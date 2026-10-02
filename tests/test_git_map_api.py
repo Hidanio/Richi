@@ -251,7 +251,7 @@ class GitMapAPITests(unittest.TestCase):
     def test_concurrent_navigation_replies_busy_without_blocking_health(self):
         started, release = threading.Event(), threading.Event()
         path = "/api/git?" + urlencode(self.options())
-        def slow(_database, _options, _runtime):
+        def slow(_database, _options, _runtime, _config, _workspace, _required):
             started.set()
             release.wait(5)
             return 200, {"result": "done"}

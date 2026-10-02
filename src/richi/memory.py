@@ -280,6 +280,41 @@ def project_put(conn, obj):
     return {"id": record["id"], "status": status}
 
 
+
+def project_add(conn, path, project_id=None, name=None, description=""):
+    """Register an existing folder in this store without copying code or knowledge."""
+    try:
+        repository = Path(path).expanduser().resolve(strict=True)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise MemoryError("Cannot register project directory: " + str(exc)) from exc
+    if not repository.is_dir():
+        raise MemoryError("Project path must be an existing directory")
+    project_id = identifier(project_id if project_id is not None else repository.name)
+    def registered_path(value):
+        if value is None:
+            return None
+        try:
+            return Path(value).expanduser().resolve()
+        except (OSError, RuntimeError, ValueError):
+            # Historical repository locations can become unavailable. They do
+            # not establish identity with a newly selected existing directory.
+            return None
+
+    existing = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+    if existing is not None:
+        old_path = existing["repo_path"]
+        if registered_path(old_path) == repository:
+            return {"status": "unchanged", "project": dict(existing)}
+        raise MemoryError("Project ID already belongs to another path; choose --id or explicitly update the project")
+    for old in conn.execute("SELECT id, repo_path FROM projects WHERE repo_path IS NOT NULL"):
+        if registered_path(old["repo_path"]) == repository:
+            raise MemoryError("This directory is already registered as project " + old["id"])
+    project_put(conn, {"id": project_id, "name": name if name is not None else repository.name,
+                       "repo_path": str(repository), "description": description,
+                       "source": str(repository), "verified_at": datetime.now(timezone.utc).isoformat()})
+    return {"status": "created", "project": dict(require_project(conn, project_id))}
+
+
 def require_project(conn, project_id):
     row = conn.execute("SELECT * FROM projects WHERE 1=1 AND id = ?", (project_id,)).fetchone()
     if row is None:
@@ -500,9 +535,17 @@ def parser():
     cli = Parser(description=__doc__)
     cli.add_argument("--db", help="SQLite path (overrides environment and config; place before command)")
     cli.add_argument("--config", help="JSON configuration file (place before command)")
+    cli.add_argument("--workspace", "-w", help="Select an isolated workspace (place before command)")
     from . import __version__
     cli.add_argument("--version", action="version", version="Richi " + __version__)
     commands = cli.add_subparsers(dest="command", required=True)
+    workspace = commands.add_parser("workspace", help="List, create, inspect, or switch isolated workspaces")
+    workspace_commands = workspace.add_subparsers(dest="action", required=True)
+    for action in ("list", "current"):
+        workspace_commands.add_parser(action)
+    workspace_commands.add_parser("create").add_argument("name")
+    workspace_commands.add_parser("use").add_argument("name", nargs="?")
+    commands.add_parser("use", help="Switch workspace; opens a chooser without a name").add_argument("name", nargs="?")
     configuration = commands.add_parser("config", help="Inspect effective settings without opening a database")
     config_commands = configuration.add_subparsers(dest="action", required=True)
     config_commands.add_parser("show")
@@ -522,6 +565,11 @@ def parser():
         group.add_parser(action).add_argument("--json", required=True, help="UTF-8 JSON file, or - for stdin")
         if name == "project":
             group.add_parser("list")
+            add = group.add_parser("add", help="Register an existing project folder in the selected workspace")
+            add.add_argument("path", type=Path)
+            add.add_argument("--id", dest="project_id")
+            add.add_argument("--name")
+            add.add_argument("--description", default="")
         elif name == "entry":
             read = group.add_parser("get")
             read.add_argument("id")
@@ -641,13 +689,15 @@ def parser():
 
 def run(args):
     from richi_launcher.config import resolve_settings
-    settings = resolve_settings(db=args.db, config_file=getattr(args, "config", None))
-    if args.command == "config":
-        raise MemoryError("Use the installed richi config command")
+    settings = resolve_settings(db=args.db, config_file=getattr(args, "config", None),
+                                workspace=getattr(args, "workspace", None))
+    if args.command in {"config", "workspace", "use"}:
+        raise MemoryError("Use the installed richi " + args.command + " command")
     database = settings.database
     new_file = not database.exists()
     source_attach = args.command == "sources" and getattr(args, "action", None) == "attach"
-    writing = args.command in {"init", "migrate"} or getattr(args, "action", None) in {"put", "upsert"} or source_attach
+    adding_project = args.command == "project" and args.action == "add"
+    writing = args.command in {"init", "migrate"} or getattr(args, "action", None) in {"put", "upsert"} or source_attach or adding_project
     conn = connect(database, create=args.command == "init", readonly=not writing)
     try:
         if args.command == "init":
@@ -661,7 +711,10 @@ def run(args):
             return backup(conn, database, args.output)
         writing = getattr(args, "action", None) in {"put", "upsert"}
         items = payload(args.json) if writing else None
-        with transaction(conn, write=writing or source_attach):
+        with transaction(conn, write=writing or source_attach or adding_project):
+            if adding_project:
+                result = project_add(conn, args.path, args.project_id, args.name, args.description)
+                return dict(result, workspace=settings.workspace, database=str(database))
             if args.command == "brief":
                 from . import task_brief
                 return task_brief.brief(conn, args, sys.modules[__name__], database)

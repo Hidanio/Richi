@@ -35,3 +35,11 @@ external task systems remain authoritative for current state.
 Keep SQLite stores, backups, captured Git bytes, private evaluation corpora,
 local configuration, credentials, and runtime files outside committed source.
 Public examples must be synthetic. Preserve copyright and licensing attribution.
+
+Workspaces isolate knowledge stores, not source code. At task start inspect
+`richi workspace current`, choose the intended workspace, and pin it with
+`richi -w NAME` for every call (or an explicit config for a custom store).
+Do not call global `richi use` on behalf of a parallel agent. A repository can be
+registered independently in several workspaces with `project add PATH`; do not
+copy another workspace's knowledge without a specific request. Tests must use
+synthetic homes/registries and verify same-project isolation across stores.

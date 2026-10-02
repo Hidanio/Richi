@@ -59,7 +59,7 @@
 </head>
 <body>
 <header>
-  <div class="brand"><div class="brand-mark" aria-hidden="true"><svg width="25" height="25" viewBox="0 0 25 25" fill="none"><path d="M6 6L19 9L10 20L6 6M6 6L10 20" stroke="currentColor" stroke-width="1.4"/><circle cx="6" cy="6" r="3.5" fill="currentColor"/><circle cx="19" cy="9" r="3" fill="currentColor"/><circle cx="10" cy="20" r="3" fill="currentColor"/></svg></div><div><h1>Карта знаний</h1><p class="subtitle">Проекты, решения и связи с источниками</p></div></div>
+  <div class="brand"><div class="brand-mark" aria-hidden="true"><svg width="25" height="25" viewBox="0 0 25 25" fill="none"><path d="M6 6L19 9L10 20L6 6M6 6L10 20" stroke="currentColor" stroke-width="1.4"/><circle cx="6" cy="6" r="3.5" fill="currentColor"/><circle cx="19" cy="9" r="3" fill="currentColor"/><circle cx="10" cy="20" r="3" fill="currentColor"/></svg></div><div><h1>Карта знаний</h1><p class="subtitle">Проекты, решения и связи с источниками</p><p class="subtitle" id="workspace-name" aria-live="polite">Workspace: …</p></div></div>
   <div class="header-actions"><div class="timestamp" id="updated-at">Данные ещё не загружены</div><button type="button" id="refresh">↻ Обновить</button></div>
 </header>
 <div class="shell"><div class="workspace">
@@ -444,7 +444,15 @@
     announce(encyclopedia?'Энциклопедия понятий':'Карта знаний');
   }
 
+  async function loadWorkspace(){
+    const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),5000);
+    try{const response=await fetch('/api/health',{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('HTTP '+response.status);const health=await response.json();const name=typeof health.workspace==='string'&&health.workspace?health.workspace:'отдельная конфигурация';$('workspace-name').textContent='Workspace: '+name;document.title='Карта знаний · '+name;}
+    catch(_error){$('workspace-name').textContent='Workspace: недоступен';}
+    finally{clearTimeout(timeout);}
+  }
+
   async function loadGraph(){
+    loadWorkspace();
     if($('git-dialog').open)closeGit();
     const request=++state.request;state.loading=true;$('refresh').disabled=true;$('refresh').textContent='Обновляем…';$('error-banner').hidden=true;if(!state.loaded)showMessage('Загружаем карту','Читаем актуальные знания из локальной памяти.');
     const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),20000);

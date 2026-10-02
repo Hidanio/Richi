@@ -9,7 +9,15 @@ Use the installed `richi` command. Run `richi config show` to resolve the select
 
 All command fragments below are subcommands of `richi`, for example `richi recall "query"`. Global selectors go first: `richi --db PATH recall "query"` or `richi --config PATH recall "query"`. Respect an explicitly selected store throughout the task; do not silently fall back to another database. The commands do not require an MCP server.
 
-The default runtime is the fixed installed package. Development is selected globally with `richi config set development.source /path/to/Richi` and `richi config set dev true`; use `richi config set dev false` to return to the installed code. CLI, agents, and map share this selection and the configured database. Do not change the mode merely to read knowledge. Configuration inspection and disabling dev work through the installed launcher even if development sources are broken or missing. Selecting a runtime never migrates SQLite; use a separate store for schema experiments.
+The default runtime is the fixed installed package. Development is selected for the current workspace with `richi config set development.source /path/to/Richi` and `richi config set dev true`; use `richi config set dev false` to return to the installed code. CLI, agents, and map share this selection and the configured database. Do not change the mode merely to read knowledge. Configuration inspection and disabling dev work through the installed launcher even if development sources are broken or missing. Selecting a runtime never migrates SQLite; use a separate store for schema experiments.
+
+## Workspace selection
+
+- At the beginning of a task, inspect `richi workspace current` or `richi config show` and establish the intended workspace from the user's context. Pin that name with `richi -w NAME` in every subsequent CLI call, or keep the user's explicitly selected `--config` path. `-w` precedes the subcommand. Do not use global `richi use` to switch an agent task: it changes future unqualified invocations in other chats.
+- A workspace contains several related projects and has its own database, history, graph, concepts, and Git artifacts. `--project` selects within that workspace. The same repository path or project ID in another workspace does not share knowledge. Do not search or copy another workspace's knowledge unless the task authorizes it.
+- `workspace create NAME` creates settings only; `-w NAME init` initializes the empty store. `-w NAME project add PATH` registers an existing folder without copying code or knowledge. Default IDs use the folder name; pass `--id` for a deliberate alternative. Never create a workspace merely because a recall query returned nothing.
+- `default` preserves the pre-existing store. Named workspaces reject `--db`, `RICHI_DB`, and `RICHI_DATA_DIR` overrides; resolve conflicting configuration explicitly instead of silently selecting another store. Working maps stay pinned to their original workspace after a global switch.
+- Workspace isolation is knowledge isolation. Source paths can be shared; separate code changes require distinct worktrees or checkouts. Dev settings are per workspace after being inherited once at creation.
 
 ## Recall
 

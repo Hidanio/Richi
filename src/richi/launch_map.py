@@ -14,7 +14,7 @@ import webbrowser
 from richi_launcher.config import resolve_settings, ConfigError
 from richi_launcher.runtime import current_runtime, runtime_command
 from .memory import Parser, MemoryError
-from .serve import compatible_health, config_arguments
+from .serve import compatible_health, config_arguments, worker_environment
 from urllib.request import ProxyHandler, build_opener
 
 
@@ -40,7 +40,8 @@ def managed_health(health, database, config_file):
             and health.get("database") == str(database)
             and health.get("config_file") == (str(config_file) if config_file is not None else None)
             and isinstance(health.get("capabilities"), list)
-            and "runtime_reload" in health["capabilities"])
+            and "runtime_reload" in health["capabilities"]
+            and "workspace_selection" in health["capabilities"])
 
 
 def available(port):
@@ -52,7 +53,7 @@ def available(port):
             return False
 
 
-def launch(database, first_port, config_file=None, runtime=None, config_required=False):
+def launch(database, first_port, config_file=None, runtime=None, config_required=False, workspace=None):
     runtime_selection = runtime or current_runtime()
     try:
         import fcntl
@@ -103,6 +104,7 @@ def launch(database, first_port, config_file=None, runtime=None, config_required
                                 action="serve"),
                 stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                 close_fds=True, start_new_session=True,
+                env=worker_environment(config_file, workspace, config_required),
             )
         deadline = time.monotonic() + 8
         while time.monotonic() < deadline and child.poll() is None:
@@ -137,7 +139,8 @@ def _main(argv=None):
         parser.error("Port must be 1–65535")
     try:
         result = launch(database, args.port, settings.config_file, current_runtime(),
-                        config_required=args.config is not None or "RICHI_CONFIG" in os.environ)
+                        config_required=args.config is not None or "RICHI_CONFIG" in os.environ,
+                        workspace=settings.workspace)
         if not args.no_open:
             result["browser_opened"] = webbrowser.open(result["url"])
         print(json.dumps(result, ensure_ascii=False))

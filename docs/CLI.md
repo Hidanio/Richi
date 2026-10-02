@@ -11,7 +11,7 @@ richi --help
 richi sources --help
 ```
 
-Режим выбирается один раз для всей установленной команды:
+Режим выбирается в настройках текущего workspace:
 
 ```sh
 richi config set development.source /path/to/Richi
@@ -32,6 +32,21 @@ richi config set dev false
 Команды `config show` и отключения dev доступны даже при неработающих исходниках.
 Подробности установки, обновления и диагностики — в
 [инструкции](INSTALLATION.md).
+
+Рабочая область выбирается перед подкомандой:
+
+```sh
+richi workspace list
+richi workspace create work
+richi -w work init
+richi -w work project add /path/to/service-example
+richi use work
+richi use
+richi -w work recall 'локальный кеш' --project service-example
+```
+
+`richi use` открывает меню только в терминале; агенты передают `-w NAME`
+в каждом вызове. [Workspace и изоляция знаний](WORKSPACES.md).
 
 Полные справочники находятся в `skills/project-memory/references`. Это единый
 источник документации CLI и установленного skill: папка skill переносится целиком,

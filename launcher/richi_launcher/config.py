@@ -28,10 +28,12 @@ class Settings:
     config_file: Path
     dev: bool = False
     development_source: Optional[Path] = None
+    workspace: Optional[str] = None
 
     def as_dict(self):
         return {"database": str(self.database), "data_dir": str(self.data_dir),
                 "port": self.port, "config_file": str(self.config_file),
+                "workspace": self.workspace,
                 "dev": self.dev,
                 "development": {"source": (str(self.development_source)
                                              if self.development_source is not None else None)}}
@@ -148,22 +150,29 @@ def _load(path, required):
     return _validate_config(_read_config(path, required), path)
 
 
-def _config_path(config_file=None):
-    config_dir, _ = _platform_dirs()
-    configured_file = config_file if config_file is not None else os.environ.get("RICHI_CONFIG")
-    return _path(configured_file if configured_file is not None else config_dir / "config.json",
-                 "config file"), configured_file is not None
-
-
-def resolve_settings(db=None, config_file=None, port=None):
+def resolve_settings(db=None, config_file=None, port=None, workspace=None, config_required=None):
     """Resolve settings without writes, checkout inspection, imports, or database access."""
     _, platform_data = _platform_dirs()
-    path, required = _config_path(config_file)
+    from .workspaces import choose_config
+    path, required, selected_workspace = choose_config(workspace=workspace, config_file=config_file)
+    if selected_workspace not in (None, "default"):
+        overrides = (["--db"] if db is not None else []) + [
+            key for key in ("RICHI_DB", "RICHI_DATA_DIR") if key in os.environ]
+        if overrides:
+            raise ConfigError("Workspace " + selected_workspace + " has isolated storage; unset/remove "
+                              + ", ".join(overrides) + " or use an explicit --config")
+    if config_required is not None:
+        if type(config_required) is not bool:
+            raise ConfigError("config_required must be a boolean")
+        required = config_required
     values = _load(path, required=required)
+    from .workspaces import _validate_storage
+    _validate_storage(selected_workspace, path, values)
     if "RICHI_DATA_DIR" in os.environ:
         data_dir = _path(os.environ["RICHI_DATA_DIR"], "RICHI_DATA_DIR")
     else:
-        data_dir = values.get("data_dir", platform_data.resolve())
+        data_dir = values.get("data_dir", path.parent if selected_workspace not in (None, "default")
+                              else platform_data.resolve())
     if db is not None:
         database = _path(db, "--db")
     elif "RICHI_DB" in os.environ:
@@ -176,12 +185,26 @@ def resolve_settings(db=None, config_file=None, port=None):
         resolved_port = _port(os.environ["RICHI_PORT"], "RICHI_PORT")
     else:
         resolved_port = values.get("port", 8765)
+    # Pinned child processes can retain the selected label while addressing the
+    # exact config and database explicitly. Metadata never selects storage or
+    # bypasses validation of a public workspace selection.
+    if config_file is not None and selected_workspace is None:
+        active_path = os.environ.get("RICHI_ACTIVE_CONFIG")
+        active_workspace = os.environ.get("RICHI_ACTIVE_WORKSPACE")
+        if active_path is not None and active_workspace is not None:
+            from .workspaces import _name
+            try:
+                if _path(active_path, "active config") == path:
+                    selected_workspace = _name(active_workspace)
+            except ConfigError:
+                pass
     return Settings(database=database, data_dir=data_dir, port=resolved_port, config_file=path,
                     dev=values.get("dev", False),
-                    development_source=values.get("development", {}).get("source"))
+                    development_source=values.get("development", {}).get("source"),
+                    workspace=selected_workspace)
 
 
-def set_config_value(key, value, config_file=None):
+def set_config_value(key, value, config_file=None, workspace=None):
     """Set dev or development.source atomically, returning the selected config path.
 
     Source paths supplied here belong to the caller's working directory. The
@@ -195,7 +218,8 @@ def set_config_value(key, value, config_file=None):
         value = str(_path(value, "development.source", resolve_links=False)) if value is not None else None
     else:
         raise ConfigError("Only dev and development.source can be set")
-    path, _ = _config_path(config_file)
+    from .workspaces import choose_config
+    path, _, selected_workspace = choose_config(workspace=workspace, config_file=config_file)
     try:
         import fcntl
     except ImportError as exc:
@@ -207,7 +231,7 @@ def set_config_value(key, value, config_file=None):
         lock_fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
         with os.fdopen(lock_fd, "a") as lock:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-            raw = _read_config(path, required=False)
+            raw = _read_config(path, required=selected_workspace not in (None, "default"))
             if key == "dev":
                 raw["dev"] = value
             else:
@@ -215,7 +239,9 @@ def set_config_value(key, value, config_file=None):
                 if not isinstance(development, dict):
                     raise ConfigError("config development must be an object")
                 raw["development"] = dict(development, source=value)
-            _validate_config(raw, path)
+            validated = _validate_config(raw, path)
+            from .workspaces import _validate_storage
+            _validate_storage(selected_workspace, path, validated)
             mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o600
             fd, temporary = tempfile.mkstemp(prefix="." + path.name + ".", dir=str(path.parent))
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
