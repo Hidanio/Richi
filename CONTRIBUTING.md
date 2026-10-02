@@ -37,8 +37,28 @@ material and its license rather than relabeling it as original Richi code.
 This policy does not override rights independently granted under applicable law,
 hosting-platform terms, existing licenses, or an applicable separate agreement.
 
-## Project status
+## Development
 
-The standalone repository currently contains project and licensing documentation.
-Build, test, and contribution commands will be documented when the implementation
-is added. Do not infer a working installation procedure from earlier prototypes.
+Use macOS or Linux with Python 3.9+ and Git. From the repository root:
+
+```sh
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e .
+python -m unittest discover -s tests
+```
+
+Keep test data synthetic. Tests should create temporary databases and repositories;
+do not point a test suite at a live knowledge store. Runtime configuration and
+data live outside the package. See [installation](docs/INSTALLATION.md) and
+[migration](docs/MIGRATION.md) for the CLI and compatibility workflow.
+
+The complete agent skill is in `skills/project-memory/`. Its `references/`
+directory is the canonical source of detailed command documentation. The
+`docs/CLI.md` index links there; keep command contracts in that one place so
+copying the whole skill directory remains sufficient for installation.
+
+For retrieval changes, preserve a reproducer and compare relevant cases before
+and after. The [evaluation guidance](skills/project-memory/references/EVALUATION.md)
+distinguishes synthetic regression checks from private task-based evaluations.
+Do not publish a private snapshot or rewrite old expectations to improve a score.
