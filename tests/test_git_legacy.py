@@ -220,9 +220,11 @@ class LegacyGitTests(unittest.TestCase):
         status, result = serve._run_git_request(self.db, self.options())
         self.assertEqual(status, 200, result)
         self.assertEqual(result["result"]["content"], "original\n")
-        capabilities = ["git_source_viewer", "legacy_git_source_viewer", "standalone_runtime"]
+        capabilities = ["git_source_viewer", "legacy_git_source_viewer", "standalone_runtime",
+                        "runtime_selection", "runtime_reload"]
         health = {"application": "project-memory-map", "database": str(self.db),
-                  "api_version": 4, "capabilities": capabilities}
+                  "api_version": 4, "capabilities": capabilities,
+                  "runtime": serve.current_runtime().as_dict(), "config_file": None}
         self.assertTrue(serve.compatible_health(health, self.db))
         for required in capabilities:
             with self.subTest(missing=required):
