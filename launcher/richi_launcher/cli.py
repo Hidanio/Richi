@@ -29,6 +29,10 @@ def _selectors(argv):
     while position < len(argv):
         token = argv[position]
         key, sep, value = token.partition("=")
+        if key.startswith("-w") and key != "-w":
+            # argparse accepts -wNAME as well as -w NAME and -w=NAME.
+            # Resolve it here before pinning storage for the selected runtime.
+            key, sep, value = "-w", "=", token[2:]
         if key not in names:
             break
         if not sep:

@@ -98,6 +98,25 @@ class WorkspaceCliTests(unittest.TestCase):
         self.assertEqual(chosen["workspace"], "alpha")
         self.assertEqual(chosen["database"], stores["alpha"]["database"])
 
+    def test_concatenated_short_selector_pins_requested_workspace_for_cli_and_map(self):
+        alpha = self.create("alpha")
+        self.create("beta")
+        self.json_command("-walpha", "init")
+        self.json_command("use", "beta")
+        self.assertEqual(self.json_command("-walpha", "workspace", "current")["workspace"], "alpha")
+        self.assertEqual(self.json_command("-walpha", "config", "show")["workspace"], "alpha")
+        self.assertEqual(self.json_command("-walpha", "project", "list")["projects"], [])
+        runner = ("import sys,json,os; sys.path.insert(0,sys.argv[1]); "
+                  "from richi_launcher.cli import main; "
+                  "os.execve=lambda executable,argv,env:print(json.dumps({'argv':argv,'env':{k:v for k,v in env.items() if k.startswith('RICHI_')}})); "
+                  "sys.exit(main(sys.argv[2:]))")
+        result = self.json_command("-walpha", "map", "--no-open", runner=runner)
+        arguments = result["argv"][result["argv"].index("cli") + 1:]
+        self.assertEqual(arguments, ["--db", alpha["database"], "--config", alpha["config_file"],
+                                     "map", "--no-open"])
+        self.assertEqual(result["env"]["RICHI_ACTIVE_WORKSPACE"], "alpha")
+        self.assertEqual(result["env"]["RICHI_DATA_DIR"], alpha["data_dir"])
+
     def test_workspace_operations_and_config_recovery_survive_broken_development(self):
         alpha = self.create("alpha")
         self.json_command("-w", "alpha", "config", "set", "development.source", self.root / "missing source")
