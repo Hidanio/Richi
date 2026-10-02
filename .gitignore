@@ -236,3 +236,13 @@ __marimo__/
 .venv/
 *.py[cod]
 .DS_Store
+
+# Local IDE state and application runtime
+.idea/
+/runtime/
+/backups/
+/artifacts/
+/richi.local.json
+*.db
+*.db-wal
+*.db-shm

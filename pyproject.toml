@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=77.0.3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "richi"
+version = "0.1.0"
+description = "Local engineering memory with evidence, Git history, and a knowledge map"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "LicenseRef-Richi-Personal-Use-and-Organization-Agreement-1.0"
+license-files = ["LICENSE.md"]
+authors = [{name = "Richardas Kuchinskas", email = "hidanjkezor@gmail.com"}]
+dependencies = []
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Topic :: Software Development",
+]
+
+[project.urls]
+Homepage = "https://github.com/Hidanio/Richi"
+Repository = "https://github.com/Hidanio/Richi"
+
+[project.scripts]
+richi = "richi_launcher.cli:main"
+
+[tool.setuptools]
+packages = ["richi", "richi_launcher"]
+package-dir = {richi = "src/richi", richi_launcher = "launcher/richi_launcher"}
+
+[tool.setuptools.package-data]
+richi = ["*.sql", "*.html"]

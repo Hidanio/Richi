@@ -1,0 +1,272 @@
+{
+  "description": "Entirely synthetic engineering knowledge; no production snapshots or workplace IDs.",
+  "project": [
+    {
+      "id": "atlas",
+      "name": "Atlas",
+      "source": "Synthetic evaluation fixture"
+    },
+    {
+      "id": "beacon",
+      "name": "Beacon",
+      "source": "Synthetic evaluation fixture"
+    }
+  ],
+  "entry": [
+    {
+      "id": "task:DEMO-17",
+      "kind": "task",
+      "title": "DEMO-17 cache warmup",
+      "summary": "Added cache warmup; deployment has not been verified.",
+      "project_ids": [
+        "atlas"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "implemented",
+      "sources": [
+        {
+          "reference": "https://example.test/evidence/task:DEMO-17",
+          "type": "synthetic"
+        }
+      ],
+      "tags": [],
+      "aliases": [],
+      "verified_at": "2020-01-01",
+      "jira_key": "DEMO-17"
+    },
+    {
+      "id": "task:DEMO-170",
+      "kind": "task",
+      "title": "DEMO-170 cache warmup experiment",
+      "summary": "Sibling task; distinct work.",
+      "project_ids": [
+        "atlas"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/evidence/task:DEMO-170",
+          "type": "synthetic"
+        }
+      ],
+      "tags": [],
+      "aliases": [],
+      "verified_at": "2020-01-01",
+      "jira_key": "DEMO-170"
+    },
+    {
+      "id": "decision:pool",
+      "kind": "experiment",
+      "title": "Connection pool experiment",
+      "summary": "Reuse connections after profiling.",
+      "project_ids": [
+        "atlas"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/evidence/decision:pool",
+          "type": "synthetic"
+        }
+      ],
+      "tags": [],
+      "aliases": [
+        "Пул соединений"
+      ],
+      "verified_at": "2020-01-01"
+    },
+    {
+      "id": "fact:budget",
+      "kind": "fact",
+      "title": "Connection budget",
+      "summary": "The consumer must cap its connection count.",
+      "project_ids": [
+        "beacon"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/evidence/fact:budget",
+          "type": "synthetic"
+        }
+      ],
+      "tags": [],
+      "aliases": [],
+      "verified_at": "2020-01-01"
+    },
+    {
+      "id": "fact:obsolete",
+      "kind": "fact",
+      "title": "Historical pool limit",
+      "summary": "A superseded conclusion.",
+      "project_ids": [
+        "atlas"
+      ],
+      "knowledge_state": "superseded",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/evidence/fact:obsolete",
+          "type": "synthetic"
+        }
+      ],
+      "tags": [],
+      "aliases": [
+        "Пул соединений"
+      ],
+      "verified_at": "2020-01-01"
+    }
+  ],
+  "entity": [
+    {
+      "id": "concept:queue",
+      "kind": "concept",
+      "title": "concept:queue",
+      "summary": "Q is a queue depth in Atlas.",
+      "aliases": [
+        "Q"
+      ],
+      "knowledge_state": "confirmed",
+      "sources": [
+        {
+          "reference": "https://example.test/evidence/concept:queue",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2020-01-01"
+    },
+    {
+      "id": "concept:quality",
+      "kind": "concept",
+      "title": "concept:quality",
+      "summary": "Q is a quality score in Beacon.",
+      "aliases": [
+        "Q"
+      ],
+      "knowledge_state": "confirmed",
+      "sources": [
+        {
+          "reference": "https://example.test/evidence/concept:quality",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2020-01-01"
+    }
+  ],
+  "edge": [
+    {
+      "id": "pool-budget",
+      "from_ref": "entry:decision:pool",
+      "to_ref": "entry:fact:budget",
+      "kind": "informs",
+      "description": "Synthetic explicit dependency.",
+      "knowledge_state": "confirmed",
+      "sources": [
+        {
+          "reference": "https://example.test/evidence/pool-budget",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2020-01-01"
+    },
+    {
+      "id": "queue-scope",
+      "from_ref": "entity:concept:queue",
+      "to_ref": "project:atlas",
+      "kind": "used_in",
+      "description": "Synthetic explicit dependency.",
+      "knowledge_state": "confirmed",
+      "sources": [
+        {
+          "reference": "https://example.test/evidence/queue-scope",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2020-01-01"
+    },
+    {
+      "id": "quality-scope",
+      "from_ref": "entity:concept:quality",
+      "to_ref": "project:beacon",
+      "kind": "used_in",
+      "description": "Synthetic explicit dependency.",
+      "knowledge_state": "confirmed",
+      "sources": [
+        {
+          "reference": "https://example.test/evidence/quality-scope",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2020-01-01"
+    }
+  ],
+  "cases": [
+    {
+      "id": "ticket-exact",
+      "query": "DEMO-17",
+      "expected_refs": [
+        "entry:task:DEMO-17"
+      ],
+      "expected_first": "entry:task:DEMO-17",
+      "excluded_refs": [
+        "entry:task:DEMO-170"
+      ]
+    },
+    {
+      "id": "alias-and-cross-project-link",
+      "query": "ПУЛ СОЕДИНЕНИЙ",
+      "project": "atlas",
+      "expected_refs": [
+        "entry:decision:pool",
+        "entry:fact:budget"
+      ],
+      "expected_first": "entry:decision:pool",
+      "excluded_refs": [
+        "entry:fact:obsolete"
+      ]
+    },
+    {
+      "id": "qualified-reference",
+      "query": "entry:fact:budget",
+      "expected_refs": [
+        "entry:fact:budget"
+      ],
+      "expected_first": "entry:fact:budget"
+    },
+    {
+      "id": "ambiguous-concept",
+      "query": "What is Q?",
+      "project": "beacon",
+      "expected_refs": [
+        "entity:concept:queue",
+        "entity:concept:quality"
+      ],
+      "expected_first": "entity:concept:quality",
+      "expected_ambiguity": true
+    },
+    {
+      "id": "unknown-ticket",
+      "query": "What happened in DEMO-999999 cache warmup?",
+      "expected_no_match": true
+    },
+    {
+      "id": "unknown-subject",
+      "query": "zzzxunknowntransportxzzz",
+      "expected_no_match": true
+    },
+    {
+      "id": "unverified-release",
+      "query": "DEMO-17 уже выкатили в прод сейчас?",
+      "expected_refs": [
+        "entry:task:DEMO-17"
+      ],
+      "expected_recheck": true,
+      "excluded_refs": [
+        "entry:task:DEMO-170"
+      ]
+    }
+  ]
+}
