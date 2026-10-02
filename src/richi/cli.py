@@ -13,6 +13,8 @@ def run_map(args):
     for flag, value in (("--db", args.db), ("--config", args.config), ("--port", args.port)):
         if value is not None:
             argv.extend((flag, str(value)))
+    if args.dev:
+        argv.append("--dev")
     if args.action == "serve":
         from . import serve
         if args.open:

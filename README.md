@@ -34,14 +34,23 @@ SQLite-хранилище, Git-навигацию, локальную карту
 ```sh
 git clone https://github.com/Hidanio/Richi.git
 cd Richi
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -e .
+python3 -m venv "$HOME/.local/share/richi/venv"
+"$HOME/.local/share/richi/venv/bin/python" -m pip install --upgrade pip
+"$HOME/.local/share/richi/venv/bin/python" -m pip install -e .
+mkdir -p "$HOME/.local/bin"
+ln -s "$HOME/.local/share/richi/venv/bin/richi" "$HOME/.local/bin/richi"
+export PATH="$HOME/.local/bin:$PATH"
 richi config show
 richi init
 richi recall 'почему выбрали локальный кеш'
-richi map
+richi map --dev
 ```
+
+Команда `richi` доступна из любой папки; для новых терминалов добавьте
+`~/.local/bin` в PATH своей оболочки. Установка `-e` сразу использует изменения
+исходников, а `map --dev` перезапускает сервер карты после их изменения.
+Окружение и данные находятся отдельно от Git-репозитория; исходники checkout
+должны оставаться доступны. Подробнее — в [инструкции установки](docs/INSTALLATION.md).
 
 Для новой установки `init` создаёт пустую базу в каталоге данных пользователя,
 отдельно от исходников. Примеры не загружают готовую энциклопедию: знания добавляет
@@ -50,7 +59,8 @@ richi map
 
 **Если у вас уже есть база**, сначала настройте её путь и выполните `richi check`.
 Самостоятельная установка не переносит и не заменяет существующую память.
-Порядок переключения и возврата описан в [руководстве миграции](docs/MIGRATION.md).
+Перенос данных, ярлыков и инструкций агента на прямой вызов `richi` описан
+в [руководстве миграции](docs/MIGRATION.md).
 
 ## Настройка и работа агента
 

@@ -1,11 +1,15 @@
 # Richi development
 
 Develop the implementation in `src/richi/` and the distributable agent skill in
-`skills/project-memory/`. Installed skills and legacy entry-point bridges are
-local deployment copies; update and review their source here first.
+`skills/project-memory/`. Installed skills are local deployment copies; update
+and review their source here first. Use the installed `richi` CLI for all local
+operations; do not add wrappers for the former standalone Python scripts.
 
 The runtime targets Python 3.9+ on macOS and Linux and uses the standard library.
-Install into a virtual environment with `python -m pip install -e .`.
+Use a dedicated virtual environment; upgrade its pip with
+`python -m pip install --upgrade pip`, then install with `python -m pip install -e .`.
+Editable installation picks up source changes on each CLI invocation. Use
+`richi map --dev` to restart the local map when runtime sources change.
 Run `python -m unittest discover -s tests -v` and
 `python evals/evaluate_recall.py`. Tests and public evaluations use disposable
 stores and synthetic repositories; they must not depend on personal memory.

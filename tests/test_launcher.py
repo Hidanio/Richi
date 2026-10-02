@@ -35,9 +35,9 @@ class LauncherTests(unittest.TestCase):
             except ProcessLookupError:
                 pass
 
-    def launch(self, db=None):
+    def launch(self, db=None, dev=False):
         result = subprocess.run([sys.executable, "-m", "richi.launch_map", "--db", str(db or self.db),
-                                 "--port", str(self.port), "--no-open"], capture_output=True, text=True, timeout=20)
+                                 "--port", str(self.port), "--no-open", *(["--dev"] if dev else [])], capture_output=True, text=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr)
         record = json.loads(result.stdout)
         if "pid" in record:
@@ -53,6 +53,15 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(third["status"], "existing")
         self.assertEqual(third["url"], first["url"])
         self.assertEqual(len(self.children), 1)
+
+    def test_dev_launch_requires_dev_server_and_then_reuses_it(self):
+        normal = self.launch()
+        development = self.launch(dev=True)
+        reused = self.launch(dev=True)
+        self.assertEqual(development["status"], "started")
+        self.assertNotEqual(normal["url"], development["url"])
+        self.assertEqual(reused, {"status": "existing", "url": development["url"]})
+        self.assertEqual(len(self.children), 2)
 
     def test_busy_port_uses_another_without_touching_owner(self):
         with socket.socket() as occupied:

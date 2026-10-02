@@ -506,6 +506,7 @@ def parser():
     map_cmd.add_argument("--db", default=argparse.SUPPRESS, help="SQLite path")
     map_cmd.add_argument("--config", default=argparse.SUPPRESS, help="JSON configuration file")
     map_cmd.add_argument("--port", help="Loopback HTTP port")
+    map_cmd.add_argument("--dev", action="store_true", help="Reload the map when installed source files change")
     map_cmd.add_argument("--no-open", action="store_true", help="Launch without opening a browser")
     map_cmd.add_argument("--open", action="store_true", help="Open the foreground server in a browser (serve only)")
     commands.add_parser("init")
