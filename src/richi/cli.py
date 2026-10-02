@@ -1,4 +1,4 @@
-"""Console entry point and lazy dispatch to the optional map process."""
+"""Lazy dispatch from the selected Richi runtime to the optional map process."""
 
 
 def run_map(args):
@@ -13,8 +13,6 @@ def run_map(args):
     for flag, value in (("--db", args.db), ("--config", args.config), ("--port", args.port)):
         if value is not None:
             argv.extend((flag, str(value)))
-    if args.dev:
-        argv.append("--dev")
     if args.action == "serve":
         from . import serve
         if args.open:
@@ -24,8 +22,3 @@ def run_map(args):
     if args.no_open:
         argv.append("--no-open")
     return launch_map.main(argv) or 0
-
-
-def main(argv=None):
-    from .memory import main as memory_main
-    return memory_main(argv)

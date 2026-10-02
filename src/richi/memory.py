@@ -474,6 +474,10 @@ def backup(conn, database, output):
 
 
 class Parser(argparse.ArgumentParser):
+    def __init__(self, *args, **kwargs):
+        kwargs["allow_abbrev"] = False
+        super().__init__(*args, **kwargs)
+
     def error(self, message):
         raise MemoryError(message)
 
@@ -500,13 +504,16 @@ def parser():
     cli.add_argument("--version", action="version", version="Richi " + __version__)
     commands = cli.add_subparsers(dest="command", required=True)
     configuration = commands.add_parser("config", help="Inspect effective settings without opening a database")
-    configuration.add_subparsers(dest="action", required=True).add_parser("show")
+    config_commands = configuration.add_subparsers(dest="action", required=True)
+    config_commands.add_parser("show")
+    config_set = config_commands.add_parser("set", help="Set dev or development.source")
+    config_set.add_argument("key", choices=("dev", "development.source"))
+    config_set.add_argument("value")
     map_cmd = commands.add_parser("map", help="Start/reuse the local map; use serve for a foreground server")
     map_cmd.add_argument("action", nargs="?", choices=("serve",))
     map_cmd.add_argument("--db", default=argparse.SUPPRESS, help="SQLite path")
     map_cmd.add_argument("--config", default=argparse.SUPPRESS, help="JSON configuration file")
     map_cmd.add_argument("--port", help="Loopback HTTP port")
-    map_cmd.add_argument("--dev", action="store_true", help="Reload the map when installed source files change")
     map_cmd.add_argument("--no-open", action="store_true", help="Launch without opening a browser")
     map_cmd.add_argument("--open", action="store_true", help="Open the foreground server in a browser (serve only)")
     commands.add_parser("init")
@@ -633,10 +640,10 @@ def parser():
 
 
 def run(args):
-    from .config import resolve_settings
+    from richi_launcher.config import resolve_settings
     settings = resolve_settings(db=args.db, config_file=getattr(args, "config", None))
     if args.command == "config":
-        return settings.as_dict()
+        raise MemoryError("Use the installed richi config command")
     database = settings.database
     new_file = not database.exists()
     source_attach = args.command == "sources" and getattr(args, "action", None) == "attach"

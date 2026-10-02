@@ -21,13 +21,16 @@ from urllib.parse import parse_qs, urlsplit
 from urllib.request import urlopen
 import webbrowser
 
-from .config import resolve_settings, ConfigError
+from richi_launcher.config import resolve_settings, ConfigError
+from richi_launcher.runtime import (bootstrap_command, current_runtime, preflight,
+                                    resolve_runtime, runtime_command)
 from .memory import Parser, MemoryError
 
 
 BASE = Path(__file__).resolve().parent
 API_VERSION = 4
-CAPABILITIES = ["git_source_viewer", "legacy_git_source_viewer", "standalone_runtime"]
+CAPABILITIES = ["git_source_viewer", "legacy_git_source_viewer", "standalone_runtime",
+                "runtime_selection", "runtime_reload"]
 GIT_QUERY_LIMIT = 8192
 GIT_OPERATION_TIMEOUT = 25
 GIT_WORKER_TIMEOUT = 30
@@ -157,12 +160,12 @@ def _git_worker():
     sys.stdout.write(json.dumps({"status": status, "payload": payload}, ensure_ascii=False))
 
 
-def _run_git_request(database, options, environment=None):
+def _run_git_request(database, options, runtime=None):
     """Bound worker time and pipes; HTTP threads never retain unbounded Git output."""
     request = json.dumps({"database": str(database), "options": options}).encode("utf-8")
-    process = subprocess.Popen([sys.executable, "-B", "-c", "from richi.serve import _git_worker; _git_worker()"],
+    process = subprocess.Popen(runtime_command(runtime or current_runtime(), [], action="git_worker"),
         cwd=str(BASE), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        start_new_session=True, env=environment)
+        start_new_session=True)
     selector = selectors.DefaultSelector()
     output, size = [], 0
     deadline = time.monotonic() + GIT_WORKER_TIMEOUT
@@ -201,17 +204,19 @@ def _run_git_request(database, options, environment=None):
         process.stderr.close()
 
 
-def compatible_health(health, database, dev=False):
+def compatible_health(health, database, runtime=None, config_file=None):
     return (isinstance(health, dict) and health.get("application") == "project-memory-map"
             and health.get("database") == str(database) and health.get("api_version") == API_VERSION
             and isinstance(health.get("capabilities"), list)
             and all(capability in health["capabilities"]
                     for capability in CAPABILITIES)
-            and (not dev or health.get("development") == {"source": str(BASE), "reload": True}))
+            and health.get("runtime") == (runtime or current_runtime()).as_dict()
+            and health.get("config_file") == (str(config_file) if config_file is not None else None))
 
 
-def handler_for(database, config_file=None, dev=False):
+def handler_for(database, config_file=None, runtime=None, config_required=False):
     database = Path(database).expanduser().resolve()
+    runtime = runtime or current_runtime()
     export_lock = threading.Lock()
     git_lock = threading.Lock()
 
@@ -219,9 +224,8 @@ def handler_for(database, config_file=None, dev=False):
         server_version = "ProjectMemoryMap/4"
 
         def setup(self):
-            if dev:
-                # Bound draining of idle requests before a source reload.
-                self.request.settimeout(35)
+            # Bound draining of idle requests before a runtime transition.
+            self.request.settimeout(35)
             super().setup()
 
         def log_message(self, *_args):
@@ -267,7 +271,8 @@ def handler_for(database, config_file=None, dev=False):
             if url.path == "/api/health" and not url.query:
                 return self.send_data(200, {"application": "project-memory-map", "database": str(database),
                                             "api_version": API_VERSION, "capabilities": CAPABILITIES,
-                                            **({"development": {"source": str(BASE), "reload": True}} if dev else {})})
+                                            "runtime": runtime.as_dict(),
+                                            "config_file": str(config_file) if config_file is not None else None})
             if url.path == "/api/git":
                 try:
                     options = _git_options(url.query)
@@ -276,8 +281,7 @@ def handler_for(database, config_file=None, dev=False):
                 if not git_lock.acquire(blocking=False):
                     return self.send_data(503, {"error": "Git navigation in progress; try again", "code": "busy"})
                 try:
-                    status, payload = (_run_git_request(database, options, development_environment(database))
-                                       if dev else _run_git_request(database, options))
+                    status, payload = _run_git_request(database, options, runtime)
                     return self.send_data(status, payload)
                 except OSError:
                     return self.send_data(503, {"error": "Git navigation is unavailable", "code": "git_unavailable"})
@@ -297,11 +301,9 @@ def handler_for(database, config_file=None, dev=False):
                 return self.send_data(503, {"error": "Export in progress; try Refresh again"})
             try:
                 result = subprocess.run(
-                    [sys.executable, "-m", "richi",
-                     *(["--config", str(config_file)] if config_file is not None else []),
-                     "--db", str(database), "graph", "export", *flags],
+                    runtime_command(runtime, [*config_arguments(config_file, config_required),
+                                               "--db", str(database), "graph", "export", *flags]),
                     capture_output=True, timeout=20,
-                    env=development_environment(database) if dev else None,
                 )
                 if result.returncode:
                     try:
@@ -329,55 +331,63 @@ def handler_for(database, config_file=None, dev=False):
     return Handler
 
 
-def development_environment(database):
-    """Fresh imports even for same-size edits within a bytecode timestamp tick."""
-    environment = dict(os.environ)
-    # Python can read old .pyc files even with -B. An unused cache prefix avoids
-    # that, without deleting caches or writing anything into the checkout.
-    environment["PYTHONDONTWRITEBYTECODE"] = "1"
-    environment["PYTHONPYCACHEPREFIX"] = str(
-        Path(database).parent / "runtime" / ("dev-cache-%d-%d" % (os.getpid(), time.monotonic_ns())))
-    return environment
+def config_arguments(config_file, required=False):
+    """Keep a missing default optional, but preserve an explicit configuration."""
+    if config_file is not None and (required or Path(config_file).is_file()):
+        return ["--config", str(config_file)]
+    return []
 
 
-def source_fingerprint():
+def source_fingerprint(package=None):
+    package = Path(package) if package is not None else BASE
     digest = hashlib.sha256()
-    for path in sorted(BASE.rglob("*")):
+    for path in sorted(package.rglob("*")):
         if path.suffix in {".py", ".sql"} and path.is_file():
-            digest.update(str(path.relative_to(BASE)).encode("utf-8"))
+            digest.update(str(path.relative_to(package)).encode("utf-8"))
             digest.update(b"\0")
             digest.update(path.read_bytes())
     return digest.digest()
 
 
-def watch_source(server, original, stopped, reload_requested):
-    """Reload after an edit settles; keep the server while syntax is incomplete."""
-    pending = rejected = None
+def watch_runtime(server, runtime, original, database, config_file, config_required,
+                  stopped, reload_requested):
+    """Switch this server only after its selected runtime passes a read-only check."""
+    pending = last_error = None
+
+    def selected():
+        settings = resolve_settings(db=database,
+                                    config_file=config_file if config_required else None)
+        target = resolve_runtime(settings)
+        fingerprint = source_fingerprint(target.package) if target.mode == "dev" else None
+        return target, (target.identity, fingerprint)
+
+    original_key = (runtime.identity, original)
     while not stopped.wait(1):
         try:
-            current = source_fingerprint()
-            if current == original:
-                pending = None
+            target, key = selected()
+            if key == original_key:
+                pending = last_error = None
                 continue
-            if current != pending:
-                pending = current
+            if key != pending:
+                pending = key
                 continue
-            if current == rejected:
+            if target.mode == "dev":
+                for path in Path(target.package).rglob("*.py"):
+                    compile(path.read_bytes(), str(path), "exec")
+            preflight(target, database,
+                      config_file=config_file if config_file is not None and
+                      (config_required or Path(config_file).is_file()) else None)
+            if key != selected()[1]:
                 continue
-            for path in BASE.rglob("*.py"):
-                compile(path.read_bytes(), str(path), "exec")
-            if current != source_fingerprint():
-                continue
-        except SyntaxError as exc:
-            rejected = current
-            print("Development reload waiting for valid source: " + str(exc), flush=True)
-            continue
-        except OSError:
-            # Editors can briefly remove files during an atomic save.
+        except (ConfigError, RuntimeError, OSError, SyntaxError, ValueError) as exc:
+            message = str(exc)
+            if message != last_error:
+                print("Runtime reload waiting for valid source/configuration: " + message, flush=True)
+                last_error = message
             continue
         if stopped.is_set():
             return
-        print("Source changed; restarting map on the same URL.", flush=True)
+        print("Runtime changed; restarting map on the same URL.", flush=True)
         reload_requested.set()
         server.shutdown()
         return
@@ -388,7 +398,6 @@ def _main(argv=None):
     parser.add_argument("--db", type=Path)
     parser.add_argument("--config", type=Path)
     parser.add_argument("--port", type=int)
-    parser.add_argument("--dev", action="store_true", help="Reload when installed source files change")
     parser.add_argument("--open", action="store_true", help="Open in the default browser")
     args = parser.parse_args(argv)
     try:
@@ -403,38 +412,39 @@ def _main(argv=None):
     with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True) as conn:
         if conn.execute("PRAGMA user_version").fetchone()[0] != 2:
             parser.error("The map requires schema 2; run richi backup and richi migrate")
-    initial_source = source_fingerprint() if args.dev else None
+    runtime = current_runtime()
+    config_required = args.config is not None or "RICHI_CONFIG" in os.environ
+    initial_source = source_fingerprint(runtime.package) if runtime.mode == "dev" else None
     address = "http://127.0.0.1:%d/" % args.port
     try:
-        server = LoopbackHTTPServer(("127.0.0.1", args.port), handler_for(database, settings.config_file if settings.config_file.is_file() else None, dev=args.dev))
+        server = LoopbackHTTPServer(("127.0.0.1", args.port), handler_for(database, settings.config_file, runtime, config_required))
     except OSError as exc:
         if args.open:
             try:
                 with urlopen(address + "api/health", timeout=2) as response:
                     health = json.load(response)
-                if compatible_health(health, database, dev=args.dev):
+                if compatible_health(health, database, runtime, settings.config_file):
                     webbrowser.open(address)
                     print("Existing map: " + address, flush=True)
                     return
             except (OSError, ValueError):
                 pass
         parser.error("Cannot listen on port %d: %s. Choose another --port." % (args.port, exc))
-    server.daemon_threads = not args.dev
+    server.daemon_threads = False
     print("Project memory map: " + address, flush=True)
     print("Local read-only viewer. Press Ctrl+C to stop.", flush=True)
     if args.open:
         webbrowser.open(address)
     stopped, reload_requested = threading.Event(), threading.Event()
-    watcher = None
-    previous_sigterm = None
-    if args.dev:
-        watcher = threading.Thread(target=watch_source,
-                                   args=(server, initial_source, stopped, reload_requested), daemon=True)
-        watcher.start()
-        def terminate(_signum, _frame):
-            raise KeyboardInterrupt
-        previous_sigterm = signal.signal(signal.SIGTERM, terminate)
-        print("Development reload: " + str(BASE), flush=True)
+    watcher = threading.Thread(target=watch_runtime,
+                               args=(server, runtime, initial_source, database,
+                                     settings.config_file, config_required, stopped, reload_requested),
+                               daemon=False)
+    def terminate(_signum, _frame):
+        raise KeyboardInterrupt
+    previous_sigterm = signal.signal(signal.SIGTERM, terminate)
+    watcher.start()
+    print("Runtime: " + runtime.mode + " " + str(runtime.package), flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -442,18 +452,18 @@ def _main(argv=None):
     finally:
         stopped.set()
         server.server_close()
-        if watcher is not None:
-            watcher.join(timeout=2)
-        if previous_sigterm is not None:
-            signal.signal(signal.SIGTERM, previous_sigterm)
+        # A transition preflight owns a bounded child process (15 seconds).
+        # Let it reap that child before this process exits.
+        watcher.join(timeout=17)
+        signal.signal(signal.SIGTERM, previous_sigterm)
     if reload_requested.is_set():
         # Replace this process, preserving its PID and URL. No supervisor or old
         # server is left running; --open is intentionally not repeated.
-        config_args = ["--config", str(settings.config_file)] if settings.config_file.is_file() else []
-        os.execve(sys.executable,
-                  [sys.executable, "-m", "richi.serve", *config_args,
-                   "--db", str(database), "--port", str(args.port), "--dev"],
-                  development_environment(database))
+        command = bootstrap_command([*config_arguments(settings.config_file, config_required),
+                                     "--db", str(database), "map", "serve", "--port", str(args.port)])
+        environment = dict(os.environ)
+        environment.pop("RICHI_ACTIVE_RUNTIME", None)
+        os.execve(command[0], command, environment)
 
 
 def main(argv=None):

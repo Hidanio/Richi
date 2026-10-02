@@ -13,14 +13,18 @@ import tempfile
 import threading
 import unittest
 
+from richi_launcher.runtime import bootstrap_command
+
 
 
 class LauncherTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="map-launcher-")
         self.addCleanup(self.temp.cleanup)
-        self.db = Path(self.temp.name) / "memory.sqlite3"
-        subprocess.run([sys.executable, "-m", "richi", "--db", str(self.db), "init"],
+        self.db = Path(self.temp.name).resolve() / "memory.sqlite3"
+        self.config = self.db.parent / "config.json"
+        self.config.write_text(json.dumps({"database": str(self.db), "dev": False}))
+        subprocess.run(bootstrap_command(["--config", str(self.config), "init"]),
                        capture_output=True, check=True)
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
@@ -35,9 +39,10 @@ class LauncherTests(unittest.TestCase):
             except ProcessLookupError:
                 pass
 
-    def launch(self, db=None, dev=False):
-        result = subprocess.run([sys.executable, "-m", "richi.launch_map", "--db", str(db or self.db),
-                                 "--port", str(self.port), "--no-open", *(["--dev"] if dev else [])], capture_output=True, text=True, timeout=20)
+    def launch(self, db=None):
+        result = subprocess.run(bootstrap_command(["--config", str(self.config), "--db", str(db or self.db),
+                                                  "map", "--port", str(self.port), "--no-open"]),
+                                capture_output=True, text=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr)
         record = json.loads(result.stdout)
         if "pid" in record:
@@ -54,15 +59,6 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(third["url"], first["url"])
         self.assertEqual(len(self.children), 1)
 
-    def test_dev_launch_requires_dev_server_and_then_reuses_it(self):
-        normal = self.launch()
-        development = self.launch(dev=True)
-        reused = self.launch(dev=True)
-        self.assertEqual(development["status"], "started")
-        self.assertNotEqual(normal["url"], development["url"])
-        self.assertEqual(reused, {"status": "existing", "url": development["url"]})
-        self.assertEqual(len(self.children), 2)
-
     def test_busy_port_uses_another_without_touching_owner(self):
         with socket.socket() as occupied:
             occupied.bind(("127.0.0.1", self.port))
@@ -74,7 +70,7 @@ class LauncherTests(unittest.TestCase):
 
     def test_missing_database_does_not_create_one(self):
         missing = self.db.parent / "missing.sqlite3"
-        result = subprocess.run([sys.executable, "-m", "richi.launch_map", "--db", str(missing), "--no-open"],
+        result = subprocess.run(bootstrap_command(["--config", str(self.config), "--db", str(missing), "map", "--no-open"]),
                                  capture_output=True, timeout=10)
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(missing.exists())

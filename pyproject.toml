@@ -24,13 +24,11 @@ Homepage = "https://github.com/Hidanio/Richi"
 Repository = "https://github.com/Hidanio/Richi"
 
 [project.scripts]
-richi = "richi.cli:main"
+richi = "richi_launcher.cli:main"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
+packages = ["richi", "richi_launcher"]
+package-dir = {richi = "src/richi", richi_launcher = "launcher/richi_launcher"}
 
 [tool.setuptools.package-data]
 richi = ["*.sql", "*.html"]

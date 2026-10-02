@@ -42,7 +42,7 @@ class MapConfigTests(unittest.TestCase):
                     response = client.getresponse()
                     health = json.loads(response.read())
                     self.assertEqual(response.status, 200, health)
-                    self.assertTrue(serve.compatible_health(health, database))
+                    self.assertTrue(serve.compatible_health(health, database, config_file=config))
                     self.assertEqual(server.server_name, "127.0.0.1")
                     self.assertEqual(server.server_port, port)
                 finally:

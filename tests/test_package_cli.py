@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from richi import cli, memory
+from richi import memory
 
 
 class PackageCliTests(unittest.TestCase):
@@ -82,16 +82,16 @@ class PackageCliTests(unittest.TestCase):
 
     def test_map_dispatch_is_lazy_and_preserves_global_and_local_options(self):
         with mock.patch("richi.launch_map.main", return_value=0) as launch:
-            self.assertEqual(cli.main(["--db", "global.db", "--config", "global.json", "map", "--no-open"]), 0)
+            self.assertEqual(memory.main(["--db", "global.db", "--config", "global.json", "map", "--no-open"]), 0)
             launch.assert_called_once_with(["--db", "global.db", "--config", "global.json", "--no-open"])
         with mock.patch("richi.serve.main", return_value=0) as serve:
-            self.assertEqual(cli.main(["--db", "global.db", "map", "serve", "--db", "local.db",
+            self.assertEqual(memory.main(["--db", "global.db", "map", "serve", "--db", "local.db",
                                        "--config", "local.json", "--port", "8123", "--open"]), 0)
             serve.assert_called_once_with(["--db", "local.db", "--config", "local.json", "--port", "8123", "--open"])
         for args in (["map", "serve", "--no-open"], ["map", "--open"]):
             stderr = io.StringIO()
             with redirect_stderr(stderr):
-                self.assertEqual(cli.main(args), 1)
+                self.assertEqual(memory.main(args), 1)
             self.assertIn("error", json.loads(stderr.getvalue()))
 
 

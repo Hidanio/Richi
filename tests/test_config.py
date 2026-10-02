@@ -4,11 +4,12 @@ from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
+import stat
 import tempfile
 import unittest
 from unittest import mock
 
-from richi import config
+from richi_launcher import config
 
 
 class ConfigTests(unittest.TestCase):
@@ -47,6 +48,9 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.database, self.home / ".local/share/richi/memory.sqlite3")
         self.assertEqual(settings.config_file, self.home / ".config/richi/config.json")
         self.assertEqual(settings.port, 8765)
+        self.assertFalse(settings.dev)
+        self.assertIsNone(settings.development_source)
+        self.assertEqual(settings.as_dict()["development"], {"source": None})
         self.assertFalse(self.home.exists())
 
     def test_mac_and_windows_defaults(self):
@@ -151,6 +155,100 @@ class ConfigTests(unittest.TestCase):
         settings = config.resolve_settings()
         self.assertEqual(settings.config_file, self.root / "custom-config/richi/config.json")
         self.assertEqual(settings.data_dir, self.root / "custom-data/richi")
+
+    def test_development_source_is_config_relative_without_inspecting_checkout(self):
+        source = self.root / "missing-checkout"
+        path = self.write({"dev": True, "development": {"source": "../missing-checkout"}})
+        before = path.read_bytes()
+        with self.cwd(self.home.parent):
+            settings = config.resolve_settings(config_file=path)
+        self.assertTrue(settings.dev)
+        self.assertEqual(settings.development_source, source)
+        self.assertEqual(settings.as_dict()["development"], {"source": str(source)})
+        self.assertEqual(path.read_bytes(), before)
+        self.assertFalse(source.exists())
+        self.assertFalse(settings.database.exists())
+        self.assertFalse(path.with_name(path.name + ".lock").exists())
+
+    def test_development_values_are_strict_and_only_come_from_config(self):
+        invalid = [{"dev": value} for value in (None, 0, 1, "true", [])]
+        invalid += [{"development": value} for value in (None, True, [], "source")]
+        invalid += [{"development": {"source": value}} for value in (False, 1, [], "", "\x00")]
+        invalid += [{"development": {"directory": "typo"}}]
+        for value in invalid:
+            with self.subTest(value=value):
+                path = self.write(value)
+                with self.assertRaises(config.ConfigError):
+                    config.resolve_settings(config_file=path)
+        path = self.write({"dev": False, "development": {"source": None}})
+        with mock.patch.dict(os.environ, {"RICHI_DEV": "true", "RICHI_DEVELOPMENT_SOURCE": "ignored"}):
+            settings = config.resolve_settings(config_file=path)
+        self.assertFalse(settings.dev)
+        self.assertIsNone(settings.development_source)
+        self.config_file.write_text('{"development":{"source":null,"source":"other"}}', encoding="utf-8")
+        with self.assertRaisesRegex(config.ConfigError, "Duplicate"):
+            config.resolve_settings(config_file=self.config_file)
+
+    def test_config_set_preserves_storage_values_and_permissions(self):
+        original = {"database": "../store.sqlite3", "data_dir": "relative-data", "port": 8123}
+        path = self.write(original)
+        path.chmod(0o640)
+        with self.cwd(self.root):
+            selected = config.set_config_value("development.source", "checkout", config_file=path)
+        config.set_config_value("dev", True, config_file=path)
+        written = json.loads(path.read_text())
+        self.assertEqual(selected, path)
+        self.assertEqual({key: written[key] for key in original}, original)
+        self.assertEqual(written["development"], {"source": str(self.root / "checkout")})
+        self.assertIs(written["dev"], True)
+        self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o640)
+        self.assertFalse((self.root / "checkout").exists())
+        self.assertFalse((self.root / "store.sqlite3").exists())
+
+    def test_config_set_creates_private_selected_config_and_accepts_unset_source(self):
+        os.environ["RICHI_CONFIG"] = str(self.config_file)
+        selected = config.set_config_value("dev", True)
+        self.assertEqual(selected, self.config_file)
+        self.assertEqual(stat.S_IMODE(selected.stat().st_mode), 0o600)
+        self.assertEqual(json.loads(selected.read_text()), {"dev": True})
+        self.assertTrue(config.resolve_settings().dev)
+        self.assertIsNone(config.resolve_settings().development_source)
+        config.set_config_value("development.source", None)
+        self.assertEqual(json.loads(selected.read_text())["development"], {"source": None})
+        self.assertFalse(self.home.exists())
+
+    def test_config_set_false_recovers_from_unavailable_checkout(self):
+        broken = self.root / "broken-checkout"
+        broken.symlink_to(broken)
+        path = self.write({"dev": True, "development": {"source": str(broken)}})
+        config.set_config_value("dev", False, config_file=path)
+        settings = config.resolve_settings(config_file=path)
+        self.assertFalse(settings.dev)
+        self.assertEqual(settings.development_source, broken)
+        self.assertTrue(broken.is_symlink())
+        self.assertFalse(settings.database.exists())
+
+    def test_config_set_rejects_bad_values_without_creating_config(self):
+        invalid = [("database", "other.sqlite3"), ("dev", "false"), ("dev", 0),
+                   ("dev", None), ("development.source", False), ("development.source", "")]
+        for key, value in invalid:
+            with self.subTest(key=key, value=value), self.assertRaises(config.ConfigError):
+                config.set_config_value(key, value, config_file=self.config_file)
+        self.assertFalse(self.config_file.parent.exists())
+
+    def test_config_set_keeps_existing_config_on_rejected_or_failed_update(self):
+        path = self.write({"dev": True, "development": {"unknown": "typo"}})
+        before = path.read_bytes()
+        with self.assertRaisesRegex(config.ConfigError, "Unknown development"):
+            config.set_config_value("dev", False, config_file=path)
+        self.assertEqual(path.read_bytes(), before)
+        path = self.write({"database": "preserved.sqlite3", "dev": True})
+        before = path.read_bytes()
+        with mock.patch.object(config.os, "replace", side_effect=OSError("simulated failure")):
+            with self.assertRaisesRegex(config.ConfigError, "Cannot update config"):
+                config.set_config_value("dev", False, config_file=path)
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(list(path.parent.glob(".config.json.*")), [])
 
 
 if __name__ == "__main__":

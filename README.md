@@ -36,21 +36,33 @@ git clone https://github.com/Hidanio/Richi.git
 cd Richi
 python3 -m venv "$HOME/.local/share/richi/venv"
 "$HOME/.local/share/richi/venv/bin/python" -m pip install --upgrade pip
-"$HOME/.local/share/richi/venv/bin/python" -m pip install -e .
+"$HOME/.local/share/richi/venv/bin/python" -m pip install .
 mkdir -p "$HOME/.local/bin"
 ln -s "$HOME/.local/share/richi/venv/bin/richi" "$HOME/.local/bin/richi"
 export PATH="$HOME/.local/bin:$PATH"
 richi config show
 richi init
 richi recall 'почему выбрали локальный кеш'
-richi map --dev
+richi map
 ```
 
 Команда `richi` доступна из любой папки; для новых терминалов добавьте
-`~/.local/bin` в PATH своей оболочки. Установка `-e` сразу использует изменения
-исходников, а `map --dev` перезапускает сервер карты после их изменения.
-Окружение и данные находятся отдельно от Git-репозитория; исходники checkout
-должны оставаться доступны. Подробнее — в [инструкции установки](docs/INSTALLATION.md).
+`~/.local/bin` в PATH своей оболочки. Обычный режим использует установленную
+копию пакета: изменения и переключение веток в checkout на неё не влияют.
+Окружение и данные находятся отдельно от Git-репозитория.
+
+Для разработки укажите исходники и включите общий dev-режим:
+
+```sh
+richi config set development.source /path/to/Richi
+richi config set dev true
+```
+
+Теперь CLI, агенты и карта используют текущий код этого checkout. CLI подхватывает
+изменения при следующем вызове, карта перезагружает сервер после изменения
+исходников; для обновления интерфейса обновите страницу браузера. Вернуться к
+установленной версии можно командой `richi config set dev false`. Настройки и
+база знаний остаются общими. Подробнее — в [инструкции установки](docs/INSTALLATION.md).
 
 Для новой установки `init` создаёт пустую базу в каталоге данных пользователя,
 отдельно от исходников. Примеры не загружают готовую энциклопедию: знания добавляет
