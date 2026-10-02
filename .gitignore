@@ -216,3 +216,23 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Richi local data and preparation files.
+# Local preparation files and task notes.
+/work/
+
+# Runtime knowledge stores and captured source snapshots are private user data.
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+/artifacts/git/
+
+# Local environment and Python cache files.
+.env.*
+!.env.example
+.venv/
+*.py[cod]
+.DS_Store
