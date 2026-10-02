@@ -8,7 +8,6 @@ import sys
 import tempfile
 import threading
 import unittest
-from http.server import ThreadingHTTPServer
 
 BASE = Path(__file__).resolve().parents[1] / "src" / "richi"
 from richi import memory
@@ -169,7 +168,7 @@ class GraphTests(unittest.TestCase):
         self.cli("graph", "neighbors", "entry:one", "--depth", "1")
 
     def test_map_http_security_refresh_and_read_only(self):
-        server = ThreadingHTTPServer(("127.0.0.1", 0), serve.handler_for(self.db))
+        server = serve.LoopbackHTTPServer(("127.0.0.1", 0), serve.handler_for(self.db))
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self.addCleanup(server.server_close)

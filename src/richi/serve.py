@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import selectors
 import signal
+from socketserver import TCPServer
 import sqlite3
 import subprocess
 import sys
@@ -30,6 +31,16 @@ GIT_QUERY_LIMIT = 8192
 GIT_OPERATION_TIMEOUT = 25
 GIT_WORKER_TIMEOUT = 30
 GIT_WORKER_OUTPUT_LIMIT = 450000
+
+
+class LoopbackHTTPServer(ThreadingHTTPServer):
+    """Bind the local viewer without a reverse DNS lookup during startup."""
+
+    def server_bind(self):
+        # HTTPServer.server_bind calls getfqdn(), which can block for tens of
+        # seconds on macOS. The viewer uses a numeric loopback address only.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 
 class GitRequestError(ValueError):
@@ -328,7 +339,7 @@ def _main(argv=None):
             parser.error("The map requires schema 2; run richi backup and richi migrate")
     address = "http://127.0.0.1:%d/" % args.port
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", args.port), handler_for(database, settings.config_file if settings.config_file.is_file() else None))
+        server = LoopbackHTTPServer(("127.0.0.1", args.port), handler_for(database, settings.config_file if settings.config_file.is_file() else None))
     except OSError as exc:
         if args.open:
             try:

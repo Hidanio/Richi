@@ -1,7 +1,6 @@
 """Read-only map Git navigation uses temporary repositories and attached evidence only."""
 from concurrent.futures import ThreadPoolExecutor
 import http.client
-from http.server import ThreadingHTTPServer
 import json
 from pathlib import Path
 import sqlite3
@@ -51,7 +50,7 @@ class GitMapAPITests(unittest.TestCase):
         graph.put(self.conn, {"id": "supports", "from_ref": "entry:task:one", "to_ref": "entity:term",
             "kind": "supports", "description": "Evidence", "sources": self.sources,
             "knowledge_state": "superseded"}, "edge", memory)
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), serve.handler_for(self.db))
+        self.server = serve.LoopbackHTTPServer(("127.0.0.1", 0), serve.handler_for(self.db))
         self.server.daemon_threads = True
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
