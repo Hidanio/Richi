@@ -93,7 +93,7 @@ class MapDevelopmentTests(unittest.TestCase):
             with socket.socket() as reservation:
                 reservation.bind(("127.0.0.1", 0))
                 port = reservation.getsockname()[1]
-            environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_")}
+            environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_") and key != "CODEX_THREAD_ID"}
             environment.update(HOME=str(root / "home"), XDG_CONFIG_HOME=str(root / "config"),
                                XDG_DATA_HOME=str(root / "data"))
             command = self.isolated_command(installed) + ["--db", str(database), "map", "serve", "--port", str(port)]
@@ -150,7 +150,7 @@ class MapDevelopmentTests(unittest.TestCase):
             with socket.socket() as reservation:
                 reservation.bind(("127.0.0.1", 0))
                 port = reservation.getsockname()[1]
-            environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_")}
+            environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_") and key != "CODEX_THREAD_ID"}
             bad_config = root / "broken.json"
             bad_config.write_text("not JSON")
             environment["RICHI_CONFIG"] = str(bad_config)

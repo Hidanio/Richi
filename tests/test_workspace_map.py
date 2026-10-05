@@ -33,7 +33,7 @@ class WorkspaceMapTests(unittest.TestCase):
         (self.checkout / "pyproject.toml").write_text('[project]\nname = "richi"\nversion = "0.1.0"\n')
         runner = "import sys;sys.path.insert(0,sys.argv[1]);from richi_launcher.cli import main;sys.exit(main(sys.argv[2:]))"
         self.command = [sys.executable, "-I", "-B", "-c", runner, str(self.installed)]
-        self.environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_")}
+        self.environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_") and key != "CODEX_THREAD_ID"}
         self.environment.update(HOME=str(self.root / "home"), XDG_CONFIG_HOME=str(self.root / "config"),
                                 XDG_DATA_HOME=str(self.root / "data"))
         self.processes = []

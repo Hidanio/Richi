@@ -335,6 +335,11 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
 def worker_environment(config_file=None, workspace=None, config_required=False):
     """Keep child storage/labels tied to this map, independently of the registry default."""
     environment = dict(os.environ)
+    # These are private descendants of an already selected map invocation.
+    # Reload re-enters the stable launcher with the map's explicit config/db;
+    # it must not ask for a new choice or follow a later chat rebind.
+    environment.pop("RICHI_CHAT_ID", None)
+    environment.pop("CODEX_THREAD_ID", None)
     if config_file is not None:
         environment["RICHI_ACTIVE_CONFIG"] = str(config_file)
         if workspace is not None:

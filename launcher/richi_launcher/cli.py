@@ -6,6 +6,8 @@ import os
 import sys
 
 from .config import ConfigError, resolve_settings, set_config_value
+from .chats import (ChatError, bind_chat, current_chat, detect_chat, pin_chat,
+                    reject_storage_overrides)
 from .runtime import ACTIVE_RUNTIME, installed_runtime, resolve_runtime, runtime_command
 from .workspaces import create_workspace, list_workspaces, use_workspace
 
@@ -25,7 +27,8 @@ def _selectors(argv):
     options = {}
     position = 0
     names = {"--config": "config_file", "--db": "db",
-             "--workspace": "workspace", "-w": "workspace"}
+             "--workspace": "workspace", "-w": "workspace",
+             "--chat": "chat_id", "--project-path": "project_path"}
     while position < len(argv):
         token = argv[position]
         key, sep, value = token.partition("=")
@@ -66,6 +69,12 @@ def _selectors(argv):
             index += 1
         tail = normalized
     return options, command, tail
+
+
+def _wants_help(arguments):
+    # A literal --help after -- is payload, not permission to skip binding.
+    options = arguments[:arguments.index("--")] if "--" in arguments else arguments
+    return "--help" in options or "-h" in options
 
 
 def _emit(result):
@@ -171,14 +180,56 @@ def workspace_command(argv, selectors, alias=False):
     return _emit(result)
 
 
+def chat_command(argv, selectors, chat_id):
+    parser = Parser(prog="richi chat", description="Choose a workspace for this chat without changing the CLI default")
+    actions = parser.add_subparsers(dest="action", required=True)
+    actions.add_parser("current", help="Inspect this chat binding and the current CLI workspace")
+    bind = actions.add_parser("bind", help="Save an explicit workspace choice for this chat")
+    selection = bind.add_mutually_exclusive_group(required=True)
+    selection.add_argument("name", nargs="?")
+    selection.add_argument("--current", action="store_true", help="Snapshot the current CLI workspace")
+    bind.add_argument("--replace", action="store_true", help="Deliberately replace this chat's existing choice")
+    args = parser.parse_args(argv)
+    if selectors:
+        raise ConfigError("Use chat bind NAME or chat bind --current without storage selectors")
+    if args.action == "current":
+        return _emit(current_chat(chat_id))
+    reject_storage_overrides(selectors)
+    return _emit(bind_chat(chat_id, workspace=args.name, current=args.current, replace=args.replace))
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     try:
         selectors, command, tail = _selectors(argv)
+        chat_id = detect_chat(selectors.pop("chat_id", None))
+        project_path = selectors.pop("project_path", None)
+        if project_path is not None and command in {"chat", "config", "workspace", "use", "map"}:
+            raise ConfigError("--project-path applies to knowledge commands, not " + command)
+        if command == "chat":
+            return chat_command(tail, selectors, chat_id)
         if command == "config":
+            selectors = pin_chat(chat_id, selectors, metadata=tail == ["show"] or _wants_help(tail))
             return configuration(tail, selectors)
         if command in {"workspace", "use"}:
+            state = current_chat(chat_id) if chat_id is not None else None
+            if state and (command == "use" or tail[:1] == ["use"]):
+                raise ChatError("A chat cannot change the global CLI default; use chat bind NAME --replace to change this chat",
+                                "chat_global_use_forbidden", chat_id=chat_id, workspace=state["workspace"])
+            if command == "workspace" and tail[:1] == ["current"]:
+                selectors = pin_chat(chat_id, selectors, metadata=True)
             return workspace_command(tail, selectors, alias=command == "use")
+        if chat_id is not None and (command in {None, "--help", "-h", "--version"}
+                                    or _wants_help(tail)):
+            # Help does not require a choice or working development sources.
+            # Argparse exits before opening the store in the fixed runtime.
+            arguments = ([command] if command is not None else ["--help"]) + tail
+            execution = runtime_command(installed_runtime(), arguments)
+            environment = dict(os.environ)
+            environment.pop(ACTIVE_RUNTIME, None)
+            os.execve(execution[0], execution, environment)
+            return 0
+        selectors = pin_chat(chat_id, selectors)
         settings = resolve_settings(**selectors)
         selected = resolve_runtime(settings)
         # Pin the resolution before entering mutable code. In particular, strip
@@ -189,6 +240,8 @@ def main(argv=None):
         pin_config = required or settings.config_file.is_file()
         if pin_config:
             arguments += ["--config", str(settings.config_file)]
+        if project_path is not None:
+            arguments += ["--project-path", project_path]
         if command is not None:
             arguments.append(command)
         arguments.extend(tail)
@@ -196,6 +249,8 @@ def main(argv=None):
         environment = dict(os.environ)
         environment.pop(ACTIVE_RUNTIME, None)
         environment.pop("RICHI_DB", None)
+        if chat_id is not None:
+            environment["RICHI_CHAT_ID"] = chat_id
         environment["RICHI_DATA_DIR"] = str(settings.data_dir)
         environment["RICHI_ACTIVE_CONFIG"] = str(settings.config_file)
         if settings.workspace is not None:
@@ -212,5 +267,6 @@ def main(argv=None):
             environment["RICHI_CONFIG"] = str(settings.config_file)
         os.execve(execution[0], execution, environment)
     except (ConfigError, OSError) as exc:
-        print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        result = exc.details if isinstance(exc, ChatError) else {"error": str(exc)}
+        print(json.dumps(result, ensure_ascii=False), file=sys.stderr)
         return 1

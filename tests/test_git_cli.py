@@ -7,6 +7,8 @@ import sys
 import tempfile
 import unittest
 
+from cli_environment import cli_environment
+
 
 
 class GitCliTests(unittest.TestCase):
@@ -38,7 +40,7 @@ class GitCliTests(unittest.TestCase):
 
     def cli(self, *args, ok=True):
         result = subprocess.run([sys.executable, "-B", "-m", "richi", "--db", str(self.db), *args],
-                                text=True, capture_output=True, timeout=30)
+                                text=True, capture_output=True, timeout=30, env=cli_environment(self.db.parent))
         self.assertEqual(result.returncode == 0, ok, result.stderr + result.stdout)
         return json.loads(result.stdout if ok else result.stderr)
 

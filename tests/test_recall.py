@@ -4,12 +4,13 @@ These are CLI integration tests, independent of retrieval/scoring internals.
 They deliberately measure the *serialized stdout*, including its final newline.
 """
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+
+from cli_environment import cli_environment
 
 
 
@@ -33,7 +34,7 @@ class RecallTests(unittest.TestCase):
             text=True,
             encoding="utf-8",
             timeout=20,
-            env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
+            env=cli_environment(self.db.parent, PYTHONDONTWRITEBYTECODE="1"),
         )
         if ok:
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)

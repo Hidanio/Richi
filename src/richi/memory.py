@@ -531,11 +531,20 @@ def positive_int(value):
     return number
 
 
+def scan_depth(value):
+    number = int(value)
+    if not 0 <= number <= 20:
+        raise argparse.ArgumentTypeError("max-depth must be between 0 and 20")
+    return number
+
+
 def parser():
     cli = Parser(description=__doc__)
     cli.add_argument("--db", help="SQLite path (overrides environment and config; place before command)")
     cli.add_argument("--config", help="JSON configuration file (place before command)")
     cli.add_argument("--workspace", "-w", help="Select an isolated workspace (place before command)")
+    cli.add_argument("--project-path", type=Path, help="Verify this repository belongs to the selected workspace before the operation")
+    cli.add_argument("--chat", help="Select a chat binding through the installed launcher")
     from . import __version__
     cli.add_argument("--version", action="version", version="Richi " + __version__)
     commands = cli.add_subparsers(dest="command", required=True)
@@ -546,6 +555,13 @@ def parser():
     workspace_commands.add_parser("create").add_argument("name")
     workspace_commands.add_parser("use").add_argument("name", nargs="?")
     commands.add_parser("use", help="Switch workspace; opens a chooser without a name").add_argument("name", nargs="?")
+    chat = commands.add_parser("chat", help="Inspect or explicitly bind this chat to a workspace")
+    chat_commands = chat.add_subparsers(dest="action", required=True)
+    chat_commands.add_parser("current")
+    bind = chat_commands.add_parser("bind")
+    bind.add_argument("name", nargs="?")
+    bind.add_argument("--current", action="store_true")
+    bind.add_argument("--replace", action="store_true")
     configuration = commands.add_parser("config", help="Inspect effective settings without opening a database")
     config_commands = configuration.add_subparsers(dest="action", required=True)
     config_commands.add_parser("show")
@@ -570,6 +586,13 @@ def parser():
             add.add_argument("--id", dest="project_id")
             add.add_argument("--name")
             add.add_argument("--description", default="")
+            scan = group.add_parser("scan", help="Preview or atomically register Git repositories under a directory")
+            scan.add_argument("path", type=Path)
+            scan.add_argument("--apply", action="store_true", help="Apply the complete collision-free discovery plan")
+            scan.add_argument("--max-depth", type=scan_depth, default=3)
+            check = group.add_parser("check", help="Resolve a path against projects in this workspace only")
+            check.add_argument("path", type=Path)
+            check.add_argument("--id", dest="project_id")
         elif name == "entry":
             read = group.add_parser("get")
             read.add_argument("id")
@@ -691,13 +714,18 @@ def run(args):
     from richi_launcher.config import resolve_settings
     settings = resolve_settings(db=args.db, config_file=getattr(args, "config", None),
                                 workspace=getattr(args, "workspace", None))
-    if args.command in {"config", "workspace", "use"}:
+    if args.command in {"config", "workspace", "use", "chat"}:
         raise MemoryError("Use the installed richi " + args.command + " command")
     database = settings.database
     new_file = not database.exists()
     source_attach = args.command == "sources" and getattr(args, "action", None) == "attach"
     adding_project = args.command == "project" and args.action == "add"
-    writing = args.command in {"init", "migrate"} or getattr(args, "action", None) in {"put", "upsert"} or source_attach or adding_project
+    scanning = args.command == "project" and args.action == "scan"
+    applying_scan = scanning and args.apply
+    project_path = getattr(args, "project_path", None)
+    if project_path is not None and (args.command in {"init", "migrate", "backup"} or adding_project or scanning):
+        raise MemoryError("--project-path is for existing project operations; omit it for initialization, registration or a workspace backup")
+    writing = args.command in {"init", "migrate"} or getattr(args, "action", None) in {"put", "upsert"} or source_attach or adding_project or applying_scan
     conn = connect(database, create=args.command == "init", readonly=not writing)
     try:
         if args.command == "init":
@@ -711,7 +739,28 @@ def run(args):
             return backup(conn, database, args.output)
         writing = getattr(args, "action", None) in {"put", "upsert"}
         items = payload(args.json) if writing else None
-        with transaction(conn, write=writing or source_attach or adding_project):
+        with transaction(conn, write=writing or source_attach or adding_project or applying_scan):
+            if project_path is not None:
+                from .projects import ensure_project_context
+                project = ensure_project_context(conn, project_path, expected_id=getattr(args, "project", None))
+                if writing and args.command == "entry":
+                    for item in items:
+                        if project["id"] not in (item.get("project_ids") or []):
+                            raise MemoryError("Entry must include checked project " + project["id"] + " in project_ids")
+                if writing and args.command == "relation":
+                    for item in items:
+                        if project["id"] not in (item.get("from_project"), item.get("to_project")):
+                            raise MemoryError("Relation must include checked project " + project["id"])
+                if writing and args.command == "project":
+                    raise MemoryError("Use project upsert without --project-path for deliberate registration changes")
+            if scanning:
+                from .projects import project_scan
+                result = project_scan(conn, args.path, apply=args.apply, max_depth=args.max_depth)
+                return dict(result, workspace=settings.workspace, database=str(database))
+            if args.command == "project" and args.action == "check":
+                from .projects import project_check
+                return dict(project_check(conn, args.path, project_id=args.project_id),
+                            workspace=settings.workspace, database=str(database))
             if adding_project:
                 result = project_add(conn, args.path, args.project_id, args.name, args.description)
                 return dict(result, workspace=settings.workspace, database=str(database))
@@ -772,6 +821,8 @@ def main(argv=None):
     try:
         args = parser().parse_args(argv)
         if args.command == "map":
+            if args.project_path is not None:
+                raise MemoryError("--project-path is not supported by map; use project check before opening the workspace map")
             from .cli import run_map
             return run_map(args)
         result = run(args)

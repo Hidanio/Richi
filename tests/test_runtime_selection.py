@@ -39,7 +39,7 @@ class RuntimeSelectionTests(unittest.TestCase):
                                 "data_dir": str(self.database.parent), "port": 8943}
         self.config.write_text(json.dumps(self.original_config), encoding="utf-8")
         self.environment = {key: value for key, value in os.environ.items()
-                            if not key.startswith("RICHI_")}
+                            if not key.startswith("RICHI_") and key != "CODEX_THREAD_ID"}
         self.environment.update(HOME=str(self.root / "home"),
                                 XDG_CONFIG_HOME=str(self.root / "config"),
                                 XDG_DATA_HOME=str(self.root / "data"))

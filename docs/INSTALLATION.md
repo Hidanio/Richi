@@ -108,7 +108,17 @@ richi config show
 получают отдельные базы и каталоги Git-снимков. Dev-настройки принадлежат
 выбранной области и копируются при её создании.
 
+Настройки текущего CLI служат предложением для нового чата. После ответа
+пользователя агент сохраняет выбор через `richi chat bind --current` или
+`richi chat bind NAME`. Чат продолжает использовать свою область после
+переключения CLI. ID Codex определяется автоматически; другие клиенты передают
+устойчивый `RICHI_CHAT_ID` либо `--chat ID`. Подробности — в [руководстве](WORKSPACES.md).
+
 ## Выбор хранилища
+
+Приведённые ниже прямые настройки базы предназначены для обычного терминала.
+Обнаруженный чат использует зарегистрированную область и отклоняет прямые
+переопределения `--config`, `--db`, `RICHI_CONFIG`, `RICHI_DB`, `RICHI_DATA_DIR`.
 
 `richi config show` показывает итоговые настройки и выбранный runtime; само
 чтение настроек не создаёт базу. Для новой установки выполните `richi init`, затем `richi check`.
@@ -209,13 +219,24 @@ Python- и SQL-файлов исходников. Изменение SQL-фай�
 ведут в его собственную папку `references/`.
 
 Убедитесь, что процесс агента видит исполняемый файл `richi` и выбранную
-конфигурацию. Проверьте из его среды `richi config show` и `richi check`: режим,
+конфигурацию. Сначала вызовите `richi chat current` и `richi workspace list`.
+Если чат ещё не привязан, спросите пользователя: текущая область CLI или другая
+для этого чата; сохраните ответ через `chat bind --current` либо `chat bind NAME`.
+Затем проверьте `richi config show` и `richi check`: режим,
 исходники и база должны совпадать с ожидаемыми.
 Настройка в терминале не гарантирует те же переменные в IDE или desktop-приложении.
 
 Пример инструкции проекта для явно разрешённых локальных обновлений:
 
 ```markdown
+At the start of a new chat, inspect `richi chat current` and `richi workspace list`.
+If unbound, ask once whether to use the current CLI workspace or another one for
+this chat. An explicit workspace already named by the user is sufficient.
+Save the answer with `richi chat bind --current` or `richi chat bind NAME`.
+Reuse the binding in later turns and after compaction; do not change the global
+CLI default. Rebinding requires the user's explicit request and `--replace`.
+Before repository work, verify `richi project check PATH --id PROJECT_ID`, then
+use `--project-path PATH` on knowledge operations. Do not infer a workspace from cwd.
 Use the project-memory skill to recall prior engineering work and save reusable
 findings, decisions, failed experiments, and task outcomes. Use the configured
 Richi store; inspect `richi config show` if its location is unclear. Local memory

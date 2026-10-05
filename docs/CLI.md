@@ -45,8 +45,26 @@ richi use
 richi -w work recall 'локальный кеш' --project service-example
 ```
 
-`richi use` открывает меню только в терминале; агенты передают `-w NAME`
-в каждом вызове. [Workspace и изоляция знаний](WORKSPACES.md).
+`richi use` открывает меню только в обычном терминале. В новом чате агент
+спрашивает область один раз, затем сохраняет выбор:
+
+```sh
+richi chat current
+richi chat bind --current
+# Или другая область только для чата:
+richi chat bind work
+richi project check /path/to/service-example --id service-example
+richi --project-path /path/to/service-example recall 'локальный кеш' --project service-example
+# Просмотр и последующий импорт папки репозиториев:
+richi project scan /path/to/repositories
+richi project scan /path/to/repositories --apply
+```
+
+Варианты `bind` взаимоисключающие: выполните только выбранный пользователем.
+В привязанном чате `-w` может только повторять сохранённую область. Прямые
+`--db`, `--config` и соответствующие переменные хранилища отклоняются.
+Для другого клиента передавайте устойчивый ID через `--chat ID` или `RICHI_CHAT_ID`;
+Codex предоставляет `CODEX_THREAD_ID`. [Workspace и изоляция знаний](WORKSPACES.md).
 
 Полные справочники находятся в `skills/project-memory/references`. Это единый
 источник документации CLI и установленного skill: папка skill переносится целиком,

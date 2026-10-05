@@ -36,10 +36,19 @@ Keep SQLite stores, backups, captured Git bytes, private evaluation corpora,
 local configuration, credentials, and runtime files outside committed source.
 Public examples must be synthetic. Preserve copyright and licensing attribution.
 
-Workspaces isolate knowledge stores, not source code. At task start inspect
-`richi workspace current`, choose the intended workspace, and pin it with
-`richi -w NAME` for every call (or an explicit config for a custom store).
-Do not call global `richi use` on behalf of a parallel agent. A repository can be
-registered independently in several workspaces with `project add PATH`; do not
-copy another workspace's knowledge without a specific request. Tests must use
-synthetic homes/registries and verify same-project isolation across stores.
+At each new chat, inspect `richi chat current` and `richi workspace list` before
+memory access. If unbound and the human has not explicitly selected a workspace
+in this chat, ask whether to use the current CLI workspace or a chat-only
+override. After the answer, `richi chat bind --current` or `richi chat bind NAME`
+saves that choice. Reuse it in later turns. A global CLI switch does not redirect
+the chat; only an explicit human request permits `chat bind NAME --replace`.
+For non-Codex integrations supply stable RICHI_CHAT_ID or --chat on every call.
+Do not bypass a binding by changing/unsetting the chat ID or storage selectors.
+
+For repository work run `project check PATH --id PROJECT`, then use
+`--project-path PATH` on relevant memory operations to validate membership again.
+Workspaces isolate knowledge, not shared source files. `project scan ROOT`
+previews discovery; --apply registers a complete conflict-free result atomically.
+Never copy another workspace's knowledge without a specific request. Use
+synthetic homes/registries in tests, clearing ambient CODEX_THREAD_ID in tests
+that are not exercising chat behavior. Test same-project isolation and worktrees.

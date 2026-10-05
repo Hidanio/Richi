@@ -15,6 +15,8 @@ import unittest
 
 from richi_launcher.runtime import bootstrap_command
 
+from cli_environment import cli_environment
+
 
 
 class LauncherTests(unittest.TestCase):
@@ -25,7 +27,7 @@ class LauncherTests(unittest.TestCase):
         self.config = self.db.parent / "config.json"
         self.config.write_text(json.dumps({"database": str(self.db), "dev": False}))
         subprocess.run(bootstrap_command(["--config", str(self.config), "init"]),
-                       capture_output=True, check=True)
+                       capture_output=True, check=True, env=cli_environment(self.db.parent))
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             self.port = sock.getsockname()[1]
@@ -42,7 +44,7 @@ class LauncherTests(unittest.TestCase):
     def launch(self, db=None):
         result = subprocess.run(bootstrap_command(["--config", str(self.config), "--db", str(db or self.db),
                                                   "map", "--port", str(self.port), "--no-open"]),
-                                capture_output=True, text=True, timeout=20)
+                                capture_output=True, text=True, timeout=20, env=cli_environment(self.db.parent))
         self.assertEqual(result.returncode, 0, result.stderr)
         record = json.loads(result.stdout)
         if "pid" in record:
@@ -71,7 +73,7 @@ class LauncherTests(unittest.TestCase):
     def test_missing_database_does_not_create_one(self):
         missing = self.db.parent / "missing.sqlite3"
         result = subprocess.run(bootstrap_command(["--config", str(self.config), "--db", str(missing), "map", "--no-open"]),
-                                 capture_output=True, timeout=10)
+                                 capture_output=True, timeout=10, env=cli_environment(self.db.parent))
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(missing.exists())
 
