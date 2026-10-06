@@ -53,7 +53,9 @@ richi map
 
 Стабильные релизы: `richi update check`, `richi update apply`,
 `richi update rollback`. Обновление сохраняет предыдущую версию, настройки dev
-и данные workspace. Подробности — [обновления](docs/UPDATES.md) и
+и данные workspace. Фоновый режим включается явно:
+`richi update auto enable --interval 6h`, состояние — `richi update auto status`.
+Подробности — [обновления](docs/UPDATES.md) и
 [публикация релиза](docs/RELEASING.md).
 
 Для разработки укажите исходники и включите общий dev-режим:

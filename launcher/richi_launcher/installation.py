@@ -4,7 +4,7 @@ No operation in this module resolves a workspace configuration or opens a
 database. Only the current and previous runtime are retained, except retired
 generations still leased by running processes.
 """
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import ast
 import importlib.metadata
 import json
@@ -115,8 +115,12 @@ def _verify_owner(ctx, generation, prefix):
         raise ConfigError("Refusing to remove an environment outside the managed installation")
 
 
+class _InstallationBusy(Exception):
+    """Another process owns the installation mutation lock."""
+
+
 @contextmanager
-def _locked(ctx, state=False):
+def _locked(ctx, state=False, blocking=True):
     import fcntl
     root = Path(ctx["root"])
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -126,7 +130,10 @@ def _locked(ctx, state=False):
     # state.lock, which is held briefly for pointer changes and collection.
     descriptor = os.open(str(root / ("state.lock" if state else "update.lock")), os.O_CREAT | os.O_RDWR, 0o600)
     try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
+        except BlockingIOError as exc:
+            raise _InstallationBusy() from exc
         yield
     finally:
         os.close(descriptor)
@@ -318,8 +325,13 @@ def _candidate_referenced(ctx, generation):
         return True
 
 
-def apply_release(release):
-    """Download, verify, stage and atomically activate one immutable wheel."""
+def apply_release(release, *, expected_generation=None, blocking=True,
+                  before_apply=None, activation_guard=None, require_auto=False):
+    """Stage a wheel; optional background guards also protect the pointer commit.
+
+    Lock order is update.lock, caller's activation guard, then state.lock.
+    The guard factory yields a boolean and remains entered through activation.
+    """
     candidate = None
     committed = False
     try:
@@ -328,8 +340,12 @@ def apply_release(release):
         _compatible(manifest)
         ctx = _context()
         _validate_layout(ctx)
-        with _locked(ctx):
+        with _locked(ctx, blocking=blocking):
             state = _state(ctx)
+            if expected_generation is not None and state["current"] != expected_generation:
+                return dict(_summary(ctx, state), status="superseded")
+            if before_apply is not None and not before_apply():
+                return dict(_summary(ctx, state), status="cancelled")
             current = state["generations"][state["current"]]
             if current["version"] == manifest["version"] and current.get("wheel_sha256") == manifest["wheel"]["sha256"]:
                 with _locked(ctx, state=True):
@@ -353,17 +369,31 @@ def apply_release(release):
                 wheel = releases.download_wheel(release, Path(temporary))
                 releases.verify_wheel(wheel, manifest)
                 record = _stage(ctx, generation, wheel, manifest)
-            leases = Path(ctx["root"]) / "leases"
-            leases.mkdir(parents=True, exist_ok=True, mode=0o700)
-            if leases.resolve() != leases:
-                raise ConfigError("Managed leases directory cannot contain symlinks")
-            fd = os.open(str(leases / (generation + ".lock")), os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
-            os.close(fd)
-            state["generations"][generation] = record
-            state["previous"], state["current"] = state["current"], generation
-            result = _activate(ctx, state, "updated")
-            committed = True
-            return result
+            if require_auto:
+                _run([str(candidate / "bin" / "python"), "-I", "-B", "-c",
+                      "from richi_launcher import auto_update, update; "
+                      "assert all(callable(getattr(auto_update, name, None)) for name in "
+                      "('run', 'status', 'enable', 'disable')); "
+                      "update.command(['auto', 'run', '--help'])"], "Automatic release self-check")
+            guard = activation_guard() if activation_guard is not None else nullcontext(True)
+            with guard as allowed:
+                if not allowed:
+                    _verify_owner(ctx, generation, candidate)
+                    shutil.rmtree(candidate)
+                    return dict(_summary(ctx, state), status="cancelled")
+                leases = Path(ctx["root"]) / "leases"
+                leases.mkdir(parents=True, exist_ok=True, mode=0o700)
+                if leases.resolve() != leases:
+                    raise ConfigError("Managed leases directory cannot contain symlinks")
+                fd = os.open(str(leases / (generation + ".lock")), os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+                os.close(fd)
+                state["generations"][generation] = record
+                state["previous"], state["current"] = state["current"], generation
+                result = _activate(ctx, state, "updated")
+                committed = True
+                return result
+    except _InstallationBusy:
+        return {"status": "busy", "message": "Another installation update is in progress"}
     except (ConfigError, bootstrap.InstallationError, OSError, ValueError, TypeError, KeyError, SyntaxError,
             RuntimeError, subprocess.SubprocessError) as exc:
         if candidate is not None and not committed and candidate.exists() and not _candidate_referenced(ctx, generation):
@@ -390,6 +420,8 @@ def rollback():
             _verify_owner(ctx, state["previous"], Path(previous["prefix"]))
             if not (Path(previous["site"]) / "richi" / "memory.py").is_file():
                 raise ConfigError("Previous Richi release is missing; rollback was not applied")
+            from . import auto_update
+            auto_update.pause_for_rollback(ctx, state["previous"])
             state["current"], state["previous"] = state["previous"], state["current"]
             return _activate(ctx, state, "rolled_back")
     except (bootstrap.InstallationError, OSError, ValueError, SyntaxError) as exc:

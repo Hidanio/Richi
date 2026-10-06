@@ -123,6 +123,31 @@ class UpdateCliRoutingTests(unittest.TestCase):
         self.fetch.assert_not_called()
         self.local_status.assert_not_called()
 
+    def test_auto_commands_route_without_workspace_or_dev_access(self):
+        from richi_launcher import auto_update
+        for action in ("enable", "disable", "status", "run"):
+            with self.subTest(action=action), mock.patch.object(auto_update, action,
+                    return_value={"status": action}) as operation:
+                result = self.command("--chat", "unbound", "update", "auto", action)
+                self.assertEqual(result["status"], action)
+                if action == "enable":
+                    operation.assert_called_once_with(interval_seconds=21600)
+                else:
+                    operation.assert_called_once_with()
+        with mock.patch.object(auto_update, "enable", return_value={"status": "enabled"}) as enable:
+            self.command("update", "auto", "enable", "--interval", "1d")
+            enable.assert_called_once_with(interval_seconds=86400)
+        self.fetch.assert_not_called()
+        self.local_status.assert_not_called()
+
+    def test_auto_invalid_interval_cannot_register_a_job(self):
+        from richi_launcher import auto_update
+        with mock.patch.object(auto_update, "enable") as enable:
+            for value in ("1m", "8d", "0h", "1.5h", "-1h", "hour"):
+                with self.subTest(value=value):
+                    self.command("update", "auto", "enable", "--interval=" + value, ok=False)
+            enable.assert_not_called()
+
     def test_apply_rejects_unsupported_installation_before_network_access(self):
         self.local_status.return_value = {"supported": False, "reason": "dedicated venv required"}
         self.assertIn("dedicated venv required", self.command("update", "apply", ok=False)["error"])
@@ -139,7 +164,7 @@ class UpdateCliRoutingTests(unittest.TestCase):
                      ("--config", str(self.config)), ("--db", str(self.database)),
                      ("--project-path", str(self.root)))
         for selection in selectors:
-            for action in ("check", "apply", "rollback", "cleanup"):
+            for action in ("check", "apply", "rollback", "cleanup", "auto"):
                 with self.subTest(selection=selection, action=action):
                     report = self.command(*selection, "update", action, ok=False)
                     self.assertIn("installation", report["error"])

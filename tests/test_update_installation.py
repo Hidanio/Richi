@@ -8,6 +8,7 @@ import tempfile
 import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from unittest.mock import patch
 
 import richi_bootstrap as bootstrap
@@ -103,6 +104,61 @@ class InstallationTests(unittest.TestCase):
         (self.site / "richi-0.1.0.dist-info" / "direct_url.json").write_text(json.dumps({"dir_info": {"editable": True}}))
         with self.assertRaisesRegex(ConfigError, "editable"):
             installation.apply_release(self.release("0.2.0"))
+
+    def test_background_compare_and_swap_and_busy_never_stage(self):
+        release = self.release("0.2.0")
+        with patch.object(installation, "_stage") as stage:
+            result = installation.apply_release(release, expected_generation="not-current")
+            self.assertEqual(result["status"], "superseded")
+            with installation._locked(self.ctx):
+                result = installation.apply_release(release, blocking=False)
+            self.assertEqual(result["status"], "busy")
+            result = installation.apply_release(release, before_apply=lambda: False)
+            self.assertEqual(result["status"], "cancelled")
+            stage.assert_not_called()
+        self.assertFalse((self.root / "state.json").exists())
+
+    def test_cancel_staged_background_candidate_preserves_current(self):
+        first = self.apply("0.2.0")
+        before = (self.root / "state.json").read_bytes()
+        @contextmanager
+        def denied():
+            yield False
+        result = installation.apply_release(self.release("0.3.0"),
+                  expected_generation=first["current"]["generation"], activation_guard=denied)
+        self.assertEqual(result["status"], "cancelled")
+        self.assertEqual((self.root / "state.json").read_bytes(), before)
+        self.assertEqual(list((self.root / "versions").iterdir()), [Path(first["current"]["prefix"])])
+
+    def test_background_release_requires_auto_capability_before_activation(self):
+        with patch.object(installation, "_run", side_effect=ConfigError("Automatic release self-check failed")):
+            with self.assertRaisesRegex(ConfigError, "Automatic release self-check"):
+                installation.apply_release(self.release("0.2.0"), require_auto=True)
+        self.assertFalse((self.root / "state.json").exists())
+        self.assertEqual(list((self.root / "versions").iterdir()), [])
+
+    def test_activation_stays_inside_guard_and_rollback_pauses_first(self):
+        guarded = []
+        @contextmanager
+        def guard():
+            guarded.append(True)
+            try:
+                yield True
+            finally:
+                guarded.pop()
+        activate = installation._activate
+        def checked_activate(ctx, state, action):
+            self.assertEqual(guarded, [True])
+            return activate(ctx, state, action)
+        with patch.object(installation, "_activate", side_effect=checked_activate):
+            installation.apply_release(self.release("0.2.0"), activation_guard=guard)
+        before = self.state()["current"]
+        def paused(ctx, generation):
+            self.assertEqual(self.state()["current"], before)
+            self.assertEqual(generation, "seed")
+        with patch("richi_launcher.auto_update.pause_for_rollback", side_effect=paused) as pause:
+            self.assertEqual(installation.rollback()["current"]["generation"], "seed")
+            pause.assert_called_once()
 
     def test_same_version_seed_can_be_replaced_then_verified_version_is_noop(self):
         first = self.apply("0.1.0")

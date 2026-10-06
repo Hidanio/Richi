@@ -39,6 +39,10 @@ _WEB = "https://github.com/" + REPOSITORY + "/releases/"
 _VERSION = re.compile(r"(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\Z")
 
 
+class TransientReleaseError(ConfigError):
+    """Network failure which can be retried without quarantining a release."""
+
+
 class _ReleaseNotFound(ConfigError):
     pass
 
@@ -169,8 +173,11 @@ def _stream_response(url, limit, publish, asset=False):
     except HTTPError as exc:
         if exc.code == 404:
             raise _ReleaseNotFound("No published stable Richi release was found") from exc
-        raise ConfigError("GitHub release request failed (HTTP " + str(exc.code) + ")") from exc
-    except (URLError, OSError, ValueError, HTTPException) as exc:
+        error_type = TransientReleaseError if exc.code in {408, 429} or 500 <= exc.code <= 599 else ConfigError
+        raise error_type("GitHub release request failed (HTTP " + str(exc.code) + ")") from exc
+    except (URLError, OSError, HTTPException) as exc:
+        raise TransientReleaseError("Cannot download the official Richi release: " + str(exc)) from exc
+    except ValueError as exc:
         if isinstance(exc, ConfigError):
             raise
         raise ConfigError("Cannot download the official Richi release: " + str(exc)) from exc
@@ -208,11 +215,11 @@ def _transfer(url, limit, write, asset=False):
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise ConfigError("Release download exceeded its time limit")
+                raise TransientReleaseError("Release download exceeded its time limit")
             try:
                 kind, value = messages.get(timeout=remaining)
             except queue.Empty as exc:
-                raise ConfigError("Release download exceeded its time limit") from exc
+                raise TransientReleaseError("Release download exceeded its time limit") from exc
             if kind == "data":
                 write(value)
             elif kind == "done":

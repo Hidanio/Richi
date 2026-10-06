@@ -1,6 +1,18 @@
 """Explicit installation maintenance, independent of workspace and dev code."""
+import re
+
 from . import installation, releases
 from .config import ConfigError
+
+
+def _interval(value):
+    match = re.fullmatch(r"([1-9][0-9]*)(m|h|d)", value)
+    if match is None:
+        raise ConfigError("Interval must use whole minutes, hours or days, for example 15m, 6h or 1d")
+    seconds = int(match.group(1)) * {"m": 60, "h": 3600, "d": 86400}[match.group(2)]
+    if not 900 <= seconds <= 604800:
+        raise ConfigError("Automatic update interval must be between 15m and 7d")
+    return seconds
 
 
 def command(argv):
@@ -12,7 +24,20 @@ def command(argv):
         action.add_argument("--version", help="Stable X.Y.Z release; defaults to latest")
     actions.add_parser("rollback", help="Switch to the previous installed version without downloading")
     actions.add_parser("cleanup", help="Retry removing retired versions after their processes exit")
+    auto = actions.add_parser("auto", help="Configure the native background stable-release updater")
+    automatic = auto.add_subparsers(dest="auto_action", required=True)
+    enable = automatic.add_parser("enable", help="Enable updates and register a per-user OS schedule")
+    enable.add_argument("--interval", default="6h", help="Check interval: 15m to 7d (default: 6h)")
+    automatic.add_parser("disable", help="Disable updates and remove the owned OS schedule")
+    automatic.add_parser("status", help="Inspect the schedule and recent attempts without fetching a release")
+    automatic.add_parser("run", help="Perform one check only when enabled and due; used by the OS scheduler")
     args = parser.parse_args(argv)
+    if args.action == "auto":
+        from . import auto_update
+        if args.auto_action == "enable":
+            return auto_update.enable(interval_seconds=_interval(args.interval))
+        return {"disable": auto_update.disable, "status": auto_update.status,
+                "run": auto_update.run}[args.auto_action]()
     if args.action == "rollback":
         return installation.rollback()
     if args.action == "cleanup":

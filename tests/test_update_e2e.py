@@ -21,8 +21,8 @@ import richi_launcher
 from cli_environment import cli_environment
 
 
-# Feed bytes are the only replacement: real release validation, download
-# staging, pip installation, self-check, activation and collection all run.
+# Feed bytes and OS scheduler registration are the only replacements: real
+# release validation, staging, pip, self-check, activation and collection run.
 # Starting in the selected interpreter preserves the mock across bootstrap's
 # normal process replacement; direct public entry points are checked separately.
 _OFFLINE_COMMAND = r'''
@@ -51,7 +51,12 @@ def transfer(url, limit, write, asset=False):
     write(data)
     return len(data)
 
-with patch("richi_launcher.releases._transfer", side_effect=transfer):
+with patch("richi_launcher.releases._transfer", side_effect=transfer), \
+        patch("richi_launcher.update_scheduler.install", return_value={"status": "installed"}), \
+        patch("richi_launcher.update_scheduler.remove", return_value={"status": "removed"}), \
+        patch("richi_launcher.update_scheduler.status", return_value={
+            "supported": True, "installed": True, "registered": True, "active": True,
+            "enabled": True, "backend": "synthetic"}):
     raise SystemExit(bootstrap.main(sys.argv[2:]))
 '''
 
@@ -123,6 +128,7 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
         release_path = self.root / (version + "-release.json")
         release_path.write_text(json.dumps(release), encoding="utf-8")
         responses = {"https://api.github.com/repos/Hidanio/Richi/releases/tags/v" + version: str(release_path),
+                     "https://api.github.com/repos/Hidanio/Richi/releases/latest": str(release_path),
                      manifest_url: str(manifest_path), wheel_url: str(wheel)}
         response_path = self.root / (version + "-responses.json")
         response_path.write_text(json.dumps(responses), encoding="utf-8")
@@ -178,11 +184,29 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             results = []
             for version in ("0.2.0", "0.3.0", "0.4.0"):
                 response_path = self.feed_fixture(wheels[version], version)
-                result = json.loads(self.run_process([self.python, "-I", "-B", runner, response_path,
-                                                      "update", "apply", "--version", version]).stdout)
-                self.assertEqual(result["status"], "updated", result)
+                if version == "0.4.0":
+                    enabled = json.loads(self.run_process([self.python, "-I", "-B", runner, response_path,
+                                                          "update", "auto", "enable", "--interval", "6h"]).stdout)
+                    self.assertEqual(enabled["status"], "enabled")
+                    self.assertEqual(enabled["interval_seconds"], 21600)
+                    self.assertEqual(enabled["installation"]["current"]["version"], "0.3.0")
+                    applied = json.loads(self.run_process([self.python, "-I", "-B", runner, response_path,
+                                                          "update", "auto", "run"]).stdout)
+                    self.assertEqual(applied["status"], "updated", applied)
+                    self.assertEqual(applied["version"], version)
+                    # A new public invocation selects the activated generation
+                    # and returns locally without querying the offline feed.
+                    self.assertEqual(self.console_json("update", "auto", "run")["status"], "not_due")
+                    checked = json.loads(self.run_process([self.python, "-I", "-B", runner, response_path,
+                                                          "update", "check"]).stdout)
+                    self.assertEqual(checked["status"], "up_to_date")
+                    result = checked["installation"]
+                else:
+                    result = json.loads(self.run_process([self.python, "-I", "-B", runner, response_path,
+                                                          "update", "apply", "--version", version]).stdout)
+                    self.assertEqual(result["status"], "updated", result)
+                    self.assertEqual(result["cleanup"]["failures"], [])
                 self.assertEqual(result["current"]["version"], version)
-                self.assertEqual(result["cleanup"]["failures"], [])
                 results.append(result)
                 self.assert_public_version(version)
                 if version != "0.2.0":
@@ -204,6 +228,12 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             self.assertEqual(rollback["status"], "rolled_back")
             self.assertEqual(rollback["current"]["version"], "0.3.0")
             self.assert_public_version("0.3.0")
+            paused = self.console_json("update", "auto", "run")
+            self.assertEqual(paused["status"], "paused")
+            self.assertEqual(paused["pause"]["reason"], "manual_rollback")
+            auto_state = json.loads((Path(context["root"]) / "auto-state.json").read_text())
+            self.assertEqual([entry["status"] for entry in auto_state["history"]], ["updated"])
+            self.assertEqual(auto_state["history"][0]["version"], "0.4.0")
             self.assertEqual(self.console_path.read_bytes(), console_bytes)
             self.assertEqual(bootstrap_path.read_bytes(), bootstrap_bytes)
             self.assertEqual({path: (path.read_bytes(), path.stat().st_mtime_ns) for path in protected_paths}, protected)
