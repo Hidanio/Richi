@@ -1,0 +1,100 @@
+name: Stable release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stable-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'Hidanio/Richi'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip build
+      - run: python -m build --wheel
+      - name: Validate the tag, wheel and manifest
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python scripts/release_manifest.py dist/*.whl --tag "$RELEASE_TAG"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stable-release
+          path: |
+            dist/*.whl
+            dist/richi-release.json
+          if-no-files-found: error
+          retention-days: 7
+
+  test:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ['3.9', '3.12']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: stable-release
+          path: dist
+      - run: python -m pip install --no-deps dist/*.whl
+      - name: Exercise packaged contents in runtime-copy fixtures
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          import richi
+          import richi_launcher
+          import richi_bootstrap
+          for package, destination in ((richi, Path('src/richi')),
+                                       (richi_launcher, Path('launcher/richi_launcher'))):
+              installed = Path(package.__file__).resolve().parent
+              assert installed != destination.resolve(), 'Expected a normally installed wheel'
+              shutil.rmtree(destination)
+              shutil.copytree(installed, destination, ignore=shutil.ignore_patterns('__pycache__'))
+          shutil.copyfile(Path(richi_bootstrap.__file__), Path('launcher/richi_bootstrap.py'))
+          PY
+      - run: python -m unittest discover -s tests -v
+      - run: python evals/evaluate_recall.py
+      - run: python -I -m richi --version
+
+  publish:
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: stable-release
+          path: dist
+      - name: Attach tested artifacts to a draft, then publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: Hidanio/Richi
+          RELEASE_TAG: ${{ github.ref_name }}
+          TESTED_SHA: ${{ github.sha }}
+        run: |
+          test "$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)" = "$TESTED_SHA"
+          gh release create "$RELEASE_TAG" dist/*.whl dist/richi-release.json \
+            --verify-tag --draft --title "Richi $RELEASE_TAG" --generate-notes
+          gh release edit "$RELEASE_TAG" --draft=false --verify-tag

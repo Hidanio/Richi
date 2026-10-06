@@ -12,7 +12,7 @@ import time
 import webbrowser
 
 from richi_launcher.config import resolve_settings, ConfigError
-from richi_launcher.runtime import current_runtime, runtime_command
+from richi_launcher.runtime import current_runtime, runtime_command, lease_fds
 from .memory import Parser, MemoryError
 from .serve import compatible_health, config_arguments, worker_environment
 from urllib.request import ProxyHandler, build_opener
@@ -103,7 +103,7 @@ def launch(database, first_port, config_file=None, runtime=None, config_required
                                                      "--db", str(database), "--port", str(port)],
                                 action="serve"),
                 stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                close_fds=True, start_new_session=True,
+                close_fds=True, start_new_session=True, pass_fds=lease_fds(),
                 env=worker_environment(config_file, workspace, config_required),
             )
         deadline = time.monotonic() + 8

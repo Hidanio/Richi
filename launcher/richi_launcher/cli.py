@@ -202,6 +202,14 @@ def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     try:
         selectors, command, tail = _selectors(argv)
+        if command == "update":
+            from .update import command as update_command
+            # Package updates are installation-wide and never select/read a
+            # workspace, chat registry, configuration, or knowledge store.
+            selectors.pop("chat_id", None)
+            if selectors:
+                raise ConfigError("Updates affect this installation, not a workspace; omit --workspace, --config, --db and --project-path")
+            return _emit(update_command(tail))
         chat_id = detect_chat(selectors.pop("chat_id", None))
         project_path = selectors.pop("project_path", None)
         if project_path is not None and command in {"chat", "config", "workspace", "use", "map"}:
