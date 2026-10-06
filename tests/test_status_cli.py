@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -69,6 +70,14 @@ class StatusCliTests(unittest.TestCase):
                        if path.name.endswith((".sqlite3", ".sqlite3-wal", ".json")) else None)
                       for path in self.root.rglob("*") if path.is_file())
 
+    def hold_readonly_reader(self, database):
+        # A first WAL reader may create empty -wal/-shm bookkeeping even with
+        # mode=ro. Establish it before comparing persistent file contents and
+        # keep a reader open so SQLite cannot remove sidecars between snapshots.
+        connection = sqlite3.connect(Path(database).as_uri() + "?mode=ro", uri=True)
+        self.addCleanup(connection.close)
+        connection.execute("SELECT id FROM projects LIMIT 1").fetchone()
+
     def create(self, name, initialized=False):
         result = self.command("workspace", "create", name)
         if initialized:
@@ -117,6 +126,43 @@ class StatusCliTests(unittest.TestCase):
         self.assertFalse(Path(report["storage"]["database"]).exists())
         self.assertEqual(self.snapshot(), before)
 
+    def test_checkpointed_wal_without_sidecars_preserves_data_across_sqlite_versions(self):
+        self.command("init")
+        database = self.command("config", "show")["database"]
+        # All fixture subprocesses exited. Checkpoint every frame and close the
+        # sole connection before removing retained empty sidecars to reproduce
+        # the clean state returned by SQLite builds used in CI.
+        checkpoint = sqlite3.connect(database)
+        try:
+            self.assertEqual(checkpoint.execute("PRAGMA journal_mode").fetchone()[0], "wal")
+            self.assertEqual(checkpoint.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone(), (0, 0, 0))
+        finally:
+            checkpoint.close()
+        wal, shm = Path(database + "-wal"), Path(database + "-shm")
+        if wal.exists():
+            self.assertEqual(wal.stat().st_size, 0)
+            wal.unlink()
+        shm.unlink(missing_ok=True)
+        self.assertFalse(wal.exists())
+        self.assertFalse(shm.exists())
+        before = self.snapshot()
+        report = self.command("status")
+        diagnostic = report["diagnostics"]["database"]
+        # System SQLite on macOS may refuse this read-only open. Other builds
+        # create empty WAL bookkeeping. Both must preserve persistent contents.
+        if diagnostic["status"] == "unavailable":
+            self.assertIn("unable to open database file", diagnostic["error"])
+            self.assertEqual(report["status"], "attention")
+        else:
+            self.assertEqual(diagnostic["status"], "ready")
+        self.assertTrue(report["runtime"]["available"])
+        allowed_created = set()
+        for file, size in ((wal, 0), (shm, 32768)):
+            if file.exists():
+                self.assertEqual(file.stat().st_size, size)
+                allowed_created.add(str(file.relative_to(self.root)))
+        self.assertEqual([item for item in self.snapshot() if item[0] not in allowed_created], before)
+
     def test_same_checkout_two_bound_chats_stay_in_their_stores_after_global_switch(self):
         repository = self.root / "shared repository"
         repository.mkdir()
@@ -126,6 +172,8 @@ class StatusCliTests(unittest.TestCase):
             self.project(name, "shared", repository, name="marker_" + name)
             self.command("chat", "bind", name, chat=name)
         self.command("use", "beta")
+        for store in stores.values():
+            self.hold_readonly_reader(store["database"])
         before = self.snapshot()
         for name in stores:
             report = self.command("status", "--projects", chat=name, cwd=repository)
@@ -304,6 +352,8 @@ def inspect(*args, **kwargs):
         self.project("default", "shared", repository)
         self.project("default", "offline", self.root / "missing folder")
         self.project("default", "remote-only")
+        database = self.command("config", "show")["database"]
+        self.hold_readonly_reader(database)
         before = self.snapshot()
         ordinary = self.command("--project-path", repository, "status")
         self.assertEqual(ordinary["diagnostics"]["project"]["status"], "matched")
