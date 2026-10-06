@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import signal
 import socket
+from socketserver import BaseRequestHandler, TCPServer
 import subprocess
 import sys
 import tempfile
@@ -14,6 +15,7 @@ import threading
 import unittest
 
 from richi_launcher.runtime import bootstrap_command
+from richi.launch_map import read_health
 
 from cli_environment import cli_environment
 
@@ -69,6 +71,32 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(result["status"], "started")
             self.assertNotEqual(result["url"], "http://127.0.0.1:%d/" % self.port)
             self.assertEqual(occupied.getsockname()[1], self.port)
+
+    def test_non_http_listener_is_kept_and_map_uses_another_port(self):
+        banner = b"SSH-2.0-synthetic-test\r\n"
+
+        class BannerHandler(BaseRequestHandler):
+            def handle(self):
+                self.request.settimeout(2)
+                self.request.recv(4096)
+                self.request.sendall(banner)
+
+        foreign = TCPServer(("127.0.0.1", self.port), BannerHandler)
+        worker = threading.Thread(target=foreign.serve_forever, daemon=True)
+        worker.start()
+        def stop_foreign():
+            foreign.shutdown()
+            foreign.server_close()
+            worker.join(timeout=3)
+        self.addCleanup(stop_foreign)
+        self.assertIsNone(read_health(self.port))
+        result = self.launch()
+        self.assertEqual(result["status"], "started")
+        self.assertNotEqual(result["url"], "http://127.0.0.1:%d/" % self.port)
+        # Skipping an unknown protocol must leave the original service alive.
+        with socket.create_connection(("127.0.0.1", self.port), timeout=2) as client:
+            client.sendall(b"synthetic probe\n")
+            self.assertEqual(client.recv(4096), banner)
 
     def test_missing_database_does_not_create_one(self):
         missing = self.db.parent / "missing.sqlite3"

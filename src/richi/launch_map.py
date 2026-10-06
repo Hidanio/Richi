@@ -2,6 +2,7 @@
 """Start or reuse the loopback map, then open it without a persistent terminal."""
 
 import argparse
+from http.client import HTTPException
 import json
 import os
 from pathlib import Path
@@ -26,7 +27,7 @@ def read_health(port):
     try:
         with HTTP.open("http://127.0.0.1:%d/api/health" % port, timeout=0.5) as response:
             return json.loads(response.read(8193))
-    except (OSError, ValueError, AttributeError, TypeError):
+    except (OSError, HTTPException, ValueError, AttributeError, TypeError):
         return None
 
 
