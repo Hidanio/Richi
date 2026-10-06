@@ -23,7 +23,7 @@ import webbrowser
 
 from richi_launcher.config import resolve_settings, ConfigError
 from richi_launcher.runtime import (bootstrap_command, current_runtime, preflight,
-                                    resolve_runtime, runtime_command)
+                                    resolve_runtime, runtime_command, lease_fds)
 from .memory import Parser, MemoryError
 
 
@@ -165,7 +165,7 @@ def _run_git_request(database, options, runtime=None, config_file=None, workspac
     request = json.dumps({"database": str(database), "options": options}).encode("utf-8")
     process = subprocess.Popen(runtime_command(runtime or current_runtime(), [], action="git_worker"),
         cwd=str(BASE), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        start_new_session=True, env=worker_environment(config_file, workspace, config_required))
+        start_new_session=True, pass_fds=lease_fds(), env=worker_environment(config_file, workspace, config_required))
     selector = selectors.DefaultSelector()
     output, size = [], 0
     deadline = time.monotonic() + GIT_WORKER_TIMEOUT
@@ -271,7 +271,8 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
             if url.path == "/api/health" and not url.query:
                 return self.send_data(200, {"application": "project-memory-map", "database": str(database),
                                             "api_version": API_VERSION, "capabilities": CAPABILITIES,
-                                            "runtime": runtime.as_dict(), "workspace": workspace,
+                                            "runtime": runtime.as_dict(), "workspace": workspace, "pid": os.getpid(),
+                                            "installation_generation": os.environ.get("RICHI_INSTALLATION_GENERATION"),
                                             "config_file": str(config_file) if config_file is not None else None})
             if url.path == "/api/git":
                 try:
@@ -303,7 +304,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 result = subprocess.run(
                     runtime_command(runtime, [*config_arguments(config_file, config_required),
                                                "--db", str(database), "graph", "export", *flags]),
-                    capture_output=True, timeout=20,
+                    capture_output=True, timeout=20, pass_fds=lease_fds(),
                     env=worker_environment(config_file, workspace, config_required),
                 )
                 if result.returncode:
