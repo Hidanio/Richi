@@ -156,7 +156,9 @@ class SchedulerTests(unittest.TestCase):
         # GC can retire the seed runtime while a new scheduled process starts.
         # Its first import must be the permanent bootstrap, which owns leases.
         self.runner.stop()
-        venv.EnvBuilder(with_pip=False).create(str(self.original))
+        (self.original / "bin" / "python").unlink()
+        with patch.object(scheduler.sys, "platform", REAL_PLATFORM):
+            venv.EnvBuilder(with_pip=False).create(str(self.original))
         python = str(self.original / "bin" / "python")
         query = subprocess.run([python, "-I", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"],
                                capture_output=True, text=True, check=True)
