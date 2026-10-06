@@ -30,7 +30,7 @@ from .memory import Parser, MemoryError
 BASE = Path(__file__).resolve().parent
 API_VERSION = 4
 CAPABILITIES = ["git_source_viewer", "legacy_git_source_viewer", "standalone_runtime",
-                "runtime_selection", "runtime_reload"]
+                "runtime_selection", "runtime_reload", "workspace_selection"]
 GIT_QUERY_LIMIT = 8192
 GIT_OPERATION_TIMEOUT = 25
 GIT_WORKER_TIMEOUT = 30
@@ -160,12 +160,12 @@ def _git_worker():
     sys.stdout.write(json.dumps({"status": status, "payload": payload}, ensure_ascii=False))
 
 
-def _run_git_request(database, options, runtime=None):
+def _run_git_request(database, options, runtime=None, config_file=None, workspace=None, config_required=False):
     """Bound worker time and pipes; HTTP threads never retain unbounded Git output."""
     request = json.dumps({"database": str(database), "options": options}).encode("utf-8")
     process = subprocess.Popen(runtime_command(runtime or current_runtime(), [], action="git_worker"),
         cwd=str(BASE), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        start_new_session=True)
+        start_new_session=True, env=worker_environment(config_file, workspace, config_required))
     selector = selectors.DefaultSelector()
     output, size = [], 0
     deadline = time.monotonic() + GIT_WORKER_TIMEOUT
@@ -214,7 +214,7 @@ def compatible_health(health, database, runtime=None, config_file=None):
             and health.get("config_file") == (str(config_file) if config_file is not None else None))
 
 
-def handler_for(database, config_file=None, runtime=None, config_required=False):
+def handler_for(database, config_file=None, runtime=None, config_required=False, workspace=None):
     database = Path(database).expanduser().resolve()
     runtime = runtime or current_runtime()
     export_lock = threading.Lock()
@@ -271,7 +271,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False)
             if url.path == "/api/health" and not url.query:
                 return self.send_data(200, {"application": "project-memory-map", "database": str(database),
                                             "api_version": API_VERSION, "capabilities": CAPABILITIES,
-                                            "runtime": runtime.as_dict(),
+                                            "runtime": runtime.as_dict(), "workspace": workspace,
                                             "config_file": str(config_file) if config_file is not None else None})
             if url.path == "/api/git":
                 try:
@@ -281,7 +281,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False)
                 if not git_lock.acquire(blocking=False):
                     return self.send_data(503, {"error": "Git navigation in progress; try again", "code": "busy"})
                 try:
-                    status, payload = _run_git_request(database, options, runtime)
+                    status, payload = _run_git_request(database, options, runtime, config_file, workspace, config_required)
                     return self.send_data(status, payload)
                 except OSError:
                     return self.send_data(503, {"error": "Git navigation is unavailable", "code": "git_unavailable"})
@@ -304,6 +304,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False)
                     runtime_command(runtime, [*config_arguments(config_file, config_required),
                                                "--db", str(database), "graph", "export", *flags]),
                     capture_output=True, timeout=20,
+                    env=worker_environment(config_file, workspace, config_required),
                 )
                 if result.returncode:
                     try:
@@ -331,6 +332,31 @@ def handler_for(database, config_file=None, runtime=None, config_required=False)
     return Handler
 
 
+def worker_environment(config_file=None, workspace=None, config_required=False):
+    """Keep child storage/labels tied to this map, independently of the registry default."""
+    environment = dict(os.environ)
+    # These are private descendants of an already selected map invocation.
+    # Reload re-enters the stable launcher with the map's explicit config/db;
+    # it must not ask for a new choice or follow a later chat rebind.
+    environment.pop("RICHI_CHAT_ID", None)
+    environment.pop("CODEX_THREAD_ID", None)
+    if config_file is not None:
+        environment["RICHI_ACTIVE_CONFIG"] = str(config_file)
+        if workspace is not None:
+            environment["RICHI_ACTIVE_WORKSPACE"] = workspace
+        else:
+            environment.pop("RICHI_ACTIVE_WORKSPACE", None)
+        if config_required or Path(config_file).is_file():
+            environment["RICHI_CONFIG"] = str(config_file)
+            environment.pop("RICHI_WORKSPACE", None)
+        else:
+            # Only the implicit default may have no configuration file yet.
+            # Pin its name so a later `workspace use` cannot redirect this child.
+            environment.pop("RICHI_CONFIG", None)
+            environment["RICHI_WORKSPACE"] = "default"
+    return environment
+
+
 def config_arguments(config_file, required=False):
     """Keep a missing default optional, but preserve an explicit configuration."""
     if config_file is not None and (required or Path(config_file).is_file()):
@@ -355,8 +381,8 @@ def watch_runtime(server, runtime, original, database, config_file, config_requi
     pending = last_error = None
 
     def selected():
-        settings = resolve_settings(db=database,
-                                    config_file=config_file if config_required else None)
+        settings = resolve_settings(db=database, config_file=config_file,
+                                    config_required=config_required)
         target = resolve_runtime(settings)
         fingerprint = source_fingerprint(target.package) if target.mode == "dev" else None
         return target, (target.identity, fingerprint)
@@ -417,7 +443,7 @@ def _main(argv=None):
     initial_source = source_fingerprint(runtime.package) if runtime.mode == "dev" else None
     address = "http://127.0.0.1:%d/" % args.port
     try:
-        server = LoopbackHTTPServer(("127.0.0.1", args.port), handler_for(database, settings.config_file, runtime, config_required))
+        server = LoopbackHTTPServer(("127.0.0.1", args.port), handler_for(database, settings.config_file, runtime, config_required, settings.workspace))
     except OSError as exc:
         if args.open:
             try:
@@ -461,7 +487,7 @@ def _main(argv=None):
         # server is left running; --open is intentionally not repeated.
         command = bootstrap_command([*config_arguments(settings.config_file, config_required),
                                      "--db", str(database), "map", "serve", "--port", str(args.port)])
-        environment = dict(os.environ)
+        environment = worker_environment(settings.config_file, settings.workspace, config_required)
         environment.pop("RICHI_ACTIVE_RUNTIME", None)
         os.execve(command[0], command, environment)
 

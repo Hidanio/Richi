@@ -126,6 +126,10 @@ try:
         from richi.serve import _git_worker
         _git_worker()
         result = 0
+    elif action == "status_worker":
+        from richi.status import inspect
+        print(json.dumps(inspect(**json.loads(arguments[0])), ensure_ascii=False))
+        result = 0
     elif action == "preflight":
         from richi import memory, serve
         with memory.connect(pathlib.Path(arguments[0]), readonly=True) as connection:
@@ -148,7 +152,7 @@ sys.exit(result or 0)
 
 
 def runtime_command(runtime, argv, action="cli"):
-    if action not in {"cli", "serve", "git_worker", "preflight"}:
+    if action not in {"cli", "serve", "git_worker", "preflight", "status_worker"}:
         raise ValueError("Unknown runtime action")
     command = [sys.executable, "-I", "-B"]
     if runtime.mode == "dev":

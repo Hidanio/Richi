@@ -17,6 +17,8 @@ from richi import memory
 from richi import recall
 from richi import task_brief
 
+from cli_environment import cli_environment
+
 
 class TaskBriefTests(unittest.TestCase):
     # Reuse fixture construction, not its unrelated impact test methods.
@@ -45,7 +47,7 @@ class TaskBriefTests(unittest.TestCase):
     def cli(self, *args, ok=True):
         result = subprocess.run([sys.executable, "-B", "-m", "richi",
                                  "--db", str(self.db), "brief", *args],
-                                capture_output=True, text=True, timeout=30)
+                                capture_output=True, text=True, timeout=30, env=cli_environment(self.db.parent))
         if ok:
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             self.assertEqual(result.stderr, "")

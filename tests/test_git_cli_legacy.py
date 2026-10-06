@@ -17,6 +17,8 @@ from richi import graph
 from richi import memory
 from richi import serve
 
+from cli_environment import cli_environment
+
 
 class GitCliLegacyTests(unittest.TestCase):
     def setUp(self):
@@ -59,7 +61,7 @@ class GitCliLegacyTests(unittest.TestCase):
         command = [sys.executable, "-B", "-m", "richi", "--db", str(self.db),
                    "sources", action, "--ref", ref or self.ref, "--source", str(source), "--max-chars", "32000"]
         command.extend(flags)
-        result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30, env=cli_environment(self.db.parent))
         if success:
             self.assertEqual(result.returncode, 0, result.stderr)
             return json.loads(result.stdout)
@@ -127,7 +129,7 @@ class GitCliLegacyTests(unittest.TestCase):
         with self.assertRaisesRegex(memory.MemoryError, "--project"):
             git_sources.run(self.conn, args, memory, self.db)
         result = subprocess.run([sys.executable, "-B", "-m", "richi", "sources", "check", "--help"],
-                                text=True, capture_output=True, timeout=10)
+                                text=True, capture_output=True, timeout=10, env=cli_environment(self.db.parent))
         self.assertEqual(result.returncode, 0)
         self.assertIn("--manifest", result.stdout)
 
@@ -139,7 +141,7 @@ class GitCliLegacyTests(unittest.TestCase):
         source_json = self.root / "source.json"
         source_json.write_text(json.dumps(self.structured))
         result = subprocess.run([sys.executable, "-B", "-m", "richi", "--db", str(self.db),
-                                 "sources", "show", "--json", str(source_json)], text=True, capture_output=True, timeout=20)
+                                 "sources", "show", "--json", str(source_json)], text=True, capture_output=True, timeout=20, env=cli_environment(self.db.parent))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["result"]["content"], "original\n")
 

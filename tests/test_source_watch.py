@@ -16,6 +16,8 @@ from richi import graph
 from richi import memory
 from richi import source_watch as watch
 
+from cli_environment import cli_environment
+
 
 class SourceWatchTests(unittest.TestCase):
     def setUp(self):
@@ -330,7 +332,7 @@ class SourceWatchTests(unittest.TestCase):
         for command in (("snapshot", "--ref", "entry:one", "--output", str(self.manifest)),
                         ("check", "--manifest", str(self.manifest), "--max-chars", "2000")):
             proc = subprocess.run([sys.executable, "-m", "richi", "--db", str(self.db),
-                                   "sources", *command], capture_output=True, text=True, timeout=10)
+                                   "sources", *command], capture_output=True, text=True, timeout=10, env=cli_environment(self.db.parent))
             self.assertEqual(proc.returncode, 0, proc.stderr)
             result = json.loads(proc.stdout)
         self.assertEqual(result["status"], "unchanged")

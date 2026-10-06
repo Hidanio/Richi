@@ -16,6 +16,8 @@ from richi import punisher
 from richi import graph
 from richi import memory
 
+from cli_environment import cli_environment
+
 
 class PunisherTests(unittest.TestCase):
     def setUp(self):
@@ -235,7 +237,7 @@ WHERE 1=1
         process = subprocess.run(
             [sys.executable, "-m", "richi", "--db", str(self.db), "punisher",
              "--project", "alpha", "--as-of", "2026-10-01", "--limit", "3", "--max-chars", "2000"],
-            capture_output=True, text=True, timeout=20,
+            capture_output=True, text=True, timeout=20, env=cli_environment(self.db.parent)
         )
         self.assertEqual(process.returncode, 0, process.stderr)
         result = json.loads(process.stdout)

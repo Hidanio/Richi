@@ -11,6 +11,8 @@ import unittest
 
 from richi import memory
 
+from cli_environment import cli_environment
+
 
 class ToolsCliTests(unittest.TestCase):
     def setUp(self):
@@ -23,7 +25,7 @@ class ToolsCliTests(unittest.TestCase):
     def cli(self, *args, ok=True):
         result = subprocess.run([sys.executable, "-B", "-m", "richi",
                                  "--db", str(self.db), *args],
-                                capture_output=True, text=True, timeout=20)
+                                capture_output=True, text=True, timeout=20, env=cli_environment(self.db.parent))
         self.assertEqual(result.returncode == 0, ok, result.stderr + result.stdout)
         return json.loads(result.stdout if ok else result.stderr)
 

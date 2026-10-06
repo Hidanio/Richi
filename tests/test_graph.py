@@ -13,6 +13,8 @@ BASE = Path(__file__).resolve().parents[1] / "src" / "richi"
 from richi import memory
 from richi import serve
 
+from cli_environment import cli_environment
+
 
 class GraphTests(unittest.TestCase):
     def setUp(self):
@@ -26,7 +28,7 @@ class GraphTests(unittest.TestCase):
     def cli(self, *args, ok=True, payload=None):
         proc = subprocess.run([sys.executable, "-m", "richi", "--db", str(self.db), *args],
                               input=json.dumps(payload) if payload is not None else None,
-                              capture_output=True, text=True, timeout=20)
+                              capture_output=True, text=True, timeout=20, env=cli_environment(self.db.parent))
         self.assertEqual(proc.returncode == 0, ok, proc.stderr + proc.stdout)
         return json.loads(proc.stdout if ok else proc.stderr)
 

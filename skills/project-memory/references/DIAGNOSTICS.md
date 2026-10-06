@@ -137,3 +137,24 @@ Punisher проверяет структуру Git-метаданных и вы�
 модуль не исполняет locator и не делает checkout указанной ревизии.
 
 Прежние записи без новых полей остаются валидными. Миграция схемы не нужна.
+
+## Workspace context and project paths
+
+Use `richi status` for chat/CLI selection, workspace storage, runtime and cwd membership.
+Use `richi --project-path PATH status --project ID` for an expected repository.
+Only the selected workspace is read; the same path in another store cannot satisfy the check.
+Before chat binding, the report is `selection_required` and reads no runtime settings or database.
+Broken selected runtime produces `unavailable`; no installed-runtime fallback occurs.
+
+`richi status --projects --limit 50` also reports registered path problems. Output limit is
+1–200; problems precede healthy paths. Check `total`, `checked`, `omitted`, `counts` and
+`status` before claiming coverage. The audit has a 10-second/10000-registration budget
+and a 30-second worker timeout. A remote-only project with no path is informational.
+Missing, inaccessible, duplicate or invalid Git paths require review; no paths are changed.
+Current-path matching can inspect other registered paths even without `--projects`.
+
+Top-level status is `ok`, `attention`, `selection_required` or `unavailable`. Exit 0 means
+a report was emitted, not a health assertion. Argument, selector and configuration errors
+exit 1. `status` reads projects/schema metadata only; it does not replace knowledge `check`
+or requested `punisher` maintenance. Continue using `--project-path` on knowledge operations
+to recheck membership in their transaction.

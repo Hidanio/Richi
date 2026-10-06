@@ -8,6 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from cli_environment import cli_environment
+
 
 
 class MemoryIntegrationTests(unittest.TestCase):
@@ -26,7 +28,7 @@ class MemoryIntegrationTests(unittest.TestCase):
     def run_cli(self, *args, ok=True, db=None):
         result = subprocess.run(
             [sys.executable, "-m", "richi", "--db", str(db or self.db), *args],
-            capture_output=True, text=True, timeout=20,
+            capture_output=True, text=True, timeout=20, env=cli_environment(self.db.parent)
         )
         if ok:
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)

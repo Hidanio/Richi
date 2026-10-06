@@ -65,7 +65,7 @@ class MapConfigTests(unittest.TestCase):
             good_config.write_text(json.dumps({"database": str(database), "data_dir": str(root)}))
             bad_config = root / "invalid.json"
             bad_config.write_text("this deliberately is not JSON")
-            environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_")}
+            environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_") and key != "CODEX_THREAD_ID"}
             environment["RICHI_CONFIG"] = str(bad_config)
             command = [sys.executable, "-B", "-m", "richi", "--config", str(good_config)]
             initialized = subprocess.run(command + ["init"], capture_output=True, text=True,
