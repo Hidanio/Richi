@@ -46,6 +46,9 @@ def managed_health(health, database, config_file):
 
 def available(port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        # Match HTTPServer so a stopped map's TIME_WAIT connections do not
+        # make a restart drift to the next port. Live listeners still conflict.
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind(("127.0.0.1", port))
             return True

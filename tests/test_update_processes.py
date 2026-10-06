@@ -1,6 +1,7 @@
 """Update routing and real runtime children keep installation leases intact."""
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
 import http.client
+from http.server import BaseHTTPRequestHandler
 import io
 import json
 import os
@@ -147,6 +148,31 @@ class UpdateCliRoutingTests(unittest.TestCase):
         self.apply.assert_not_called()
         self.rollback.assert_not_called()
         self.cleanup.assert_not_called()
+
+
+@unittest.skipIf(sys.platform == "win32", "Map launcher targets macOS and Linux")
+class MapPortReuseTests(unittest.TestCase):
+    def test_restart_reuses_server_time_wait_port_but_never_an_active_listener(self):
+        with socket.socket() as listener:
+            # Match the map server's listening socket. An accepted connection
+            # actively closed by the server leaves its port in TIME_WAIT.
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.settimeout(3)
+            listener.bind(("127.0.0.1", 0))
+            listener.listen()
+            port = listener.getsockname()[1]
+            with socket.create_connection(("127.0.0.1", port), timeout=3) as client:
+                connection, _ = listener.accept()
+                with connection:
+                    connection.settimeout(3)
+                    connection.shutdown(socket.SHUT_WR)
+                    self.assertEqual(client.recv(1), b"")
+                    client.close()
+                    self.assertEqual(connection.recv(1), b"")
+        self.assertTrue(launch_map.available(port), "A restarting map can reuse TIME_WAIT")
+        with serve.LoopbackHTTPServer(("127.0.0.1", port), BaseHTTPRequestHandler) as server:
+            self.assertEqual(server.server_address[1], port)
+            self.assertFalse(launch_map.available(port), "An active listener still owns its port")
 
 
 @unittest.skipIf(sys.platform == "win32", "Runtime leases require macOS or Linux flock")
