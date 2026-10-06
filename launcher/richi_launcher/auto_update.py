@@ -20,13 +20,14 @@ DEFAULT_INTERVAL = 6 * 60 * 60
 MIN_INTERVAL = 15 * 60
 MAX_INTERVAL = 7 * 24 * 60 * 60
 MAX_HISTORY = 20
+AUTO_POLICY_VERSION = 2
 
 
 def _now():
     return int(time.time())
 
 
-def _read(ctx, name, default):
+def _read(ctx, name, default, *, formats=(1,)):
     path = Path(ctx["root"]) / name
     if path.is_symlink():
         raise ConfigError("Automatic update metadata cannot be a symlink: " + name)
@@ -44,7 +45,7 @@ def _read(ctx, name, default):
     except (ValueError, UnicodeError) as exc:
         raise ConfigError("Invalid automatic update metadata: " + name) from exc
     if (not isinstance(result, dict) or type(result.get("format_version")) is not int
-            or result["format_version"] != 1):
+            or result["format_version"] not in formats):
         raise ConfigError("Unsupported automatic update metadata: " + name)
     return result
 
@@ -56,15 +57,31 @@ def _interval(value):
 
 
 def _config(ctx):
-    value = _read(ctx, "auto.json", {"format_version": 1, "enabled": False,
-                                    "interval_seconds": DEFAULT_INTERVAL, "policy_id": None})
+    value = _read(ctx, "auto.json", {"format_version": AUTO_POLICY_VERSION, "enabled": False,
+                                    "interval_seconds": DEFAULT_INTERVAL, "policy_id": None,
+                                    "auto_install": False}, formats=(1, AUTO_POLICY_VERSION))
     if type(value.get("enabled")) is not bool:
         raise ConfigError("Automatic update enabled must be a boolean")
+    # Older policies enabled installation implicitly. Missing consent now means
+    # checking only; inspection does not rewrite their configuration.
+    value.setdefault("auto_install", False)
+    if type(value["auto_install"]) is not bool:
+        raise ConfigError("Automatic installation must be a boolean")
+    if value["format_version"] == 1:
+        value["auto_install"] = False
     _interval(value.get("interval_seconds"))
     if value["enabled"] and (not isinstance(value.get("policy_id"), str)
                              or not 1 <= len(value["policy_id"]) <= 128):
         raise ConfigError("Automatic update policy identity is missing")
     return value
+
+
+def _migrate_policy(ctx, config):
+    """Caller holds auto.lock; old launchers must reject newly checked policy."""
+    if config["format_version"] != AUTO_POLICY_VERSION:
+        config.update(format_version=AUTO_POLICY_VERSION, auto_install=False)
+        _write(ctx, "auto.json", config)
+    return config
 
 
 def _state(ctx):
@@ -123,23 +140,32 @@ def _pause(ctx):
 
 
 def pause_for_rollback(ctx, generation):
-    """Called under update.lock before rollback; deliberately takes no auto.lock."""
-    try:
-        if not _config(ctx)["enabled"]:
-            return
-    except ConfigError:
-        # A broken policy must never prevent rollback or permit silently
-        # undoing it. Retain a conservative pause for explicit enable to clear.
-        pass
-    _write(ctx, "auto-pause.json", {"format_version": 1, "reason": "manual_rollback",
-                                    "time": _now(), "generation": generation})
+    """Called under update.lock; pause installing, keep scheduled checks active."""
+    with _lock(ctx):
+        try:
+            config = _config(ctx)
+            if not config["enabled"]:
+                return
+            # A previous launcher must not reinterpret a legacy enabled policy
+            # as consent to install when rollback selects its older code.
+            config = _migrate_policy(ctx, config)
+            if not config["auto_install"]:
+                return
+        except ConfigError:
+            # A broken policy must never permit silently undoing rollback.
+            pass
+        _write(ctx, "auto-pause.json", {"format_version": 1, "reason": "manual_rollback",
+                                        "time": _now(), "generation": generation})
 
 
 def _snapshot(ctx, local=None):
     from . import update_scheduler
     config, state, pause = _config(ctx), _state(ctx), _pause(ctx)
+    if not config["auto_install"]:
+        pause = None
     return {"status": ("disabled" if not config["enabled"] else "paused" if pause else "enabled"),
             "enabled": config["enabled"], "interval_seconds": config["interval_seconds"],
+            "auto_install": config["auto_install"],
             "pause": pause, "next_due": state["next_due"],
             "last_attempt": state.get("last_attempt"), "last_outcome": state.get("last_outcome"),
             "in_progress": state.get("in_progress"), "quarantine": state.get("quarantine"),
@@ -152,14 +178,16 @@ def status():
     """Read policy and recent outcomes without creating any files."""
     local = installation.status()
     if not local.get("supported"):
-        return {"status": "unsupported", "enabled": False, "installation": local}
+        return {"status": "unsupported", "enabled": False, "auto_install": False, "installation": local}
     return _snapshot(installation._context(), local)
 
 
-def enable(interval_seconds=DEFAULT_INTERVAL):
-    """Install the scheduler and reset pause/quarantine after an explicit opt-in."""
+def enable(interval_seconds=DEFAULT_INTERVAL, *, auto_install=False):
+    """Enable scheduled checks; installing releases requires separate consent."""
     from . import update_scheduler
     _interval(interval_seconds)
+    if type(auto_install) is not bool:
+        raise ConfigError("Automatic installation must be a boolean")
     local = installation.status()
     if not local.get("supported"):
         raise ConfigError(local.get("reason", "Managed updates are unavailable"))
@@ -167,6 +195,16 @@ def enable(interval_seconds=DEFAULT_INTERVAL):
     # Serialize scheduler registration/removal separately; never wait for the
     # installation lock while holding the short policy lock (auto.lock).
     with _lock(ctx, "auto-control.lock"):
+        if not auto_install:
+            with _lock(ctx):
+                config = _config(ctx)
+                if config["enabled"] and (config["auto_install"] or config["format_version"] == 1):
+                    # Revoke before waiting for a candidate holding update.lock.
+                    # No policy lock is held while waiting below. If scheduler
+                    # setup subsequently fails, revocation remains effective.
+                    config.update(format_version=AUTO_POLICY_VERSION, auto_install=False,
+                                  policy_id=uuid.uuid4().hex)
+                    _write(ctx, "auto.json", config)
         with installation._locked(ctx):
             with _lock(ctx):
                 config, state = _config(ctx), _state(ctx)
@@ -177,7 +215,8 @@ def enable(interval_seconds=DEFAULT_INTERVAL):
                 state.update(next_due=0, failure_count=0, quarantine=None, in_progress=None,
                              approved_generation=local["current"]["generation"])
                 _write(ctx, "auto-state.json", state)
-                config.update(enabled=True, interval_seconds=interval_seconds,
+                config.update(format_version=AUTO_POLICY_VERSION, enabled=True,
+                              interval_seconds=interval_seconds, auto_install=auto_install,
                               policy_id=uuid.uuid4().hex, enabled_at=_now())
                 _write(ctx, "auto.json", config)
                 (Path(ctx["root"]) / "auto-pause.json").unlink(missing_ok=True)
@@ -192,15 +231,18 @@ def disable():
         with _lock(ctx):
             if (Path(ctx["root"]) / "auto.json").exists():
                 config = _config(ctx)
-                config.update(enabled=False, policy_id=uuid.uuid4().hex, disabled_at=_now())
+                config.update(format_version=AUTO_POLICY_VERSION, enabled=False, auto_install=False,
+                              policy_id=uuid.uuid4().hex, disabled_at=_now())
                 _write(ctx, "auto.json", config)
         update_scheduler.remove(ctx)
     return _snapshot(ctx)
 
 
-def _allowed(ctx, policy_id):
+def _allowed(ctx, policy_id, *, require_install=True):
     config = _config(ctx)
-    return config["enabled"] and config.get("policy_id") == policy_id and _pause(ctx) is None
+    return (config["enabled"] and config.get("policy_id") == policy_id
+            and (not require_install or config["auto_install"])
+            and (not config["auto_install"] or _pause(ctx) is None))
 
 
 def _error(exc):
@@ -208,7 +250,7 @@ def _error(exc):
 
 
 def _finish(ctx, attempt, outcome, *, version=None, error=None, retry=False,
-            quarantine=None, append=True):
+            quarantine=None, append=True, action=None):
     with _lock(ctx):
         state, config = _state(ctx), _config(ctx)
         pending = state.get("in_progress")
@@ -217,6 +259,8 @@ def _finish(ctx, attempt, outcome, *, version=None, error=None, retry=False,
             result["version"] = version
         if error is not None:
             result["error"] = _error(error)
+        if action is not None:
+            result["action"] = action
         # Explicit re-enable creates a fresh policy while an old tick may still
         # be downloading. It owns the new state and cannot be overwritten here.
         if not pending or pending.get("attempt_id") != attempt["attempt_id"]:
@@ -265,13 +309,16 @@ def _recovery(ctx, pending):
             with _lock(ctx):
                 state = _state(ctx)
                 fresh = state.get("in_progress")
+                policy = _config(ctx)
+                checking_only = policy["enabled"] and not policy["auto_install"]
                 if (not fresh or fresh.get("attempt_id") != pending["attempt_id"]
-                        or not _allowed(ctx, pending["policy_id"])):
+                        or not (_allowed(ctx, pending["policy_id"], require_install=False) or checking_only)):
                     return {"status": "cancelled"}
                 local = installation.status()
                 if not local.get("supported"):
                     return {"status": "unsupported", "reason": local.get("reason")}
                 current, pending = local["current"], fresh
+                auto_install = policy["auto_install"]
                 version = pending.get("version")
                 changed = current.get("generation") != pending.get("expected_generation")
                 verified = (pending["phase"] == "applying" and version == current.get("version")
@@ -280,7 +327,12 @@ def _recovery(ctx, pending):
                 # them: a manual update could install the same wheel after
                 # interruption. Only the activation guard's durable approval
                 # distinguishes that commit; ambiguous changes stay paused.
-                if changed and verified and state.get("approved_generation") == current["generation"]:
+                if not auto_install:
+                    # A legacy applying journal is not installation consent.
+                    # Retire it without approving or resuming installation, and
+                    # keep scheduled checks working after manual changes.
+                    outcome = "cancelled" if pending["phase"] == "applying" else "interrupted_check"
+                elif changed and verified and state.get("approved_generation") == current["generation"]:
                     outcome = "recovered_updated"
                 elif changed:
                     _write(ctx, "auto-pause.json", {"format_version": 1, "reason": "installation_changed",
@@ -294,7 +346,7 @@ def _recovery(ctx, pending):
                    "reason": "Installation was interrupted before activation"}
                   if outcome == "interrupted_candidate" else None)
     return _finish(ctx, pending, outcome, version=version, quarantine=quarantine,
-                   retry=outcome == "interrupted_check")
+                   retry=outcome == "interrupted_check" or (outcome == "cancelled" and not auto_install))
 
 
 def run():
@@ -303,7 +355,12 @@ def run():
     config, state = _config(ctx), _state(ctx)
     if not config["enabled"]:
         return {"status": "disabled"}
-    if _pause(ctx):
+    if config["format_version"] != AUTO_POLICY_VERSION:
+        with _lock(ctx):
+            config = _migrate_policy(ctx, _config(ctx))
+        if not config["enabled"]:
+            return {"status": "disabled"}
+    if config["auto_install"] and _pause(ctx):
         return {"status": "paused", "pause": _pause(ctx)}
     if state.get("in_progress") is None and _now() < state["next_due"]:
         return {"status": "not_due", "next_due": state["next_due"]}
@@ -314,14 +371,15 @@ def run():
             config, state = _config(ctx), _state(ctx)
             if not config["enabled"]:
                 return {"status": "disabled"}
-            if _pause(ctx):
+            if config["auto_install"] and _pause(ctx):
                 return {"status": "paused", "pause": _pause(ctx)}
             local = installation.status()
             if not local.get("supported"):
                 return {"status": "unsupported", "reason": local.get("reason")}
             current = local["current"]
             pending = state.get("in_progress")
-            if pending is None and current["generation"] != state.get("approved_generation"):
+            if (config["auto_install"] and pending is None
+                    and current["generation"] != state.get("approved_generation")):
                 pause = {"format_version": 1, "reason": "installation_changed",
                          "time": _now(), "generation": current["generation"]}
                 _write(ctx, "auto-pause.json", pause)
@@ -343,7 +401,7 @@ def run():
             release = releases.fetch_release()
         except (ConfigError, OSError) as exc:
             return _finish(ctx, pending, "check_failed", error=exc, retry=True)
-        if not _allowed(ctx, pending["policy_id"]):
+        if not _allowed(ctx, pending["policy_id"], require_install=False):
             return _finish(ctx, pending, "cancelled")
         if release is None:
             return _finish(ctx, pending, "no_release")
@@ -353,6 +411,9 @@ def run():
         checksum = release["manifest"]["wheel"]["sha256"]
         if version == current["version"] and checksum == current.get("wheel_sha256"):
             return _finish(ctx, pending, "up_to_date", version=version)
+        if not config["auto_install"]:
+            return _finish(ctx, pending, "release_available" if version == current["version"] else "update_available",
+                           version=version, action="richi update apply --version " + version)
         with _lock(ctx):
             state = _state(ctx)
             quarantined = state.get("quarantine")

@@ -87,20 +87,180 @@ class AutoUpdateTests(unittest.TestCase):
     def test_enable_installs_scheduler_default_interval_and_current_baseline(self):
         result = auto_update.enable()
         self.assertTrue(result["enabled"])
+        self.assertFalse(result["auto_install"])
         self.assertEqual(result["interval_seconds"], 21600)
         self.assertEqual(self.state()["approved_generation"], "seed")
         update_scheduler.install.assert_called_once_with(self.ctx)
         self.assertEqual((self.root / "auto.json").stat().st_mode & 0o777, 0o600)
         releases.fetch_release.assert_not_called()
 
-    def test_enable_failure_preserves_previous_policy_and_pause(self):
+    def test_default_mode_reports_update_without_downloading_or_installing(self):
         auto_update.enable()
+        with patch.object(releases, "download_wheel") as download, \
+                patch("richi_launcher.config.resolve_settings", side_effect=AssertionError("workspace access")):
+            result = auto_update.run()
+        self.assertEqual(result["status"], "update_available")
+        self.assertEqual(result["action"], "richi update apply --version 0.2.0")
+        self.assertEqual(self.state()["last_outcome"]["action"], result["action"])
+        self.assertEqual(self.current["generation"], "seed")
+        self.assertFalse((self.root / "state.json").exists())
+        download.assert_not_called()
+        installation.apply_release.assert_not_called()
+
+    def test_default_mode_distinguishes_unverified_same_version_release(self):
+        auto_update.enable()
+        releases.fetch_release.return_value = self.release("0.1.0")
+        result = auto_update.run()
+        self.assertEqual(result["status"], "release_available")
+        self.assertEqual(result["action"], "richi update apply --version 0.1.0")
+        installation.apply_release.assert_not_called()
+
+    def legacy_policy(self):
+        path = self.root / "auto.json"
+        config = json.loads(path.read_text())
+        config["format_version"] = 1
+        config.pop("auto_install")
+        installation._atomic_json(path, config)
+        return path
+
+    def test_legacy_policy_defaults_to_checks_and_migrates_without_installation(self):
+        auto_update.enable(auto_install=True)
+        path = self.legacy_policy()
+        installation._atomic_json(self.root / "auto-pause.json",
+                                  {"format_version": 1, "reason": "manual_rollback"})
+        before = path.read_bytes()
+        snapshot = auto_update.status()
+        self.assertFalse(snapshot["auto_install"])
+        self.assertEqual(snapshot["status"], "enabled")
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(auto_update.run()["status"], "update_available")
+        migrated = json.loads(path.read_text())
+        self.assertEqual(migrated["format_version"], 2)
+        self.assertFalse(migrated["auto_install"])
+        # Previous launchers accept only format 1; they must not reinterpret
+        # an enabled check-only policy as permission to install after rollback.
+        with self.assertRaisesRegex(ConfigError, "Unsupported"):
+            auto_update._read(self.ctx, "auto.json", None)
+        installation.apply_release.assert_not_called()
+
+    def test_legacy_policy_migrates_even_when_next_check_is_not_due(self):
+        auto_update.enable()
+        releases.fetch_release.return_value = None
+        auto_update.run()
+        path = self.legacy_policy()
+        self.assertEqual(auto_update.run()["status"], "not_due")
+        self.assertEqual(json.loads(path.read_text())["format_version"], 2)
+
+    def test_legacy_rollback_migrates_before_old_launcher_can_read_policy(self):
+        auto_update.enable()
+        path = self.legacy_policy()
+        with installation._locked(self.ctx):
+            auto_update.pause_for_rollback(self.ctx, "seed")
+        self.assertEqual(json.loads(path.read_text())["format_version"], 2)
+        self.assertEqual(auto_update.status()["status"], "enabled")
+        self.assertEqual(auto_update.run()["status"], "update_available")
+
+    def test_checking_continues_after_manual_install_and_rollback(self):
+        auto_update.enable()
+        self.current = {"version": "0.2.0", "generation": "manual-release", "wheel_sha256": "a" * 64}
+        self.assertEqual(auto_update.run()["status"], "up_to_date")
+        self.due()
+        with installation._locked(self.ctx):
+            auto_update.pause_for_rollback(self.ctx, "seed")
+        self.current = {"version": "0.1.0", "generation": "seed"}
+        self.assertEqual(auto_update.run()["status"], "update_available")
+        self.assertEqual(auto_update.status()["status"], "enabled")
+        installation.apply_release.assert_not_called()
+
+    def test_reenable_and_disable_revoke_installation_consent(self):
+        self.assertTrue(auto_update.enable(auto_install=True)["auto_install"])
+        self.assertFalse(auto_update.enable()["auto_install"])
+        self.assertEqual(auto_update.run()["status"], "update_available")
+        auto_update.enable(auto_install=True)
+        self.assertFalse(auto_update.disable()["auto_install"])
+        config = json.loads((self.root / "auto.json").read_text())
+        self.assertFalse(config["auto_install"])
+        installation.apply_release.assert_not_called()
+
+    def test_plain_enable_revokes_before_waiting_for_a_real_installation_lock(self):
+        auto_update.enable(auto_install=True)
+        staged, continue_stage, revoked, enabled = [threading.Event() for unused in range(4)]
+        self.addCleanup(continue_stage.set)
+        failures = []
+        write = auto_update._write
+        def record_write(ctx, name, value):
+            write(ctx, name, value)
+            if name == "auto.json" and value.get("enabled") and value.get("auto_install") is False:
+                revoked.set()
+        def apply(release, **kwargs):
+            with installation._locked(self.ctx):
+                self.assertTrue(kwargs["before_apply"]())
+                staged.set()
+                self.assertTrue(continue_stage.wait(5))
+                return self.apply(release, **kwargs)
+        def enable_checks():
+            try:
+                auto_update.enable()
+                enabled.set()
+            except BaseException as exc:
+                failures.append(exc)
+        installation.apply_release.side_effect = apply
+        with patch.object(auto_update, "_write", side_effect=record_write):
+            tick, result = self.start_tick()
+            self.assertTrue(staged.wait(5))
+            control = threading.Thread(target=enable_checks)
+            control.start()
+            self.assertTrue(revoked.wait(5))
+            self.assertFalse(enabled.wait(0.05))
+            continue_stage.set()
+            tick.join(5)
+            control.join(5)
+        self.assertFalse(tick.is_alive() or control.is_alive())
+        self.assertEqual(failures, [])
+        self.assertEqual(result[0]["status"], "cancelled")
+        self.assertEqual(self.current["generation"], "seed")
+        self.assertFalse(auto_update.status()["auto_install"])
+
+    def test_failed_reenable_keeps_revocation_and_retires_old_attempt(self):
+        auto_update.enable(auto_install=True)
+        self.pending()
+        update_scheduler.install.side_effect = ConfigError("OS registration unavailable")
+        with self.assertRaises(ConfigError):
+            auto_update.enable()
+        self.assertFalse(auto_update.status()["auto_install"])
+        self.assertEqual(auto_update.run()["status"], "cancelled")
+        self.assertIsNone(self.state()["in_progress"])
+        self.due()
+        self.assertEqual(auto_update.run()["status"], "update_available")
+        installation.apply_release.assert_not_called()
+
+    def test_legacy_interrupted_installation_is_retired_without_resuming_it(self):
+        auto_update.enable(auto_install=True)
+        self.pending()
+        self.legacy_policy()
+        self.assertEqual(auto_update.run()["status"], "cancelled")
+        self.assertIsNone(self.state()["in_progress"])
+        self.assertIsNone(self.state()["quarantine"])
+        self.assertEqual(self.state()["approved_generation"], "seed")
+        self.due()
+        self.assertEqual(auto_update.run()["status"], "update_available")
+        installation.apply_release.assert_not_called()
+
+    def test_invalid_installation_consent_never_registers_scheduler(self):
+        for value in ("true", 1, None):
+            with self.subTest(value=value), self.assertRaises(ConfigError):
+                auto_update.enable(auto_install=value)
+        update_scheduler.install.assert_not_called()
+        self.assertFalse(self.root.exists())
+
+    def test_enable_failure_preserves_previous_policy_and_pause(self):
+        auto_update.enable(auto_install=True)
         auto_update.pause_for_rollback(self.ctx, "seed")
         before = {name: (self.root / name).read_bytes() for name in
                   ("auto.json", "auto-state.json", "auto-pause.json")}
         update_scheduler.install.side_effect = ConfigError("OS registration unavailable")
         with self.assertRaises(ConfigError):
-            auto_update.enable(3600)
+            auto_update.enable(3600, auto_install=True)
         self.assertEqual(before, {name: (self.root / name).read_bytes() for name in before})
 
     def test_interval_validation_never_registers_or_writes(self):
@@ -131,7 +291,7 @@ class AutoUpdateTests(unittest.TestCase):
                                      "RICHI_CONFIG": str(workspace / "config.json"),
                                      "RICHI_WORKSPACE": "absent", "CODEX_THREAD_ID": "unbound"}), \
                 patch("richi_launcher.config.resolve_settings", side_effect=AssertionError("workspace access")):
-            auto_update.enable()
+            auto_update.enable(auto_install=True)
             result = auto_update.run()
             self.assertEqual(result["status"], "updated")
             self.assertEqual(self.state()["approved_generation"], self.current["generation"])
@@ -154,7 +314,7 @@ class AutoUpdateTests(unittest.TestCase):
         self.assertEqual(self.state()["failure_count"], 0)
 
     def test_download_network_failure_retries_without_quarantine(self):
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         installation.apply_release.side_effect = releases.TransientReleaseError("connection reset")
         result = auto_update.run()
         self.assertEqual(result["status"], "download_failed")
@@ -165,7 +325,7 @@ class AutoUpdateTests(unittest.TestCase):
         self.assertEqual(auto_update.run()["status"], "updated")
 
     def test_bad_candidate_quarantined_until_newer_release_or_explicit_enable(self):
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         installation.apply_release.side_effect = ConfigError("self-check failed")
         self.assertEqual(auto_update.run()["status"], "candidate_failed")
         self.due()
@@ -174,7 +334,7 @@ class AutoUpdateTests(unittest.TestCase):
         releases.fetch_release.return_value = self.release(checksum="b" * 64)
         self.assertEqual(auto_update.run()["status"], "quarantined")
         self.assertEqual(installation.apply_release.call_count, 1)
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         installation.apply_release.side_effect = self.apply
         self.assertEqual(auto_update.run()["status"], "updated")
         self.due()
@@ -189,12 +349,12 @@ class AutoUpdateTests(unittest.TestCase):
 
     def test_older_published_version_does_not_downgrade(self):
         self.current = {"version": "0.9.0", "generation": "release-0.9.0"}
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         self.assertEqual(auto_update.run()["status"], "older_release")
         installation.apply_release.assert_not_called()
 
     def test_disable_persists_even_when_service_removal_fails(self):
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         update_scheduler.remove.side_effect = ConfigError("OS removal unavailable")
         with self.assertRaises(ConfigError):
             auto_update.disable()
@@ -203,7 +363,7 @@ class AutoUpdateTests(unittest.TestCase):
         releases.fetch_release.assert_not_called()
 
     def test_disable_during_fetch_prevents_installation_and_overlap_is_busy(self):
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         entered, resume = threading.Event(), threading.Event()
         self.addCleanup(resume.set)
         def fetch():
@@ -224,7 +384,7 @@ class AutoUpdateTests(unittest.TestCase):
         installation.apply_release.assert_not_called()
 
     def test_reenable_during_fetch_owns_new_policy_and_old_tick_cannot_overwrite(self):
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         entered, resume = threading.Event(), threading.Event()
         self.addCleanup(resume.set)
         def fetch():
@@ -242,7 +402,7 @@ class AutoUpdateTests(unittest.TestCase):
         self.assertEqual(self.state(), before)
 
     def test_disable_after_staging_is_atomic_with_activation(self):
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         staged, activate = threading.Event(), threading.Event()
         self.addCleanup(activate.set)
         def apply(release, **kwargs):
@@ -260,7 +420,7 @@ class AutoUpdateTests(unittest.TestCase):
         self.assertEqual(self.current["generation"], "seed")
 
     def test_enable_waits_until_concurrent_disable_finishes_removing_scheduler(self):
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         removing, resume, enabling, enabled = [threading.Event() for unused in range(4)]
         self.addCleanup(resume.set)
         order, failures = [], []
@@ -279,7 +439,7 @@ class AutoUpdateTests(unittest.TestCase):
         def enable():
             enabling.set()
             try:
-                auto_update.enable()
+                auto_update.enable(auto_install=True)
                 enabled.set()
             except BaseException as exc:
                 failures.append(exc)
@@ -301,16 +461,16 @@ class AutoUpdateTests(unittest.TestCase):
         self.assertTrue(auto_update.status()["enabled"])
 
     def test_rollback_pause_and_external_generation_change_require_reenable(self):
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         auto_update.pause_for_rollback(self.ctx, "seed")
         self.assertEqual(auto_update.run()["status"], "paused")
         releases.fetch_release.assert_not_called()
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         self.current = {"version": "0.3.0", "generation": "manual-release"}
         self.assertEqual(auto_update.run()["status"], "paused")
         self.assertEqual(auto_update.status()["pause"]["reason"], "installation_changed")
         releases.fetch_release.assert_not_called()
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         self.assertEqual(auto_update.run()["status"], "older_release")
 
     def pending(self, phase="applying"):
@@ -321,7 +481,7 @@ class AutoUpdateTests(unittest.TestCase):
         self.save(state)
 
     def test_crash_after_verified_activation_recovers_without_reinstalling(self):
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         self.pending()
         self.current = {"version": "0.2.0", "generation": "release-0.2.0", "wheel_sha256": "a" * 64}
         state = self.state()
@@ -335,7 +495,7 @@ class AutoUpdateTests(unittest.TestCase):
         installation.apply_release.assert_not_called()
 
     def test_manual_same_wheel_after_interruption_requires_explicit_reenable(self):
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         self.pending()
         self.current = {"version": "0.2.0", "generation": "manual-same-wheel", "wheel_sha256": "a" * 64}
         self.assertEqual(auto_update.run()["status"], "superseded")
@@ -346,7 +506,7 @@ class AutoUpdateTests(unittest.TestCase):
         installation.apply_release.assert_not_called()
 
     def test_crash_before_activation_quarantines_incomplete_candidate(self):
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         self.pending()
         self.assertEqual(auto_update.run()["status"], "interrupted_candidate")
         self.due()
@@ -354,7 +514,7 @@ class AutoUpdateTests(unittest.TestCase):
         installation.apply_release.assert_not_called()
 
     def test_crash_during_feed_check_uses_retry_schedule(self):
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         self.pending("checking")
         result = auto_update.run()
         self.assertEqual(result["status"], "interrupted_check")
@@ -362,7 +522,7 @@ class AutoUpdateTests(unittest.TestCase):
         self.assertIsNone(self.state()["quarantine"])
 
     def test_interrupted_attempt_does_not_override_manual_generation_change(self):
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         self.pending()
         self.current = {"version": "0.1.0", "generation": "manually-restored", "wheel_sha256": "b" * 64}
         self.assertEqual(auto_update.run()["status"], "superseded")
@@ -370,7 +530,7 @@ class AutoUpdateTests(unittest.TestCase):
         installation.apply_release.assert_not_called()
 
     def test_malformed_attempt_journal_fails_closed(self):
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         state = self.state()
         state["in_progress"] = {"phase": "applying"}
         self.save(state)
@@ -379,7 +539,7 @@ class AutoUpdateTests(unittest.TestCase):
         releases.fetch_release.assert_not_called()
 
     def test_recovery_cannot_overwrite_policy_after_explicit_reenable(self):
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         self.pending()
         stale = self.state()["in_progress"]
         self.current = {"version": "0.2.0", "generation": "release-0.2.0", "wheel_sha256": "a" * 64}
@@ -389,7 +549,7 @@ class AutoUpdateTests(unittest.TestCase):
         self.assertEqual(self.state(), before)
 
     def test_recovery_rechecks_manual_rollback_pause_before_approving_generation(self):
-        auto_update.enable()
+        auto_update.enable(auto_install=True)
         self.pending()
         stale = self.state()["in_progress"]
         self.current = {"version": "0.2.0", "generation": "release-0.2.0", "wheel_sha256": "a" * 64}

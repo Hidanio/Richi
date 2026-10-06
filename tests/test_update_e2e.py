@@ -184,10 +184,44 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             results = []
             for version in ("0.2.0", "0.3.0", "0.4.0"):
                 response_path = self.feed_fixture(wheels[version], version)
+                if version == "0.3.0":
+                    # Plain enable checks releases without changing the current
+                    # version or collecting its previous seed. Omit wheel bytes
+                    # from the feed so even an attempted download fails.
+                    managed_root = Path(context["root"])
+                    state_path = managed_root / "state.json"
+                    before_state = (state_path.read_bytes(), state_path.stat().st_mtime_ns)
+                    before_versions = sorted(path.name for path in (managed_root / "versions").iterdir())
+                    runtime_paths = [Path(context["site"]) / "richi/memory.py",
+                                     Path(context["site"]) / "richi_launcher/cli.py",
+                                     Path(results[-1]["current"]["site"]) / "richi/memory.py"]
+                    before_runtime = {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in runtime_paths}
+                    check_responses = json.loads(response_path.read_text())
+                    check_responses = {url: path for url, path in check_responses.items() if not url.endswith(".whl")}
+                    check_feed = self.root / "check-only-responses.json"
+                    check_feed.write_text(json.dumps(check_responses))
+                    enabled = json.loads(self.run_process([self.python, "-I", "-B", runner, check_feed,
+                                                          "update", "auto", "enable"]).stdout)
+                    self.assertEqual(enabled["status"], "enabled")
+                    self.assertFalse(enabled["auto_install"])
+                    available = json.loads(self.run_process([self.python, "-I", "-B", runner, check_feed,
+                                                            "update", "auto", "run"]).stdout)
+                    self.assertEqual(available["status"], "update_available", available)
+                    self.assertEqual(available["version"], version)
+                    self.assertEqual(available["action"], "richi update apply --version 0.3.0")
+                    self.assert_public_version("0.2.0")
+                    self.assertEqual(self.console_json("update", "auto", "run")["status"], "not_due")
+                    self.assertEqual((state_path.read_bytes(), state_path.stat().st_mtime_ns), before_state)
+                    self.assertEqual(sorted(path.name for path in (managed_root / "versions").iterdir()), before_versions)
+                    self.assertEqual({path: (path.read_bytes(), path.stat().st_mtime_ns) for path in runtime_paths}, before_runtime)
+                    self.assertEqual({path: (path.read_bytes(), path.stat().st_mtime_ns) for path in protected_paths}, protected)
+                    # The explicit manual apply below remains available while
+                    # the background policy only checks for releases.
                 if version == "0.4.0":
                     enabled = json.loads(self.run_process([self.python, "-I", "-B", runner, response_path,
-                                                          "update", "auto", "enable", "--interval", "6h"]).stdout)
+                                                          "update", "auto", "enable", "--install", "--interval", "6h"]).stdout)
                     self.assertEqual(enabled["status"], "enabled")
+                    self.assertTrue(enabled["auto_install"])
                     self.assertEqual(enabled["interval_seconds"], 21600)
                     self.assertEqual(enabled["installation"]["current"]["version"], "0.3.0")
                     applied = json.loads(self.run_process([self.python, "-I", "-B", runner, response_path,
@@ -232,8 +266,10 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             self.assertEqual(paused["status"], "paused")
             self.assertEqual(paused["pause"]["reason"], "manual_rollback")
             auto_state = json.loads((Path(context["root"]) / "auto-state.json").read_text())
-            self.assertEqual([entry["status"] for entry in auto_state["history"]], ["updated"])
-            self.assertEqual(auto_state["history"][0]["version"], "0.4.0")
+            self.assertEqual([entry["status"] for entry in auto_state["history"]], ["update_available", "updated"])
+            self.assertEqual(auto_state["history"][0]["version"], "0.3.0")
+            self.assertEqual(auto_state["history"][0]["action"], "richi update apply --version 0.3.0")
+            self.assertEqual(auto_state["history"][1]["version"], "0.4.0")
             self.assertEqual(self.console_path.read_bytes(), console_bytes)
             self.assertEqual(bootstrap_path.read_bytes(), bootstrap_bytes)
             self.assertEqual({path: (path.read_bytes(), path.stat().st_mtime_ns) for path in protected_paths}, protected)

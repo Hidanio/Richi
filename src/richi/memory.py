@@ -554,9 +554,11 @@ def parser():
         updates.add_parser(action).add_argument("--version", help="Stable release X.Y.Z; defaults to latest")
     updates.add_parser("rollback")
     updates.add_parser("cleanup")
-    auto = updates.add_parser("auto", help="Manage native background release updates")
+    auto = updates.add_parser("auto", help="Manage background release checks and optional installation")
     automatic = auto.add_subparsers(dest="auto_action", required=True)
-    automatic.add_parser("enable").add_argument("--interval", default="6h", help="15m to 7d; default 6h")
+    enable = automatic.add_parser("enable", help="Enable background checks; installation requires --install")
+    enable.add_argument("--interval", default="6h", help="15m to 7d; default 6h")
+    enable.add_argument("--install", action="store_true", help="Also install automatically (off by default)")
     for action in ("disable", "status", "run"):
         automatic.add_parser(action)
     status = commands.add_parser("status", help="Read workspace, runtime and project-path diagnostics")

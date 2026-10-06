@@ -372,6 +372,7 @@ def apply_release(release, *, expected_generation=None, blocking=True,
             if require_auto:
                 _run([str(candidate / "bin" / "python"), "-I", "-B", "-c",
                       "from richi_launcher import auto_update, update; "
+                      "assert getattr(auto_update, 'AUTO_POLICY_VERSION', None) == 2; "
                       "assert all(callable(getattr(auto_update, name, None)) for name in "
                       "('run', 'status', 'enable', 'disable')); "
                       "update.command(['auto', 'run', '--help'])"], "Automatic release self-check")

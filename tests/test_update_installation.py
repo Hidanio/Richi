@@ -137,6 +137,29 @@ class InstallationTests(unittest.TestCase):
         self.assertFalse((self.root / "state.json").exists())
         self.assertEqual(list((self.root / "versions").iterdir()), [])
 
+    def test_background_rejects_legacy_auto_runtime_before_activation(self):
+        # The old runtime exposes every auto command but has no separate
+        # installation consent. Run the actual candidate probe against it.
+        staged = {}
+        def legacy_stage(ctx, generation, wheel, manifest):
+            record = self._stage(ctx, generation, wheel, manifest)
+            site = Path(record["site"])
+            (site / "richi_launcher" / "auto_update.py").write_text(
+                "def run(): pass\ndef status(): pass\ndef enable(): pass\ndef disable(): pass\n")
+            (site / "richi_launcher" / "update.py").write_text("def command(argv): pass\n")
+            staged["site"] = site
+            return record
+        original_run = installation._run
+        def run_probe(command, label):
+            code = "import sys; sys.path.insert(0, " + repr(str(staged["site"])) + "); " + command[-1]
+            return original_run([sys.executable, "-I", "-B", "-c", code], label)
+        with patch.object(installation, "_stage", side_effect=legacy_stage), \
+                patch.object(installation, "_run", side_effect=run_probe):
+            with self.assertRaisesRegex(ConfigError, "Automatic release self-check"):
+                installation.apply_release(self.release("0.2.0"), require_auto=True)
+        self.assertFalse((self.root / "state.json").exists())
+        self.assertEqual(list((self.root / "versions").iterdir()), [])
+
     def test_activation_stays_inside_guard_and_rollback_pauses_first(self):
         guarded = []
         @contextmanager

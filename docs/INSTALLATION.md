@@ -45,9 +45,13 @@ richi update check
 richi update apply
 # Возврат к предыдущей установленной версии:
 richi update rollback
-# Необязательно: фоновая проверка и установка каждые 6 часов:
+# Необязательно: фоновая проверка каждые 6 часов, без установки:
 richi update auto enable --interval 6h
 richi update auto status
+# Только если вы хотите также устанавливать обновления автоматически:
+richi update auto enable --interval 6h --install
+# Возврат к одной проверке (выключает автоустановку):
+richi update auto enable --interval 6h
 # Отключение фонового режима:
 richi update auto disable
 ```

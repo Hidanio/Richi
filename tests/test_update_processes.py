@@ -131,12 +131,15 @@ class UpdateCliRoutingTests(unittest.TestCase):
                 result = self.command("--chat", "unbound", "update", "auto", action)
                 self.assertEqual(result["status"], action)
                 if action == "enable":
-                    operation.assert_called_once_with(interval_seconds=21600)
+                    operation.assert_called_once_with(interval_seconds=21600, auto_install=False)
                 else:
                     operation.assert_called_once_with()
         with mock.patch.object(auto_update, "enable", return_value={"status": "enabled"}) as enable:
             self.command("update", "auto", "enable", "--interval", "1d")
-            enable.assert_called_once_with(interval_seconds=86400)
+            enable.assert_called_once_with(interval_seconds=86400, auto_install=False)
+        with mock.patch.object(auto_update, "enable", return_value={"status": "enabled"}) as enable:
+            self.command("update", "auto", "enable", "--install", "--interval", "15m")
+            enable.assert_called_once_with(interval_seconds=900, auto_install=True)
         self.fetch.assert_not_called()
         self.local_status.assert_not_called()
 

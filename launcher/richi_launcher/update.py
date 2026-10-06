@@ -24,18 +24,19 @@ def command(argv):
         action.add_argument("--version", help="Stable X.Y.Z release; defaults to latest")
     actions.add_parser("rollback", help="Switch to the previous installed version without downloading")
     actions.add_parser("cleanup", help="Retry removing retired versions after their processes exit")
-    auto = actions.add_parser("auto", help="Configure the native background stable-release updater")
+    auto = actions.add_parser("auto", help="Configure background release checks and optional automatic installation")
     automatic = auto.add_subparsers(dest="auto_action", required=True)
-    enable = automatic.add_parser("enable", help="Enable updates and register a per-user OS schedule")
+    enable = automatic.add_parser("enable", help="Enable background checks; installation requires explicit --install opt-in")
     enable.add_argument("--interval", default="6h", help="Check interval: 15m to 7d (default: 6h)")
-    automatic.add_parser("disable", help="Disable updates and remove the owned OS schedule")
+    enable.add_argument("--install", action="store_true", help="Also install releases automatically (off by default)")
+    automatic.add_parser("disable", help="Disable background checks and installation; remove the owned OS schedule")
     automatic.add_parser("status", help="Inspect the schedule and recent attempts without fetching a release")
     automatic.add_parser("run", help="Perform one check only when enabled and due; used by the OS scheduler")
     args = parser.parse_args(argv)
     if args.action == "auto":
         from . import auto_update
         if args.auto_action == "enable":
-            return auto_update.enable(interval_seconds=_interval(args.interval))
+            return auto_update.enable(interval_seconds=_interval(args.interval), auto_install=args.install)
         return {"disable": auto_update.disable, "status": auto_update.status,
                 "run": auto_update.run}[args.auto_action]()
     if args.action == "rollback":
