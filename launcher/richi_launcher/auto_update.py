@@ -257,8 +257,8 @@ def _activation_guard(ctx, attempt):
 
 
 def _recovery(ctx, pending):
-    # Recovery can approve a committed generation, so serialize against manual
-    # changes just like activation and re-read the journal after both locks.
+    # Recovery reports committed outcomes, so serialize against manual changes
+    # just like activation and re-read the journal after both locks.
     # The snapshot taken before acquiring them is never sufficient evidence.
     try:
         with installation._locked(ctx, blocking=False):
@@ -276,9 +276,11 @@ def _recovery(ctx, pending):
                 changed = current.get("generation") != pending.get("expected_generation")
                 verified = (pending["phase"] == "applying" and version == current.get("version")
                             and pending.get("wheel_sha256") == current.get("wheel_sha256"))
-                if changed and verified:
-                    state["approved_generation"] = current["generation"]
-                    _write(ctx, "auto-state.json", state)
+                # Matching bytes alone do not prove this tick activated
+                # them: a manual update could install the same wheel after
+                # interruption. Only the activation guard's durable approval
+                # distinguishes that commit; ambiguous changes stay paused.
+                if changed and verified and state.get("approved_generation") == current["generation"]:
                     outcome = "recovered_updated"
                 elif changed:
                     _write(ctx, "auto-pause.json", {"format_version": 1, "reason": "installation_changed",

@@ -324,8 +324,24 @@ class AutoUpdateTests(unittest.TestCase):
         auto_update.enable()
         self.pending()
         self.current = {"version": "0.2.0", "generation": "release-0.2.0", "wheel_sha256": "a" * 64}
+        state = self.state()
+        # The activation guard approved this generation before interruption;
+        # only the final outcome journal write was lost.
+        state["approved_generation"] = self.current["generation"]
+        self.save(state)
         self.assertEqual(auto_update.run()["status"], "recovered_updated")
         self.assertEqual(self.state()["approved_generation"], "release-0.2.0")
+        releases.fetch_release.assert_not_called()
+        installation.apply_release.assert_not_called()
+
+    def test_manual_same_wheel_after_interruption_requires_explicit_reenable(self):
+        auto_update.enable()
+        self.pending()
+        self.current = {"version": "0.2.0", "generation": "manual-same-wheel", "wheel_sha256": "a" * 64}
+        self.assertEqual(auto_update.run()["status"], "superseded")
+        self.assertEqual(auto_update.status()["status"], "paused")
+        self.assertEqual(self.state()["approved_generation"], "seed")
+        self.assertEqual(auto_update.run()["status"], "paused")
         releases.fetch_release.assert_not_called()
         installation.apply_release.assert_not_called()
 
