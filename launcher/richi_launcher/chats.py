@@ -162,7 +162,14 @@ def pin_chat(chat_id, selectors, metadata=False):
     """Snapshot one chat selection for the entire invocation before runtime load."""
     if chat_id is None:
         return selectors
-    state = current_chat(chat_id)
+    return pin_chat_state(current_chat(chat_id), selectors, metadata)
+
+
+def pin_chat_state(state, selectors, metadata=False):
+    """Validate a selection already snapshotted by this invocation."""
+    if not state["detected"]:
+        return selectors
+    chat_id = state["chat_id"]
     if not state["bound"]:
         if metadata:
             return selectors

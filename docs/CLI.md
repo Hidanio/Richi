@@ -66,6 +66,20 @@ richi project scan /path/to/repositories --apply
 Для другого клиента передавайте устойчивый ID через `--chat ID` или `RICHI_CHAT_ID`;
 Codex предоставляет `CODEX_THREAD_ID`. [Workspace и изоляция знаний](WORKSPACES.md).
 
+Единая проверка контекста и путей:
+
+```sh
+richi status
+richi --project-path /path/to/service-example status --project service-example
+richi status --projects --limit 50
+```
+
+Отчёт только читает метаданные выбранного workspace. Код 0 означает сформированный
+отчёт; проверяйте поле `status` и покрытие `diagnostics.projects`. Непривязанный
+чат получает `selection_required` без доступа к базе. При неисправном runtime
+возвращается `unavailable` с доступными настройками и причиной. Подробности и
+границы проверки — в [руководстве workspaces](WORKSPACES.md#состояние-workspace-и-путей-проектов).
+
 Полные справочники находятся в `skills/project-memory/references`. Это единый
 источник документации CLI и установленного skill: папка skill переносится целиком,
 без ссылок на файлы вне неё.

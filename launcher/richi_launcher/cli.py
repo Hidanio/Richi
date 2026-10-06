@@ -208,6 +208,9 @@ def main(argv=None):
             raise ConfigError("--project-path applies to knowledge commands, not " + command)
         if command == "chat":
             return chat_command(tail, selectors, chat_id)
+        if command == "status":
+            from .status import command as status_command
+            return _emit(status_command(tail, selectors, chat_id, project_path))
         if command == "config":
             selectors = pin_chat(chat_id, selectors, metadata=tail == ["show"] or _wants_help(tail))
             return configuration(tail, selectors)

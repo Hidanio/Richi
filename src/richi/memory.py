@@ -548,6 +548,10 @@ def parser():
     from . import __version__
     cli.add_argument("--version", action="version", version="Richi " + __version__)
     commands = cli.add_subparsers(dest="command", required=True)
+    status = commands.add_parser("status", help="Read workspace, runtime and project-path diagnostics")
+    status.add_argument("--projects", action="store_true")
+    status.add_argument("--project")
+    status.add_argument("--limit", type=positive_int, default=50)
     workspace = commands.add_parser("workspace", help="List, create, inspect, or switch isolated workspaces")
     workspace_commands = workspace.add_subparsers(dest="action", required=True)
     for action in ("list", "current"):
@@ -714,7 +718,7 @@ def run(args):
     from richi_launcher.config import resolve_settings
     settings = resolve_settings(db=args.db, config_file=getattr(args, "config", None),
                                 workspace=getattr(args, "workspace", None))
-    if args.command in {"config", "workspace", "use", "chat"}:
+    if args.command in {"config", "workspace", "use", "chat", "status"}:
         raise MemoryError("Use the installed richi " + args.command + " command")
     database = settings.database
     new_file = not database.exists()
