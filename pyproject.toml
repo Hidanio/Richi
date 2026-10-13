@@ -24,11 +24,12 @@ Homepage = "https://github.com/Hidanio/Richi"
 Repository = "https://github.com/Hidanio/Richi"
 
 [project.scripts]
-richi = "richi_launcher.cli:main"
+richi = "richi_bootstrap:main"
 
 [tool.setuptools]
 packages = ["richi", "richi_launcher"]
-package-dir = {richi = "src/richi", richi_launcher = "launcher/richi_launcher"}
+py-modules = ["richi_bootstrap"]
+package-dir = {"" = "launcher", richi = "src/richi", richi_launcher = "launcher/richi_launcher"}
 
 [tool.setuptools.package-data]
 richi = ["*.sql", "*.html"]

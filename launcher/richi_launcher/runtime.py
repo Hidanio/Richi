@@ -168,13 +168,23 @@ def bootstrap_command(argv):
     return [sys.executable, "-I", "-B", "-c", code, str(LAUNCHER_ROOT), *map(str, argv)]
 
 
+def lease_fds():
+    # Legacy in-process library use and isolated fixtures have no lease. Public
+    # entry points acquire it in the bootstrap before importing any runtime.
+    if "RICHI_INSTALLATION_LEASE_FD" not in os.environ:
+        return ()
+    from richi_bootstrap import lease_fds as inherited_lease_fds
+    return inherited_lease_fds()
+
+
 def preflight(runtime, database, config_file=None):
     environment = dict(os.environ)
     if config_file is not None:
         environment["RICHI_CONFIG"] = str(config_file)
     try:
         result = subprocess.run(runtime_command(runtime, [database], action="preflight"),
-                                capture_output=True, text=True, timeout=15, env=environment)
+                                capture_output=True, text=True, timeout=15, env=environment,
+                                pass_fds=lease_fds())
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise ConfigError("Runtime preflight failed: " + str(exc)) from exc
     if result.returncode:

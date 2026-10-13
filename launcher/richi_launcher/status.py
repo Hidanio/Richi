@@ -7,7 +7,7 @@ import tempfile
 
 from .chats import current_chat, pin_chat_state
 from .config import ConfigError, resolve_settings
-from .runtime import ACTIVE_RUNTIME, resolve_runtime, runtime_command
+from .runtime import ACTIVE_RUNTIME, resolve_runtime, runtime_command, lease_fds
 
 
 MAX_OUTPUT = 1024 * 1024
@@ -37,7 +37,7 @@ def _worker(runtime, arguments):
     with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors:
         try:
             result = subprocess.run(execution, stdout=output, stderr=errors,
-                                    timeout=30, env=environment)
+                                    timeout=30, env=environment, pass_fds=lease_fds())
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise ConfigError("Workspace inspection failed: " + str(exc)) from exc
         output.seek(0)
