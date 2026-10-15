@@ -334,6 +334,242 @@ WHERE 1=1
                 self.report(**arguments)
         self.assertEqual(list(self.conn.iterdump()), before)
 
+    def test_long_summary_counts_saved_unicode_without_stripping_or_normalizing(self):
+        threshold = 8
+        expected = {}
+        for name, pattern in (("ascii", "abc"), ("cyrillic", "абв"), ("unicode", "👩\u200d🔬e\u0301"),
+                              ("whitespace", " \t\nx ")):
+            for length in (threshold - 1, threshold, threshold + 1):
+                identity = "task:" + name + "-" + str(length)
+                summary = (pattern * threshold)[:length]
+                self.entry(identity, kind="task", summary=summary)
+                if length > threshold:
+                    expected["entry:" + identity] = length
+        report = self.report(summary_warn_chars=threshold)
+        findings = self.findings(report, "long_summary")
+        self.assertEqual({item["refs"][0]: item["details"]["summary_chars"] for item in findings}, expected)
+        self.assertEqual(report["summary_warn_chars"], threshold)
+        self.assertFalse(self.findings(self.report(summary_warn_chars=threshold + 1), "long_summary"))
+        self.assertEqual(len(self.findings(self.report(summary_warn_chars=threshold - 1), "long_summary")), 8)
+
+    def test_long_summary_default_and_threshold_validation(self):
+        for length in (5999, 6000, 6001):
+            self.entry("task:" + str(length), summary="я" * length)
+        report = self.report()
+        self.assertEqual(report["summary_warn_chars"], 6000)
+        self.assertEqual([item["refs"] for item in self.findings(report, "long_summary")], [["entry:task:6001"]])
+        self.assertEqual(memory.parser().parse_args(["punisher"]).summary_warn_chars, 6000)
+        for value in (1, 1000000):
+            self.assertEqual(self.report(summary_warn_chars=value)["summary_warn_chars"], value)
+        before = list(self.conn.iterdump())
+        for value in (0, -1, 1000001, True, False, 1.0, "6000", None):
+            with self.subTest(value=value), self.assertRaisesRegex(memory.MemoryError, "summary_warn_chars.*1.*1000000"):
+                self.report(summary_warn_chars=value)
+        self.assertEqual(list(self.conn.iterdump()), before)
+
+    def test_long_summary_states_kinds_and_read_arguments_are_explicit(self):
+        expected = {}
+        for state in sorted(memory.KNOWLEDGE):
+            for kind in sorted(memory.KINDS):
+                identity = kind + ":" + state
+                record = self.entry(identity, kind=kind, knowledge_state=state, work_state="implemented")
+                expected["entry:" + identity] = ("entry", record)
+            record = self.entity("concept:" + state, knowledge_state=state)
+            expected["entity:" + record["id"]] = ("entity", record)
+        before = list(self.conn.iterdump())
+        report = self.report(summary_warn_chars=1)
+        findings = self.findings(report, "long_summary")
+        self.assertEqual(len(findings), len(expected))
+        self.assertEqual(report["finding_counts"]["long_summary"], len(expected))
+        for item in findings:
+            family, record = expected[item["refs"][0]]
+            self.assertEqual(item["level"], "review" if record["knowledge_state"] == "confirmed" else "info")
+            self.assertEqual(item["details"], {
+                "summary_chars": len(record["summary"]), "threshold_chars": 1,
+                "kind": record["kind"], "knowledge_state": record["knowledge_state"],
+                "read_arguments": [family, "get", record["id"]],
+            })
+            self.assertIn("Read the full record", item["reason"])
+            self.assertIn("Length alone does not", item["reason"])
+            self.assertNotIn(record["summary"], json.dumps(item, ensure_ascii=False))
+            parsed = memory.parser().parse_args(item["details"]["read_arguments"])
+            self.assertEqual((parsed.command, parsed.action, parsed.id), (family, "get", record["id"]))
+        self.assertEqual(report["health"], self.report(summary_warn_chars=1000000)["health"])
+        self.assertEqual(report["health"]["status"], "ok")
+        self.assertEqual(list(self.conn.iterdump()), before)
+
+    def test_long_summary_uses_existing_strict_scope_not_graph_neighbors(self):
+        self.entry("task:own", summary="Own detailed record")
+        self.entry("task:neighbor", project_ids=["beta"], summary="Foreign detailed record")
+        self.edge("neighbor", "entry:task:own", "entry:task:neighbor")
+        for identity in ("direct", "indirect", "reverse", "guess", "old", "unsourced", "foreign"):
+            self.entity(identity)
+        self.edge("scope", "entity:direct", "project:alpha", kind="used_in")
+        self.edge("indirect", "entity:indirect", "entity:direct")
+        self.edge("reverse", "project:alpha", "entity:reverse", kind="used_in")
+        self.edge("guess", "entity:guess", "project:alpha", kind="used_in", knowledge_state="hypothesis")
+        self.edge("old", "entity:old", "project:alpha", kind="used_in", knowledge_state="superseded")
+        self.edge("unsourced", "entity:unsourced", "project:alpha", kind="used_in", knowledge_state="hypothesis", sources=[])
+        self.edge("foreign", "entity:foreign", "project:beta", kind="used_in")
+        report = self.report(project="alpha", summary_warn_chars=1)
+        self.assertEqual([item["refs"] for item in self.findings(report, "long_summary")],
+                         [["entity:direct"], ["entry:task:own"]])
+        self.assertEqual(report["coverage"]["inspected"]["entries"], 1)
+        self.assertEqual(report["coverage"]["inspected"]["entities"], 1)
+
+    def test_long_summary_does_not_expand_scan_caps_or_claim_complete_coverage(self):
+        for index in range(5):
+            self.entry("task:" + str(index))
+            self.entity("concept:" + str(index))
+            self.edge("scope:" + str(index), "entity:concept:" + str(index), "project:alpha", kind="used_in")
+        with mock.patch.object(punisher, "RECORD_SCAN_LIMIT", 2), mock.patch.object(punisher, "EDGE_SCAN_LIMIT", 1):
+            report = self.report(project="alpha", summary_warn_chars=1)
+        self.assertFalse(report["coverage"]["complete"])
+        self.assertTrue(report["truncated"])
+        self.assertEqual(report["coverage"]["limits"], {"records_per_table": 2, "edges": 1})
+        self.assertEqual(report["coverage"]["scanned"], {"entries": 2, "entities": 2, "edges": 1, "relations": 0})
+        self.assertEqual(report["coverage"]["inspected"]["entities"], 1)
+        self.assertEqual(report["coverage"]["eligible_entries"], 5)
+        self.assertEqual(report["finding_counts"]["long_summary"], 3)
+
+    def test_long_summary_is_read_only_for_schema_one_and_two_without_external_io(self):
+        for version in (1, 2):
+            with self.subTest(version=version):
+                if version == 1:
+                    self.conn.close()
+                    self.db = Path(self.temp.name) / "schema-one.sqlite3"
+                    self.conn = memory.connect(self.db, create=True)
+                    self.addCleanup(self.conn.close)
+                    self.conn.executescript((BASE / "schema.sql").read_text())
+                    self.conn.executescript(memory.FTS_SQL)
+                    self.conn.execute("PRAGMA user_version = 1")
+                    memory.project_put(self.conn, {"id": "alpha", "name": "alpha", "source": "fixture"})
+                else:
+                    self.conn.close()
+                    self.db = Path(self.temp.name) / "schema-two.sqlite3"
+                    self.conn = memory.connect(self.db, create=True)
+                    self.addCleanup(self.conn.close)
+                    memory.initialize(self.conn, self.db)
+                    memory.project_put(self.conn, {"id": "alpha", "name": "alpha", "source": "fixture"})
+                    self.entity("concept:detail", summary="Long entity context")
+                    self.edge("scope", "entity:concept:detail", "project:alpha", kind="used_in")
+                record = self.entry("task:detail", summary="First detailed finding", work_state="implemented")
+                self.entry(record["id"], summary="Updated detailed finding", work_state="merged")
+                before = list(self.conn.iterdump())
+                with mock.patch("socket.socket", side_effect=AssertionError("network forbidden")), \
+                        mock.patch("subprocess.run", side_effect=AssertionError("Git forbidden")), \
+                        mock.patch("subprocess.Popen", side_effect=AssertionError("Git forbidden")), \
+                        mock.patch("builtins.open", side_effect=AssertionError("source I/O forbidden")), \
+                        mock.patch("pathlib.Path.open", side_effect=AssertionError("source I/O forbidden")), \
+                        mock.patch("pathlib.Path.exists", side_effect=AssertionError("source I/O forbidden")):
+                    first = self.report(summary_warn_chars=1)
+                    second = self.report(summary_warn_chars=1)
+                self.assertEqual(first, second)
+                self.assertEqual(first["schema_version"], version)
+                self.assertEqual(first["finding_counts"]["long_summary"], version)
+                self.assertEqual(first["health"]["status"], "ok")
+                self.assertEqual(list(self.conn.iterdump()), before)
+                self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], version)
+
+    def test_long_summary_cli_budget_omits_whole_findings_and_preserves_exact_ids(self):
+        identities = ["task:000"] + ["task:%03d-" % index + "д" * 191 for index in range(1, 20)]
+        expected = {}
+        for identity in identities:
+            summary = "Подробные условия " + identity + " 👩\u200d🔬" * 10
+            self.entry(identity, kind="task", summary=summary)
+            expected["entry:" + identity] = len(summary)
+        for budget in (2000, 4096, 16000):
+            with self.subTest(budget=budget):
+                process = subprocess.run(
+                    [sys.executable, "-m", "richi", "--db", str(self.db), "punisher", "--project", "alpha",
+                     "--as-of", "2026-10-01", "--summary-warn-chars", "10", "--limit", "200", "--max-chars", str(budget)],
+                    capture_output=True, text=True, timeout=20, env=cli_environment(self.db.parent))
+                self.assertEqual(process.returncode, 0, process.stderr)
+                report = json.loads(process.stdout)
+                self.assertEqual(report["summary_warn_chars"], 10)
+                self.assertEqual(report["budget"]["output_chars"], len(process.stdout))
+                self.assertLessEqual(len(process.stdout), budget)
+                self.assertEqual(report["candidate_count"], len(identities))
+                self.assertEqual(report["finding_counts"], {"long_summary": len(identities)})
+                self.assertEqual(report["budget"]["omitted_findings"], len(identities) - len(report["findings"]))
+                self.assertTrue(report["coverage"]["complete"])
+                if budget == 2000:
+                    self.assertTrue(report["truncated"])
+                    self.assertGreater(report["budget"]["omitted_findings"], 0)
+                else:
+                    self.assertTrue(report["findings"])
+                for item in report["findings"]:
+                    ref = item["refs"][0]
+                    self.assertIn(ref, expected)
+                    self.assertEqual(item["details"], {
+                        "summary_chars": expected[ref], "threshold_chars": 10, "kind": "task",
+                        "knowledge_state": "confirmed", "read_arguments": ["entry", "get", ref[len("entry:"):]],
+                    })
+
+    def test_long_summary_read_arguments_keep_shell_characters_literal(self):
+        identity = "task:literal 'quoted'; $(touch never) `uname`"
+        self.entry(identity)
+        item = self.findings(self.report(summary_warn_chars=1), "long_summary")[0]
+        self.assertEqual(item["details"]["read_arguments"], ["entry", "get", identity])
+        self.assertEqual(memory.parser().parse_args(item["details"]["read_arguments"]).id, identity)
+
+    def test_long_summary_read_arguments_allow_ids_starting_with_dash(self):
+        for family, create in (("entry", self.entry), ("entity", self.entity)):
+            for identity in ("-x", "--history", "--"):
+                create(identity)
+        for item in self.findings(self.report(summary_warn_chars=1), "long_summary"):
+            family, _, identity = item["refs"][0].partition(":")
+            arguments = item["details"]["read_arguments"]
+            self.assertEqual(arguments, [family, "get", "--", identity])
+            self.assertEqual(memory.parser().parse_args(arguments).id, identity)
+            process = subprocess.run(
+                [sys.executable, "-m", "richi", "--db", str(self.db), *arguments],
+                capture_output=True, text=True, timeout=20, env=cli_environment(self.db.parent))
+            self.assertEqual(process.returncode, 0, process.stderr)
+            self.assertEqual(json.loads(process.stdout)["id"], identity)
+
+    def test_summary_threshold_cli_rejects_invalid_values(self):
+        for value in ("0", "-1", "1000001", "1.5", "true", "invalid"):
+            with self.subTest(value=value):
+                process = subprocess.run(
+                    [sys.executable, "-m", "richi", "--db", str(self.db), "punisher", "--summary-warn-chars", value],
+                    capture_output=True, text=True, timeout=20, env=cli_environment(self.db.parent))
+                self.assertNotEqual(process.returncode, 0)
+                self.assertIn("summary", json.loads(process.stderr)["error"])
+
+
+class PunisherWorkspaceTests(unittest.TestCase):
+    def test_bound_workspace_and_project_path_isolate_same_record_ids(self):
+        # The existing launcher fixture uses only copied packages and a temporary
+        # registry/home; its synthetic chat IDs never select the caller's store.
+        from test_chat_workspaces import ChatCliTests
+        fixture = ChatCliTests("test_two_chats_in_same_directory_remain_isolated_after_cli_default_changes")
+        self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
+        repositories = {}
+        for name, summary in (("alpha", "Long synthetic summary"), ("beta", "Short")):
+            fixture.command("workspace", "create", name)
+            fixture.command("chat", "bind", name, chat=name)
+            fixture.command("init", chat=name)
+            repo = fixture.root / (name + "-repo")
+            repo.mkdir()
+            repositories[name] = repo
+            fixture.command("project", "add", repo, "--id", "shared", chat=name)
+            fixture.command("--project-path", repo, "entry", "put", "--json", "-", chat=name, payload={
+                "id": "task:shared", "kind": "task", "title": "Same ID in two workspaces", "summary": summary,
+                "project_ids": ["shared"], "sources": [{"reference": "test://" + name}],
+                "knowledge_state": "confirmed", "verified_at": "2026-10-01"})
+        fixture.command("use", "beta")
+        for name, expected in (("alpha", 1), ("beta", 0)):
+            report = fixture.command("--project-path", repositories[name], "punisher", "--project", "shared",
+                                     "--summary-warn-chars", "10", "--as-of", "2026-10-01", chat=name)
+            self.assertEqual(report["finding_counts"].get("long_summary", 0), expected)
+            self.assertEqual(report["coverage"]["inspected"]["entries"], 1)
+            self.assertEqual(fixture.command("chat", "current", chat=name)["workspace"], name)
+        rejected = fixture.command("-w", "beta", "punisher", chat="alpha", ok=False)
+        self.assertEqual(rejected["code"], "chat_workspace_conflict")
+        fixture.command("--project-path", repositories["beta"], "punisher", "--project", "shared", chat="alpha", ok=False)
+
 
 if __name__ == "__main__":
     unittest.main()
