@@ -102,7 +102,9 @@ For reproducibility, the report records fixture and generated-corpus hashes,
 installed module hashes, Python/platform/SQLite versions, the actual diagnostic
 counters and record/history/current-summary storage statistics. It also checks
 full target records, source provenance, states, output budgets and unchanged
-database/WAL byte digests (SHM is transient coordination state). These checks
+byte digests of the database and every nonempty WAL. An absent WAL and a
+zero-byte WAL are equivalent; transient SHM is excluded. The statistics reader
+is explicitly closed before subsequent CLI reads and the final comparison. These checks
 distinguish a valid measurement from a useful record being present in a bounded result.
 
 Each scenario uses disposable synthetic storage with an explicit temporary
