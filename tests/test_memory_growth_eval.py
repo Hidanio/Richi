@@ -7,10 +7,12 @@ import importlib.util
 import json
 import math
 from pathlib import Path
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from cli_environment import cli_environment
 from richi import compact, graph, memory, recall
@@ -28,6 +30,94 @@ def load_runner():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def failure_diagnostics(process):
+    """Keep the causes at the end of a large report visible in CI failures."""
+    details = {"returncode": process.returncode, "stderr": process.stderr}
+    try:
+        report = json.loads(process.stdout)
+    except (TypeError, ValueError):
+        details["stdout_excerpt"] = process.stdout[:3000]
+    else:
+        if not isinstance(report, dict):
+            details["stdout_excerpt"] = process.stdout[:3000]
+        else:
+            details["summary"] = report.get("summary")
+            if report.get("error"):
+                details["error"] = report["error"]
+            causes = []
+            for dataset in report.get("datasets", []):
+                if dataset.get("harness_error") or dataset.get("invariant_failures"):
+                    cause = {"dataset": dataset.get("id"),
+                             "harness_error": dataset.get("harness_error"),
+                             "invariant_failures": dataset.get("invariant_failures", [])}
+                    if dataset.get("read_only", {}).get("unchanged") is False:
+                        cause["read_only"] = dataset["read_only"]
+                    causes.append(cause)
+                for case in dataset.get("cases", []):
+                    if case.get("harness_error") or case.get("invariant_failures"):
+                        causes.append({"dataset": dataset.get("id"), "case": case.get("id"),
+                                       "harness_error": case.get("harness_error"),
+                                       "invariant_failures": case.get("invariant_failures", [])})
+            details["causes"] = causes
+    return "Quick growth measurement failed:\n" + json.dumps(details, ensure_ascii=False, indent=2)
+
+
+class MemoryGrowthHarnessUnitTests(unittest.TestCase):
+    def test_failure_diagnostics_show_causes_after_large_report_prefix(self):
+        report = {
+            "irrelevant_prefix": "x" * 4000,
+            "datasets": [{"id": "b8-d0-h0", "invariant_failures": ["read-only bytes changed"],
+                          "read_only": {"unchanged": False, "before": {"database": "same"},
+                                        "after": {"database": "same", "-wal": "empty"}},
+                          "cases": [{"id": "probe", "harness_error": "late case failure"}]}],
+            "summary": {"execution_completed": False, "harness_errors": ["late case failure"],
+                        "invariant_failures": 1},
+        }
+        process = subprocess.CompletedProcess([], 1, json.dumps(report), "")
+        message = failure_diagnostics(process)
+        for expected in ("summary", "b8-d0-h0", "probe", "late case failure", "read-only bytes changed", "-wal"):
+            self.assertIn(expected, message)
+        self.assertNotIn("irrelevant_prefix", message)
+
+    def test_storage_closes_readonly_connection_without_waiting_for_gc(self):
+        runner = load_runner()
+        with tempfile.TemporaryDirectory(prefix="richi-growth-storage-close-") as temporary:
+            database = Path(temporary) / "synthetic.sqlite3"
+            writer = memory.connect(database, create=True)
+            try:
+                memory.initialize(writer, database)
+            finally:
+                writer.close()
+            connection = sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)
+            try:
+                # Retain a strong reference so GC cannot hide a missing close.
+                with mock.patch.object(runner.sqlite3, "connect", return_value=connection):
+                    sizes = runner.storage(database)
+                self.assertEqual(sizes["counts"]["entries"], 0)
+                with self.assertRaises(sqlite3.ProgrammingError):
+                    connection.execute("SELECT 1")
+            finally:
+                connection.close()
+
+    def test_readonly_digest_ignores_empty_wal_but_detects_persisted_bytes(self):
+        runner = load_runner()
+        with tempfile.TemporaryDirectory(prefix="richi-growth-wal-digest-") as temporary:
+            database = Path(temporary) / "synthetic.sqlite3"
+            database.write_bytes(b"Synthetic byte-fingerprint fixture; never opened as SQLite.")
+            baseline = runner.readonly_digest(database)
+            wal = Path(str(database) + "-wal")
+            wal.write_bytes(b"")
+            self.assertEqual(runner.readonly_digest(database), baseline)
+            wal.write_bytes(b"Synthetic nonempty WAL frames")
+            first = runner.readonly_digest(database)
+            self.assertNotEqual(first, baseline)
+            self.assertIn("-wal", first)
+            wal.write_bytes(b"Changed synthetic nonempty WAL frames")
+            self.assertNotEqual(runner.readonly_digest(database), first)
+            database.write_bytes(b"Changed synthetic database bytes")
+            self.assertNotEqual(runner.readonly_digest(database)["database"], baseline["database"])
 
 
 class MemoryGrowthEvalTests(unittest.TestCase):
@@ -76,7 +166,7 @@ class MemoryGrowthEvalTests(unittest.TestCase):
         cls.process = cls.run_cli("--quick", "--repeats", "1", "--cases", str(cls.custom_path),
                                   "--output", str(cls.report_path), timeout=240)
         if cls.process.returncode != 0:
-            raise AssertionError("Quick growth measurement failed: " + cls.process.stderr + cls.process.stdout[:3000])
+            raise AssertionError(failure_diagnostics(cls.process))
         cls.report = json.loads(cls.process.stdout)
 
     @classmethod
