@@ -671,7 +671,7 @@ def parser():
     capture_mode = capture.add_mutually_exclusive_group()
     capture_mode.add_argument("--rev", help="Capture committed bytes at this revision instead of the working copy")
     capture_mode.add_argument("--worktree", action="store_true", help="Capture working-copy bytes (default)")
-    capture.add_argument("--repo", help="Optional linked worktree of the registered repository")
+    capture.add_argument("--repo", help="Explicit checkout of the registered repository; otherwise use --project-path, then registered repo_path")
     capture.add_argument("--output", help="NEW source JSON file for attach/show; never overwritten")
     capture.add_argument("--max-chars", type=compact.max_chars, default=16000)
     attach = source_actions.add_parser("attach", help="Append a captured source using optimistic concurrency and existing history")
