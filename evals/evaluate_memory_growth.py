@@ -7,6 +7,7 @@ All stores and homes are disposable; there is deliberately no --db argument.
 """
 import argparse
 import copy
+from contextlib import closing
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -275,13 +276,18 @@ def file_digest(path):
 
 
 def readonly_digest(database):
-    # Include WAL content if present; SHM is transient coordination state.
+    # Readers may create/remove an empty WAL on some SQLite/VFS versions.
+    # It contains no frames, so absence and zero bytes are equivalent here.
+    # Always hash database bytes and every nonempty WAL; SHM is coordination.
     return {suffix or "database": file_digest(Path(str(database) + suffix))
-            for suffix in ("", "-wal") if Path(str(database) + suffix).exists()}
+            for suffix in ("", "-wal") if Path(str(database) + suffix).exists()
+            and (not suffix or Path(str(database) + suffix).stat().st_size > 0)}
 
 
 def storage(database):
-    with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True) as conn:
+    # sqlite3.Connection's context manager manages a transaction, not closing.
+    # Release the reader before later CLI calls and the final byte comparison.
+    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as conn:
         counts = {table: conn.execute("SELECT count(*) FROM " + table).fetchone()[0]
                   for table in ("entries", "entities", "graph_edges", "entry_history", "entity_history", "edge_history")}
         chars, byte_count = conn.execute("SELECT coalesce(sum(length(summary)),0), coalesce(sum(length(CAST(summary AS BLOB))),0) FROM entries").fetchone()
@@ -419,6 +425,7 @@ def main(argv=None):
                 "FTS shortlist and graph caps can lose targets. Counts/outcomes describe executed work, not a hypothetical exhaustive search.",
                 "The crowded lexical query has many legitimate lexical matches; missing its designated target measures bounded discoverability, not objective irrelevance of the other results.",
                 "DB bytes include indexes/history/free pages; history JSON byte counts do not attribute physical SQLite table storage.",
+                "Read-only digests compare database bytes and nonempty WAL bytes; an absent versus empty WAL is equivalent, and transient SHM is excluded.",
                 "History axes have identical final current content; content hashes exclude generated created_at/updated_at timestamps.",
                 "This fixture grows entries and their task-detail edges, not entities; entity counters are reported but entity-growth performance is not measured.",
                 "Sources are fictional and never fetched. Full get checks preserve provenance/states; excerpts may omit conditions.",
