@@ -151,7 +151,19 @@ def _write_source(path, source):
 
 
 def capture(conn, args, api, database):
-    repo = _repository(conn, args.project, getattr(args, "repo", None), api)
+    override = getattr(args, "repo", None)
+    selected_by = "repo" if override else "registered"
+    project_path = getattr(args, "project_path", None)
+    if project_path is not None:
+        from .projects import ensure_project_context
+        # Internal callers must enforce the same workspace guard as the CLI,
+        # including when an explicit --repo takes precedence.
+        ensure_project_context(conn, project_path, expected_id=args.project)
+        if not override:
+            checkout = Path(project_path).expanduser().resolve(strict=True)
+            override = checkout.parent if checkout.is_file() else checkout
+            selected_by = "project_path"
+    repo = _repository(conn, args.project, override, api)
     revision = getattr(args, "rev", None)
     if revision is not None and getattr(args, "worktree", False):
         raise api.MemoryError("Choose --rev or --worktree")
@@ -159,12 +171,15 @@ def capture(conn, args, api, database):
                                   revision=revision or "HEAD", worktree=revision is None,
                                   artifact_dir=_artifacts(database))
     source = api.sources([source])[0]
-    if getattr(args, "output", None):
-        _write_source(args.output, source)
-    return _bound({"status": "captured", "source": source,
+    result = _bound({"status": "captured", "source": source,
+            "capture_context": {"repo_root": str(repo), "selected_by": selected_by,
+                                "resolved_commit": source["git"]["commit"]},
             "output": str(Path(args.output).expanduser().absolute()) if getattr(args, "output", None) else None,
             "notice": "Captured evidence only. No knowledge record or verified_at was changed."},
             getattr(args, "max_chars", 16000))
+    if getattr(args, "output", None):
+        _write_source(args.output, source)
+    return result
 
 
 def attach(conn, args, api, database):
