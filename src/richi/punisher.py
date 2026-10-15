@@ -139,16 +139,20 @@ def _fit(response, limit, maximum):
 
 
 def punisher(conn, args, api):
-    """Return maintenance diagnostics; args: project, limit, max_chars, stale_days, as_of."""
+    """Return bounded maintenance diagnostics without changing stored knowledge."""
     limit = getattr(args, "limit", 20)
     maximum = getattr(args, "max_chars", 16000)
     stale_days = getattr(args, "stale_days", 180)
+    summary_warn_chars = getattr(args, "summary_warn_chars", 6000)
     if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 200:
         raise api.MemoryError("Punisher limit must be between 1 and 200")
     if not isinstance(maximum, int) or isinstance(maximum, bool) or not 2000 <= maximum <= 100000:
         raise api.MemoryError("max_chars must be between 2000 and 100000")
     if not isinstance(stale_days, int) or isinstance(stale_days, bool) or not 1 <= stale_days <= 36500:
         raise api.MemoryError("stale_days must be between 1 and 36500")
+    if (not isinstance(summary_warn_chars, int) or isinstance(summary_warn_chars, bool)
+            or not 1 <= summary_warn_chars <= 1000000):
+        raise api.MemoryError("summary_warn_chars must be an integer between 1 and 1000000")
     raw_as_of = getattr(args, "as_of", None)
     try:
         as_of = date.fromisoformat(raw_as_of) if raw_as_of is not None else datetime.now(timezone.utc).date()
@@ -362,6 +366,17 @@ WHERE 1=1
 ;""", (ref,)).fetchone():
             add("graph_node_missing", "error", "The record has no graph registry node.", ref)
         summary = record.get("summary")
+        if isinstance(summary, str) and len(summary) > summary_warn_chars:
+            read_arguments = [record["family"], "get"]
+            if record["id"].startswith("-"):
+                read_arguments.append("--")
+            read_arguments.append(record["id"])
+            add("long_summary", "review" if record["knowledge_state"] == "confirmed" else "info",
+                "Read the full record and review whether current state and details would benefit from separation. "
+                "Length alone does not establish mixed history, outdated knowledge, or reduced quality.",
+                ref, summary_chars=len(summary), threshold_chars=summary_warn_chars, kind=record["kind"],
+                knowledge_state=record["knowledge_state"],
+                read_arguments=read_arguments)
         if isinstance(summary, str) and summary.strip():
             # The complete exact string is the key: titles, whitespace, and
             # scopes are not normalized into an assumed semantic duplicate.
@@ -433,6 +448,7 @@ LIMIT 1
     counts = dict(sorted(Counter(item["code"] for item in findings).items()))
     response = {
         "schema_version": version, "as_of": as_of.isoformat(), "project": project, "stale_days": stale_days,
+        "summary_warn_chars": summary_warn_chars,
         "health": {
             "scope": "database", "status": "ok" if integrity_ok and not foreign_count else "error",
             "integrity": [_short(message, 300) for message in integrity],

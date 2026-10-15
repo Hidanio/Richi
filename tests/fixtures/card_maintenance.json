@@ -1,0 +1,361 @@
+{
+  "description": "Entirely synthetic. The long input repeats sourced investigation notes to emulate accumulated chronological updates. Numbered editorial copies introduce no new measurements, dates, events or claims. The preservation map is the oracle, declared before any writes. Sources are inert example.invalid references.",
+  "projects": [
+    {
+      "id": "relay",
+      "name": "Relay",
+      "source": "synthetic card-maintenance fixture"
+    },
+    {
+      "id": "ledger",
+      "name": "Ledger",
+      "source": "synthetic card-maintenance fixture"
+    }
+  ],
+  "parent_after": {
+    "id": "task:DEMO-84",
+    "kind": "task",
+    "jira_key": "DEMO-84",
+    "title": "DEMO-84: безопасное повторение квитанций Relay",
+    "project_ids": [
+      "ledger",
+      "relay"
+    ],
+    "knowledge_state": "confirmed",
+    "work_state": "implemented",
+    "sources": [
+      {
+        "reference": "https://example.invalid/relay/pull/84",
+        "type": "pull_request",
+        "observed_at": "2026-09-14",
+        "label": "Synthetic implementation review; open PR"
+      },
+      {
+        "reference": "https://example.invalid/relay/spec/receipt-v3",
+        "type": "specification",
+        "observed_at": "2026-09-12",
+        "label": "Synthetic applicability and cold-restore exception"
+      },
+      {
+        "reference": "https://example.invalid/relay/traces/receipt-race",
+        "type": "investigation",
+        "observed_at": "2026-09-09",
+        "label": "Synthetic receipt race trace"
+      },
+      {
+        "reference": "https://example.invalid/relay/runs/2026-09-10",
+        "type": "measurement",
+        "observed_at": "2026-09-10",
+        "label": "Synthetic failed cross-shard retry experiment"
+      },
+      {
+        "reference": "https://example.invalid/relay/notes/epoch-fence",
+        "type": "proposal",
+        "observed_at": "2026-09-13",
+        "label": "Unverified synthetic alternative"
+      }
+    ],
+    "aliases": [
+      "повтор квитанций Relay"
+    ],
+    "tags": [
+      "receipts"
+    ],
+    "verified_at": "2026-09-14",
+    "summary": "В Relay реализовано повторение квитанции в пределах одной секции ledger. Состояние implemented подтверждено ревью от 2026-09-14; PR остаётся открытым, merged и released не подтверждены. Дата проверки описывает это ревью, а редакторское сокращение карточки её не обновляет.\n\nДействующее условие: cursor продвигается только после durable-receipt. Выбор обусловлен сохранением порядка подтверждений: ответ транспорта ещё не доказывает сохранение квитанции. Межсекционный retry отклонён из-за двойной квитанции при смене владельца; причина и область отказа: entry:decision:DEMO-84-reject-cross-shard. Подробности воспроизведения гонки: entry:investigation:DEMO-84-receipt-race.\n\nПроверки выполнены на синтетическом стенде. Неудачный запуск 2026-09-10 и исторические числа сохранены в entry:experiment:DEMO-84-replay-20260910; это не текущая производительность production. Нового замера после реализации нет. Исключение cold-restore: восстановление из архивной секции требует ручного сопоставления квитанций до запуска replay. Это исключение продолжает действовать и после исправления обычного пути.\n\nАльтернатива epoch-fence пока не проверена; её ожидаемый эффект неизвестен. Условия будущей проверки: entry:investigation:DEMO-84-epoch-fence. Следующий шаг — отдельно проверить merge и release по первичным системам, а перед cold-restore прочитать полный текст условия и спецификацию. Все подробные записи относятся к DEMO-84 и к проектам Relay/Ledger; исторические свидетельства сохранены."
+  },
+  "children": [
+    {
+      "id": "investigation:DEMO-84-receipt-race",
+      "kind": "investigation",
+      "jira_key": "DEMO-84",
+      "title": "Гонка квитанций на границе flush",
+      "summary": "Вопрос: почему ответ retry иногда предшествует устойчивому сохранению квитанции? В синтетической трассе receipt-window-17 ответ ACK появляется между fsync журнала и публикацией receipt-index. Это окно объясняет повторную доставку при смене владельца; вывод ограничен тестовым Relay и форматом receipt-v3. Действующее условие: cursor продвигается только после durable-receipt. Исключение cold-restore: восстановление из архивной секции требует ручного сопоставления квитанций до запуска replay. Метод: сравнивали порядок ACK, fsync и receipt-index на одной трассе; журналы транспорта не заменяют проверку индекса. Трасса не доказывает частоту гонки на production.",
+      "project_ids": [
+        "ledger",
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.invalid/relay/traces/receipt-race",
+          "type": "investigation",
+          "observed_at": "2026-09-09",
+          "label": "Synthetic receipt race trace"
+        },
+        {
+          "reference": "https://example.invalid/relay/spec/receipt-v3",
+          "type": "specification",
+          "observed_at": "2026-09-12",
+          "label": "Synthetic applicability and cold-restore exception"
+        }
+      ],
+      "aliases": [],
+      "tags": [
+        "receipts"
+      ],
+      "verified_at": "2026-09-09"
+    },
+    {
+      "id": "decision:DEMO-84-reject-cross-shard",
+      "kind": "decision",
+      "jira_key": "DEMO-84",
+      "title": "Причина отказа от межсекционного retry",
+      "summary": "Межсекционный retry отклонён: причина отказа — двойная квитанция при смене владельца. На стенде второй владелец повторно принимает ACK до публикации receipt-index первым владельцем. Отклонение относится к переносу cursor между секциями ledger, а не к повтору внутри одной секции после durable-receipt. Вариант с ожиданием индекса в одной секции выбран как ограниченное исправление. Неудачный эксперимент остаётся подтверждённым наблюдением; сам отказ не делает эту причину superseded. Решение не подтверждает merge либо release реализации. Подробные условия и исторические числа: entry:experiment:DEMO-84-replay-20260910.",
+      "project_ids": [
+        "ledger",
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.invalid/relay/traces/receipt-race",
+          "type": "investigation",
+          "observed_at": "2026-09-09",
+          "label": "Synthetic receipt race trace"
+        },
+        {
+          "reference": "https://example.invalid/relay/runs/2026-09-10",
+          "type": "measurement",
+          "observed_at": "2026-09-10",
+          "label": "Synthetic failed cross-shard retry experiment"
+        },
+        {
+          "reference": "https://example.invalid/relay/spec/receipt-v3",
+          "type": "specification",
+          "observed_at": "2026-09-12",
+          "label": "Synthetic applicability and cold-restore exception"
+        }
+      ],
+      "aliases": [],
+      "tags": [
+        "receipts"
+      ],
+      "verified_at": "2026-09-12"
+    },
+    {
+      "id": "experiment:DEMO-84-replay-20260910",
+      "kind": "experiment",
+      "jira_key": "DEMO-84",
+      "title": "Неудачный повтор и исторический замер",
+      "summary": "Исторический запуск 2026-09-10: 8 синтетических секций, 64 параллельных worker, TTL квитанции 30 s, фиксированный seed 17. Вариант cross-shard-retry дал p99 452 ms вместо baseline p99 310 ms; зарегистрирована двойная квитанция при смене владельца. Итог эксперимента — неудача в этих условиях, knowledge_state confirmed относится к наблюдению, не к успешности подхода. Метод: одинаковый набор 10000 квитанций, последовательный baseline и candidate; это один прогон без доверительного интервала. Исторический p99 452 ms не является текущей производительностью production и не переносится на другой TTL, число worker или обычный одноcекционный путь. Повторного замера после исправления пока нет.",
+      "project_ids": [
+        "ledger",
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.invalid/relay/runs/2026-09-10",
+          "type": "measurement",
+          "observed_at": "2026-09-10",
+          "label": "Synthetic failed cross-shard retry experiment"
+        }
+      ],
+      "aliases": [],
+      "tags": [
+        "receipts"
+      ],
+      "verified_at": "2026-09-10"
+    },
+    {
+      "id": "investigation:DEMO-84-epoch-fence",
+      "kind": "investigation",
+      "jira_key": "DEMO-84",
+      "title": "Непроверенная альтернатива epoch-fence",
+      "summary": "Гипотеза: epoch-fence может запретить старому владельцу публикацию receipt-index после смены эпохи. Эта альтернатива не запускалась и не считается подтверждённым решением. Предложенный тест: менять владельца между fsync и ACK при неизменных 8 секциях и TTL 30 s, отдельно проверить cold-restore. Ожидаемый эффект и накладные расходы неизвестны; результат испытания отсутствует. Источник от 2026-09-13 фиксирует предложение, verified_at остаётся null. Нужны отдельные эксперимент и ревью применимости, прежде чем менять действующее правило durable-receipt. Связь с DEMO-84 фиксирует принадлежность исследования, а не доказанность гипотезы.",
+      "project_ids": [
+        "ledger",
+        "relay"
+      ],
+      "knowledge_state": "hypothesis",
+      "work_state": "planned",
+      "sources": [
+        {
+          "reference": "https://example.invalid/relay/notes/epoch-fence",
+          "type": "proposal",
+          "observed_at": "2026-09-13",
+          "label": "Unverified synthetic alternative"
+        }
+      ],
+      "aliases": [],
+      "tags": [
+        "receipts"
+      ],
+      "verified_at": null
+    }
+  ],
+  "before_recipe": {
+    "editorial_copy_count": 8,
+    "preamble": "Синтетическая накопленная карточка DEMO-84. Ниже повторяются уже зафиксированные свидетельства; номера редакторских копий не означают новые замеры.\n\n",
+    "note_prefix": "\n\nРедакторская копия {copy}, блок {block}: сохранён исходный контекст проверки.\n"
+  },
+  "preservation_map": [
+    {
+      "fact_id": "implementation",
+      "text": "Состояние implemented",
+      "destination": "task:DEMO-84",
+      "source": "https://example.invalid/relay/pull/84"
+    },
+    {
+      "fact_id": "release",
+      "text": "merged и released не подтверждены",
+      "destination": "task:DEMO-84",
+      "source": "https://example.invalid/relay/pull/84"
+    },
+    {
+      "fact_id": "condition",
+      "text": "cursor продвигается только после durable-receipt",
+      "destination": "task:DEMO-84",
+      "source": "https://example.invalid/relay/spec/receipt-v3"
+    },
+    {
+      "fact_id": "exception",
+      "text": "Исключение cold-restore: восстановление из архивной секции требует ручного сопоставления квитанций до запуска replay.",
+      "destination": "task:DEMO-84",
+      "source": "https://example.invalid/relay/spec/receipt-v3"
+    },
+    {
+      "fact_id": "rejection",
+      "text": "двойная квитанция при смене владельца",
+      "destination": "decision:DEMO-84-reject-cross-shard",
+      "source": "https://example.invalid/relay/traces/receipt-race"
+    },
+    {
+      "fact_id": "investigation",
+      "text": "receipt-window-17",
+      "destination": "investigation:DEMO-84-receipt-race",
+      "source": "https://example.invalid/relay/traces/receipt-race"
+    },
+    {
+      "fact_id": "trace-method",
+      "text": "сравнивали порядок ACK, fsync и receipt-index на одной трассе",
+      "destination": "investigation:DEMO-84-receipt-race",
+      "source": "https://example.invalid/relay/traces/receipt-race"
+    },
+    {
+      "fact_id": "measurement",
+      "text": "p99 452 ms вместо baseline p99 310 ms",
+      "destination": "experiment:DEMO-84-replay-20260910",
+      "source": "https://example.invalid/relay/runs/2026-09-10"
+    },
+    {
+      "fact_id": "measurement-date",
+      "text": "Исторический запуск 2026-09-10",
+      "destination": "experiment:DEMO-84-replay-20260910",
+      "source": "https://example.invalid/relay/runs/2026-09-10"
+    },
+    {
+      "fact_id": "measurement-conditions",
+      "text": "8 синтетических секций, 64 параллельных worker, TTL квитанции 30 s, фиксированный seed 17",
+      "destination": "experiment:DEMO-84-replay-20260910",
+      "source": "https://example.invalid/relay/runs/2026-09-10"
+    },
+    {
+      "fact_id": "measurement-method",
+      "text": "одинаковый набор 10000 квитанций, последовательный baseline и candidate; это один прогон без доверительного интервала",
+      "destination": "experiment:DEMO-84-replay-20260910",
+      "source": "https://example.invalid/relay/runs/2026-09-10"
+    },
+    {
+      "fact_id": "historical-scope",
+      "text": "не является текущей производительностью production",
+      "destination": "experiment:DEMO-84-replay-20260910",
+      "source": "https://example.invalid/relay/runs/2026-09-10"
+    },
+    {
+      "fact_id": "failure",
+      "text": "Итог эксперимента — неудача в этих условиях",
+      "destination": "experiment:DEMO-84-replay-20260910",
+      "source": "https://example.invalid/relay/runs/2026-09-10"
+    },
+    {
+      "fact_id": "hypothesis",
+      "text": "epoch-fence может запретить старому владельцу публикацию receipt-index после смены эпохи",
+      "destination": "investigation:DEMO-84-epoch-fence",
+      "source": "https://example.invalid/relay/notes/epoch-fence"
+    },
+    {
+      "fact_id": "unknown",
+      "text": "Ожидаемый эффект и накладные расходы неизвестны",
+      "destination": "investigation:DEMO-84-epoch-fence",
+      "source": "https://example.invalid/relay/notes/epoch-fence"
+    },
+    {
+      "fact_id": "hypothesis-method",
+      "text": "менять владельца между fsync и ACK при неизменных 8 секциях и TTL 30 s, отдельно проверить cold-restore",
+      "destination": "investigation:DEMO-84-epoch-fence",
+      "source": "https://example.invalid/relay/notes/epoch-fence"
+    },
+    {
+      "fact_id": "next-step",
+      "text": "отдельно проверить merge и release по первичным системам",
+      "destination": "task:DEMO-84",
+      "source": "https://example.invalid/relay/pull/84"
+    }
+  ],
+  "queries": [
+    {
+      "name": "jira",
+      "query": "DEMO-84",
+      "limit": 8,
+      "after_id": "task:DEMO-84"
+    },
+    {
+      "name": "rejection",
+      "query": "двойная квитанция",
+      "limit": 8,
+      "after_id": "decision:DEMO-84-reject-cross-shard"
+    },
+    {
+      "name": "investigation",
+      "query": "receipt-window-17",
+      "limit": 8,
+      "after_id": "investigation:DEMO-84-receipt-race"
+    },
+    {
+      "name": "condition",
+      "query": "durable-receipt",
+      "limit": 8,
+      "after_id": "task:DEMO-84"
+    },
+    {
+      "name": "exception",
+      "query": "cold-restore",
+      "limit": 8,
+      "after_id": "task:DEMO-84"
+    },
+    {
+      "name": "historical-measurement",
+      "query": "452",
+      "limit": 8,
+      "after_id": "experiment:DEMO-84-replay-20260910"
+    },
+    {
+      "name": "hypothesis",
+      "query": "epoch-fence",
+      "limit": 8,
+      "after_id": "investigation:DEMO-84-epoch-fence",
+      "include_hypotheses": true
+    }
+  ],
+  "read_scenarios": {
+    "current": [
+      "task:DEMO-84"
+    ],
+    "rejection_with_context": [
+      "task:DEMO-84",
+      "decision:DEMO-84-reject-cross-shard"
+    ],
+    "all_preserved_facts": [
+      "task:DEMO-84",
+      "investigation:DEMO-84-receipt-race",
+      "decision:DEMO-84-reject-cross-shard",
+      "experiment:DEMO-84-replay-20260910",
+      "investigation:DEMO-84-epoch-fence"
+    ]
+  }
+}

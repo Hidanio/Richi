@@ -655,6 +655,8 @@ def parser():
     punisher_cmd.add_argument("--limit", type=limit, default=20)
     punisher_cmd.add_argument("--max-chars", type=compact.max_chars, default=16000)
     punisher_cmd.add_argument("--stale-days", type=positive_int, default=180)
+    punisher_cmd.add_argument("--summary-warn-chars", type=positive_int, default=6000,
+                              help="Review summaries longer than this many Unicode characters (1-1000000; default: 6000); a reading heuristic, not a quality limit")
     punisher_cmd.add_argument("--as-of", help="ISO date for reproducible age checks (default: today in UTC)")
     source_cmd = commands.add_parser("sources", help="Explicit snapshots and drift checks; no network access")
     source_actions = source_cmd.add_subparsers(dest="action", required=True)
