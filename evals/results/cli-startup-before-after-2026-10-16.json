@@ -1,0 +1,5281 @@
+{
+  "schema_version": 1,
+  "started_at": "2026-10-16T17:32:19.017758+00:00",
+  "runner_sha256": "9d16603ec58d46873354c5f7616ef21bacbf5c216f3849489ac3afa4feaf7762",
+  "growth_revision": "ff966896ec9c28497430ec18b2c39706ee86d5ab",
+  "growth_helper_sha256": "013ea13bef2a127ed0c631454cc0615e744a333d153a633ddcd2c4895cccc908",
+  "fixture_sha256": "a38d6fdad925a1f2045b13faad83a611bbe01ed274fba42b0888772df4b60e31",
+  "repeats_per_variant_per_condition": 9,
+  "metadata": {
+    "baseline": {
+      "installed": {
+        "python": "3.9.6 (default, Nov 11 2024, 03:15:38) \n[Clang 16.0.0 (clang-1600.0.26.6)]",
+        "executable": "/private/tmp/richi-recall-candidates-venv/bin/python",
+        "platform": "macOS-15.1-arm64-arm-64bit",
+        "sqlite": "3.43.2",
+        "version": "0.1.0",
+        "package": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi",
+        "hashes": {
+          "richi/__init__.py": "81481a8e54d6b9b63b318fecfb0354ef4521f08265d784ce54d6755460979335",
+          "richi/__main__.py": "375fc231133ef59286ab1754b74f79ec89fb8e52d9b70ea6c5ef43ed938f497f",
+          "richi/brief_checks.py": "ac2c6ece85a4e3d785b4a058dbac8e6a6a984439ae4e4700b8d188c154222c38",
+          "richi/cli.py": "69668bf7975c7de79a770c3876a26442dd810cedded717e8e6afc4b421b077aa",
+          "richi/compact.py": "fa0358ba754ebfe9f257b30df893679f72273018c364b92ab142de2d8c89c56a",
+          "richi/git_evidence.py": "306c5b7bd8041ae62659c0b592296e58e352732c63b4f4e86a98711af9c3008d",
+          "richi/git_impact.py": "c1e8adff1b79a41718327a9a7c86a2b3c1dc7002969edf2554612bdd78efb829",
+          "richi/git_legacy.py": "7655a075c228a4beb06bcfdd13270297e9af08240080b696c6cdc40abf846ed1",
+          "richi/git_sources.py": "a935407e96e96830200284cc1d059429e56020585f29760af1786b2bb118ab66",
+          "richi/graph.py": "9126019c904c654dca2ddc9c264b0dfe04fdbaafc09d1e6aaca8642ef6c76a23",
+          "richi/graph_schema.sql": "f4035d6eee2655953aa8b74abf38c2945aacce08c7cdf502dad88146ce031c49",
+          "richi/launch_map.py": "d310c43d5e3e4f95af1b75f21c17ca066f10e1a46b3be976be8405766dcd629a",
+          "richi/map.html": "78708a7d67db89b84b14aef06725314d5224d7dc814b965b8534f7814190526a",
+          "richi/memory.py": "a1ebf750db425e16bb44271df4485973697468823efcb0552fa13ef90f9c11b7",
+          "richi/projects.py": "4b24e6b61b36ad666b83847dde6896ede6056689e0e94750bf966744f195b431",
+          "richi/punisher.py": "5e550af5a480ad04465768ae5ea604942b03a7a7fa8f1199441df70cb6529db0",
+          "richi/recall.py": "891db35bd7ac21f82b39ac2c619641621d84039f63cb7f6e552ce50be02e6d14",
+          "richi/schema.sql": "2e10a887665af1190194b53631174ad62e54688a3305f8cc37d4bcaef2ee926e",
+          "richi/serve.py": "f4c1301adedeb72640ce1559fa6e1247f6f6ec7fd4ce703d1397adddb3438bf9",
+          "richi/source_watch.py": "88a79961ac4bfc61dfdb863d84a5d3cf7441dec06f70f4d1e3d859bc433e95e2",
+          "richi/status.py": "d7fcd7fa496e287555c79b42d28c0cbd3610ccae112fe22a88f62fa9b16205c5",
+          "richi/task_brief.py": "54756e6b042679d982cd74b671c4d3963375fcd627bd13a17981d8ad04396433",
+          "richi_launcher/__init__.py": "33a44ae27805c52f2a0061f52ee8f8674dce15851fca19086fb0dfe3518773c4",
+          "richi_launcher/auto_update.py": "88ef91dad04934a867a119352469b5a0fb504c30cff8191981cb57f42c8853e4",
+          "richi_launcher/chats.py": "a24d9c3fe00e5fb7dae8c0cf3cbc9357170f15b39a7c4e21655981c6fbebcf65",
+          "richi_launcher/cli.py": "7410d5dfcd423acf42254b879ae415d346df9655a37629639e87573fb74f8206",
+          "richi_launcher/config.py": "98215e665ed5de2ade59f0b86abc76e76cae082121feb17d6e519ed58f70cc57",
+          "richi_launcher/installation.py": "92d9ec6b848504d48cfbd77f445d98feaca543148c1858ddb228d81f8cfe5485",
+          "richi_launcher/releases.py": "faf5f65ce54f6e10feddb4bd01ccb3494decde7b7c6a17ce4e3c6d8906bb4297",
+          "richi_launcher/runtime.py": "7aeb2751dbf2de619e4c9751aebcb73a7235926f091b2eacd040423965fea328",
+          "richi_launcher/status.py": "c26dc18c3e26410f57ab73380adbdcc90156ebcc057a6c04dfa024d305527cf4",
+          "richi_launcher/update.py": "541020461f21326acc5cbae904cc5ac2ac09e0072683aac23a1e7d389c88d271",
+          "richi_launcher/update_scheduler.py": "8c29eff37437d7412c3cea90c72818c1a1153e874db90d9c3065c85c849e3160",
+          "richi_launcher/workspaces.py": "0ef9ead44703bc6fa810d7ca8d86d0d802163c457e4c358d40683967b0119eb7",
+          "richi_bootstrap.py": "4ec3110dc93d13713b153c0f13cc421e2e8bf41fbe98d21a45c571cdb9e2fd3c"
+        }
+      },
+      "source": {
+        "path": "/private/tmp/richi-recall-candidates",
+        "hashes": {
+          "src/richi/__init__.py": "81481a8e54d6b9b63b318fecfb0354ef4521f08265d784ce54d6755460979335",
+          "src/richi/__main__.py": "375fc231133ef59286ab1754b74f79ec89fb8e52d9b70ea6c5ef43ed938f497f",
+          "src/richi/brief_checks.py": "ac2c6ece85a4e3d785b4a058dbac8e6a6a984439ae4e4700b8d188c154222c38",
+          "src/richi/cli.py": "69668bf7975c7de79a770c3876a26442dd810cedded717e8e6afc4b421b077aa",
+          "src/richi/compact.py": "fa0358ba754ebfe9f257b30df893679f72273018c364b92ab142de2d8c89c56a",
+          "src/richi/git_evidence.py": "306c5b7bd8041ae62659c0b592296e58e352732c63b4f4e86a98711af9c3008d",
+          "src/richi/git_impact.py": "c1e8adff1b79a41718327a9a7c86a2b3c1dc7002969edf2554612bdd78efb829",
+          "src/richi/git_legacy.py": "7655a075c228a4beb06bcfdd13270297e9af08240080b696c6cdc40abf846ed1",
+          "src/richi/git_sources.py": "a935407e96e96830200284cc1d059429e56020585f29760af1786b2bb118ab66",
+          "src/richi/graph.py": "9126019c904c654dca2ddc9c264b0dfe04fdbaafc09d1e6aaca8642ef6c76a23",
+          "src/richi/graph_schema.sql": "f4035d6eee2655953aa8b74abf38c2945aacce08c7cdf502dad88146ce031c49",
+          "src/richi/launch_map.py": "d310c43d5e3e4f95af1b75f21c17ca066f10e1a46b3be976be8405766dcd629a",
+          "src/richi/map.html": "78708a7d67db89b84b14aef06725314d5224d7dc814b965b8534f7814190526a",
+          "src/richi/memory.py": "a1ebf750db425e16bb44271df4485973697468823efcb0552fa13ef90f9c11b7",
+          "src/richi/projects.py": "4b24e6b61b36ad666b83847dde6896ede6056689e0e94750bf966744f195b431",
+          "src/richi/punisher.py": "5e550af5a480ad04465768ae5ea604942b03a7a7fa8f1199441df70cb6529db0",
+          "src/richi/recall.py": "891db35bd7ac21f82b39ac2c619641621d84039f63cb7f6e552ce50be02e6d14",
+          "src/richi/schema.sql": "2e10a887665af1190194b53631174ad62e54688a3305f8cc37d4bcaef2ee926e",
+          "src/richi/serve.py": "f4c1301adedeb72640ce1559fa6e1247f6f6ec7fd4ce703d1397adddb3438bf9",
+          "src/richi/source_watch.py": "88a79961ac4bfc61dfdb863d84a5d3cf7441dec06f70f4d1e3d859bc433e95e2",
+          "src/richi/status.py": "d7fcd7fa496e287555c79b42d28c0cbd3610ccae112fe22a88f62fa9b16205c5",
+          "src/richi/task_brief.py": "54756e6b042679d982cd74b671c4d3963375fcd627bd13a17981d8ad04396433",
+          "launcher/richi_bootstrap.py": "4ec3110dc93d13713b153c0f13cc421e2e8bf41fbe98d21a45c571cdb9e2fd3c",
+          "launcher/richi_launcher/__init__.py": "33a44ae27805c52f2a0061f52ee8f8674dce15851fca19086fb0dfe3518773c4",
+          "launcher/richi_launcher/auto_update.py": "88ef91dad04934a867a119352469b5a0fb504c30cff8191981cb57f42c8853e4",
+          "launcher/richi_launcher/chats.py": "a24d9c3fe00e5fb7dae8c0cf3cbc9357170f15b39a7c4e21655981c6fbebcf65",
+          "launcher/richi_launcher/cli.py": "7410d5dfcd423acf42254b879ae415d346df9655a37629639e87573fb74f8206",
+          "launcher/richi_launcher/config.py": "98215e665ed5de2ade59f0b86abc76e76cae082121feb17d6e519ed58f70cc57",
+          "launcher/richi_launcher/installation.py": "92d9ec6b848504d48cfbd77f445d98feaca543148c1858ddb228d81f8cfe5485",
+          "launcher/richi_launcher/releases.py": "faf5f65ce54f6e10feddb4bd01ccb3494decde7b7c6a17ce4e3c6d8906bb4297",
+          "launcher/richi_launcher/runtime.py": "7aeb2751dbf2de619e4c9751aebcb73a7235926f091b2eacd040423965fea328",
+          "launcher/richi_launcher/status.py": "c26dc18c3e26410f57ab73380adbdcc90156ebcc057a6c04dfa024d305527cf4",
+          "launcher/richi_launcher/update.py": "541020461f21326acc5cbae904cc5ac2ac09e0072683aac23a1e7d389c88d271",
+          "launcher/richi_launcher/update_scheduler.py": "8c29eff37437d7412c3cea90c72818c1a1153e874db90d9c3065c85c849e3160",
+          "launcher/richi_launcher/workspaces.py": "0ef9ead44703bc6fa810d7ca8d86d0d802163c457e4c358d40683967b0119eb7"
+        }
+      }
+    },
+    "candidate": {
+      "installed": {
+        "python": "3.9.6 (default, Nov 11 2024, 03:15:38) \n[Clang 16.0.0 (clang-1600.0.26.6)]",
+        "executable": "/private/tmp/richi-hotpaths-venv/bin/python",
+        "platform": "macOS-15.1-arm64-arm-64bit",
+        "sqlite": "3.43.2",
+        "version": "0.1.0",
+        "package": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi",
+        "hashes": {
+          "richi/__init__.py": "81481a8e54d6b9b63b318fecfb0354ef4521f08265d784ce54d6755460979335",
+          "richi/__main__.py": "375fc231133ef59286ab1754b74f79ec89fb8e52d9b70ea6c5ef43ed938f497f",
+          "richi/brief_checks.py": "ac2c6ece85a4e3d785b4a058dbac8e6a6a984439ae4e4700b8d188c154222c38",
+          "richi/cli.py": "69668bf7975c7de79a770c3876a26442dd810cedded717e8e6afc4b421b077aa",
+          "richi/compact.py": "fa0358ba754ebfe9f257b30df893679f72273018c364b92ab142de2d8c89c56a",
+          "richi/git_evidence.py": "306c5b7bd8041ae62659c0b592296e58e352732c63b4f4e86a98711af9c3008d",
+          "richi/git_impact.py": "c1e8adff1b79a41718327a9a7c86a2b3c1dc7002969edf2554612bdd78efb829",
+          "richi/git_legacy.py": "7655a075c228a4beb06bcfdd13270297e9af08240080b696c6cdc40abf846ed1",
+          "richi/git_sources.py": "a935407e96e96830200284cc1d059429e56020585f29760af1786b2bb118ab66",
+          "richi/graph.py": "9126019c904c654dca2ddc9c264b0dfe04fdbaafc09d1e6aaca8642ef6c76a23",
+          "richi/graph_schema.sql": "f4035d6eee2655953aa8b74abf38c2945aacce08c7cdf502dad88146ce031c49",
+          "richi/launch_map.py": "d310c43d5e3e4f95af1b75f21c17ca066f10e1a46b3be976be8405766dcd629a",
+          "richi/map.html": "78708a7d67db89b84b14aef06725314d5224d7dc814b965b8534f7814190526a",
+          "richi/memory.py": "a1ebf750db425e16bb44271df4485973697468823efcb0552fa13ef90f9c11b7",
+          "richi/projects.py": "4b24e6b61b36ad666b83847dde6896ede6056689e0e94750bf966744f195b431",
+          "richi/punisher.py": "5e550af5a480ad04465768ae5ea604942b03a7a7fa8f1199441df70cb6529db0",
+          "richi/recall.py": "891db35bd7ac21f82b39ac2c619641621d84039f63cb7f6e552ce50be02e6d14",
+          "richi/schema.sql": "2e10a887665af1190194b53631174ad62e54688a3305f8cc37d4bcaef2ee926e",
+          "richi/serve.py": "f4c1301adedeb72640ce1559fa6e1247f6f6ec7fd4ce703d1397adddb3438bf9",
+          "richi/source_watch.py": "88a79961ac4bfc61dfdb863d84a5d3cf7441dec06f70f4d1e3d859bc433e95e2",
+          "richi/status.py": "d7fcd7fa496e287555c79b42d28c0cbd3610ccae112fe22a88f62fa9b16205c5",
+          "richi/task_brief.py": "54756e6b042679d982cd74b671c4d3963375fcd627bd13a17981d8ad04396433",
+          "richi_launcher/__init__.py": "33a44ae27805c52f2a0061f52ee8f8674dce15851fca19086fb0dfe3518773c4",
+          "richi_launcher/auto_update.py": "88ef91dad04934a867a119352469b5a0fb504c30cff8191981cb57f42c8853e4",
+          "richi_launcher/chats.py": "a24d9c3fe00e5fb7dae8c0cf3cbc9357170f15b39a7c4e21655981c6fbebcf65",
+          "richi_launcher/cli.py": "7410d5dfcd423acf42254b879ae415d346df9655a37629639e87573fb74f8206",
+          "richi_launcher/config.py": "e15d3c5b262e342d5797e2c6b409b4ee8c44f7a2be3242e340e7b0cf77b8b66d",
+          "richi_launcher/installation.py": "92d9ec6b848504d48cfbd77f445d98feaca543148c1858ddb228d81f8cfe5485",
+          "richi_launcher/releases.py": "faf5f65ce54f6e10feddb4bd01ccb3494decde7b7c6a17ce4e3c6d8906bb4297",
+          "richi_launcher/runtime.py": "d9400386680b08481518903473e2938279f5b6b6ee9880c7f561081c494b450b",
+          "richi_launcher/status.py": "c26dc18c3e26410f57ab73380adbdcc90156ebcc057a6c04dfa024d305527cf4",
+          "richi_launcher/update.py": "541020461f21326acc5cbae904cc5ac2ac09e0072683aac23a1e7d389c88d271",
+          "richi_launcher/update_scheduler.py": "8c29eff37437d7412c3cea90c72818c1a1153e874db90d9c3065c85c849e3160",
+          "richi_launcher/workspaces.py": "6685eef2ee31ed125396dacb3cd12a35d906637a5f93d8f171cf7a30952b16bd",
+          "richi_bootstrap.py": "4ec3110dc93d13713b153c0f13cc421e2e8bf41fbe98d21a45c571cdb9e2fd3c"
+        }
+      },
+      "source": {
+        "path": "/private/tmp/richi-recall-hotpaths",
+        "hashes": {
+          "src/richi/__init__.py": "81481a8e54d6b9b63b318fecfb0354ef4521f08265d784ce54d6755460979335",
+          "src/richi/__main__.py": "375fc231133ef59286ab1754b74f79ec89fb8e52d9b70ea6c5ef43ed938f497f",
+          "src/richi/brief_checks.py": "ac2c6ece85a4e3d785b4a058dbac8e6a6a984439ae4e4700b8d188c154222c38",
+          "src/richi/cli.py": "69668bf7975c7de79a770c3876a26442dd810cedded717e8e6afc4b421b077aa",
+          "src/richi/compact.py": "fa0358ba754ebfe9f257b30df893679f72273018c364b92ab142de2d8c89c56a",
+          "src/richi/git_evidence.py": "306c5b7bd8041ae62659c0b592296e58e352732c63b4f4e86a98711af9c3008d",
+          "src/richi/git_impact.py": "c1e8adff1b79a41718327a9a7c86a2b3c1dc7002969edf2554612bdd78efb829",
+          "src/richi/git_legacy.py": "7655a075c228a4beb06bcfdd13270297e9af08240080b696c6cdc40abf846ed1",
+          "src/richi/git_sources.py": "a935407e96e96830200284cc1d059429e56020585f29760af1786b2bb118ab66",
+          "src/richi/graph.py": "9126019c904c654dca2ddc9c264b0dfe04fdbaafc09d1e6aaca8642ef6c76a23",
+          "src/richi/graph_schema.sql": "f4035d6eee2655953aa8b74abf38c2945aacce08c7cdf502dad88146ce031c49",
+          "src/richi/launch_map.py": "d310c43d5e3e4f95af1b75f21c17ca066f10e1a46b3be976be8405766dcd629a",
+          "src/richi/map.html": "78708a7d67db89b84b14aef06725314d5224d7dc814b965b8534f7814190526a",
+          "src/richi/memory.py": "a1ebf750db425e16bb44271df4485973697468823efcb0552fa13ef90f9c11b7",
+          "src/richi/projects.py": "4b24e6b61b36ad666b83847dde6896ede6056689e0e94750bf966744f195b431",
+          "src/richi/punisher.py": "5e550af5a480ad04465768ae5ea604942b03a7a7fa8f1199441df70cb6529db0",
+          "src/richi/recall.py": "891db35bd7ac21f82b39ac2c619641621d84039f63cb7f6e552ce50be02e6d14",
+          "src/richi/schema.sql": "2e10a887665af1190194b53631174ad62e54688a3305f8cc37d4bcaef2ee926e",
+          "src/richi/serve.py": "f4c1301adedeb72640ce1559fa6e1247f6f6ec7fd4ce703d1397adddb3438bf9",
+          "src/richi/source_watch.py": "88a79961ac4bfc61dfdb863d84a5d3cf7441dec06f70f4d1e3d859bc433e95e2",
+          "src/richi/status.py": "d7fcd7fa496e287555c79b42d28c0cbd3610ccae112fe22a88f62fa9b16205c5",
+          "src/richi/task_brief.py": "54756e6b042679d982cd74b671c4d3963375fcd627bd13a17981d8ad04396433",
+          "launcher/richi_bootstrap.py": "4ec3110dc93d13713b153c0f13cc421e2e8bf41fbe98d21a45c571cdb9e2fd3c",
+          "launcher/richi_launcher/__init__.py": "33a44ae27805c52f2a0061f52ee8f8674dce15851fca19086fb0dfe3518773c4",
+          "launcher/richi_launcher/auto_update.py": "88ef91dad04934a867a119352469b5a0fb504c30cff8191981cb57f42c8853e4",
+          "launcher/richi_launcher/chats.py": "a24d9c3fe00e5fb7dae8c0cf3cbc9357170f15b39a7c4e21655981c6fbebcf65",
+          "launcher/richi_launcher/cli.py": "7410d5dfcd423acf42254b879ae415d346df9655a37629639e87573fb74f8206",
+          "launcher/richi_launcher/config.py": "e15d3c5b262e342d5797e2c6b409b4ee8c44f7a2be3242e340e7b0cf77b8b66d",
+          "launcher/richi_launcher/installation.py": "92d9ec6b848504d48cfbd77f445d98feaca543148c1858ddb228d81f8cfe5485",
+          "launcher/richi_launcher/releases.py": "faf5f65ce54f6e10feddb4bd01ccb3494decde7b7c6a17ce4e3c6d8906bb4297",
+          "launcher/richi_launcher/runtime.py": "d9400386680b08481518903473e2938279f5b6b6ee9880c7f561081c494b450b",
+          "launcher/richi_launcher/status.py": "c26dc18c3e26410f57ab73380adbdcc90156ebcc057a6c04dfa024d305527cf4",
+          "launcher/richi_launcher/update.py": "541020461f21326acc5cbae904cc5ac2ac09e0072683aac23a1e7d389c88d271",
+          "launcher/richi_launcher/update_scheduler.py": "8c29eff37437d7412c3cea90c72818c1a1153e874db90d9c3065c85c849e3160",
+          "launcher/richi_launcher/workspaces.py": "6685eef2ee31ed125396dacb3cd12a35d906637a5f93d8f171cf7a30952b16bd"
+        }
+      }
+    }
+  },
+  "protocol": "One untimed warmup/variant/condition; rotate conditions each round, alternate AB/BA by round+condition index; sequential subprocesses.",
+  "limitations": [
+    "Host load uncontrolled; no caches flushed, no cold or SLA claim.",
+    "cProfile timings overlap and include instrumentation overhead; do not add/subtract them from ordinary wall time.",
+    "Launcher profile wrapper preimports infrastructure/json/pathlib; profiles exclude interpreter startup, exec and teardown.",
+    "Entry-growth fixture only; no entity, history or same-Jira-detail growth.",
+    "Crowded target miss measures bounded known-record discoverability among legitimate lexical matches.",
+    "Quality misses are retained; exit success means parity/invariants, not perfect retrieval."
+  ],
+  "datasets": [
+    {
+      "background": 100,
+      "current_corpus_sha256": "61a61b309b4245ba76033d634a00681e08bb9f5b4632390bdf0a016b1112f0e3",
+      "storage": {
+        "counts": {
+          "entries": 106,
+          "entities": 0,
+          "graph_edges": 4,
+          "entry_history": 106,
+          "entity_history": 0,
+          "edge_history": 4
+        },
+        "current_summary_chars": 24304,
+        "current_summary_utf8_bytes": 24304,
+        "entry_history_before_json_bytes": 0,
+        "entry_history_after_json_bytes": 68423,
+        "files_bytes": {
+          "database": 372736,
+          "-wal": 0,
+          "-shm": 32768
+        },
+        "sqlite_pages": {
+          "page_size": 4096,
+          "page_count": 91,
+          "freelist_count": 0,
+          "user_version": 2
+        },
+        "search_backend": "fts5"
+      }
+    },
+    {
+      "background": 10000,
+      "current_corpus_sha256": "64d02f075a04e0e5bd975f7f5c977dfe1ee1c0318f4922237702be4bca0b8fbb",
+      "storage": {
+        "counts": {
+          "entries": 10006,
+          "entities": 0,
+          "graph_edges": 4,
+          "entry_history": 10006,
+          "entity_history": 0,
+          "edge_history": 4
+        },
+        "current_summary_chars": 2290504,
+        "current_summary_utf8_bytes": 2290504,
+        "entry_history_before_json_bytes": 0,
+        "entry_history_after_json_bytes": 6426293,
+        "files_bytes": {
+          "database": 19656704,
+          "-wal": 0,
+          "-shm": 32768
+        },
+        "sqlite_pages": {
+          "page_size": 4096,
+          "page_count": 4799,
+          "freelist_count": 0,
+          "user_version": 2
+        },
+        "search_backend": "fts5"
+      }
+    }
+  ],
+  "selections": [
+    {
+      "background": 100,
+      "variant": "baseline",
+      "runtime": {
+        "mode": "release",
+        "package": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi",
+        "version": "0.1.0",
+        "identity": "47471d22e6fe92592b7104039a4b67501397cf1ab0afa339a262f8fc0826658a",
+        "source": null,
+        "available": true
+      }
+    },
+    {
+      "background": 100,
+      "variant": "candidate",
+      "runtime": {
+        "mode": "release",
+        "package": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi",
+        "version": "0.1.0",
+        "identity": "e774589ac216b3367da09a38908fa20a5bf4e52538d5e68a5526e1189f6880b7",
+        "source": null,
+        "available": true
+      }
+    },
+    {
+      "background": 100,
+      "variant": "baseline",
+      "runtime": {
+        "mode": "dev",
+        "package": "/private/tmp/richi-recall-candidates/src/richi",
+        "version": "0.1.0",
+        "identity": "e5d2d266768af8ba660baf065c15d0e19e62c9ab0f44b9724e8ee91c88ddb0f8",
+        "source": "/private/tmp/richi-recall-candidates",
+        "available": true
+      }
+    },
+    {
+      "background": 100,
+      "variant": "candidate",
+      "runtime": {
+        "mode": "dev",
+        "package": "/private/tmp/richi-recall-hotpaths/src/richi",
+        "version": "0.1.0",
+        "identity": "c5a942d1466f4ae652977be274a1003da67ab813bfa948036464e76e3b5f1a1f",
+        "source": "/private/tmp/richi-recall-hotpaths",
+        "available": true
+      }
+    },
+    {
+      "background": 10000,
+      "variant": "baseline",
+      "runtime": {
+        "mode": "release",
+        "package": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi",
+        "version": "0.1.0",
+        "identity": "47471d22e6fe92592b7104039a4b67501397cf1ab0afa339a262f8fc0826658a",
+        "source": null,
+        "available": true
+      }
+    },
+    {
+      "background": 10000,
+      "variant": "candidate",
+      "runtime": {
+        "mode": "release",
+        "package": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi",
+        "version": "0.1.0",
+        "identity": "e774589ac216b3367da09a38908fa20a5bf4e52538d5e68a5526e1189f6880b7",
+        "source": null,
+        "available": true
+      }
+    },
+    {
+      "background": 10000,
+      "variant": "baseline",
+      "runtime": {
+        "mode": "dev",
+        "package": "/private/tmp/richi-recall-candidates/src/richi",
+        "version": "0.1.0",
+        "identity": "e5d2d266768af8ba660baf065c15d0e19e62c9ab0f44b9724e8ee91c88ddb0f8",
+        "source": "/private/tmp/richi-recall-candidates",
+        "available": true
+      }
+    },
+    {
+      "background": 10000,
+      "variant": "candidate",
+      "runtime": {
+        "mode": "dev",
+        "package": "/private/tmp/richi-recall-hotpaths/src/richi",
+        "version": "0.1.0",
+        "identity": "c5a942d1466f4ae652977be274a1003da67ab813bfa948036464e76e3b5f1a1f",
+        "source": "/private/tmp/richi-recall-hotpaths",
+        "available": true
+      }
+    }
+  ],
+  "conditions": [
+    {
+      "id": "release-b100-current-id",
+      "mode": "release",
+      "background": 100,
+      "case": {
+        "id": "current-id",
+        "query": "task:DEMO-84",
+        "project": "relay",
+        "limit": 8,
+        "expected_refs": [
+          "entry:task:DEMO-84"
+        ],
+        "excluded_refs": [],
+        "expected_no_match": false,
+        "expect_ref": "entry:task:DEMO-84",
+        "include_hypotheses": false
+      },
+      "samples": [
+        {
+          "round": 1,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 347.07325,
+          "candidate_ms": 261.22775,
+          "candidate_minus_baseline_ms": -85.84549999999996
+        },
+        {
+          "round": 2,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 264.891,
+          "baseline_ms": 282.297042,
+          "candidate_minus_baseline_ms": -17.406041999999957
+        },
+        {
+          "round": 3,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 278.424458,
+          "candidate_ms": 253.726291,
+          "candidate_minus_baseline_ms": -24.698167000000012
+        },
+        {
+          "round": 4,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 260.96325,
+          "baseline_ms": 435.39725,
+          "candidate_minus_baseline_ms": -174.43399999999997
+        },
+        {
+          "round": 5,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 419.644209,
+          "candidate_ms": 261.495083,
+          "candidate_minus_baseline_ms": -158.14912599999997
+        },
+        {
+          "round": 6,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 266.566583,
+          "baseline_ms": 284.960292,
+          "candidate_minus_baseline_ms": -18.393709
+        },
+        {
+          "round": 7,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 278.204083,
+          "candidate_ms": 253.350041,
+          "candidate_minus_baseline_ms": -24.85404200000002
+        },
+        {
+          "round": 8,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 271.235791,
+          "baseline_ms": 464.256917,
+          "candidate_minus_baseline_ms": -193.02112599999998
+        },
+        {
+          "round": 9,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 393.218083,
+          "candidate_ms": 263.22275,
+          "candidate_minus_baseline_ms": -129.99533299999996
+        }
+      ],
+      "normal_outcome": {
+        "returned_refs": [
+          "entry:task:DEMO-84",
+          "entry:decision:DEMO-84-rejection",
+          "entry:investigation:DEMO-84-window"
+        ],
+        "positions": {
+          "entry:task:DEMO-84": 1
+        },
+        "hit_at_limit": true,
+        "recall_at_limit": 1.0,
+        "reciprocal_rank": 1.0,
+        "no_match": false,
+        "candidate_count": 3,
+        "output_chars": 6354,
+        "truncated": false,
+        "budget": {
+          "max_chars": 16000,
+          "output_chars": 6354,
+          "omitted_results": 0,
+          "omitted_edges": 0
+        },
+        "quality_misses": [],
+        "invariant_failures": []
+      },
+      "baseline": {
+        "samples_ms": [
+          347.07325,
+          282.297042,
+          278.424458,
+          435.39725,
+          419.644209,
+          284.960292,
+          278.204083,
+          464.256917,
+          393.218083
+        ],
+        "median_ms": 347.07325,
+        "p95_ms": 464.256917,
+        "p95_method": "nearest-rank; small samples do not estimate a stable tail",
+        "min_ms": 278.204083,
+        "max_ms": 464.256917
+      },
+      "candidate": {
+        "samples_ms": [
+          261.22775,
+          264.891,
+          253.726291,
+          260.96325,
+          261.495083,
+          266.566583,
+          253.350041,
+          271.235791,
+          263.22275
+        ],
+        "median_ms": 261.495083,
+        "p95_ms": 271.235791,
+        "p95_method": "nearest-rank; small samples do not estimate a stable tail",
+        "min_ms": 253.350041,
+        "max_ms": 271.235791
+      },
+      "median_paired_delta_ms": -85.84549999999996,
+      "diagnostics": {
+        "baseline": {
+          "counts": {
+            "fts_rows_fetched": 3,
+            "fts_shortlisted": 3,
+            "entries_scanned": 105,
+            "entities_scanned": 0,
+            "entries_scored": 3,
+            "entries_prefiltered": 102,
+            "expected_entry_probes": 0,
+            "direct_rejected": {
+              "routing_prefilter": 102
+            },
+            "direct_candidates": 3,
+            "graph_seeds": 3,
+            "graph_links_fetched": 6,
+            "graph_links_examined": 6,
+            "graph_rejected": {
+              "jira_guard": 1,
+              "node_unavailable": 1
+            },
+            "graph_candidates": 3,
+            "candidates": 3,
+            "selected": 3,
+            "returned": 3,
+            "budget_omitted": 0
+          },
+          "fts_shortlist_truncated": false,
+          "graph_links_truncated": false,
+          "expected": {
+            "ref": "entry:task:DEMO-84",
+            "knowledge_state": "confirmed",
+            "direct_stage": "candidate",
+            "graph_stage": "candidate",
+            "direct_rank": 1,
+            "selected_position": 1,
+            "returned_position": 1,
+            "outcome": "returned"
+          }
+        },
+        "candidate": {
+          "counts": {
+            "fts_rows_fetched": 3,
+            "fts_shortlisted": 3,
+            "entries_scanned": 105,
+            "entities_scanned": 0,
+            "entries_scored": 3,
+            "entries_prefiltered": 102,
+            "expected_entry_probes": 0,
+            "direct_rejected": {
+              "routing_prefilter": 102
+            },
+            "direct_candidates": 3,
+            "graph_seeds": 3,
+            "graph_links_fetched": 6,
+            "graph_links_examined": 6,
+            "graph_rejected": {
+              "jira_guard": 1,
+              "node_unavailable": 1
+            },
+            "graph_candidates": 3,
+            "candidates": 3,
+            "selected": 3,
+            "returned": 3,
+            "budget_omitted": 0
+          },
+          "fts_shortlist_truncated": false,
+          "graph_links_truncated": false,
+          "expected": {
+            "ref": "entry:task:DEMO-84",
+            "knowledge_state": "confirmed",
+            "direct_stage": "candidate",
+            "graph_stage": "candidate",
+            "direct_rank": 1,
+            "selected_position": 1,
+            "returned_position": 1,
+            "outcome": "returned"
+          }
+        }
+      },
+      "profiles": {}
+    },
+    {
+      "id": "release-b100-crowded-lexical",
+      "mode": "release",
+      "background": 100,
+      "case": {
+        "id": "crowded-lexical",
+        "query": "receipt calibration",
+        "project": "relay",
+        "limit": 8,
+        "expected_refs": [
+          "entry:note:crowded-target"
+        ],
+        "excluded_refs": [],
+        "expected_no_match": false,
+        "expect_ref": "entry:note:crowded-target",
+        "include_hypotheses": false
+      },
+      "samples": [
+        {
+          "round": 1,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 261.768916,
+          "baseline_ms": 283.982417,
+          "candidate_minus_baseline_ms": -22.213501000000008
+        },
+        {
+          "round": 2,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 305.260791,
+          "candidate_ms": 425.328583,
+          "candidate_minus_baseline_ms": 120.067792
+        },
+        {
+          "round": 3,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 361.397792,
+          "baseline_ms": 343.628833,
+          "candidate_minus_baseline_ms": 17.768958999999995
+        },
+        {
+          "round": 4,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 318.371459,
+          "candidate_ms": 259.714042,
+          "candidate_minus_baseline_ms": -58.65741700000001
+        },
+        {
+          "round": 5,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 265.199958,
+          "baseline_ms": 309.116958,
+          "candidate_minus_baseline_ms": -43.91700000000003
+        },
+        {
+          "round": 6,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 285.518541,
+          "candidate_ms": 410.225917,
+          "candidate_minus_baseline_ms": 124.70737599999995
+        },
+        {
+          "round": 7,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 398.478,
+          "baseline_ms": 289.043375,
+          "candidate_minus_baseline_ms": 109.43462499999998
+        },
+        {
+          "round": 8,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 288.2095,
+          "candidate_ms": 257.905792,
+          "candidate_minus_baseline_ms": -30.303707999999972
+        },
+        {
+          "round": 9,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 261.962584,
+          "baseline_ms": 282.416834,
+          "candidate_minus_baseline_ms": -20.454250000000002
+        }
+      ],
+      "normal_outcome": {
+        "returned_refs": [
+          "entry:note:background-00001",
+          "entry:note:background-00004",
+          "entry:note:background-00010",
+          "entry:note:background-00013",
+          "entry:note:background-00016",
+          "entry:note:background-00022",
+          "entry:note:background-00025",
+          "entry:note:background-00031"
+        ],
+        "positions": {
+          "entry:note:crowded-target": null
+        },
+        "hit_at_limit": false,
+        "recall_at_limit": 0.0,
+        "reciprocal_rank": 0,
+        "no_match": false,
+        "candidate_count": 104,
+        "output_chars": 10113,
+        "truncated": true,
+        "budget": {
+          "max_chars": 16000,
+          "output_chars": 10113,
+          "omitted_results": 96,
+          "omitted_edges": 0
+        },
+        "quality_misses": [
+          "target absent: entry:note:crowded-target"
+        ],
+        "invariant_failures": []
+      },
+      "baseline": {
+        "samples_ms": [
+          283.982417,
+          305.260791,
+          343.628833,
+          318.371459,
+          309.116958,
+          285.518541,
+          289.043375,
+          288.2095,
+          282.416834
+        ],
+        "median_ms": 289.043375,
+        "p95_ms": 343.628833,
+        "p95_method": "nearest-rank; small samples do not estimate a stable tail",
+        "min_ms": 282.416834,
+        "max_ms": 343.628833
+      },
+      "candidate": {
+        "samples_ms": [
+          261.768916,
+          425.328583,
+          361.397792,
+          259.714042,
+          265.199958,
+          410.225917,
+          398.478,
+          257.905792,
+          261.962584
+        ],
+        "median_ms": 265.199958,
+        "p95_ms": 425.328583,
+        "p95_method": "nearest-rank; small samples do not estimate a stable tail",
+        "min_ms": 257.905792,
+        "max_ms": 425.328583
+      },
+      "median_paired_delta_ms": -20.454250000000002,
+      "diagnostics": {
+        "baseline": {
+          "counts": {
+            "fts_rows_fetched": 104,
+            "fts_shortlisted": 104,
+            "entries_scanned": 105,
+            "entities_scanned": 0,
+            "entries_scored": 104,
+            "entries_prefiltered": 1,
+            "expected_entry_probes": 0,
+            "direct_rejected": {
+              "routing_prefilter": 1
+            },
+            "direct_candidates": 104,
+            "graph_seeds": 3,
+            "graph_links_fetched": 0,
+            "graph_links_examined": 0,
+            "graph_rejected": {},
+            "graph_candidates": 0,
+            "candidates": 104,
+            "selected": 8,
+            "returned": 8,
+            "budget_omitted": 0
+          },
+          "fts_shortlist_truncated": false,
+          "graph_links_truncated": false,
+          "expected": {
+            "ref": "entry:note:crowded-target",
+            "knowledge_state": "confirmed",
+            "direct_stage": "candidate",
+            "graph_stage": "not_reached",
+            "direct_rank": 73,
+            "selected_position": null,
+            "returned_position": null,
+            "outcome": "rank_or_limit"
+          }
+        },
+        "candidate": {
+          "counts": {
+            "fts_rows_fetched": 104,
+            "fts_shortlisted": 104,
+            "entries_scanned": 105,
+            "entities_scanned": 0,
+            "entries_scored": 104,
+            "entries_prefiltered": 1,
+            "expected_entry_probes": 0,
+            "direct_rejected": {
+              "routing_prefilter": 1
+            },
+            "direct_candidates": 104,
+            "graph_seeds": 3,
+            "graph_links_fetched": 0,
+            "graph_links_examined": 0,
+            "graph_rejected": {},
+            "graph_candidates": 0,
+            "candidates": 104,
+            "selected": 8,
+            "returned": 8,
+            "budget_omitted": 0
+          },
+          "fts_shortlist_truncated": false,
+          "graph_links_truncated": false,
+          "expected": {
+            "ref": "entry:note:crowded-target",
+            "knowledge_state": "confirmed",
+            "direct_stage": "candidate",
+            "graph_stage": "not_reached",
+            "direct_rank": 73,
+            "selected_position": null,
+            "returned_position": null,
+            "outcome": "rank_or_limit"
+          }
+        }
+      },
+      "profiles": {}
+    },
+    {
+      "id": "dev-b100-current-id",
+      "mode": "dev",
+      "background": 100,
+      "case": {
+        "id": "current-id",
+        "query": "task:DEMO-84",
+        "project": "relay",
+        "limit": 8,
+        "expected_refs": [
+          "entry:task:DEMO-84"
+        ],
+        "excluded_refs": [],
+        "expected_no_match": false,
+        "expect_ref": "entry:task:DEMO-84",
+        "include_hypotheses": false
+      },
+      "samples": [
+        {
+          "round": 1,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 410.68075,
+          "candidate_ms": 270.562125,
+          "candidate_minus_baseline_ms": -140.118625
+        },
+        {
+          "round": 2,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 271.372333,
+          "baseline_ms": 285.430417,
+          "candidate_minus_baseline_ms": -14.058083999999951
+        },
+        {
+          "round": 3,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 285.8375,
+          "candidate_ms": 387.959833,
+          "candidate_minus_baseline_ms": 102.12233300000003
+        },
+        {
+          "round": 4,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 273.042208,
+          "baseline_ms": 307.606375,
+          "candidate_minus_baseline_ms": -34.564167
+        },
+        {
+          "round": 5,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 421.837917,
+          "candidate_ms": 283.92875,
+          "candidate_minus_baseline_ms": -137.90916700000002
+        },
+        {
+          "round": 6,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 280.625292,
+          "baseline_ms": 283.903708,
+          "candidate_minus_baseline_ms": -3.278415999999993
+        },
+        {
+          "round": 7,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 279.196084,
+          "candidate_ms": 285.151209,
+          "candidate_minus_baseline_ms": 5.9551250000000095
+        },
+        {
+          "round": 8,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 272.968542,
+          "baseline_ms": 421.961,
+          "candidate_minus_baseline_ms": -148.992458
+        },
+        {
+          "round": 9,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 446.07125,
+          "candidate_ms": 275.721458,
+          "candidate_minus_baseline_ms": -170.34979200000004
+        }
+      ],
+      "normal_outcome": {
+        "returned_refs": [
+          "entry:task:DEMO-84",
+          "entry:decision:DEMO-84-rejection",
+          "entry:investigation:DEMO-84-window"
+        ],
+        "positions": {
+          "entry:task:DEMO-84": 1
+        },
+        "hit_at_limit": true,
+        "recall_at_limit": 1.0,
+        "reciprocal_rank": 1.0,
+        "no_match": false,
+        "candidate_count": 3,
+        "output_chars": 6354,
+        "truncated": false,
+        "budget": {
+          "max_chars": 16000,
+          "output_chars": 6354,
+          "omitted_results": 0,
+          "omitted_edges": 0
+        },
+        "quality_misses": [],
+        "invariant_failures": []
+      },
+      "baseline": {
+        "samples_ms": [
+          410.68075,
+          285.430417,
+          285.8375,
+          307.606375,
+          421.837917,
+          283.903708,
+          279.196084,
+          421.961,
+          446.07125
+        ],
+        "median_ms": 307.606375,
+        "p95_ms": 446.07125,
+        "p95_method": "nearest-rank; small samples do not estimate a stable tail",
+        "min_ms": 279.196084,
+        "max_ms": 446.07125
+      },
+      "candidate": {
+        "samples_ms": [
+          270.562125,
+          271.372333,
+          387.959833,
+          273.042208,
+          283.92875,
+          280.625292,
+          285.151209,
+          272.968542,
+          275.721458
+        ],
+        "median_ms": 275.721458,
+        "p95_ms": 387.959833,
+        "p95_method": "nearest-rank; small samples do not estimate a stable tail",
+        "min_ms": 270.562125,
+        "max_ms": 387.959833
+      },
+      "median_paired_delta_ms": -34.564167,
+      "diagnostics": {
+        "baseline": {
+          "counts": {
+            "fts_rows_fetched": 3,
+            "fts_shortlisted": 3,
+            "entries_scanned": 105,
+            "entities_scanned": 0,
+            "entries_scored": 3,
+            "entries_prefiltered": 102,
+            "expected_entry_probes": 0,
+            "direct_rejected": {
+              "routing_prefilter": 102
+            },
+            "direct_candidates": 3,
+            "graph_seeds": 3,
+            "graph_links_fetched": 6,
+            "graph_links_examined": 6,
+            "graph_rejected": {
+              "jira_guard": 1,
+              "node_unavailable": 1
+            },
+            "graph_candidates": 3,
+            "candidates": 3,
+            "selected": 3,
+            "returned": 3,
+            "budget_omitted": 0
+          },
+          "fts_shortlist_truncated": false,
+          "graph_links_truncated": false,
+          "expected": {
+            "ref": "entry:task:DEMO-84",
+            "knowledge_state": "confirmed",
+            "direct_stage": "candidate",
+            "graph_stage": "candidate",
+            "direct_rank": 1,
+            "selected_position": 1,
+            "returned_position": 1,
+            "outcome": "returned"
+          }
+        },
+        "candidate": {
+          "counts": {
+            "fts_rows_fetched": 3,
+            "fts_shortlisted": 3,
+            "entries_scanned": 105,
+            "entities_scanned": 0,
+            "entries_scored": 3,
+            "entries_prefiltered": 102,
+            "expected_entry_probes": 0,
+            "direct_rejected": {
+              "routing_prefilter": 102
+            },
+            "direct_candidates": 3,
+            "graph_seeds": 3,
+            "graph_links_fetched": 6,
+            "graph_links_examined": 6,
+            "graph_rejected": {
+              "jira_guard": 1,
+              "node_unavailable": 1
+            },
+            "graph_candidates": 3,
+            "candidates": 3,
+            "selected": 3,
+            "returned": 3,
+            "budget_omitted": 0
+          },
+          "fts_shortlist_truncated": false,
+          "graph_links_truncated": false,
+          "expected": {
+            "ref": "entry:task:DEMO-84",
+            "knowledge_state": "confirmed",
+            "direct_stage": "candidate",
+            "graph_stage": "candidate",
+            "direct_rank": 1,
+            "selected_position": 1,
+            "returned_position": 1,
+            "outcome": "returned"
+          }
+        }
+      },
+      "profiles": {}
+    },
+    {
+      "id": "dev-b100-crowded-lexical",
+      "mode": "dev",
+      "background": 100,
+      "case": {
+        "id": "crowded-lexical",
+        "query": "receipt calibration",
+        "project": "relay",
+        "limit": 8,
+        "expected_refs": [
+          "entry:note:crowded-target"
+        ],
+        "excluded_refs": [],
+        "expected_no_match": false,
+        "expect_ref": "entry:note:crowded-target",
+        "include_hypotheses": false
+      },
+      "samples": [
+        {
+          "round": 1,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 280.118,
+          "baseline_ms": 303.21975,
+          "candidate_minus_baseline_ms": -23.10174999999998
+        },
+        {
+          "round": 2,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 283.811875,
+          "candidate_ms": 418.544875,
+          "candidate_minus_baseline_ms": 134.733
+        },
+        {
+          "round": 3,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 314.814875,
+          "baseline_ms": 285.049,
+          "candidate_minus_baseline_ms": 29.765874999999994
+        },
+        {
+          "round": 4,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 283.229708,
+          "candidate_ms": 267.858541,
+          "candidate_minus_baseline_ms": -15.371167000000014
+        },
+        {
+          "round": 5,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 286.209334,
+          "baseline_ms": 316.528417,
+          "candidate_minus_baseline_ms": -30.319082999999978
+        },
+        {
+          "round": 6,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 283.114292,
+          "candidate_ms": 375.704917,
+          "candidate_minus_baseline_ms": 92.59062500000005
+        },
+        {
+          "round": 7,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 393.9545,
+          "baseline_ms": 308.669458,
+          "candidate_minus_baseline_ms": 85.28504199999998
+        },
+        {
+          "round": 8,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 284.957209,
+          "candidate_ms": 279.157584,
+          "candidate_minus_baseline_ms": -5.799624999999992
+        },
+        {
+          "round": 9,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 286.470166,
+          "baseline_ms": 284.276,
+          "candidate_minus_baseline_ms": 2.1941659999999956
+        }
+      ],
+      "normal_outcome": {
+        "returned_refs": [
+          "entry:note:background-00001",
+          "entry:note:background-00004",
+          "entry:note:background-00010",
+          "entry:note:background-00013",
+          "entry:note:background-00016",
+          "entry:note:background-00022",
+          "entry:note:background-00025",
+          "entry:note:background-00031"
+        ],
+        "positions": {
+          "entry:note:crowded-target": null
+        },
+        "hit_at_limit": false,
+        "recall_at_limit": 0.0,
+        "reciprocal_rank": 0,
+        "no_match": false,
+        "candidate_count": 104,
+        "output_chars": 10113,
+        "truncated": true,
+        "budget": {
+          "max_chars": 16000,
+          "output_chars": 10113,
+          "omitted_results": 96,
+          "omitted_edges": 0
+        },
+        "quality_misses": [
+          "target absent: entry:note:crowded-target"
+        ],
+        "invariant_failures": []
+      },
+      "baseline": {
+        "samples_ms": [
+          303.21975,
+          283.811875,
+          285.049,
+          283.229708,
+          316.528417,
+          283.114292,
+          308.669458,
+          284.957209,
+          284.276
+        ],
+        "median_ms": 284.957209,
+        "p95_ms": 316.528417,
+        "p95_method": "nearest-rank; small samples do not estimate a stable tail",
+        "min_ms": 283.114292,
+        "max_ms": 316.528417
+      },
+      "candidate": {
+        "samples_ms": [
+          280.118,
+          418.544875,
+          314.814875,
+          267.858541,
+          286.209334,
+          375.704917,
+          393.9545,
+          279.157584,
+          286.470166
+        ],
+        "median_ms": 286.470166,
+        "p95_ms": 418.544875,
+        "p95_method": "nearest-rank; small samples do not estimate a stable tail",
+        "min_ms": 267.858541,
+        "max_ms": 418.544875
+      },
+      "median_paired_delta_ms": 2.1941659999999956,
+      "diagnostics": {
+        "baseline": {
+          "counts": {
+            "fts_rows_fetched": 104,
+            "fts_shortlisted": 104,
+            "entries_scanned": 105,
+            "entities_scanned": 0,
+            "entries_scored": 104,
+            "entries_prefiltered": 1,
+            "expected_entry_probes": 0,
+            "direct_rejected": {
+              "routing_prefilter": 1
+            },
+            "direct_candidates": 104,
+            "graph_seeds": 3,
+            "graph_links_fetched": 0,
+            "graph_links_examined": 0,
+            "graph_rejected": {},
+            "graph_candidates": 0,
+            "candidates": 104,
+            "selected": 8,
+            "returned": 8,
+            "budget_omitted": 0
+          },
+          "fts_shortlist_truncated": false,
+          "graph_links_truncated": false,
+          "expected": {
+            "ref": "entry:note:crowded-target",
+            "knowledge_state": "confirmed",
+            "direct_stage": "candidate",
+            "graph_stage": "not_reached",
+            "direct_rank": 73,
+            "selected_position": null,
+            "returned_position": null,
+            "outcome": "rank_or_limit"
+          }
+        },
+        "candidate": {
+          "counts": {
+            "fts_rows_fetched": 104,
+            "fts_shortlisted": 104,
+            "entries_scanned": 105,
+            "entities_scanned": 0,
+            "entries_scored": 104,
+            "entries_prefiltered": 1,
+            "expected_entry_probes": 0,
+            "direct_rejected": {
+              "routing_prefilter": 1
+            },
+            "direct_candidates": 104,
+            "graph_seeds": 3,
+            "graph_links_fetched": 0,
+            "graph_links_examined": 0,
+            "graph_rejected": {},
+            "graph_candidates": 0,
+            "candidates": 104,
+            "selected": 8,
+            "returned": 8,
+            "budget_omitted": 0
+          },
+          "fts_shortlist_truncated": false,
+          "graph_links_truncated": false,
+          "expected": {
+            "ref": "entry:note:crowded-target",
+            "knowledge_state": "confirmed",
+            "direct_stage": "candidate",
+            "graph_stage": "not_reached",
+            "direct_rank": 73,
+            "selected_position": null,
+            "returned_position": null,
+            "outcome": "rank_or_limit"
+          }
+        }
+      },
+      "profiles": {}
+    },
+    {
+      "id": "release-b10000-current-id",
+      "mode": "release",
+      "background": 10000,
+      "case": {
+        "id": "current-id",
+        "query": "task:DEMO-84",
+        "project": "relay",
+        "limit": 8,
+        "expected_refs": [
+          "entry:task:DEMO-84"
+        ],
+        "excluded_refs": [],
+        "expected_no_match": false,
+        "expect_ref": "entry:task:DEMO-84",
+        "include_hypotheses": false
+      },
+      "samples": [
+        {
+          "round": 1,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 364.155833,
+          "candidate_ms": 326.54625,
+          "candidate_minus_baseline_ms": -37.609582999999986
+        },
+        {
+          "round": 2,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 278.339792,
+          "baseline_ms": 300.681916,
+          "candidate_minus_baseline_ms": -22.342124000000013
+        },
+        {
+          "round": 3,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 310.035209,
+          "candidate_ms": 321.130541,
+          "candidate_minus_baseline_ms": 11.095331999999985
+        },
+        {
+          "round": 4,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 266.5465,
+          "baseline_ms": 437.463542,
+          "candidate_minus_baseline_ms": -170.91704200000004
+        },
+        {
+          "round": 5,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 476.1245,
+          "candidate_ms": 281.277833,
+          "candidate_minus_baseline_ms": -194.84666700000002
+        },
+        {
+          "round": 6,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 329.900625,
+          "baseline_ms": 311.5145,
+          "candidate_minus_baseline_ms": 18.386124999999993
+        },
+        {
+          "round": 7,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 292.322375,
+          "candidate_ms": 264.171667,
+          "candidate_minus_baseline_ms": -28.15070800000001
+        },
+        {
+          "round": 8,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 269.619834,
+          "baseline_ms": 436.2585,
+          "candidate_minus_baseline_ms": -166.638666
+        },
+        {
+          "round": 9,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 418.150584,
+          "candidate_ms": 288.844958,
+          "candidate_minus_baseline_ms": -129.30562599999996
+        }
+      ],
+      "normal_outcome": {
+        "returned_refs": [
+          "entry:task:DEMO-84",
+          "entry:decision:DEMO-84-rejection",
+          "entry:investigation:DEMO-84-window"
+        ],
+        "positions": {
+          "entry:task:DEMO-84": 1
+        },
+        "hit_at_limit": true,
+        "recall_at_limit": 1.0,
+        "reciprocal_rank": 1.0,
+        "no_match": false,
+        "candidate_count": 3,
+        "output_chars": 6354,
+        "truncated": false,
+        "budget": {
+          "max_chars": 16000,
+          "output_chars": 6354,
+          "omitted_results": 0,
+          "omitted_edges": 0
+        },
+        "quality_misses": [],
+        "invariant_failures": []
+      },
+      "baseline": {
+        "samples_ms": [
+          364.155833,
+          300.681916,
+          310.035209,
+          437.463542,
+          476.1245,
+          311.5145,
+          292.322375,
+          436.2585,
+          418.150584
+        ],
+        "median_ms": 364.155833,
+        "p95_ms": 476.1245,
+        "p95_method": "nearest-rank; small samples do not estimate a stable tail",
+        "min_ms": 292.322375,
+        "max_ms": 476.1245
+      },
+      "candidate": {
+        "samples_ms": [
+          326.54625,
+          278.339792,
+          321.130541,
+          266.5465,
+          281.277833,
+          329.900625,
+          264.171667,
+          269.619834,
+          288.844958
+        ],
+        "median_ms": 281.277833,
+        "p95_ms": 329.900625,
+        "p95_method": "nearest-rank; small samples do not estimate a stable tail",
+        "min_ms": 264.171667,
+        "max_ms": 329.900625
+      },
+      "median_paired_delta_ms": -37.609582999999986,
+      "diagnostics": {
+        "baseline": {
+          "counts": {
+            "fts_rows_fetched": 3,
+            "fts_shortlisted": 3,
+            "entries_scanned": 10005,
+            "entities_scanned": 0,
+            "entries_scored": 3,
+            "entries_prefiltered": 10002,
+            "expected_entry_probes": 0,
+            "direct_rejected": {
+              "routing_prefilter": 10002
+            },
+            "direct_candidates": 3,
+            "graph_seeds": 3,
+            "graph_links_fetched": 6,
+            "graph_links_examined": 6,
+            "graph_rejected": {
+              "jira_guard": 1,
+              "node_unavailable": 1
+            },
+            "graph_candidates": 3,
+            "candidates": 3,
+            "selected": 3,
+            "returned": 3,
+            "budget_omitted": 0
+          },
+          "fts_shortlist_truncated": false,
+          "graph_links_truncated": false,
+          "expected": {
+            "ref": "entry:task:DEMO-84",
+            "knowledge_state": "confirmed",
+            "direct_stage": "candidate",
+            "graph_stage": "candidate",
+            "direct_rank": 1,
+            "selected_position": 1,
+            "returned_position": 1,
+            "outcome": "returned"
+          }
+        },
+        "candidate": {
+          "counts": {
+            "fts_rows_fetched": 3,
+            "fts_shortlisted": 3,
+            "entries_scanned": 10005,
+            "entities_scanned": 0,
+            "entries_scored": 3,
+            "entries_prefiltered": 10002,
+            "expected_entry_probes": 0,
+            "direct_rejected": {
+              "routing_prefilter": 10002
+            },
+            "direct_candidates": 3,
+            "graph_seeds": 3,
+            "graph_links_fetched": 6,
+            "graph_links_examined": 6,
+            "graph_rejected": {
+              "jira_guard": 1,
+              "node_unavailable": 1
+            },
+            "graph_candidates": 3,
+            "candidates": 3,
+            "selected": 3,
+            "returned": 3,
+            "budget_omitted": 0
+          },
+          "fts_shortlist_truncated": false,
+          "graph_links_truncated": false,
+          "expected": {
+            "ref": "entry:task:DEMO-84",
+            "knowledge_state": "confirmed",
+            "direct_stage": "candidate",
+            "graph_stage": "candidate",
+            "direct_rank": 1,
+            "selected_position": 1,
+            "returned_position": 1,
+            "outcome": "returned"
+          }
+        }
+      },
+      "profiles": {
+        "baseline": {
+          "launcher": {
+            "profile_seconds": 0.067088708,
+            "phases": [
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 1002,
+                "function": "_find_and_load",
+                "calls": 52,
+                "self_ms": 0.138872,
+                "cumulative_ms": 64.70475
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/runtime.py",
+                "line": 45,
+                "function": "describe_runtime",
+                "calls": 1,
+                "self_ms": 0.053507,
+                "cumulative_ms": 1.3593750000000002
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 153,
+                "function": "resolve_settings",
+                "calls": 1,
+                "self_ms": 0.009460000000000001,
+                "cumulative_ms": 0.282625
+              }
+            ],
+            "top_self": [
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.compile>",
+                "calls": 33,
+                "self_ms": 49.520714,
+                "cumulative_ms": 49.520714
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _imp.create_dynamic>",
+                "calls": 15,
+                "self_ms": 4.0783320000000005,
+                "cumulative_ms": 4.0783320000000005
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.stat>",
+                "calls": 197,
+                "self_ms": 1.369912,
+                "cumulative_ms": 1.4026640000000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method io.open_code>",
+                "calls": 64,
+                "self_ms": 1.111417,
+                "cumulative_ms": 1.111417
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.__build_class__>",
+                "calls": 119,
+                "self_ms": 0.723585,
+                "cumulative_ms": 1.3178340000000002
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.exec>",
+                "calls": 44,
+                "self_ms": 0.5453800000000001,
+                "cumulative_ms": 66.70375
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<method 'read' of '_io.BufferedReader' objects>",
+                "calls": 55,
+                "self_ms": 0.33599900000000005,
+                "cumulative_ms": 0.33599900000000005
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.eval>",
+                "calls": 12,
+                "self_ms": 0.333666,
+                "cumulative_ms": 0.33495700000000006
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.open>",
+                "calls": 25,
+                "self_ms": 0.30737400000000004,
+                "cumulative_ms": 0.31225
+              },
+              {
+                "file": "<frozen importlib._bootstrap_external>",
+                "line": 1505,
+                "function": "find_spec",
+                "calls": 77,
+                "self_ms": 0.29297300000000004,
+                "cumulative_ms": 1.9576660000000004
+              }
+            ],
+            "module_bodies": [
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/inspect.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.051750000000000004,
+                "cumulative_ms": 11.630291000000001
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/runtime.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.017418000000000003,
+                "cumulative_ms": 8.458708
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/dataclasses.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.020708,
+                "cumulative_ms": 20.247125
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/shutil.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.036957000000000004,
+                "cumulative_ms": 6.726791
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.018292,
+                "cumulative_ms": 15.905167
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/tempfile.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.018249,
+                "cumulative_ms": 13.516167000000001
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py",
+                "line": 10,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.021253,
+                "cumulative_ms": 3.432542
+              }
+            ]
+          },
+          "runtime": {
+            "profile_seconds": 0.30889308700000007,
+            "phases": [
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 1002,
+                "function": "_find_and_load",
+                "calls": 93,
+                "self_ms": 0.310151,
+                "cumulative_ms": 255.074083
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/memory.py",
+                "line": 541,
+                "function": "parser",
+                "calls": 1,
+                "self_ms": 0.096333,
+                "cumulative_ms": 59.978833
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/compact.py",
+                "line": 78,
+                "function": "fit_response",
+                "calls": 1,
+                "self_ms": 0.003751,
+                "cumulative_ms": 1.1622080000000001
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 153,
+                "function": "resolve_settings",
+                "calls": 1,
+                "self_ms": 0.01554,
+                "cumulative_ms": 1.673375
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 634,
+                "function": "recall",
+                "calls": 1,
+                "self_ms": 0.008416,
+                "cumulative_ms": 24.297416000000002
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 295,
+                "function": "lexical",
+                "calls": 3,
+                "self_ms": 0.027460000000000002,
+                "cumulative_ms": 0.341582
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 378,
+                "function": "entry_routing_match",
+                "calls": 10002,
+                "self_ms": 4.602303,
+                "cumulative_ms": 14.185484000000002
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 401,
+                "function": "entry_candidate_rows",
+                "calls": 4,
+                "self_ms": 7.427181000000001,
+                "cumulative_ms": 21.648916
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 439,
+                "function": "candidates",
+                "calls": 1,
+                "self_ms": 0.025920000000000002,
+                "cumulative_ms": 22.456
+              }
+            ],
+            "top_self": [
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.compile>",
+                "calls": 63,
+                "self_ms": 134.355167,
+                "cumulative_ms": 134.355167
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.__build_class__>",
+                "calls": 243,
+                "self_ms": 49.15505,
+                "cumulative_ms": 50.772925
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<method 'read' of '_io.BufferedReader' objects>",
+                "calls": 62,
+                "self_ms": 21.939247,
+                "cumulative_ms": 21.939247
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.isinstance>",
+                "calls": 7832,
+                "self_ms": 11.026069000000001,
+                "cumulative_ms": 11.026069000000001
+              },
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 160,
+                "function": "__exit__",
+                "calls": 93,
+                "self_ms": 7.964086,
+                "cumulative_ms": 12.066460000000001
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 401,
+                "function": "entry_candidate_rows",
+                "calls": 4,
+                "self_ms": 7.427181000000001,
+                "cumulative_ms": 21.648916
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/sre_parse.py",
+                "line": 493,
+                "function": "_parse",
+                "calls": 126,
+                "self_ms": 5.688006000000001,
+                "cumulative_ms": 9.266956
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _imp.create_dynamic>",
+                "calls": 16,
+                "self_ms": 5.023123,
+                "cumulative_ms": 5.023123
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 378,
+                "function": "entry_routing_match",
+                "calls": 10002,
+                "self_ms": 4.602303,
+                "cumulative_ms": 14.185484000000002
+              },
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 112,
+                "function": "release",
+                "calls": 95,
+                "self_ms": 4.081113,
+                "cumulative_ms": 4.1037479999999995
+              }
+            ],
+            "module_bodies": [
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/shutil.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.037205,
+                "cumulative_ms": 6.821709
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/tempfile.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.016666000000000004,
+                "cumulative_ms": 3.64225
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.017831000000000003,
+                "cumulative_ms": 48.9775
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/dataclasses.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.018875000000000003,
+                "cumulative_ms": 33.98575
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/inspect.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.6919980000000001,
+                "cumulative_ms": 14.879667000000001
+              }
+            ]
+          }
+        },
+        "candidate": {
+          "launcher": {
+            "profile_seconds": 0.041583877000000005,
+            "phases": [
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 1002,
+                "function": "_find_and_load",
+                "calls": 29,
+                "self_ms": 0.072414,
+                "cumulative_ms": 39.183834
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/runtime.py",
+                "line": 43,
+                "function": "describe_runtime",
+                "calls": 1,
+                "self_ms": 0.049088,
+                "cumulative_ms": 1.440042
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 152,
+                "function": "resolve_settings",
+                "calls": 1,
+                "self_ms": 0.008582,
+                "cumulative_ms": 0.272125
+              }
+            ],
+            "top_self": [
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.compile>",
+                "calls": 22,
+                "self_ms": 30.868288,
+                "cumulative_ms": 30.868288
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _imp.create_dynamic>",
+                "calls": 5,
+                "self_ms": 1.3417510000000001,
+                "cumulative_ms": 1.3417510000000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.stat>",
+                "calls": 131,
+                "self_ms": 0.759753,
+                "cumulative_ms": 0.791421
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method io.open_code>",
+                "calls": 42,
+                "self_ms": 0.661004,
+                "cumulative_ms": 0.661004
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.exec>",
+                "calls": 33,
+                "self_ms": 0.511294,
+                "cumulative_ms": 41.231667
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.__build_class__>",
+                "calls": 78,
+                "self_ms": 0.5037920000000001,
+                "cumulative_ms": 0.873913
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.open>",
+                "calls": 25,
+                "self_ms": 0.37388000000000005,
+                "cumulative_ms": 0.378709
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.eval>",
+                "calls": 10,
+                "self_ms": 0.29724900000000004,
+                "cumulative_ms": 0.29883200000000004
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<method 'read' of '_io.BufferedReader' objects>",
+                "calls": 44,
+                "self_ms": 0.24003900000000003,
+                "cumulative_ms": 0.24003900000000003
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/sre_parse.py",
+                "line": 493,
+                "function": "_parse",
+                "calls": 30,
+                "self_ms": 0.229136,
+                "cumulative_ms": 0.6135
+              }
+            ],
+            "module_bodies": [
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/inspect.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.043250000000000004,
+                "cumulative_ms": 11.014167
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/dataclasses.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.017251000000000002,
+                "cumulative_ms": 18.545375000000003
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/runtime.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.012791,
+                "cumulative_ms": 0.47695800000000005
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.008917000000000001,
+                "cumulative_ms": 0.5255000000000001
+              }
+            ]
+          },
+          "runtime": {
+            "profile_seconds": 0.14290241600000014,
+            "phases": [
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 1002,
+                "function": "_find_and_load",
+                "calls": 87,
+                "self_ms": 0.175398,
+                "cumulative_ms": 106.09591800000001
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/memory.py",
+                "line": 541,
+                "function": "parser",
+                "calls": 1,
+                "self_ms": 0.078795,
+                "cumulative_ms": 22.236291
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/compact.py",
+                "line": 78,
+                "function": "fit_response",
+                "calls": 1,
+                "self_ms": 0.003295,
+                "cumulative_ms": 1.0550000000000002
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 152,
+                "function": "resolve_settings",
+                "calls": 1,
+                "self_ms": 0.011791000000000001,
+                "cumulative_ms": 1.282458
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 295,
+                "function": "lexical",
+                "calls": 3,
+                "self_ms": 0.02663,
+                "cumulative_ms": 0.324416
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 378,
+                "function": "entry_routing_match",
+                "calls": 10002,
+                "self_ms": 4.473751000000001,
+                "cumulative_ms": 13.759199
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 401,
+                "function": "entry_candidate_rows",
+                "calls": 4,
+                "self_ms": 6.7544640000000005,
+                "cumulative_ms": 20.548291
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 439,
+                "function": "candidates",
+                "calls": 1,
+                "self_ms": 0.023671,
+                "cumulative_ms": 21.347125000000002
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 634,
+                "function": "recall",
+                "calls": 1,
+                "self_ms": 0.006417000000000001,
+                "cumulative_ms": 23.037000000000003
+              }
+            ],
+            "top_self": [
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.compile>",
+                "calls": 60,
+                "self_ms": 84.880711,
+                "cumulative_ms": 84.880711
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 401,
+                "function": "entry_candidate_rows",
+                "calls": 4,
+                "self_ms": 6.7544640000000005,
+                "cumulative_ms": 20.548291
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 378,
+                "function": "entry_routing_match",
+                "calls": 10002,
+                "self_ms": 4.473751000000001,
+                "cumulative_ms": 13.759199
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 176,
+                "function": "normalize",
+                "calls": 20042,
+                "self_ms": 3.5967240000000005,
+                "cumulative_ms": 4.7183150000000005
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _imp.create_dynamic>",
+                "calls": 13,
+                "self_ms": 3.3819550000000005,
+                "cumulative_ms": 3.3819550000000005
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 387,
+                "function": "<genexpr>",
+                "calls": 30006,
+                "self_ms": 3.113779,
+                "cumulative_ms": 3.113779
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.stat>",
+                "calls": 1146,
+                "self_ms": 2.531087,
+                "cumulative_ms": 2.532629
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method io.open_code>",
+                "calls": 118,
+                "self_ms": 1.5752460000000001,
+                "cumulative_ms": 1.5752460000000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.any>",
+                "calls": 10041,
+                "self_ms": 1.482138,
+                "cumulative_ms": 4.840508000000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.__build_class__>",
+                "calls": 236,
+                "self_ms": 1.3552780000000002,
+                "cumulative_ms": 2.724447
+              }
+            ],
+            "module_bodies": [
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/shutil.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.023753,
+                "cumulative_ms": 5.754250000000001
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.010374000000000001,
+                "cumulative_ms": 26.470208000000003
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/dataclasses.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.016000000000000004,
+                "cumulative_ms": 18.577917000000003
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/inspect.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.577666,
+                "cumulative_ms": 11.582625
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "release-b10000-crowded-lexical",
+      "mode": "release",
+      "background": 10000,
+      "case": {
+        "id": "crowded-lexical",
+        "query": "receipt calibration",
+        "project": "relay",
+        "limit": 8,
+        "expected_refs": [
+          "entry:note:crowded-target"
+        ],
+        "excluded_refs": [],
+        "expected_no_match": false,
+        "expect_ref": "entry:note:crowded-target",
+        "include_hypotheses": false
+      },
+      "samples": [
+        {
+          "round": 1,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 274.290416,
+          "baseline_ms": 308.327,
+          "candidate_minus_baseline_ms": -34.036584000000005
+        },
+        {
+          "round": 2,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 323.77775,
+          "candidate_ms": 402.0215,
+          "candidate_minus_baseline_ms": 78.24374999999998
+        },
+        {
+          "round": 3,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 354.627625,
+          "baseline_ms": 301.019708,
+          "candidate_minus_baseline_ms": 53.60791700000004
+        },
+        {
+          "round": 4,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 310.966083,
+          "candidate_ms": 277.022167,
+          "candidate_minus_baseline_ms": -33.943916
+        },
+        {
+          "round": 5,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 287.821125,
+          "baseline_ms": 309.397917,
+          "candidate_minus_baseline_ms": -21.57679200000001
+        },
+        {
+          "round": 6,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 386.297125,
+          "candidate_ms": 422.497958,
+          "candidate_minus_baseline_ms": 36.20083299999999
+        },
+        {
+          "round": 7,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 375.798417,
+          "baseline_ms": 346.525125,
+          "candidate_minus_baseline_ms": 29.27329199999997
+        },
+        {
+          "round": 8,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 380.814042,
+          "candidate_ms": 284.415916,
+          "candidate_minus_baseline_ms": -96.39812599999999
+        },
+        {
+          "round": 9,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 282.370166,
+          "baseline_ms": 306.743292,
+          "candidate_minus_baseline_ms": -24.373126000000013
+        }
+      ],
+      "normal_outcome": {
+        "returned_refs": [
+          "entry:note:background-00001",
+          "entry:note:background-00004",
+          "entry:note:background-00010",
+          "entry:note:background-00013",
+          "entry:note:background-00016",
+          "entry:note:background-00022",
+          "entry:note:background-00025",
+          "entry:note:background-00031"
+        ],
+        "positions": {
+          "entry:note:crowded-target": null
+        },
+        "hit_at_limit": false,
+        "recall_at_limit": 0.0,
+        "reciprocal_rank": 0,
+        "no_match": false,
+        "candidate_count": 160,
+        "output_chars": 10258,
+        "truncated": true,
+        "budget": {
+          "max_chars": 16000,
+          "output_chars": 10258,
+          "omitted_results": 152,
+          "omitted_edges": 0
+        },
+        "quality_misses": [
+          "target absent: entry:note:crowded-target"
+        ],
+        "invariant_failures": []
+      },
+      "baseline": {
+        "samples_ms": [
+          308.327,
+          323.77775,
+          301.019708,
+          310.966083,
+          309.397917,
+          386.297125,
+          346.525125,
+          380.814042,
+          306.743292
+        ],
+        "median_ms": 310.966083,
+        "p95_ms": 386.297125,
+        "p95_method": "nearest-rank; small samples do not estimate a stable tail",
+        "min_ms": 301.019708,
+        "max_ms": 386.297125
+      },
+      "candidate": {
+        "samples_ms": [
+          274.290416,
+          402.0215,
+          354.627625,
+          277.022167,
+          287.821125,
+          422.497958,
+          375.798417,
+          284.415916,
+          282.370166
+        ],
+        "median_ms": 287.821125,
+        "p95_ms": 422.497958,
+        "p95_method": "nearest-rank; small samples do not estimate a stable tail",
+        "min_ms": 274.290416,
+        "max_ms": 422.497958
+      },
+      "median_paired_delta_ms": -21.57679200000001,
+      "diagnostics": {
+        "baseline": {
+          "counts": {
+            "fts_rows_fetched": 161,
+            "fts_shortlisted": 160,
+            "entries_scanned": 10005,
+            "entities_scanned": 0,
+            "entries_scored": 160,
+            "entries_prefiltered": 9845,
+            "expected_entry_probes": 1,
+            "direct_rejected": {
+              "routing_prefilter": 9844,
+              "fts_not_shortlisted": 1
+            },
+            "direct_candidates": 160,
+            "graph_seeds": 3,
+            "graph_links_fetched": 0,
+            "graph_links_examined": 0,
+            "graph_rejected": {},
+            "graph_candidates": 0,
+            "candidates": 160,
+            "selected": 8,
+            "returned": 8,
+            "budget_omitted": 0
+          },
+          "fts_shortlist_truncated": true,
+          "graph_links_truncated": false,
+          "expected": {
+            "ref": "entry:note:crowded-target",
+            "knowledge_state": "confirmed",
+            "direct_stage": "fts_not_shortlisted",
+            "graph_stage": "not_reached",
+            "direct_rank": null,
+            "selected_position": null,
+            "returned_position": null,
+            "outcome": "fts_not_shortlisted"
+          }
+        },
+        "candidate": {
+          "counts": {
+            "fts_rows_fetched": 161,
+            "fts_shortlisted": 160,
+            "entries_scanned": 10005,
+            "entities_scanned": 0,
+            "entries_scored": 160,
+            "entries_prefiltered": 9845,
+            "expected_entry_probes": 1,
+            "direct_rejected": {
+              "routing_prefilter": 9844,
+              "fts_not_shortlisted": 1
+            },
+            "direct_candidates": 160,
+            "graph_seeds": 3,
+            "graph_links_fetched": 0,
+            "graph_links_examined": 0,
+            "graph_rejected": {},
+            "graph_candidates": 0,
+            "candidates": 160,
+            "selected": 8,
+            "returned": 8,
+            "budget_omitted": 0
+          },
+          "fts_shortlist_truncated": true,
+          "graph_links_truncated": false,
+          "expected": {
+            "ref": "entry:note:crowded-target",
+            "knowledge_state": "confirmed",
+            "direct_stage": "fts_not_shortlisted",
+            "graph_stage": "not_reached",
+            "direct_rank": null,
+            "selected_position": null,
+            "returned_position": null,
+            "outcome": "fts_not_shortlisted"
+          }
+        }
+      },
+      "profiles": {
+        "baseline": {
+          "launcher": {
+            "profile_seconds": 0.06307454099999998,
+            "phases": [
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 1002,
+                "function": "_find_and_load",
+                "calls": 52,
+                "self_ms": 0.11820600000000002,
+                "cumulative_ms": 60.83095900000001
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 153,
+                "function": "resolve_settings",
+                "calls": 1,
+                "self_ms": 0.010249000000000001,
+                "cumulative_ms": 0.274042
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/runtime.py",
+                "line": 45,
+                "function": "describe_runtime",
+                "calls": 1,
+                "self_ms": 0.05009400000000001,
+                "cumulative_ms": 1.3070830000000002
+              }
+            ],
+            "top_self": [
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.compile>",
+                "calls": 33,
+                "self_ms": 46.82292,
+                "cumulative_ms": 46.82292
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _imp.create_dynamic>",
+                "calls": 15,
+                "self_ms": 3.8406670000000003,
+                "cumulative_ms": 3.8406670000000003
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.stat>",
+                "calls": 197,
+                "self_ms": 1.17621,
+                "cumulative_ms": 1.207834
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method io.open_code>",
+                "calls": 64,
+                "self_ms": 0.994665,
+                "cumulative_ms": 0.994665
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.__build_class__>",
+                "calls": 119,
+                "self_ms": 0.699623,
+                "cumulative_ms": 1.274832
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.exec>",
+                "calls": 44,
+                "self_ms": 0.5311680000000001,
+                "cumulative_ms": 62.767291
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.eval>",
+                "calls": 12,
+                "self_ms": 0.316543,
+                "cumulative_ms": 0.318084
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.open>",
+                "calls": 25,
+                "self_ms": 0.300918,
+                "cumulative_ms": 0.30566800000000005
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<method 'read' of '_io.BufferedReader' objects>",
+                "calls": 55,
+                "self_ms": 0.271334,
+                "cumulative_ms": 0.271334
+              },
+              {
+                "file": "<frozen importlib._bootstrap_external>",
+                "line": 1505,
+                "function": "find_spec",
+                "calls": 77,
+                "self_ms": 0.25647400000000004,
+                "cumulative_ms": 1.6522990000000002
+              }
+            ],
+            "module_bodies": [
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/dataclasses.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.018126000000000003,
+                "cumulative_ms": 18.851041000000002
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/inspect.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.04212400000000001,
+                "cumulative_ms": 10.810209
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/shutil.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.031542,
+                "cumulative_ms": 6.113042
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.013208000000000001,
+                "cumulative_ms": 14.944792
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/tempfile.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.015792,
+                "cumulative_ms": 12.578708
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/runtime.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.016749000000000003,
+                "cumulative_ms": 7.979375
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py",
+                "line": 10,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.018335,
+                "cumulative_ms": 3.1772080000000003
+              }
+            ]
+          },
+          "runtime": {
+            "profile_seconds": 0.25848141100000016,
+            "phases": [
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 1002,
+                "function": "_find_and_load",
+                "calls": 93,
+                "self_ms": 0.524039,
+                "cumulative_ms": 197.457751
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/memory.py",
+                "line": 541,
+                "function": "parser",
+                "calls": 1,
+                "self_ms": 0.085382,
+                "cumulative_ms": 24.41275
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/compact.py",
+                "line": 78,
+                "function": "fit_response",
+                "calls": 1,
+                "self_ms": 0.0037110000000000003,
+                "cumulative_ms": 1.6553750000000003
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 153,
+                "function": "resolve_settings",
+                "calls": 1,
+                "self_ms": 0.014503000000000002,
+                "cumulative_ms": 1.5706670000000003
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 634,
+                "function": "recall",
+                "calls": 1,
+                "self_ms": 0.097542,
+                "cumulative_ms": 38.90075
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 295,
+                "function": "lexical",
+                "calls": 160,
+                "self_ms": 1.074767,
+                "cumulative_ms": 3.9292040000000004
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 378,
+                "function": "entry_routing_match",
+                "calls": 9845,
+                "self_ms": 4.91458,
+                "cumulative_ms": 10.702285
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 401,
+                "function": "entry_candidate_rows",
+                "calls": 161,
+                "self_ms": 6.132767000000001,
+                "cumulative_ms": 17.607916000000003
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 439,
+                "function": "candidates",
+                "calls": 1,
+                "self_ms": 0.436161,
+                "cumulative_ms": 36.687709
+              }
+            ],
+            "top_self": [
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.compile>",
+                "calls": 63,
+                "self_ms": 147.980376,
+                "cumulative_ms": 147.980376
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<method 'execute' of 'sqlite3.Connection' objects>",
+                "calls": 336,
+                "self_ms": 14.962081,
+                "cumulative_ms": 14.962081
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 401,
+                "function": "entry_candidate_rows",
+                "calls": 161,
+                "self_ms": 6.132767000000001,
+                "cumulative_ms": 17.607916000000003
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method io.open_code>",
+                "calls": 124,
+                "self_ms": 5.653284,
+                "cumulative_ms": 5.653284
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.stat>",
+                "calls": 1176,
+                "self_ms": 5.453127,
+                "cumulative_ms": 5.45496
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<method 'close' of 'sqlite3.Connection' objects>",
+                "calls": 1,
+                "self_ms": 4.962458000000001,
+                "cumulative_ms": 4.962458000000001
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 378,
+                "function": "entry_routing_match",
+                "calls": 9845,
+                "self_ms": 4.91458,
+                "cumulative_ms": 10.702285
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _imp.create_dynamic>",
+                "calls": 16,
+                "self_ms": 4.824248000000001,
+                "cumulative_ms": 4.824248000000001
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 176,
+                "function": "normalize",
+                "calls": 20976,
+                "self_ms": 3.753386,
+                "cumulative_ms": 5.059454000000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.__build_class__>",
+                "calls": 243,
+                "self_ms": 2.5565450000000003,
+                "cumulative_ms": 7.499670000000001
+              }
+            ],
+            "module_bodies": [
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/shutil.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.035585,
+                "cumulative_ms": 6.390417
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/tempfile.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.015833000000000003,
+                "cumulative_ms": 3.774875
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.019499000000000002,
+                "cumulative_ms": 36.691625
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/dataclasses.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.020125,
+                "cumulative_ms": 21.799458
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/inspect.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.732249,
+                "cumulative_ms": 14.564542000000001
+              }
+            ]
+          }
+        },
+        "candidate": {
+          "launcher": {
+            "profile_seconds": 0.038666712000000034,
+            "phases": [
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 1002,
+                "function": "_find_and_load",
+                "calls": 29,
+                "self_ms": 0.058916,
+                "cumulative_ms": 36.570542
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/runtime.py",
+                "line": 43,
+                "function": "describe_runtime",
+                "calls": 1,
+                "self_ms": 0.045971000000000005,
+                "cumulative_ms": 1.220417
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 152,
+                "function": "resolve_settings",
+                "calls": 1,
+                "self_ms": 0.008374,
+                "cumulative_ms": 0.232167
+              }
+            ],
+            "top_self": [
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.compile>",
+                "calls": 22,
+                "self_ms": 29.305166,
+                "cumulative_ms": 29.305166
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _imp.create_dynamic>",
+                "calls": 5,
+                "self_ms": 1.206666,
+                "cumulative_ms": 1.206666
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.stat>",
+                "calls": 131,
+                "self_ms": 0.622791,
+                "cumulative_ms": 0.6546210000000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method io.open_code>",
+                "calls": 42,
+                "self_ms": 0.5395430000000001,
+                "cumulative_ms": 0.5395430000000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.__build_class__>",
+                "calls": 78,
+                "self_ms": 0.477087,
+                "cumulative_ms": 0.8320000000000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.exec>",
+                "calls": 33,
+                "self_ms": 0.458091,
+                "cumulative_ms": 38.36387500000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.open>",
+                "calls": 25,
+                "self_ms": 0.258253,
+                "cumulative_ms": 0.263335
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.eval>",
+                "calls": 10,
+                "self_ms": 0.25087600000000004,
+                "cumulative_ms": 0.252083
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/sre_parse.py",
+                "line": 493,
+                "function": "_parse",
+                "calls": 30,
+                "self_ms": 0.209428,
+                "cumulative_ms": 0.566834
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<method 'read' of '_io.BufferedReader' objects>",
+                "calls": 44,
+                "self_ms": 0.171291,
+                "cumulative_ms": 0.171291
+              }
+            ],
+            "module_bodies": [
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/inspect.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.039122000000000004,
+                "cumulative_ms": 10.403083
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/dataclasses.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.016708,
+                "cumulative_ms": 17.832292
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/runtime.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.01025,
+                "cumulative_ms": 0.403125
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.00725,
+                "cumulative_ms": 0.479125
+              }
+            ]
+          },
+          "runtime": {
+            "profile_seconds": 0.15212537600000017,
+            "phases": [
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 1002,
+                "function": "_find_and_load",
+                "calls": 87,
+                "self_ms": 0.173074,
+                "cumulative_ms": 106.36820800000001
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/memory.py",
+                "line": 541,
+                "function": "parser",
+                "calls": 1,
+                "self_ms": 0.076321,
+                "cumulative_ms": 22.050417000000003
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/compact.py",
+                "line": 78,
+                "function": "fit_response",
+                "calls": 1,
+                "self_ms": 0.004376,
+                "cumulative_ms": 1.615834
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 152,
+                "function": "resolve_settings",
+                "calls": 1,
+                "self_ms": 0.011749,
+                "cumulative_ms": 1.3685
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 295,
+                "function": "lexical",
+                "calls": 160,
+                "self_ms": 0.9217960000000001,
+                "cumulative_ms": 3.486377
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 378,
+                "function": "entry_routing_match",
+                "calls": 9845,
+                "self_ms": 4.168950000000001,
+                "cumulative_ms": 9.272488000000001
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 401,
+                "function": "entry_candidate_rows",
+                "calls": 161,
+                "self_ms": 4.958436,
+                "cumulative_ms": 14.765171
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 439,
+                "function": "candidates",
+                "calls": 1,
+                "self_ms": 0.42766200000000004,
+                "cumulative_ms": 29.968458000000002
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 634,
+                "function": "recall",
+                "calls": 1,
+                "self_ms": 0.083375,
+                "cumulative_ms": 32.096917000000005
+              }
+            ],
+            "top_self": [
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.compile>",
+                "calls": 60,
+                "self_ms": 84.634962,
+                "cumulative_ms": 84.634962
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<method 'execute' of 'sqlite3.Connection' objects>",
+                "calls": 336,
+                "self_ms": 10.588078000000001,
+                "cumulative_ms": 10.588078000000001
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 401,
+                "function": "entry_candidate_rows",
+                "calls": 161,
+                "self_ms": 4.958436,
+                "cumulative_ms": 14.765171
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 378,
+                "function": "entry_routing_match",
+                "calls": 9845,
+                "self_ms": 4.168950000000001,
+                "cumulative_ms": 9.272488000000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _imp.create_dynamic>",
+                "calls": 13,
+                "self_ms": 3.401208,
+                "cumulative_ms": 3.401208
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi/recall.py",
+                "line": 176,
+                "function": "normalize",
+                "calls": 20976,
+                "self_ms": 3.304466,
+                "cumulative_ms": 4.479458
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.stat>",
+                "calls": 1146,
+                "self_ms": 2.55269,
+                "cumulative_ms": 2.554274
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method io.open_code>",
+                "calls": 118,
+                "self_ms": 1.600045,
+                "cumulative_ms": 1.600045
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.__build_class__>",
+                "calls": 236,
+                "self_ms": 1.387342,
+                "cumulative_ms": 2.8037440000000005
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _sqlite3.connect>",
+                "calls": 1,
+                "self_ms": 0.9869170000000002,
+                "cumulative_ms": 0.9869170000000002
+              }
+            ],
+            "module_bodies": [
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/shutil.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.025333,
+                "cumulative_ms": 5.7805
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.011751000000000001,
+                "cumulative_ms": 27.045959
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/dataclasses.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.016084,
+                "cumulative_ms": 18.901583
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/inspect.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.5786680000000001,
+                "cumulative_ms": 12.182500000000001
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "dev-b10000-current-id",
+      "mode": "dev",
+      "background": 10000,
+      "case": {
+        "id": "current-id",
+        "query": "task:DEMO-84",
+        "project": "relay",
+        "limit": 8,
+        "expected_refs": [
+          "entry:task:DEMO-84"
+        ],
+        "excluded_refs": [],
+        "expected_no_match": false,
+        "expect_ref": "entry:task:DEMO-84",
+        "include_hypotheses": false
+      },
+      "samples": [
+        {
+          "round": 1,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 374.711917,
+          "candidate_ms": 392.99925,
+          "candidate_minus_baseline_ms": 18.28733299999999
+        },
+        {
+          "round": 2,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 328.8985,
+          "baseline_ms": 298.612709,
+          "candidate_minus_baseline_ms": 30.285791000000017
+        },
+        {
+          "round": 3,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 298.147125,
+          "candidate_ms": 284.356583,
+          "candidate_minus_baseline_ms": -13.790542000000016
+        },
+        {
+          "round": 4,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 294.876,
+          "baseline_ms": 451.899208,
+          "candidate_minus_baseline_ms": -157.023208
+        },
+        {
+          "round": 5,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 424.630917,
+          "candidate_ms": 284.729917,
+          "candidate_minus_baseline_ms": -139.901
+        },
+        {
+          "round": 6,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 320.8405,
+          "baseline_ms": 323.763959,
+          "candidate_minus_baseline_ms": -2.92345899999998
+        },
+        {
+          "round": 7,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 293.654541,
+          "candidate_ms": 282.188667,
+          "candidate_minus_baseline_ms": -11.465873999999985
+        },
+        {
+          "round": 8,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 291.310125,
+          "baseline_ms": 370.279125,
+          "candidate_minus_baseline_ms": -78.969
+        },
+        {
+          "round": 9,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 384.013459,
+          "candidate_ms": 339.101625,
+          "candidate_minus_baseline_ms": -44.911834
+        }
+      ],
+      "normal_outcome": {
+        "returned_refs": [
+          "entry:task:DEMO-84",
+          "entry:decision:DEMO-84-rejection",
+          "entry:investigation:DEMO-84-window"
+        ],
+        "positions": {
+          "entry:task:DEMO-84": 1
+        },
+        "hit_at_limit": true,
+        "recall_at_limit": 1.0,
+        "reciprocal_rank": 1.0,
+        "no_match": false,
+        "candidate_count": 3,
+        "output_chars": 6354,
+        "truncated": false,
+        "budget": {
+          "max_chars": 16000,
+          "output_chars": 6354,
+          "omitted_results": 0,
+          "omitted_edges": 0
+        },
+        "quality_misses": [],
+        "invariant_failures": []
+      },
+      "baseline": {
+        "samples_ms": [
+          374.711917,
+          298.612709,
+          298.147125,
+          451.899208,
+          424.630917,
+          323.763959,
+          293.654541,
+          370.279125,
+          384.013459
+        ],
+        "median_ms": 370.279125,
+        "p95_ms": 451.899208,
+        "p95_method": "nearest-rank; small samples do not estimate a stable tail",
+        "min_ms": 293.654541,
+        "max_ms": 451.899208
+      },
+      "candidate": {
+        "samples_ms": [
+          392.99925,
+          328.8985,
+          284.356583,
+          294.876,
+          284.729917,
+          320.8405,
+          282.188667,
+          291.310125,
+          339.101625
+        ],
+        "median_ms": 294.876,
+        "p95_ms": 392.99925,
+        "p95_method": "nearest-rank; small samples do not estimate a stable tail",
+        "min_ms": 282.188667,
+        "max_ms": 392.99925
+      },
+      "median_paired_delta_ms": -13.790542000000016,
+      "diagnostics": {
+        "baseline": {
+          "counts": {
+            "fts_rows_fetched": 3,
+            "fts_shortlisted": 3,
+            "entries_scanned": 10005,
+            "entities_scanned": 0,
+            "entries_scored": 3,
+            "entries_prefiltered": 10002,
+            "expected_entry_probes": 0,
+            "direct_rejected": {
+              "routing_prefilter": 10002
+            },
+            "direct_candidates": 3,
+            "graph_seeds": 3,
+            "graph_links_fetched": 6,
+            "graph_links_examined": 6,
+            "graph_rejected": {
+              "jira_guard": 1,
+              "node_unavailable": 1
+            },
+            "graph_candidates": 3,
+            "candidates": 3,
+            "selected": 3,
+            "returned": 3,
+            "budget_omitted": 0
+          },
+          "fts_shortlist_truncated": false,
+          "graph_links_truncated": false,
+          "expected": {
+            "ref": "entry:task:DEMO-84",
+            "knowledge_state": "confirmed",
+            "direct_stage": "candidate",
+            "graph_stage": "candidate",
+            "direct_rank": 1,
+            "selected_position": 1,
+            "returned_position": 1,
+            "outcome": "returned"
+          }
+        },
+        "candidate": {
+          "counts": {
+            "fts_rows_fetched": 3,
+            "fts_shortlisted": 3,
+            "entries_scanned": 10005,
+            "entities_scanned": 0,
+            "entries_scored": 3,
+            "entries_prefiltered": 10002,
+            "expected_entry_probes": 0,
+            "direct_rejected": {
+              "routing_prefilter": 10002
+            },
+            "direct_candidates": 3,
+            "graph_seeds": 3,
+            "graph_links_fetched": 6,
+            "graph_links_examined": 6,
+            "graph_rejected": {
+              "jira_guard": 1,
+              "node_unavailable": 1
+            },
+            "graph_candidates": 3,
+            "candidates": 3,
+            "selected": 3,
+            "returned": 3,
+            "budget_omitted": 0
+          },
+          "fts_shortlist_truncated": false,
+          "graph_links_truncated": false,
+          "expected": {
+            "ref": "entry:task:DEMO-84",
+            "knowledge_state": "confirmed",
+            "direct_stage": "candidate",
+            "graph_stage": "candidate",
+            "direct_rank": 1,
+            "selected_position": 1,
+            "returned_position": 1,
+            "outcome": "returned"
+          }
+        }
+      },
+      "profiles": {
+        "baseline": {
+          "launcher": {
+            "profile_seconds": 0.11140662199999993,
+            "phases": [
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 1002,
+                "function": "_find_and_load",
+                "calls": 52,
+                "self_ms": 0.11225,
+                "cumulative_ms": 60.594167000000006
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/runtime.py",
+                "line": 45,
+                "function": "describe_runtime",
+                "calls": 1,
+                "self_ms": 0.009625,
+                "cumulative_ms": 0.149042
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 153,
+                "function": "resolve_settings",
+                "calls": 1,
+                "self_ms": 0.015707000000000002,
+                "cumulative_ms": 0.38975000000000004
+              }
+            ],
+            "top_self": [
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.compile>",
+                "calls": 33,
+                "self_ms": 46.50607900000001,
+                "cumulative_ms": 46.50607900000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.open>",
+                "calls": 4,
+                "self_ms": 41.919668,
+                "cumulative_ms": 41.920459
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/cli.py",
+                "line": 201,
+                "function": "main",
+                "calls": 1,
+                "self_ms": 6.75771,
+                "cumulative_ms": 50.27037500000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _imp.create_dynamic>",
+                "calls": 15,
+                "self_ms": 3.769998,
+                "cumulative_ms": 3.769998
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.stat>",
+                "calls": 177,
+                "self_ms": 1.09108,
+                "cumulative_ms": 1.099871
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method io.open_code>",
+                "calls": 64,
+                "self_ms": 0.907498,
+                "cumulative_ms": 0.907498
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.exec>",
+                "calls": 44,
+                "self_ms": 0.880543,
+                "cumulative_ms": 111.081917
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.__build_class__>",
+                "calls": 119,
+                "self_ms": 0.70604,
+                "cumulative_ms": 1.268831
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.unlink>",
+                "calls": 1,
+                "self_ms": 0.525625,
+                "cumulative_ms": 0.525625
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.eval>",
+                "calls": 12,
+                "self_ms": 0.31533200000000006,
+                "cumulative_ms": 0.31679100000000004
+              }
+            ],
+            "module_bodies": [
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/inspect.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.04029100000000001,
+                "cumulative_ms": 11.363334000000002
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/runtime.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.018166,
+                "cumulative_ms": 8.54075
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/dataclasses.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.016585000000000003,
+                "cumulative_ms": 18.951334
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/shutil.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.026169000000000005,
+                "cumulative_ms": 6.1205
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.011084,
+                "cumulative_ms": 14.665875
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/tempfile.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.014042,
+                "cumulative_ms": 12.478542000000001
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py",
+                "line": 10,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.019834,
+                "cumulative_ms": 3.340958
+              }
+            ]
+          },
+          "runtime": {
+            "profile_seconds": 0.2209697489999996,
+            "phases": [
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 1002,
+                "function": "_find_and_load",
+                "calls": 93,
+                "self_ms": 0.40285,
+                "cumulative_ms": 180.970166
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/memory.py",
+                "line": 541,
+                "function": "parser",
+                "calls": 1,
+                "self_ms": 0.087414,
+                "cumulative_ms": 23.880292
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/compact.py",
+                "line": 78,
+                "function": "fit_response",
+                "calls": 1,
+                "self_ms": 0.0036230000000000004,
+                "cumulative_ms": 1.182167
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 153,
+                "function": "resolve_settings",
+                "calls": 1,
+                "self_ms": 0.013419000000000002,
+                "cumulative_ms": 1.50025
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 634,
+                "function": "recall",
+                "calls": 1,
+                "self_ms": 0.009292,
+                "cumulative_ms": 24.608917
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 295,
+                "function": "lexical",
+                "calls": 3,
+                "self_ms": 0.028738000000000003,
+                "cumulative_ms": 0.35129000000000005
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 378,
+                "function": "entry_routing_match",
+                "calls": 10002,
+                "self_ms": 4.652951000000001,
+                "cumulative_ms": 14.110987
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 401,
+                "function": "entry_candidate_rows",
+                "calls": 4,
+                "self_ms": 7.694636,
+                "cumulative_ms": 21.844166
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 439,
+                "function": "candidates",
+                "calls": 1,
+                "self_ms": 0.027419000000000002,
+                "cumulative_ms": 22.708084
+              }
+            ],
+            "top_self": [
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.compile>",
+                "calls": 63,
+                "self_ms": 141.68250500000002,
+                "cumulative_ms": 141.68250500000002
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 401,
+                "function": "entry_candidate_rows",
+                "calls": 4,
+                "self_ms": 7.694636,
+                "cumulative_ms": 21.844166
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 378,
+                "function": "entry_routing_match",
+                "calls": 10002,
+                "self_ms": 4.652951000000001,
+                "cumulative_ms": 14.110987
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.stat>",
+                "calls": 1179,
+                "self_ms": 4.639502,
+                "cumulative_ms": 4.64146
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _imp.create_dynamic>",
+                "calls": 16,
+                "self_ms": 4.602499000000001,
+                "cumulative_ms": 4.602499000000001
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 176,
+                "function": "normalize",
+                "calls": 20042,
+                "self_ms": 3.6301370000000004,
+                "cumulative_ms": 4.845021000000001
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 387,
+                "function": "<genexpr>",
+                "calls": 30006,
+                "self_ms": 3.180268,
+                "cumulative_ms": 3.180268
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method io.open_code>",
+                "calls": 124,
+                "self_ms": 3.1517480000000004,
+                "cumulative_ms": 3.1517480000000004
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<method 'execute' of 'sqlite3.Connection' objects>",
+                "calls": 34,
+                "self_ms": 1.852667,
+                "cumulative_ms": 1.852667
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.__build_class__>",
+                "calls": 243,
+                "self_ms": 1.719166,
+                "cumulative_ms": 5.242542
+              }
+            ],
+            "module_bodies": [
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/shutil.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.036207,
+                "cumulative_ms": 6.321334
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/tempfile.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.018542,
+                "cumulative_ms": 4.15725
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.015169000000000002,
+                "cumulative_ms": 42.7935
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/dataclasses.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.019874,
+                "cumulative_ms": 27.690209
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/inspect.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.6427570000000001,
+                "cumulative_ms": 14.46925
+              }
+            ]
+          }
+        },
+        "candidate": {
+          "launcher": {
+            "profile_seconds": 0.05241149800000002,
+            "phases": [
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 1002,
+                "function": "_find_and_load",
+                "calls": 46,
+                "self_ms": 0.089619,
+                "cumulative_ms": 50.791834
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/runtime.py",
+                "line": 43,
+                "function": "describe_runtime",
+                "calls": 1,
+                "self_ms": 0.0062900000000000005,
+                "cumulative_ms": 0.10433400000000001
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 152,
+                "function": "resolve_settings",
+                "calls": 1,
+                "self_ms": 0.0072510000000000005,
+                "cumulative_ms": 0.249708
+              }
+            ],
+            "top_self": [
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.compile>",
+                "calls": 30,
+                "self_ms": 39.289165000000004,
+                "cumulative_ms": 39.289165000000004
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _imp.create_dynamic>",
+                "calls": 13,
+                "self_ms": 3.221086,
+                "cumulative_ms": 3.221086
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.stat>",
+                "calls": 159,
+                "self_ms": 0.9775,
+                "cumulative_ms": 0.9859160000000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method io.open_code>",
+                "calls": 58,
+                "self_ms": 0.7914580000000001,
+                "cumulative_ms": 0.7914580000000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.__build_class__>",
+                "calls": 107,
+                "self_ms": 0.6462060000000001,
+                "cumulative_ms": 1.1060800000000002
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.exec>",
+                "calls": 41,
+                "self_ms": 0.48046700000000003,
+                "cumulative_ms": 52.003083000000004
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.eval>",
+                "calls": 11,
+                "self_ms": 0.270876,
+                "cumulative_ms": 0.27216700000000005
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.open>",
+                "calls": 4,
+                "self_ms": 0.23641600000000002,
+                "cumulative_ms": 0.237041
+              },
+              {
+                "file": "<frozen importlib._bootstrap_external>",
+                "line": 1505,
+                "function": "find_spec",
+                "calls": 67,
+                "self_ms": 0.23336300000000001,
+                "cumulative_ms": 1.5393350000000001
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/sre_parse.py",
+                "line": 493,
+                "function": "_parse",
+                "calls": 28,
+                "self_ms": 0.211596,
+                "cumulative_ms": 0.570957
+              }
+            ],
+            "module_bodies": [
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/dataclasses.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.016419,
+                "cumulative_ms": 17.881333
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/shutil.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.025461,
+                "cumulative_ms": 5.783625000000001
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/tempfile.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.012917,
+                "cumulative_ms": 12.129000000000001
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/inspect.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.040123,
+                "cumulative_ms": 10.411666
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/runtime.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.009666000000000001,
+                "cumulative_ms": 0.410875
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.008000000000000002,
+                "cumulative_ms": 0.485792
+              }
+            ]
+          },
+          "runtime": {
+            "profile_seconds": 0.1460641659999999,
+            "phases": [
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 1002,
+                "function": "_find_and_load",
+                "calls": 87,
+                "self_ms": 0.182066,
+                "cumulative_ms": 109.329249
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/memory.py",
+                "line": 541,
+                "function": "parser",
+                "calls": 1,
+                "self_ms": 0.080711,
+                "cumulative_ms": 22.963
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/compact.py",
+                "line": 78,
+                "function": "fit_response",
+                "calls": 1,
+                "self_ms": 0.0031670000000000005,
+                "cumulative_ms": 1.03025
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 152,
+                "function": "resolve_settings",
+                "calls": 1,
+                "self_ms": 0.011170000000000001,
+                "cumulative_ms": 1.346042
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/recall.py",
+                "line": 295,
+                "function": "lexical",
+                "calls": 3,
+                "self_ms": 0.026580000000000003,
+                "cumulative_ms": 0.32929200000000003
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/recall.py",
+                "line": 378,
+                "function": "entry_routing_match",
+                "calls": 10002,
+                "self_ms": 4.363252000000001,
+                "cumulative_ms": 13.446306000000002
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/recall.py",
+                "line": 401,
+                "function": "entry_candidate_rows",
+                "calls": 4,
+                "self_ms": 7.1474850000000005,
+                "cumulative_ms": 20.628792
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/recall.py",
+                "line": 439,
+                "function": "candidates",
+                "calls": 1,
+                "self_ms": 0.02475,
+                "cumulative_ms": 21.417
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/recall.py",
+                "line": 634,
+                "function": "recall",
+                "calls": 1,
+                "self_ms": 0.006334000000000001,
+                "cumulative_ms": 23.036792000000002
+              }
+            ],
+            "top_self": [
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.compile>",
+                "calls": 60,
+                "self_ms": 86.127122,
+                "cumulative_ms": 86.127122
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/recall.py",
+                "line": 401,
+                "function": "entry_candidate_rows",
+                "calls": 4,
+                "self_ms": 7.1474850000000005,
+                "cumulative_ms": 20.628792
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/recall.py",
+                "line": 378,
+                "function": "entry_routing_match",
+                "calls": 10002,
+                "self_ms": 4.363252000000001,
+                "cumulative_ms": 13.446306000000002
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _imp.create_dynamic>",
+                "calls": 13,
+                "self_ms": 3.8517060000000005,
+                "cumulative_ms": 3.8517060000000005
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/recall.py",
+                "line": 176,
+                "function": "normalize",
+                "calls": 20042,
+                "self_ms": 3.452788,
+                "cumulative_ms": 4.602763
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/recall.py",
+                "line": 387,
+                "function": "<genexpr>",
+                "calls": 30006,
+                "self_ms": 3.0879130000000004,
+                "cumulative_ms": 3.0879130000000004
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.stat>",
+                "calls": 1149,
+                "self_ms": 2.916741,
+                "cumulative_ms": 2.9183660000000002
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method io.open_code>",
+                "calls": 118,
+                "self_ms": 2.014128,
+                "cumulative_ms": 2.014128
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.any>",
+                "calls": 10041,
+                "self_ms": 1.42121,
+                "cumulative_ms": 4.739578000000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.__build_class__>",
+                "calls": 236,
+                "self_ms": 1.413164,
+                "cumulative_ms": 2.830372
+              }
+            ],
+            "module_bodies": [
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/shutil.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.025249,
+                "cumulative_ms": 6.046125
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.010625,
+                "cumulative_ms": 27.03575
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/dataclasses.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.016002,
+                "cumulative_ms": 18.685958000000003
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/inspect.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.575918,
+                "cumulative_ms": 12.050041
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "dev-b10000-crowded-lexical",
+      "mode": "dev",
+      "background": 10000,
+      "case": {
+        "id": "crowded-lexical",
+        "query": "receipt calibration",
+        "project": "relay",
+        "limit": 8,
+        "expected_refs": [
+          "entry:note:crowded-target"
+        ],
+        "excluded_refs": [],
+        "expected_no_match": false,
+        "expect_ref": "entry:note:crowded-target",
+        "include_hypotheses": false
+      },
+      "samples": [
+        {
+          "round": 1,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 295.556208,
+          "baseline_ms": 304.688,
+          "candidate_minus_baseline_ms": -9.131791999999962
+        },
+        {
+          "round": 2,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 305.035625,
+          "candidate_ms": 473.189542,
+          "candidate_minus_baseline_ms": 168.15391700000004
+        },
+        {
+          "round": 3,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 428.014125,
+          "baseline_ms": 301.9685,
+          "candidate_minus_baseline_ms": 126.04562499999997
+        },
+        {
+          "round": 4,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 335.033708,
+          "candidate_ms": 304.505583,
+          "candidate_minus_baseline_ms": -30.52812499999999
+        },
+        {
+          "round": 5,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 295.191333,
+          "baseline_ms": 305.145917,
+          "candidate_minus_baseline_ms": -9.954584000000011
+        },
+        {
+          "round": 6,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 309.836208,
+          "candidate_ms": 425.19675,
+          "candidate_minus_baseline_ms": 115.36054200000001
+        },
+        {
+          "round": 7,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 438.28475,
+          "baseline_ms": 304.067292,
+          "candidate_minus_baseline_ms": 134.21745799999997
+        },
+        {
+          "round": 8,
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "baseline_ms": 300.218125,
+          "candidate_ms": 296.394583,
+          "candidate_minus_baseline_ms": -3.823541999999975
+        },
+        {
+          "round": 9,
+          "order": [
+            "candidate",
+            "baseline"
+          ],
+          "candidate_ms": 293.147542,
+          "baseline_ms": 322.530542,
+          "candidate_minus_baseline_ms": -29.383000000000038
+        }
+      ],
+      "normal_outcome": {
+        "returned_refs": [
+          "entry:note:background-00001",
+          "entry:note:background-00004",
+          "entry:note:background-00010",
+          "entry:note:background-00013",
+          "entry:note:background-00016",
+          "entry:note:background-00022",
+          "entry:note:background-00025",
+          "entry:note:background-00031"
+        ],
+        "positions": {
+          "entry:note:crowded-target": null
+        },
+        "hit_at_limit": false,
+        "recall_at_limit": 0.0,
+        "reciprocal_rank": 0,
+        "no_match": false,
+        "candidate_count": 160,
+        "output_chars": 10258,
+        "truncated": true,
+        "budget": {
+          "max_chars": 16000,
+          "output_chars": 10258,
+          "omitted_results": 152,
+          "omitted_edges": 0
+        },
+        "quality_misses": [
+          "target absent: entry:note:crowded-target"
+        ],
+        "invariant_failures": []
+      },
+      "baseline": {
+        "samples_ms": [
+          304.688,
+          305.035625,
+          301.9685,
+          335.033708,
+          305.145917,
+          309.836208,
+          304.067292,
+          300.218125,
+          322.530542
+        ],
+        "median_ms": 305.035625,
+        "p95_ms": 335.033708,
+        "p95_method": "nearest-rank; small samples do not estimate a stable tail",
+        "min_ms": 300.218125,
+        "max_ms": 335.033708
+      },
+      "candidate": {
+        "samples_ms": [
+          295.556208,
+          473.189542,
+          428.014125,
+          304.505583,
+          295.191333,
+          425.19675,
+          438.28475,
+          296.394583,
+          293.147542
+        ],
+        "median_ms": 304.505583,
+        "p95_ms": 473.189542,
+        "p95_method": "nearest-rank; small samples do not estimate a stable tail",
+        "min_ms": 293.147542,
+        "max_ms": 473.189542
+      },
+      "median_paired_delta_ms": -3.823541999999975,
+      "diagnostics": {
+        "baseline": {
+          "counts": {
+            "fts_rows_fetched": 161,
+            "fts_shortlisted": 160,
+            "entries_scanned": 10005,
+            "entities_scanned": 0,
+            "entries_scored": 160,
+            "entries_prefiltered": 9845,
+            "expected_entry_probes": 1,
+            "direct_rejected": {
+              "routing_prefilter": 9844,
+              "fts_not_shortlisted": 1
+            },
+            "direct_candidates": 160,
+            "graph_seeds": 3,
+            "graph_links_fetched": 0,
+            "graph_links_examined": 0,
+            "graph_rejected": {},
+            "graph_candidates": 0,
+            "candidates": 160,
+            "selected": 8,
+            "returned": 8,
+            "budget_omitted": 0
+          },
+          "fts_shortlist_truncated": true,
+          "graph_links_truncated": false,
+          "expected": {
+            "ref": "entry:note:crowded-target",
+            "knowledge_state": "confirmed",
+            "direct_stage": "fts_not_shortlisted",
+            "graph_stage": "not_reached",
+            "direct_rank": null,
+            "selected_position": null,
+            "returned_position": null,
+            "outcome": "fts_not_shortlisted"
+          }
+        },
+        "candidate": {
+          "counts": {
+            "fts_rows_fetched": 161,
+            "fts_shortlisted": 160,
+            "entries_scanned": 10005,
+            "entities_scanned": 0,
+            "entries_scored": 160,
+            "entries_prefiltered": 9845,
+            "expected_entry_probes": 1,
+            "direct_rejected": {
+              "routing_prefilter": 9844,
+              "fts_not_shortlisted": 1
+            },
+            "direct_candidates": 160,
+            "graph_seeds": 3,
+            "graph_links_fetched": 0,
+            "graph_links_examined": 0,
+            "graph_rejected": {},
+            "graph_candidates": 0,
+            "candidates": 160,
+            "selected": 8,
+            "returned": 8,
+            "budget_omitted": 0
+          },
+          "fts_shortlist_truncated": true,
+          "graph_links_truncated": false,
+          "expected": {
+            "ref": "entry:note:crowded-target",
+            "knowledge_state": "confirmed",
+            "direct_stage": "fts_not_shortlisted",
+            "graph_stage": "not_reached",
+            "direct_rank": null,
+            "selected_position": null,
+            "returned_position": null,
+            "outcome": "fts_not_shortlisted"
+          }
+        }
+      },
+      "profiles": {
+        "baseline": {
+          "launcher": {
+            "profile_seconds": 0.182359212,
+            "phases": [
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 1002,
+                "function": "_find_and_load",
+                "calls": 52,
+                "self_ms": 0.141693,
+                "cumulative_ms": 179.80054
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/runtime.py",
+                "line": 45,
+                "function": "describe_runtime",
+                "calls": 1,
+                "self_ms": 0.007878,
+                "cumulative_ms": 0.135542
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 153,
+                "function": "resolve_settings",
+                "calls": 1,
+                "self_ms": 0.010043,
+                "cumulative_ms": 0.339833
+              }
+            ],
+            "top_self": [
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _imp.create_dynamic>",
+                "calls": 15,
+                "self_ms": 77.737207,
+                "cumulative_ms": 77.737207
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.compile>",
+                "calls": 33,
+                "self_ms": 74.68720900000001,
+                "cumulative_ms": 74.68720900000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method __new__ of type object at 0x1015c2860>",
+                "calls": 133,
+                "self_ms": 8.552668,
+                "cumulative_ms": 8.552668
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<method 'read' of '_io.BufferedReader' objects>",
+                "calls": 33,
+                "self_ms": 6.130913,
+                "cumulative_ms": 6.130913
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.stat>",
+                "calls": 177,
+                "self_ms": 1.4967920000000001,
+                "cumulative_ms": 1.5056260000000001
+              },
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 901,
+                "function": "_find_spec",
+                "calls": 52,
+                "self_ms": 1.4336300000000002,
+                "cumulative_ms": 4.075586
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method io.open_code>",
+                "calls": 64,
+                "self_ms": 1.293998,
+                "cumulative_ms": 1.293998
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.__build_class__>",
+                "calls": 119,
+                "self_ms": 0.7449560000000001,
+                "cumulative_ms": 1.395251
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.exec>",
+                "calls": 44,
+                "self_ms": 0.583914,
+                "cumulative_ms": 181.730167
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.eval>",
+                "calls": 12,
+                "self_ms": 0.33658600000000005,
+                "cumulative_ms": 0.33800100000000005
+              }
+            ],
+            "module_bodies": [
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/inspect.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.048001,
+                "cumulative_ms": 11.289167
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/runtime.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.019457,
+                "cumulative_ms": 77.06341700000002
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/dataclasses.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.018166,
+                "cumulative_ms": 19.959208000000004
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/shutil.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.040544000000000004,
+                "cumulative_ms": 24.34675
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.011833,
+                "cumulative_ms": 62.751833000000005
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/tempfile.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.019334,
+                "cumulative_ms": 49.480417
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py",
+                "line": 10,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.025833000000000002,
+                "cumulative_ms": 72.30045900000002
+              }
+            ]
+          },
+          "runtime": {
+            "profile_seconds": 0.17369807500000023,
+            "phases": [
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 1002,
+                "function": "_find_and_load",
+                "calls": 93,
+                "self_ms": 0.22820400000000002,
+                "cumulative_ms": 123.49433300000001
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/memory.py",
+                "line": 541,
+                "function": "parser",
+                "calls": 1,
+                "self_ms": 0.084664,
+                "cumulative_ms": 24.672000000000004
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/compact.py",
+                "line": 78,
+                "function": "fit_response",
+                "calls": 1,
+                "self_ms": 0.003373,
+                "cumulative_ms": 1.583666
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 153,
+                "function": "resolve_settings",
+                "calls": 1,
+                "self_ms": 0.013334000000000002,
+                "cumulative_ms": 1.536
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 634,
+                "function": "recall",
+                "calls": 1,
+                "self_ms": 0.074626,
+                "cumulative_ms": 35.274167000000006
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 295,
+                "function": "lexical",
+                "calls": 160,
+                "self_ms": 1.099181,
+                "cumulative_ms": 4.100793
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 378,
+                "function": "entry_routing_match",
+                "calls": 9845,
+                "self_ms": 4.3749,
+                "cumulative_ms": 9.767447
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 401,
+                "function": "entry_candidate_rows",
+                "calls": 161,
+                "self_ms": 5.331497,
+                "cumulative_ms": 15.867492
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 439,
+                "function": "candidates",
+                "calls": 1,
+                "self_ms": 0.46295300000000006,
+                "cumulative_ms": 33.158125000000005
+              }
+            ],
+            "top_self": [
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.compile>",
+                "calls": 63,
+                "self_ms": 97.259628,
+                "cumulative_ms": 97.259628
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<method 'execute' of 'sqlite3.Connection' objects>",
+                "calls": 336,
+                "self_ms": 11.953040000000001,
+                "cumulative_ms": 11.953040000000001
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 401,
+                "function": "entry_candidate_rows",
+                "calls": 161,
+                "self_ms": 5.331497,
+                "cumulative_ms": 15.867492
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 378,
+                "function": "entry_routing_match",
+                "calls": 9845,
+                "self_ms": 4.3749,
+                "cumulative_ms": 9.767447
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _imp.create_dynamic>",
+                "calls": 16,
+                "self_ms": 4.293627000000001,
+                "cumulative_ms": 4.293627000000001
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 176,
+                "function": "normalize",
+                "calls": 20976,
+                "self_ms": 3.5057840000000002,
+                "cumulative_ms": 4.774977000000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.stat>",
+                "calls": 1179,
+                "self_ms": 3.252501,
+                "cumulative_ms": 3.2539590000000005
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method io.open_code>",
+                "calls": 124,
+                "self_ms": 2.1561640000000004,
+                "cumulative_ms": 2.1561640000000004
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.__build_class__>",
+                "calls": 243,
+                "self_ms": 1.515543,
+                "cumulative_ms": 3.080417
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates/src/richi/recall.py",
+                "line": 295,
+                "function": "lexical",
+                "calls": 160,
+                "self_ms": 1.099181,
+                "cumulative_ms": 4.100793
+              }
+            ],
+            "module_bodies": [
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/shutil.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.032957,
+                "cumulative_ms": 6.428458000000001
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/tempfile.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.012918,
+                "cumulative_ms": 2.9581670000000004
+              },
+              {
+                "file": "/private/tmp/richi-recall-candidates-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.016374,
+                "cumulative_ms": 33.897125
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/dataclasses.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.019791,
+                "cumulative_ms": 20.179041
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/inspect.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.6311260000000001,
+                "cumulative_ms": 12.772583000000001
+              }
+            ]
+          }
+        },
+        "candidate": {
+          "launcher": {
+            "profile_seconds": 0.05264329399999999,
+            "phases": [
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 1002,
+                "function": "_find_and_load",
+                "calls": 46,
+                "self_ms": 0.090376,
+                "cumulative_ms": 50.757667000000005
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/runtime.py",
+                "line": 43,
+                "function": "describe_runtime",
+                "calls": 1,
+                "self_ms": 0.00575,
+                "cumulative_ms": 0.116167
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 152,
+                "function": "resolve_settings",
+                "calls": 1,
+                "self_ms": 0.007707000000000001,
+                "cumulative_ms": 0.261417
+              }
+            ],
+            "top_self": [
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.compile>",
+                "calls": 30,
+                "self_ms": 39.406960000000005,
+                "cumulative_ms": 39.406960000000005
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _imp.create_dynamic>",
+                "calls": 13,
+                "self_ms": 3.290668,
+                "cumulative_ms": 3.290668
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.stat>",
+                "calls": 159,
+                "self_ms": 0.876963,
+                "cumulative_ms": 0.885171
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method io.open_code>",
+                "calls": 58,
+                "self_ms": 0.7715420000000001,
+                "cumulative_ms": 0.7715420000000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.__build_class__>",
+                "calls": 107,
+                "self_ms": 0.645416,
+                "cumulative_ms": 1.0928300000000002
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.exec>",
+                "calls": 41,
+                "self_ms": 0.4692120000000001,
+                "cumulative_ms": 52.306667000000004
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.open>",
+                "calls": 4,
+                "self_ms": 0.353833,
+                "cumulative_ms": 0.35441700000000004
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.eval>",
+                "calls": 11,
+                "self_ms": 0.284376,
+                "cumulative_ms": 0.28545800000000005
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.unlink>",
+                "calls": 1,
+                "self_ms": 0.24108400000000002,
+                "cumulative_ms": 0.24108400000000002
+              },
+              {
+                "file": "<frozen importlib._bootstrap_external>",
+                "line": 1505,
+                "function": "find_spec",
+                "calls": 67,
+                "self_ms": 0.221621,
+                "cumulative_ms": 1.369416
+              }
+            ],
+            "module_bodies": [
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/dataclasses.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.015583,
+                "cumulative_ms": 18.089875000000003
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/inspect.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.045875000000000006,
+                "cumulative_ms": 10.458208
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/runtime.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.008999,
+                "cumulative_ms": 0.405708
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.007667000000000001,
+                "cumulative_ms": 0.488375
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/tempfile.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.013584,
+                "cumulative_ms": 11.947875
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/shutil.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.026749000000000002,
+                "cumulative_ms": 5.732833
+              }
+            ]
+          },
+          "runtime": {
+            "profile_seconds": 0.15309149999999994,
+            "phases": [
+              {
+                "file": "<frozen importlib._bootstrap>",
+                "line": 1002,
+                "function": "_find_and_load",
+                "calls": 87,
+                "self_ms": 0.181124,
+                "cumulative_ms": 107.54358300000001
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/memory.py",
+                "line": 541,
+                "function": "parser",
+                "calls": 1,
+                "self_ms": 0.08191000000000001,
+                "cumulative_ms": 21.923125000000002
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/compact.py",
+                "line": 78,
+                "function": "fit_response",
+                "calls": 1,
+                "self_ms": 0.003124,
+                "cumulative_ms": 1.514458
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 152,
+                "function": "resolve_settings",
+                "calls": 1,
+                "self_ms": 0.009041,
+                "cumulative_ms": 1.2850000000000001
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/recall.py",
+                "line": 295,
+                "function": "lexical",
+                "calls": 160,
+                "self_ms": 0.8875240000000001,
+                "cumulative_ms": 3.3321630000000004
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/recall.py",
+                "line": 378,
+                "function": "entry_routing_match",
+                "calls": 9845,
+                "self_ms": 4.07014,
+                "cumulative_ms": 9.212201
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/recall.py",
+                "line": 401,
+                "function": "entry_candidate_rows",
+                "calls": 161,
+                "self_ms": 5.466499000000001,
+                "cumulative_ms": 15.213157
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/recall.py",
+                "line": 439,
+                "function": "candidates",
+                "calls": 1,
+                "self_ms": 0.35677500000000006,
+                "cumulative_ms": 29.855458000000002
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/recall.py",
+                "line": 634,
+                "function": "recall",
+                "calls": 1,
+                "self_ms": 0.058334000000000004,
+                "cumulative_ms": 31.830834000000003
+              }
+            ],
+            "top_self": [
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.compile>",
+                "calls": 60,
+                "self_ms": 85.72279,
+                "cumulative_ms": 85.72279
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<method 'execute' of 'sqlite3.Connection' objects>",
+                "calls": 336,
+                "self_ms": 10.246835,
+                "cumulative_ms": 10.246835
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/recall.py",
+                "line": 401,
+                "function": "entry_candidate_rows",
+                "calls": 161,
+                "self_ms": 5.466499000000001,
+                "cumulative_ms": 15.213157
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/recall.py",
+                "line": 378,
+                "function": "entry_routing_match",
+                "calls": 9845,
+                "self_ms": 4.07014,
+                "cumulative_ms": 9.212201
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _imp.create_dynamic>",
+                "calls": 13,
+                "self_ms": 3.4428310000000004,
+                "cumulative_ms": 3.4428310000000004
+              },
+              {
+                "file": "/private/tmp/richi-recall-hotpaths/src/richi/recall.py",
+                "line": 176,
+                "function": "normalize",
+                "calls": 20976,
+                "self_ms": 3.305477,
+                "cumulative_ms": 4.467636000000001
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method posix.stat>",
+                "calls": 1149,
+                "self_ms": 2.565786,
+                "cumulative_ms": 2.567162
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method io.open_code>",
+                "calls": 118,
+                "self_ms": 1.791997,
+                "cumulative_ms": 1.791997
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method builtins.__build_class__>",
+                "calls": 236,
+                "self_ms": 1.343091,
+                "cumulative_ms": 2.739498
+              },
+              {
+                "file": "~",
+                "line": 0,
+                "function": "<built-in method _sqlite3.connect>",
+                "calls": 1,
+                "self_ms": 1.0125000000000002,
+                "cumulative_ms": 1.0125000000000002
+              }
+            ],
+            "module_bodies": [
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/shutil.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.020875,
+                "cumulative_ms": 5.53875
+              },
+              {
+                "file": "/private/tmp/richi-hotpaths-venv/lib/python3.9/site-packages/richi_launcher/config.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.008960000000000001,
+                "cumulative_ms": 28.082959000000002
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/dataclasses.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.014039000000000001,
+                "cumulative_ms": 19.267916
+              },
+              {
+                "file": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/inspect.py",
+                "line": 1,
+                "function": "<module>",
+                "calls": 1,
+                "self_ms": 0.523332,
+                "cumulative_ms": 11.894
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "invariant_failures": [],
+  "readonly_unchanged": true,
+  "summary": {
+    "execution_completed": true,
+    "parity_and_invariants_passed": true,
+    "quality_miss_conditions": 4,
+    "ordinary_measured_calls": 144
+  },
+  "completed_at": "2026-10-16T17:33:36.819735+00:00"
+}

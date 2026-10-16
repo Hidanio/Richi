@@ -5,9 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import subprocess
 import sys
-import tempfile
 import time
 
 from .config import ConfigError
@@ -156,6 +154,8 @@ def runtime_command(runtime, argv, action="cli"):
         raise ValueError("Unknown runtime action")
     command = [sys.executable, "-I", "-B"]
     if runtime.mode == "dev":
+        import tempfile
+
         # -B alone still reads .pyc. A unique, unwritten prefix avoids stale
         # imports for same-size edits inside a filesystem timestamp tick.
         prefix = str(Path(tempfile.gettempdir()) / ("richi-bytecode-%d-%d" % (os.getpid(), time.monotonic_ns())))
@@ -178,6 +178,8 @@ def lease_fds():
 
 
 def preflight(runtime, database, config_file=None):
+    import subprocess
+
     environment = dict(os.environ)
     if config_file is not None:
         environment["RICHI_CONFIG"] = str(config_file)
