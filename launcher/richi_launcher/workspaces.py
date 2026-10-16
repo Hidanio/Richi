@@ -9,7 +9,6 @@ import json
 import os
 from pathlib import Path
 import re
-import tempfile
 
 from .config import ConfigError, _load, _path, _platform_dirs, _unique_object
 
@@ -163,6 +162,8 @@ def _registry_lock():
 
 
 def _atomic_json(path, value):
+    import tempfile
+
     temporary = None
     try:
         fd, temporary = tempfile.mkstemp(prefix="." + path.name + ".", dir=str(path.parent))
