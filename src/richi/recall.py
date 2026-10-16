@@ -48,6 +48,8 @@ class RecallTrace:
     def __init__(self, conn, expected_ref, states, api):
         self.counts = {"fts_rows_fetched": 0, "fts_shortlisted": 0,
                        "entries_scanned": 0, "entities_scanned": 0,
+                       "entries_scored": 0, "entries_prefiltered": 0,
+                       "expected_entry_probes": 0,
                        "direct_rejected": {}, "direct_candidates": 0,
                        "graph_seeds": 0, "graph_links_fetched": 0,
                        "graph_links_examined": 0, "graph_rejected": {},
@@ -373,6 +375,67 @@ def lexical_rejection(record, score, reasons, keys, subjects, symbols):
     return None
 
 
+def entry_routing_match(row, normalized_query, query_phrase, variants):
+    """A conservative metadata gate for lexical()'s existing FTS exceptions.
+
+    Whole-key and subject guards still run on the full record. Do not use SQL
+    lower/NOCASE here: existing Unicode casefold and ё/е semantics differ.
+    """
+    identity = normalize(row["id"])
+    if normalized_query in {identity, "entry:" + identity}:
+        return True
+    if normalize(row["jira_key"]) in variants or any(
+            identity in {key, "task:" + key, "jira:" + key} for key in variants):
+        return True
+    if row["aliases"] == "[]":
+        return False
+    padded_query = " " + query_phrase + " "
+    for value in json.loads(row["aliases"]):
+        alias = phrase(value)
+        if alias and (alias == query_phrase or
+                      (" " in alias and " " + alias + " " in padded_query)):
+            return True
+    return False
+
+
+def entry_candidate_rows(conn, query, keys, states, fts_ranks, has_fts, trace):
+    """Read full entries only after routing; preserve the no-FTS fallback.
+
+    recall() keeps a read snapshot while metadata and PK lookups run.
+    An excluded --expect target may be read once to explain its old lexical
+    guard, but that diagnostic probe never enters retrieval's candidate set.
+    """
+    states_sql = ",".join("?" for _ in states)
+    fields = "id, jira_key, aliases" if has_fts else "*"
+    rows = conn.execute("SELECT " + fields + " FROM entries WHERE 1=1 AND knowledge_state IN (" + states_sql + ")", states)
+    normalized_query = normalize(query).strip()
+    query_phrase = phrase(query)
+    variants = {variant for key in keys for variant in key_variants(key)}
+    for row in rows:
+        if trace:
+            # Count each visited entry once, even when its full payload is read.
+            trace.counts["entries_scanned"] += 1
+        if not has_fts:
+            yield row, False
+            continue
+        admitted = row["id"] in fts_ranks or entry_routing_match(
+            row, normalized_query, query_phrase, variants)
+        node_ref = "entry:" + row["id"]
+        probe = False
+        if not admitted:
+            if trace:
+                trace.counts["entries_prefiltered"] += 1
+                probe = bool(trace.expected and trace.expected["ref"] == node_ref)
+                if not probe:
+                    trace.direct(node_ref, "routing_prefilter")
+            if not probe:
+                continue
+        full = conn.execute("SELECT * FROM entries WHERE 1=1 AND id = ?", (row["id"],)).fetchone()
+        if probe:
+            trace.counts["expected_entry_probes"] += 1
+        yield full, probe
+
+
 def candidates(conn, query, terms, keys, states, project, api, trace=None):
     states_sql = ",".join("?" for _ in states)
     candidates_by_ref, fts_ranks, discarded_weak = {}, {}, 0
@@ -397,19 +460,22 @@ def candidates(conn, query, terms, keys, states, project, api, trace=None):
         if trace:
             trace.counts.update(fts_rows_fetched=len(rows), fts_shortlisted=len(fts_ranks))
 
-    # A light scan supplies exact aliases/IDs that tokenization can miss. When FTS
-    # is absent the same scan also acts as the Unicode lexical fallback.
-    rows = conn.execute("SELECT * FROM entries WHERE 1=1 AND knowledge_state IN (" + states_sql + ")", states)
-    for row in rows:
+    # Preserve all FTS exceptions without loading/scoring unrelated full texts.
+    for row, probe in entry_candidate_rows(conn, query, keys, states, fts_ranks, has_fts, trace):
         record = decode(row)
         node_ref = "entry:" + record["id"]
-        if trace:
-            trace.counts["entries_scanned"] += 1
+        if trace and not probe:
+            trace.counts["entries_scored"] += 1
         score, reasons = lexical(record, query, terms, keys, "entry")
         rank = fts_ranks.get(record["id"])
         # FTS rank and project proximity can rank evidence, but cannot turn an
         # absent substantive lexical anchor into evidence for the question.
         rejection = lexical_rejection(record, score, reasons, keys, subjects, symbols)
+        if probe:
+            # Explain only this excluded target against the executed shortlist.
+            # Do not change candidates, rankings, or discarded_weak reporting.
+            trace.direct(node_ref, rejection or "fts_not_shortlisted")
+            continue
         if rejection:
             discarded_weak += int(rank is not None)
             if trace:
@@ -566,6 +632,16 @@ def concept_ambiguity(direct):
 
 
 def recall(conn, args, api, *, bounded=True):
+    # CLI callers already own a read transaction. Direct API callers need the
+    # same snapshot across routing, payload lookup, and graph expansion. Never
+    # commit or roll back a transaction owned by the caller.
+    if conn.in_transaction:
+        return _recall(conn, args, api, bounded=bounded)
+    with api.transaction(conn, write=False):
+        return _recall(conn, args, api, bounded=bounded)
+
+
+def _recall(conn, args, api, *, bounded=True):
     query = api.string(args.query, "query").strip()
     if len(query) > 2000:
         raise api.MemoryError("Recall query must be at most 2000 characters")
