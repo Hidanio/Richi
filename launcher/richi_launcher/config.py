@@ -12,7 +12,6 @@ import os
 from pathlib import Path
 import stat
 import sys
-import tempfile
 from typing import Optional
 
 
@@ -211,6 +210,8 @@ def set_config_value(key, value, config_file=None, workspace=None):
     selected checkout need not exist or import successfully: disabling dev must
     remain possible when development code is unavailable.
     """
+    import tempfile
+
     if key == "dev":
         if type(value) is not bool:
             raise ConfigError("config dev must be a boolean")
