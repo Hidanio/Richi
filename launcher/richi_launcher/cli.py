@@ -22,7 +22,7 @@ class Parser(argparse.ArgumentParser):
 
 
 def _selectors(argv):
-    # Consume only global selectors and map's supported local selectors. Never
+    # Consume only global options and map's supported local selectors. Never
     # interpret option-looking recall text or another command's payload.
     options = {}
     position = 0
@@ -31,6 +31,10 @@ def _selectors(argv):
              "--chat": "chat_id", "--project-path": "project_path"}
     while position < len(argv):
         token = argv[position]
+        if token == "--compact-json":
+            options["compact_json"] = True
+            position += 1
+            continue
         key, sep, value = token.partition("=")
         if key.startswith("-w") and key != "-w":
             # argparse accepts -wNAME as well as -w NAME and -w=NAME.
@@ -77,12 +81,13 @@ def _wants_help(arguments):
     return "--help" in options or "-h" in options
 
 
-def _emit(result):
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+def _emit(result, *, compact_json=False):
+    print(json.dumps(result, ensure_ascii=False, indent=None if compact_json else 2,
+                     separators=(",", ":") if compact_json else None))
     return 0
 
 
-def configuration(argv, selectors):
+def configuration(argv, selectors, *, compact_json=False):
     parser = Parser(prog="richi config", description="Inspect settings or select installed/development code")
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("show")
@@ -120,7 +125,7 @@ def configuration(argv, selectors):
         result["installed_runtime"] = installed_runtime().as_dict()
     except ConfigError as exc:
         result["installed_runtime"] = {"available": False, "error": str(exc)}
-    return _emit(result)
+    return _emit(result, compact_json=compact_json)
 
 
 def _choose_workspace():
@@ -146,7 +151,7 @@ def _choose_workspace():
     return choices[selected - 1]["name"]
 
 
-def workspace_command(argv, selectors, alias=False):
+def workspace_command(argv, selectors, alias=False, *, compact_json=False):
     parser = Parser(prog="richi use" if alias else "richi workspace",
                     description="Create isolated workspaces and select the default for future commands")
     if alias:
@@ -165,22 +170,22 @@ def workspace_command(argv, selectors, alias=False):
         settings = resolve_settings(**selectors)
         return _emit({"workspace": settings.workspace, "config_file": str(settings.config_file),
                       "database": str(settings.database), "data_dir": str(settings.data_dir),
-                      "initialized": settings.database.is_file()})
+                      "initialized": settings.database.is_file()}, compact_json=compact_json)
     if selectors:
         raise ConfigError("Storage selectors apply to workspace current; use workspace list/create/use without --workspace, --config or --db")
     if args.action == "list":
-        return _emit(list_workspaces())
+        return _emit(list_workspaces(), compact_json=compact_json)
     if args.action == "create":
         result = create_workspace(args.name)
         result["next_command"] = "richi --workspace " + args.name + " init"
-        return _emit(result)
+        return _emit(result, compact_json=compact_json)
     name = args.name if args.name is not None else _choose_workspace()
     result = use_workspace(name)
     result["scope"] = "Default for future commands; explicit --workspace/--config and RICHI_* selectors take precedence"
-    return _emit(result)
+    return _emit(result, compact_json=compact_json)
 
 
-def chat_command(argv, selectors, chat_id):
+def chat_command(argv, selectors, chat_id, *, compact_json=False):
     parser = Parser(prog="richi chat", description="Choose a workspace for this chat without changing the CLI default")
     actions = parser.add_subparsers(dest="action", required=True)
     actions.add_parser("current", help="Inspect this chat binding and the current CLI workspace")
@@ -193,15 +198,19 @@ def chat_command(argv, selectors, chat_id):
     if selectors:
         raise ConfigError("Use chat bind NAME or chat bind --current without storage selectors")
     if args.action == "current":
-        return _emit(current_chat(chat_id))
+        return _emit(current_chat(chat_id), compact_json=compact_json)
     reject_storage_overrides(selectors)
-    return _emit(bind_chat(chat_id, workspace=args.name, current=args.current, replace=args.replace))
+    return _emit(bind_chat(chat_id, workspace=args.name, current=args.current, replace=args.replace),
+                 compact_json=compact_json)
 
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     try:
         selectors, command, tail = _selectors(argv)
+        # Presentation is not a storage selector and must never affect binding
+        # checks, recovery commands, or the selected runtime's configuration.
+        compact_json = selectors.pop("compact_json", False)
         if command == "update":
             from .update import command as update_command
             # Package updates are installation-wide and never select/read a
@@ -209,19 +218,19 @@ def main(argv=None):
             selectors.pop("chat_id", None)
             if selectors:
                 raise ConfigError("Updates affect this installation, not a workspace; omit --workspace, --config, --db and --project-path")
-            return _emit(update_command(tail))
+            return _emit(update_command(tail), compact_json=compact_json)
         chat_id = detect_chat(selectors.pop("chat_id", None))
         project_path = selectors.pop("project_path", None)
         if project_path is not None and command in {"chat", "config", "workspace", "use", "map"}:
             raise ConfigError("--project-path applies to knowledge commands, not " + command)
         if command == "chat":
-            return chat_command(tail, selectors, chat_id)
+            return chat_command(tail, selectors, chat_id, compact_json=compact_json)
         if command == "status":
             from .status import command as status_command
-            return _emit(status_command(tail, selectors, chat_id, project_path))
+            return _emit(status_command(tail, selectors, chat_id, project_path), compact_json=compact_json)
         if command == "config":
             selectors = pin_chat(chat_id, selectors, metadata=tail == ["show"] or _wants_help(tail))
-            return configuration(tail, selectors)
+            return configuration(tail, selectors, compact_json=compact_json)
         if command in {"workspace", "use"}:
             state = current_chat(chat_id) if chat_id is not None else None
             if state and (command == "use" or tail[:1] == ["use"]):
@@ -229,7 +238,7 @@ def main(argv=None):
                                 "chat_global_use_forbidden", chat_id=chat_id, workspace=state["workspace"])
             if command == "workspace" and tail[:1] == ["current"]:
                 selectors = pin_chat(chat_id, selectors, metadata=True)
-            return workspace_command(tail, selectors, alias=command == "use")
+            return workspace_command(tail, selectors, alias=command == "use", compact_json=compact_json)
         if chat_id is not None and (command in {None, "--help", "-h", "--version"}
                                     or _wants_help(tail)):
             # Help does not require a choice or working development sources.
@@ -253,6 +262,8 @@ def main(argv=None):
             arguments += ["--config", str(settings.config_file)]
         if project_path is not None:
             arguments += ["--project-path", project_path]
+        if compact_json:
+            arguments.append("--compact-json")
         if command is not None:
             arguments.append(command)
         arguments.extend(tail)

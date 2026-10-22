@@ -415,12 +415,13 @@ def impact(conn, args, api, database, *, bounded=True, states=None):
                                     "changed_paths": displayed_paths,
                                     "changed_paths_omitted": len(overlap) - len(displayed_paths),
                                     "match_reason": mode}
-                match_size = len(git_sources._render(match))
+                # This is an internal work cap, independent of CLI presentation.
+                match_size = len(git_sources._render(match, compact=False))
                 matches.append(match)
                 match_chars += match_size
                 matches.sort(key=lambda item: _match_rank(item, base, target))
                 while match_chars > MAX_MATCH_DETAIL_CHARS and len(matches) > 1:
-                    match_chars -= len(git_sources._render(matches.pop()))
+                    match_chars -= len(git_sources._render(matches.pop(), compact=False))
         if match_count:
             matching_records += 1
             rank = lambda card: card["_rank"]

@@ -1,8 +1,9 @@
 """Bounded reading views. Excerpts are verbatim evidence, never new summaries."""
 import argparse
 import copy
-import json
 import re
+
+from .output import rendered
 
 
 EXCERPT_NOTE = "Partial verbatim excerpt; limitations may be omitted. Read the full record before drawing a conclusion."
@@ -14,10 +15,6 @@ def max_chars(value):
     if not 2000 <= number <= 100000:
         raise argparse.ArgumentTypeError("max-chars must be between 2000 and 100000")
     return number
-
-
-def rendered(value):
-    return json.dumps(value, ensure_ascii=False, indent=2) + "\n"
 
 
 def excerpt(text, limit):
