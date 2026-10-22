@@ -7,64 +7,11 @@ Git и Python 3.9+ без дополнительных библиотек. Он�
 
 ## Сохранить проверенную версию
 
-Проект должен иметь `repo_path` в `project list`. `--project` — его стабильный ID.
-Команды доступны из любой рабочей папки; ID и пути — синтетические примеры.
-Перед захватом проверьте checkout командой
-`richi project check /path/to/worktree --id service-example`.
-
-```sh
-# По умолчанию сохраняются фактические байты рабочей копии, включая правки.
-richi --project-path /path/to/worktree sources capture --project service-example \
-  --path internal/cache.go --output /tmp/cache-source-01.json
-
-# Явный выбор закоммиченного кода: HEAD, тег, локальная ветка или SHA.
-richi --project-path /path/to/worktree sources capture --project service-example \
-  --path internal/cache.go --rev HEAD --output /tmp/cache-commit-01.json
-
-richi entry get task:ABC-123
-richi sources attach --ref entry:task:ABC-123 \
-  --json /tmp/cache-source-01.json --expected-updated-at 'UPDATED_AT_FROM_GET'
-```
-
-Для `sources capture` checkout выбирается в таком порядке: явный `--repo`,
-корень Git-репозитория проверенного `--project-path`, зарегистрированный
-`repo_path`. Текущая папка терминала сама по себе checkout не выбирает.
-`--project-path` продолжает проверять принадлежность проекта выбранному workspace;
-явный `--repo` должен относиться к тому же Git common directory, что и
-зарегистрированный репозиторий. Если передан путь к подкаталогу worktree,
-`--path` всё равно задаётся от корня этого worktree.
-
-В ответе `capture` рядом с объектом `source` возвращается `capture_context`:
-`repo_root` — выбранный корень checkout, `selected_by` — `repo`, `project_path`
-или `registered`, `resolved_commit` — полный SHA разрешённого коммита
-(базовый HEAD для снимка рабочей копии). Перед добавлением источника проверьте,
-что это именно исследованный checkout и коммит.
-При `--output` в новый JSON сохраняется только объект `source`;
-`capture_context` остаётся диагностикой ответа. Файл не перезаписывается.
-Можно включить сохранённый объект в `sources` нового
-`entry/entity/edge put`. Для существующей карточки `attach` добавляет источник,
-сохраняя её содержание, остальные источники, связи с проектами и историю.
-Обязательный `expected_updated_at` защищает от параллельных изменений, в том
-числе при повторной отправке уже добавленного источника. После конфликта нужно
-прочитать карточку снова. `attach` также проверяет доступность сохранённых байтов.
-
-Выбор checkout через `--project-path` описан здесь только для `sources capture`.
-Для `git-check`, `diff`, `impact` и других Git-команд при работе с linked worktree
-передавайте `--repo` явно; один `--project-path` не выбирает для них checkout.
-
-`--rev` читает файл из коммита. Режим по умолчанию / `--worktree` сохраняет
-отдельный снимок байтов в `artifacts/git/<sha256>.blob` рядом с базой.
-Его базовый коммит — HEAD в момент захвата, а `dirty` показывает отличие
-именно этого файла от коммита. Незакоммиченный или untracked файл нельзя
-представлять как содержимое коммита. Для unborn-репозитория без HEAD захват
-не поддерживается. Удалённый файл можно захватить через прежний `--rev`.
-
-Новые источники содержат необязательный объект `git` версии 1:
-`repo_id`, `path`, `commit`, `blob`, `mode`, `dirty` и, для рабочей копии,
-`snapshot`. Верхние `revision`, `sha256`, `observed_at` заполняются автоматически.
-`blob` относится к базовому коммиту; у нового файла он `null`. Старые источники
-без `git` продолжают работать, миграция SQLite не нужна. Прежние записи
-автоматически к текущему HEAD не привязываются.
+Захват байтов, выбор checkout и безопасное добавление источника описаны в
+[GIT_CAPTURE.md](GIT_CAPTURE.md). Для Git-чтений ниже выбирайте linked worktree
+явным `--repo`: один `--project-path` проверяет membership, но не выбирает для
+них checkout. `sources related` читает сохранённые якоря, не выбирает checkout
+и не принимает `--repo`.
 
 ## Открыть код, историю и сравнение
 

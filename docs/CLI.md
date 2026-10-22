@@ -11,6 +11,13 @@ richi --help
 richi sources --help
 ```
 
+Для агента можно добавить глобальный `--compact-json` перед подкомандой:
+`richi --compact-json recall 'локальный кеш'`. Успешный JSON в stdout выводится
+без отступов; формат по умолчанию сохраняется. Бюджет `--max-chars` считается
+по выбранному формату, поэтому в тесный лимит могут поместиться дополнительные
+данные. Ошибки, help, файлы `--output` и карта не меняются; сочетание с `map`
+отклоняется. Контракт и измерения — в [COMPACT_OUTPUT.md](COMPACT_OUTPUT.md).
+
 Режим выбирается в настройках текущего workspace:
 
 ```sh
@@ -86,14 +93,19 @@ richi status --projects --limit 50
 
 | Задача | Справочник |
 |---|---|
-| Создать базу, зарегистрировать проект, сохранить результат, сделать backup | [CLI и формат записей](../skills/project-memory/references/CLI.md) |
+| Создать базу, зарегистрировать проект, сделать backup | [CLI](../skills/project-memory/references/CLI.md) |
+| Создать или полностью обновить запись, сохранить task-карточку | [Запись и защита от конфликтов](../skills/project-memory/references/ENTRY_WRITE.md) |
 | Найти прошлую работу и разобрать ограничения выдачи | [Recall](../skills/project-memory/references/RECALL.md) |
 | Собрать контекст вопроса и изменения кода | [Brief](../skills/project-memory/references/BRIEF.md) |
 | Связать знания с версиями кода, открыть историю и diff | [Git-источники](../skills/project-memory/references/GIT.md) |
+| Захватить проверенные байты из checkout/worktree и прикрепить источник | [Capture и attach](../skills/project-memory/references/GIT_CAPTURE.md) |
 | Найти знания по изменённым файлам | [Impact](../skills/project-memory/references/IMPACT.md) |
-| Создать сущности, связи и посмотреть соседей | [Граф](../skills/project-memory/references/GRAPH.md) |
+| Создать сущности и связи | [Граф](../skills/project-memory/references/GRAPH.md) |
+| Прочитать соседей известной записи | [Соседи и границы выдачи](../skills/project-memory/references/NEIGHBORS.md) |
 | Описать термины с разными значениями и версиями | [Энциклопедия](../skills/project-memory/references/ENCYCLOPEDIA.md) |
-| Разобрать пропущенный результат, проверить группу источников | [Диагностика](../skills/project-memory/references/DIAGNOSTICS.md) |
+| Разобрать пропущенный известный результат | [Диагностика recall](../skills/project-memory/references/RECALL_DEBUG.md) |
+| Проверить состояние workspace, кандидатов или группу источников | [Диагностика](../skills/project-memory/references/DIAGNOSTICS.md) |
+| Оценить дубли и необходимость объединения без изменений | [Ограниченный аудит](../skills/project-memory/references/MEMORY_AUDIT.md) |
 | Вручную объединить знания и разобрать кандидатов punisher | [Обслуживание](../skills/project-memory/references/MAINTENANCE.md) |
 | Проверить изменение поиска по воспроизводимым примерам | [Оценка качества](../skills/project-memory/references/EVALUATION.md) |
 

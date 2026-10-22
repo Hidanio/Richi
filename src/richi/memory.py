@@ -13,6 +13,7 @@ import sqlite3
 import sys
 from . import graph
 from . import compact
+from . import output
 
 
 VERSION = 2
@@ -545,6 +546,8 @@ def parser():
     cli.add_argument("--workspace", "-w", help="Select an isolated workspace (place before command)")
     cli.add_argument("--project-path", type=Path, help="Verify this repository belongs to the selected workspace before the operation")
     cli.add_argument("--chat", help="Select a chat binding through the installed launcher")
+    cli.add_argument("--compact-json", action="store_true",
+                     help="Print compact JSON and fit response budgets in that format (place before command)")
     from . import __version__
     cli.add_argument("--version", action="version", version="Richi " + __version__)
     commands = cli.add_subparsers(dest="command", required=True)
@@ -840,12 +843,15 @@ def main(argv=None):
     try:
         args = parser().parse_args(argv)
         if args.command == "map":
+            if args.compact_json:
+                raise MemoryError("--compact-json is for JSON commands, not map")
             if args.project_path is not None:
                 raise MemoryError("--project-path is not supported by map; use project check before opening the workspace map")
             from .cli import run_map
             return run_map(args)
-        result = run(args)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        with output.json_mode(compact=args.compact_json):
+            result = run(args)
+            sys.stdout.write(output.rendered(result))
         return 0
     except (MemoryError, sqlite3.Error, OSError, ValueError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)

@@ -11,6 +11,8 @@ import hashlib
 import json
 import unicodedata
 
+from .output import rendered as _render
+
 
 RECORD_SCAN_LIMIT = 5000
 EDGE_SCAN_LIMIT = 10000
@@ -24,10 +26,6 @@ def _rows(conn, sql, params=()):
     cursor = conn.execute(sql, params)
     names = [column[0] for column in cursor.description]
     return [dict(zip(names, row)) for row in cursor]
-
-
-def _render(value):
-    return json.dumps(value, ensure_ascii=False, indent=2) + "\n"
 
 
 def _short(value, limit=220):
