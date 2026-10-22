@@ -12,6 +12,7 @@ import stat
 
 from . import git_evidence
 from . import graph
+from .output import rendered as _render
 
 
 MAX_RECORDS = 5000
@@ -23,10 +24,6 @@ MAX_SCAN_SOURCE_CHARS = 8 * 1024 * 1024
 NOTICE = ("Git checks compare captured bytes with the selected local revision. "
           "Changed code is a review candidate, not a disproved fact; unchanged code "
           "does not establish dependency or production freshness. No verified_at fields were updated.")
-
-
-def _render(value):
-    return json.dumps(value, ensure_ascii=False, indent=2) + "\n"
 
 
 def _artifacts(database):
@@ -144,7 +141,7 @@ def _write_source(path, source):
     descriptor = os.open(Path(path).expanduser(), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            handle.write(_render(source))
+            handle.write(_render(source, compact=False))
     except BaseException:
         Path(path).expanduser().unlink(missing_ok=True)
         raise

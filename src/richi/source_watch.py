@@ -13,6 +13,8 @@ import re
 import stat
 import tempfile
 
+from .output import rendered
+
 
 FORMAT = "project-memory-source-watch"
 VERSION = 1
@@ -534,7 +536,7 @@ def _bound_report(result, max_chars):
     # Match the CLI's JSON encoding, including whitespace and its final newline.
     def size():
         for _ in range(10):
-            actual = len(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
+            actual = len(rendered(result))
             if actual == result["budget"]["output_chars"]:
                 return actual
             result["budget"]["output_chars"] = actual
