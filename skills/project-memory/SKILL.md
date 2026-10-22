@@ -69,18 +69,17 @@ meaningful stage. Otherwise respect the requested read/write scope. Local memory
 authorization does not authorize external messages or changes. Search for an
 existing matching record; avoid routine activity logs and speculative aliases.
 
-Read [CLI.md](references/CLI.md) for entry payloads and task/detail writing.
-Keep stable task IDs and a current connected summary with material conditions,
-unknowns and refs to reusable details. Preserve useful earlier attempts in
-searchable current records; history alone is insufficient. No mandatory Markdown
-schema or automatic Templates runtime is implied.
+For creating/updating entries (or drafting the payload), read
+[ENTRY_WRITE.md](references/ENTRY_WRITE.md): complete fields, optimistic
+concurrency and task/detail writing. For entity/edge payloads use
+[GRAPH.md](references/GRAPH.md). Keep stable IDs, current searchable evidence
+and the full sources, scope and states. Never write back an excerpt.
 
-For entry/entity/edge updates, full `get` first: preserve sources, actual project/Jira scope
-and knowledge/work states. `put` replaces the payload. Remove read-only
-`created_at`, `updated_at`, `history`; pass `expected_updated_at` from that read
-(`null` for create-only). On conflict reread and reconcile before retrying.
-Use a structured file or quoted heredoc for JSON; verify successful writes by get.
-Report failed/unavailable saves honestly. Use transactional CLI writes, not direct SQL.
+Every entry/entity/edge `put` replaces the payload. Full `get` first; remove
+`created_at`, `updated_at`, `history` and pass that version as
+`expected_updated_at` (`null` for create-only). Preserve unrelated fields.
+On conflict reread and reconcile; verify successful writes by full get.
+Use transactional CLI writes, not direct SQL, and report unavailable saves.
 
 Sources and revision/hash anchors must describe evidence actually checked.
 Keep event/measurement dates distinct from verification dates; editing text does
@@ -90,20 +89,24 @@ implemented, merged and released are distinct. Missing sources do not by themsel
 invalidate historical observations. Evidence-backed graph directions matter;
 shared tags/Jira or membership alone do not prove causality.
 
-## Read only the relevant procedure
+## Read the procedure for the operation
 
-- Dependencies, links, entities or map: [GRAPH.md](references/GRAPH.md).
-  Scoped definitions/ambiguous aliases: [ENCYCLOPEDIA.md](references/ENCYCLOPEDIA.md).
-- Code evidence capture, attachment or freshness: [GIT.md](references/GIT.md).
-  Combined question/change context: [BRIEF.md](references/BRIEF.md);
-  knowledge affected by a known diff: [IMPACT.md](references/IMPACT.md).
-- Missing known record (`recall --expect REF`), health, candidate review or
-  source snapshots/checks: [DIAGNOSTICS.md](references/DIAGNOSTICS.md).
-  Retrieval failures and evaluation: [EVALUATION.md](references/EVALUATION.md).
-- Explicit cleanup, consolidation or task splitting: read
-  [MAINTENANCE.md](references/MAINTENANCE.md) before mutations. Back up the bound
-  workspace before live maintenance. Preserve sources, conditions and history;
-  do not physically purge. Do not run whole-store cleanup during ordinary work.
+These focused procedures cover common operations; load additional linked material
+only when its specific operation or contract is needed.
+
+| Operation | Reference |
+|---|---|
+| Neighbors/links of a known node | [NEIGHBORS.md](references/NEIGHBORS.md) |
+| Scoped definitions or ambiguous aliases | [ENCYCLOPEDIA.md](references/ENCYCLOPEDIA.md) |
+| Capture/attach checked code, including worktrees | [GIT_CAPTURE.md](references/GIT_CAPTURE.md) |
+| Historical code, diffs or Git freshness | [GIT.md](references/GIT.md) |
+| Explain a missing known record | [RECALL_DEBUG.md](references/RECALL_DEBUG.md) |
+| Audit selected records or find cleanup candidates | [MEMORY_AUDIT.md](references/MEMORY_AUDIT.md) |
+| Apply consolidation or split a task | [MAINTENANCE.md](references/MAINTENANCE.md); back up before live mutations |
+| Combined question/change context | [BRIEF.md](references/BRIEF.md); known diff only: [IMPACT.md](references/IMPACT.md) |
+| Health, diagnostic counters, source snapshots/checks | [DIAGNOSTICS.md](references/DIAGNOSTICS.md) |
+| Retrieval regression/quality evaluation | [EVALUATION.md](references/EVALUATION.md) |
+| Project/relation writes, backups, map or broader CLI | [CLI.md](references/CLI.md) |
 
 Keep databases, backups and captured Git artifacts outside source checkouts.
 Preserve `artifacts/git/` and required Git objects when copying a store; SQLite

@@ -1,0 +1,364 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-22",
+  "evidence_visibility": "Private frozen workspace; aggregate only. Not a publicly reproducible benchmark.",
+  "baseline_skill_commit": "1eb690b9819694e40823318b10c495c0d51c2437",
+  "candidate_skill_files_sha256": {
+    "SKILL.md": "8c28f2d6f6448edda1eaf11f0f2a9b6d04027b2808e8de803d3ed5353f0895ec",
+    "references/BRIEF.md": "51dd49a4ab9b27c754e17b9cae2c95965a47886fd09f8d87dc09c05acbccfdb8",
+    "references/CLI.md": "39cf08d8e6682180bc12f623161b0aff1e0c2636d007e50798f5ff40df22e29a",
+    "references/DIAGNOSTICS.md": "2b43352b92f6ba4000398d8e691bbac2f33f7e8c025bea0a76fb10a9e163f12a",
+    "references/ENCYCLOPEDIA.md": "517bf0aaae3720d7d1e3ec66bb7d9fecb53c971ab6a0f22de215aa6d983f3524",
+    "references/ENTRY_WRITE.md": "9f80c5b43822a2cfe5387bacad4e5d024f624ecf5c31ccd712b19f9000016f9b",
+    "references/EVALUATION.md": "dece53e1fa0ddfa115ba3011a11de2e0877e6efe1ca094b0ea30c620e3dcb1d4",
+    "references/GIT.md": "355790c001748aae2dbf8c07a79051a2914382001c739309447fccdb45d83e99",
+    "references/GIT_CAPTURE.md": "88d41eed2315b471515ac2e39b7c2dbb542870160e143c1e53897946d01df144",
+    "references/GRAPH.md": "96f6694658e763fdb3a88bf9aa4bc755d0b63e7e4d9d236aa5f1120603da0580",
+    "references/IMPACT.md": "c3d5483d9a99dc96fe9aaad40ab7c4b6a0722ff3e24413a69d4830521fe04589",
+    "references/MAINTENANCE.md": "8a77b663f9a724c09d298bd4f3b47fd2ad77aa9ed0892ae3c53745f32575c668",
+    "references/MEMORY_AUDIT.md": "ae67c0bb7e2ac8e9b14c569578b8e016860b68daf43341c1020f2e5139460517",
+    "references/NEIGHBORS.md": "be18f21db3f828b6fb747b5eed3106c503a5ae3e6e91df0d495d98741b1e07e3",
+    "references/RECALL.md": "b063c4bcd008c7477bc2367e5a5a5764adeae0728519ea1eea538e087245a926",
+    "references/RECALL_DEBUG.md": "49cb33bfa9b0be53b05cebea88e4dd0cf2c5c44fbd77c21d9b4db10e66b76b50",
+    "references/WORKSPACES.md": "c710c5261682f4f793d7a5363213b8dc0cff9cde8c53e25f700070f8a79f8da7"
+  },
+  "runtime_held_constant": "1eb690b9819694e40823318b10c495c0d51c2437",
+  "output_format_held_constant": "compact",
+  "protocol": {
+    "cases": 6,
+    "sessions_per_version": 2,
+    "orders": [
+      "forward",
+      "reverse"
+    ],
+    "reuse_context_within_session": true,
+    "new_holdout_cases": 1,
+    "fresh_sessions_per_holdout_version": 1,
+    "same_model_settings_without_overrides": true,
+    "blind_quality_review": true,
+    "criterion": "At least 10% aggregate reduction in both tokenizers, each matched run lower in both; no material quality regression; exact full drafts; immutable inputs/databases."
+  },
+  "main": {
+    "totals": {
+      "baseline": {
+        "calls": 40,
+        "tokens": {
+          "o200k_base": 76939,
+          "cl100k_base": 103920
+        }
+      },
+      "candidate": {
+        "calls": 40,
+        "tokens": {
+          "o200k_base": 56870,
+          "cl100k_base": 69172
+        }
+      }
+    },
+    "aggregate_reduction_percent": {
+      "o200k_base": 26.084300549786196,
+      "cl100k_base": 33.437259430331025
+    },
+    "matched_pairs": [
+      {
+        "baseline": "N1",
+        "candidate": "M1",
+        "reduction_percent": {
+          "o200k_base": 25.32161344882374,
+          "cl100k_base": 32.974415260010595
+        },
+        "candidate_lower_both": true
+      },
+      {
+        "baseline": "M2",
+        "candidate": "N2",
+        "reduction_percent": {
+          "o200k_base": 26.86921433657726,
+          "cl100k_base": 33.91612499021067
+        },
+        "candidate_lower_both": true
+      }
+    ],
+    "numeric_win_rule_passed": true,
+    "integrity_passed": true
+  },
+  "main_breakdown": {
+    "baseline": {
+      "read": {
+        "calls": 14,
+        "tokens": {
+          "o200k_base": 42889,
+          "cl100k_base": 60494
+        }
+      },
+      "richi": {
+        "calls": 18,
+        "tokens": {
+          "o200k_base": 17432,
+          "cl100k_base": 20018
+        }
+      },
+      "file": {
+        "calls": 8,
+        "tokens": {
+          "o200k_base": 16618,
+          "cl100k_base": 23408
+        }
+      }
+    },
+    "candidate": {
+      "read": {
+        "calls": 14,
+        "tokens": {
+          "o200k_base": 17772,
+          "cl100k_base": 20470
+        }
+      },
+      "richi": {
+        "calls": 19,
+        "tokens": {
+          "o200k_base": 22493,
+          "cl100k_base": 25307
+        }
+      },
+      "file": {
+        "calls": 7,
+        "tokens": {
+          "o200k_base": 16605,
+          "cl100k_base": 23395
+        }
+      }
+    }
+  },
+  "runs": {
+    "N1": {
+      "role": "baseline",
+      "calls": 20,
+      "observed_input_tokens": {
+        "o200k_base": 39022,
+        "cl100k_base": 52844
+      },
+      "draft_exact_expected": true,
+      "database_unchanged": true
+    },
+    "M1": {
+      "role": "candidate",
+      "calls": 20,
+      "observed_input_tokens": {
+        "o200k_base": 29141,
+        "cl100k_base": 35419
+      },
+      "draft_exact_expected": true,
+      "database_unchanged": true
+    },
+    "N2": {
+      "role": "candidate",
+      "calls": 20,
+      "observed_input_tokens": {
+        "o200k_base": 27729,
+        "cl100k_base": 33753
+      },
+      "draft_exact_expected": true,
+      "database_unchanged": true
+    },
+    "M2": {
+      "role": "baseline",
+      "calls": 20,
+      "observed_input_tokens": {
+        "o200k_base": 37917,
+        "cl100k_base": 51076
+      },
+      "draft_exact_expected": true,
+      "database_unchanged": true
+    }
+  },
+  "holdout": {
+    "totals": {
+      "baseline": {
+        "calls": 10,
+        "tokens": {
+          "o200k_base": 115711,
+          "cl100k_base": 131284
+        }
+      },
+      "candidate": {
+        "calls": 9,
+        "tokens": {
+          "o200k_base": 80885,
+          "cl100k_base": 90502
+        }
+      }
+    },
+    "aggregate_reduction_percent": {
+      "o200k_base": 30.097397827345716,
+      "cl100k_base": 31.063952956948295
+    },
+    "integrity_passed": true
+  },
+  "quality_counts": {
+    "pass": 25,
+    "minor_gap": 1
+  },
+  "quality_matrix": [
+    {
+      "candidate": "K",
+      "case_id": "T1",
+      "status": "pass"
+    },
+    {
+      "candidate": "K",
+      "case_id": "T2",
+      "status": "pass"
+    },
+    {
+      "candidate": "K",
+      "case_id": "T3",
+      "status": "pass"
+    },
+    {
+      "candidate": "K",
+      "case_id": "T4",
+      "status": "pass"
+    },
+    {
+      "candidate": "K",
+      "case_id": "T5",
+      "status": "pass"
+    },
+    {
+      "candidate": "K",
+      "case_id": "T6",
+      "status": "pass"
+    },
+    {
+      "candidate": "R",
+      "case_id": "T1",
+      "status": "pass"
+    },
+    {
+      "candidate": "R",
+      "case_id": "T2",
+      "status": "pass"
+    },
+    {
+      "candidate": "R",
+      "case_id": "T3",
+      "status": "minor_gap"
+    },
+    {
+      "candidate": "R",
+      "case_id": "T4",
+      "status": "pass"
+    },
+    {
+      "candidate": "R",
+      "case_id": "T5",
+      "status": "pass"
+    },
+    {
+      "candidate": "R",
+      "case_id": "T6",
+      "status": "pass"
+    },
+    {
+      "candidate": "D",
+      "case_id": "T1",
+      "status": "pass"
+    },
+    {
+      "candidate": "D",
+      "case_id": "T2",
+      "status": "pass"
+    },
+    {
+      "candidate": "D",
+      "case_id": "T3",
+      "status": "pass"
+    },
+    {
+      "candidate": "D",
+      "case_id": "T4",
+      "status": "pass"
+    },
+    {
+      "candidate": "D",
+      "case_id": "T5",
+      "status": "pass"
+    },
+    {
+      "candidate": "D",
+      "case_id": "T6",
+      "status": "pass"
+    },
+    {
+      "candidate": "V",
+      "case_id": "T1",
+      "status": "pass"
+    },
+    {
+      "candidate": "V",
+      "case_id": "T2",
+      "status": "pass"
+    },
+    {
+      "candidate": "V",
+      "case_id": "T3",
+      "status": "pass"
+    },
+    {
+      "candidate": "V",
+      "case_id": "T4",
+      "status": "pass"
+    },
+    {
+      "candidate": "V",
+      "case_id": "T5",
+      "status": "pass"
+    },
+    {
+      "candidate": "V",
+      "case_id": "T6",
+      "status": "pass"
+    },
+    {
+      "candidate": "F",
+      "case_id": "H1",
+      "status": "pass"
+    },
+    {
+      "candidate": "B",
+      "case_id": "H1",
+      "status": "pass"
+    }
+  ],
+  "candidate_labels": [
+    "K",
+    "V",
+    "B"
+  ],
+  "overall_gate_passed": true,
+  "tool_denials": {
+    "N1": 1,
+    "M1": 0,
+    "N2": 1,
+    "M2": 1
+  },
+  "validation": {
+    "unittest_ran": 587,
+    "unittest_passed": 586,
+    "unittest_skipped": 1,
+    "recall_acceptance_passed": 7,
+    "skill_validator": "passed",
+    "source_review": "one common-update-contract omission fixed before candidate freeze"
+  },
+  "limitations": [
+    "Six previously seen regression questions, two sessions per version; not a random production sample or significance estimate.",
+    "The separate single graph holdout was hidden from the implementation author until source freeze; not a broad generalization test.",
+    "Full returned stdout/stderr incl. repeated reads and denied requests before outer truncation; excludes prompts, tool framing, reasoning, repeated history, output generation, cache and billing.",
+    "The combined change splits procedures, compresses text and translates moved procedures to English; effects are not individually isolated.",
+    "Quality reviewer was blind to assignments and metrics; reference names cited in answers remained visible, so masking is not absolute. Instruction-read provenance was separately checked against logs.",
+    "No model billing or end-to-end latency claim; compact JSON held constant, so its separate savings are excluded.",
+    "Frozen primary-file allowlist excluded some raw reports/fixtures; denied reads remained in costs and limitations and were not silently removed.",
+    "No live mutations executed by evaluation agents; exact update drafts do not test real concurrent mutation."
+  ]
+}

@@ -38,6 +38,27 @@ SKILL_ROUTES = {
 }
 
 
+def skill_routes(directory):
+    """Measure the routes published by each skill layout, not stale file names.
+
+    Legacy checkouts retain the original route set. The operation layout moves
+    material out of broad manuals, so reading those manuals alone is no longer
+    a complete entry-update or maintenance route. These are static once-per-file
+    counts, not claims about the references an agent will actually choose.
+    """
+    if not (directory / 'references/ENTRY_WRITE.md').is_file():
+        return SKILL_ROUTES
+    return {
+        'core_only_recall_or_known_id_get': [],
+        'recall_with_flags_and_budget_reference': ['RECALL.md'],
+        'entry_update_with_payload_reference': ['ENTRY_WRITE.md'],
+        'maintenance_with_procedure_reference': ['MEMORY_AUDIT.md', 'MAINTENANCE.md'],
+        'maintenance_review_with_diagnostics': ['MEMORY_AUDIT.md'],
+        'maintenance_entry_and_edge_changes': [
+            'MEMORY_AUDIT.md', 'MAINTENANCE.md', 'ENTRY_WRITE.md', 'GRAPH.md', 'NEIGHBORS.md'],
+    }
+
+
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -193,7 +214,7 @@ def skill_measurements(source, tokenizers):
         measurements[path.name] = {'sha256': sha(path), 'chars': len(text), 'utf8_bytes': len(text.encode()),
                                   'tokens': {name: len(enc.encode(text, disallowed_special=())) for name, enc in tokenizers.items()}}
     routes = {}
-    for name, references in SKILL_ROUTES.items():
+    for name, references in skill_routes(directory).items():
         routes[name] = {'files_read_once': ['SKILL.md'] + references,
             'tokens': {enc: sum(measurements[file]['tokens'][enc] for file in ['SKILL.md'] + references) for enc in tokenizers},
             'chars': sum(measurements[file]['chars'] for file in ['SKILL.md'] + references)}
