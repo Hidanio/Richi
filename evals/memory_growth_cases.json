@@ -1,0 +1,369 @@
+{
+  "description": "Synthetic independent growth axes. Fixed targets and queries are declared before measurements. The crowded lexical query measures discoverability of a designated known record among many legitimate lexical matches; it does not label all other matches irrelevant. Sources are fictional and never fetched.",
+  "project": [
+    {
+      "id": "relay",
+      "name": "Relay",
+      "source": "synthetic growth fixture"
+    },
+    {
+      "id": "ledger",
+      "name": "Ledger",
+      "source": "synthetic growth fixture"
+    }
+  ],
+  "entry": [
+    {
+      "id": "task:DEMO-84",
+      "kind": "task",
+      "title": "DEMO-84: current Relay receipt implementation",
+      "summary": "Receipt replay is implemented for one ledger partition. Advance the cursor only after durable-receipt. Exception: cold-restore requires manual receipt reconciliation before replay. The patch is implemented; merge and release have not been verified. Current release must be checked in the authoritative system. Details: entry:decision:DEMO-84-rejection and entry:investigation:DEMO-84-window.",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "implemented",
+      "verified_at": "2026-10-01",
+      "sources": [
+        {
+          "reference": "https://example.invalid/growth/task:DEMO-84",
+          "type": "synthetic",
+          "observed_at": "2026-10-01"
+        }
+      ],
+      "tags": [],
+      "aliases": [],
+      "jira_key": "DEMO-84"
+    },
+    {
+      "id": "decision:DEMO-84-rejection",
+      "kind": "decision",
+      "title": "Rejected cross-partition replay",
+      "summary": "Reason for rejection: dualreceipt ownership permits two owners to acknowledge one receipt during handover. This rejected approach applies to cross-partition replay; it does not invalidate same-partition replay after persistence. The observed failed result is confirmed, not superseded.",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "verified_at": "2026-10-01",
+      "sources": [
+        {
+          "reference": "https://example.invalid/growth/decision:DEMO-84-rejection",
+          "type": "synthetic",
+          "observed_at": "2026-10-01"
+        }
+      ],
+      "tags": [],
+      "aliases": [],
+      "jira_key": "DEMO-84"
+    },
+    {
+      "id": "investigation:DEMO-84-window",
+      "kind": "investigation",
+      "title": "Receipt race investigation",
+      "summary": "The unique receipt-window-17 trace places ACK between journal fsync and receipt-index publication. This is a synthetic trace observation, not production incidence. Historical measurement on 2026-09-10: p99 452 ms with 8 partitions and 64 workers; it is not current performance.",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "verified_at": "2026-10-01",
+      "sources": [
+        {
+          "reference": "https://example.invalid/growth/investigation:DEMO-84-window",
+          "type": "synthetic",
+          "observed_at": "2026-10-01"
+        }
+      ],
+      "tags": [],
+      "aliases": [],
+      "jira_key": "DEMO-84"
+    },
+    {
+      "id": "investigation:DEMO-84-hypothesis",
+      "kind": "investigation",
+      "title": "Unverified alternate fence",
+      "summary": "Hypothesis: epochbarrier fencing may prevent the previous owner from publishing the receipt index. This has not been tested; correctness and overhead are unknown.",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "hypothesis",
+      "work_state": "planned",
+      "verified_at": null,
+      "sources": [
+        {
+          "reference": "https://example.invalid/growth/investigation:DEMO-84-hypothesis",
+          "type": "synthetic",
+          "observed_at": "2026-10-01"
+        }
+      ],
+      "tags": [],
+      "aliases": [],
+      "jira_key": "DEMO-84"
+    },
+    {
+      "id": "fact:foreign-protocol",
+      "kind": "fact",
+      "title": "Ledger transfer protocol",
+      "summary": "The ledger transfer protocol requires an ownership acknowledgement. Relay uses this protocol, but the authoritative definition belongs to the Ledger project. Cross-project evidence remains relevant when Relay is the preferred project.",
+      "project_ids": [
+        "ledger"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "verified_at": "2026-10-01",
+      "sources": [
+        {
+          "reference": "https://example.invalid/growth/fact:foreign-protocol",
+          "type": "synthetic",
+          "observed_at": "2026-10-01"
+        }
+      ],
+      "tags": [],
+      "aliases": [],
+      "jira_key": null
+    },
+    {
+      "id": "note:crowded-target",
+      "kind": "note",
+      "title": "Detailed calibration investigation target",
+      "summary": "Receipt calibration was observed in one synthetic investigation. This target has no exact query alias or Jira key. Its unique full-record detail is calibration-target-evidence; numerous independently identified background notes discuss the same lexical subject.",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "verified_at": "2026-10-01",
+      "sources": [
+        {
+          "reference": "https://example.invalid/growth/note:crowded-target",
+          "type": "synthetic",
+          "observed_at": "2026-10-01"
+        }
+      ],
+      "tags": [],
+      "aliases": [],
+      "jira_key": null
+    }
+  ],
+  "entity": [],
+  "edge": [
+    {
+      "id": "part:decision:DEMO-84-rejection",
+      "from_ref": "entry:decision:DEMO-84-rejection",
+      "to_ref": "entry:task:DEMO-84",
+      "kind": "part_of",
+      "description": "This sourced detail belongs to the task; membership does not confirm a hypothesis.",
+      "knowledge_state": "confirmed",
+      "sources": [
+        {
+          "reference": "https://example.invalid/growth/decision:DEMO-84-rejection",
+          "type": "synthetic",
+          "observed_at": "2026-10-01"
+        }
+      ],
+      "verified_at": "2026-10-01"
+    },
+    {
+      "id": "part:investigation:DEMO-84-window",
+      "from_ref": "entry:investigation:DEMO-84-window",
+      "to_ref": "entry:task:DEMO-84",
+      "kind": "part_of",
+      "description": "This sourced detail belongs to the task; membership does not confirm a hypothesis.",
+      "knowledge_state": "confirmed",
+      "sources": [
+        {
+          "reference": "https://example.invalid/growth/investigation:DEMO-84-window",
+          "type": "synthetic",
+          "observed_at": "2026-10-01"
+        }
+      ],
+      "verified_at": "2026-10-01"
+    },
+    {
+      "id": "part:investigation:DEMO-84-hypothesis",
+      "from_ref": "entry:investigation:DEMO-84-hypothesis",
+      "to_ref": "entry:task:DEMO-84",
+      "kind": "part_of",
+      "description": "This sourced detail belongs to the task; membership does not confirm a hypothesis.",
+      "knowledge_state": "confirmed",
+      "sources": [
+        {
+          "reference": "https://example.invalid/growth/investigation:DEMO-84-hypothesis",
+          "type": "synthetic",
+          "observed_at": "2026-10-01"
+        }
+      ],
+      "verified_at": "2026-10-01"
+    },
+    {
+      "id": "foreign-protocol-informs-task",
+      "from_ref": "entry:fact:foreign-protocol",
+      "to_ref": "entry:task:DEMO-84",
+      "kind": "informs",
+      "description": "Relay uses the independently scoped Ledger protocol.",
+      "knowledge_state": "confirmed",
+      "sources": [
+        {
+          "reference": "https://example.invalid/growth/fact:foreign-protocol",
+          "type": "synthetic",
+          "observed_at": "2026-10-01"
+        }
+      ],
+      "verified_at": "2026-10-01"
+    }
+  ],
+  "cases": [
+    {
+      "id": "current-id",
+      "query": "task:DEMO-84",
+      "project": "relay",
+      "limit": 8,
+      "expected_refs": [
+        "entry:task:DEMO-84"
+      ],
+      "excluded_refs": [],
+      "expected_no_match": false,
+      "expect_ref": "entry:task:DEMO-84",
+      "include_hypotheses": false
+    },
+    {
+      "id": "shared-jira",
+      "query": "DEMO-84 сейчас",
+      "project": "relay",
+      "limit": 8,
+      "expected_refs": [
+        "entry:task:DEMO-84"
+      ],
+      "excluded_refs": [],
+      "expected_no_match": false,
+      "expect_ref": "entry:task:DEMO-84",
+      "include_hypotheses": false
+    },
+    {
+      "id": "refusal",
+      "query": "dualreceipt ownership",
+      "project": "relay",
+      "limit": 8,
+      "expected_refs": [
+        "entry:decision:DEMO-84-rejection"
+      ],
+      "excluded_refs": [],
+      "expected_no_match": false,
+      "expect_ref": "entry:decision:DEMO-84-rejection",
+      "include_hypotheses": false
+    },
+    {
+      "id": "unique-detail",
+      "query": "receipt-window-17",
+      "project": "relay",
+      "limit": 8,
+      "expected_refs": [
+        "entry:investigation:DEMO-84-window"
+      ],
+      "excluded_refs": [],
+      "expected_no_match": false,
+      "expect_ref": "entry:investigation:DEMO-84-window",
+      "include_hypotheses": false
+    },
+    {
+      "id": "condition",
+      "query": "durable-receipt",
+      "project": "relay",
+      "limit": 8,
+      "expected_refs": [
+        "entry:task:DEMO-84"
+      ],
+      "excluded_refs": [],
+      "expected_no_match": false,
+      "expect_ref": "entry:task:DEMO-84",
+      "include_hypotheses": false
+    },
+    {
+      "id": "hypothesis-excluded",
+      "query": "epochbarrier fencing",
+      "project": "relay",
+      "limit": 8,
+      "expected_refs": [],
+      "excluded_refs": [
+        "entry:investigation:DEMO-84-hypothesis"
+      ],
+      "expected_no_match": true,
+      "expect_ref": "entry:investigation:DEMO-84-hypothesis",
+      "include_hypotheses": false
+    },
+    {
+      "id": "hypothesis-included",
+      "query": "epochbarrier fencing",
+      "project": "relay",
+      "limit": 8,
+      "expected_refs": [
+        "entry:investigation:DEMO-84-hypothesis"
+      ],
+      "excluded_refs": [],
+      "expected_no_match": false,
+      "expect_ref": "entry:investigation:DEMO-84-hypothesis",
+      "include_hypotheses": true
+    },
+    {
+      "id": "cross-project",
+      "query": "ledger transfer protocol",
+      "project": "relay",
+      "limit": 8,
+      "expected_refs": [
+        "entry:fact:foreign-protocol"
+      ],
+      "excluded_refs": [],
+      "expected_no_match": false,
+      "expect_ref": "entry:fact:foreign-protocol",
+      "include_hypotheses": false
+    },
+    {
+      "id": "negative",
+      "query": "absentquasarprotocol",
+      "project": "relay",
+      "limit": 8,
+      "expected_refs": [],
+      "excluded_refs": [],
+      "expected_no_match": true,
+      "expect_ref": "entry:task:DEMO-84",
+      "include_hypotheses": false
+    },
+    {
+      "id": "crowded-lexical",
+      "query": "receipt calibration",
+      "project": "relay",
+      "limit": 8,
+      "expected_refs": [
+        "entry:note:crowded-target"
+      ],
+      "excluded_refs": [],
+      "expected_no_match": false,
+      "expect_ref": "entry:note:crowded-target",
+      "include_hypotheses": false
+    },
+    {
+      "id": "crowded-unique-control",
+      "query": "calibration-target-evidence",
+      "project": "relay",
+      "limit": 8,
+      "expected_refs": [
+        "entry:note:crowded-target"
+      ],
+      "excluded_refs": [],
+      "expected_no_match": false,
+      "expect_ref": "entry:note:crowded-target",
+      "include_hypotheses": false
+    }
+  ],
+  "generator": {
+    "version": 1,
+    "background_title": "Receipt calibration",
+    "background_sentences": [
+      "A synthetic ledger note records receipt calibration for partition {index}. Ownership is recorded before an acknowledgement is retried.",
+      "The experiment repeats receipt calibration on isolated partition {index}. Its conclusion applies to this synthetic partition only.",
+      "This engineering note compares receipt calibration for partition {index}. It retains the source and scope of that observation."
+    ],
+    "history_target": "task:DEMO-84"
+  }
+}
