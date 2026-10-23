@@ -212,6 +212,16 @@ def traverse(conn, seed, states, depth, cap):
 
 def export(conn, args, api):
     require_v2(conn, api)
+    if args.action == "neighbors":
+        view = getattr(args, "view", "full")
+        maximum = getattr(args, "max_chars", None)
+        if view not in {"full", "compact"}:
+            raise api.MemoryError("Graph view must be full or compact")
+        if view == "full" and maximum is not None:
+            raise api.MemoryError("Graph --max-chars requires --view compact")
+        if view == "compact":
+            from . import graph_view
+            return graph_view.neighbors(conn, args, api)
     states = allowed_states(args)
     is_neighbors = args.action == "neighbors"
     cap = args.limit if is_neighbors else MAX_NODES
@@ -279,6 +289,10 @@ def add_commands(commands, api):
     neighbors.add_argument("ref")
     neighbors.add_argument("--depth", type=depth, default=1)
     neighbors.add_argument("--limit", type=api.limit, default=200)
+    neighbors.add_argument("--view", choices=("full", "compact"), default="full")
+    from . import compact
+    neighbors.add_argument("--max-chars", type=compact.max_chars,
+                           help="Rendered JSON budget; requires --view compact (default: 16000)")
     for command in (full, neighbors):
         command.add_argument("--include-hypotheses", action="store_true")
         command.add_argument("--include-superseded", action="store_true")
