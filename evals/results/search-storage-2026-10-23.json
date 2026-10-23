@@ -1,0 +1,797 @@
+{
+  "format_version": 1,
+  "observed_at": "2026-10-23T17:20:42.240863+00:00",
+  "python": "3.9.6",
+  "sqlite": "3.43.2",
+  "platform": "Darwin 24.1.0",
+  "installed_code_sha256": {
+    "__init__.py": "81481a8e54d6b9b63b318fecfb0354ef4521f08265d784ce54d6755460979335",
+    "__main__.py": "375fc231133ef59286ab1754b74f79ec89fb8e52d9b70ea6c5ef43ed938f497f",
+    "brief_checks.py": "ac2c6ece85a4e3d785b4a058dbac8e6a6a984439ae4e4700b8d188c154222c38",
+    "cli.py": "69668bf7975c7de79a770c3876a26442dd810cedded717e8e6afc4b421b077aa",
+    "compact.py": "423099d2399875950cd440191a9457eaa633ce1a68dbd214daa7b7cab6a637e3",
+    "git_evidence.py": "306c5b7bd8041ae62659c0b592296e58e352732c63b4f4e86a98711af9c3008d",
+    "git_impact.py": "6df1cf5e607c46373a009792b61b63436c5b2769384ef3447821fddd41effe1e",
+    "git_legacy.py": "7655a075c228a4beb06bcfdd13270297e9af08240080b696c6cdc40abf846ed1",
+    "git_sources.py": "31d7bff3616a9158a472a5e39e1474770041f43612aaf2bea45d492f3fceff1b",
+    "graph.py": "ef3edb03161e474236c74d82b62f4e0fc0b2d1a1773fcb3702a045237257eb78",
+    "graph_view.py": "70b6ee52696d6d019d2ad1942a46498a26424df0c67d8b2cf362aab9e6ccf6dc",
+    "launch_map.py": "d310c43d5e3e4f95af1b75f21c17ca066f10e1a46b3be976be8405766dcd629a",
+    "memory.py": "06a7300a8dd9636e9eed24b949dcfc086a2ae6d37b9da3adf7ca5794cff9ee48",
+    "output.py": "6e5c027ac19ce7dbccd29e056cbe075eace8d25867b82ded59352fffa9508737",
+    "projects.py": "4b24e6b61b36ad666b83847dde6896ede6056689e0e94750bf966744f195b431",
+    "punisher.py": "504d3b683e24aacc4cca312a608a6fdff91fb938c60e727c75c259c8d595723b",
+    "recall.py": "891db35bd7ac21f82b39ac2c619641621d84039f63cb7f6e552ce50be02e6d14",
+    "retrieval_tools.py": "4cfc592c2bf94f721e67aa0f6c4e6aa843c084051a78e21bf3458bb49a5e0abe",
+    "serve.py": "f4c1301adedeb72640ce1559fa6e1247f6f6ec7fd4ce703d1397adddb3438bf9",
+    "source_watch.py": "328bf273f57d0af66f46d891df2b0a990ec4954aa8a748006960ded4197c592b",
+    "status.py": "d7fcd7fa496e287555c79b42d28c0cbd3610ccae112fe22a88f62fa9b16205c5",
+    "storage.py": "c231caf3c81ef99d36830e462f543664bf4a0559b22bd01772fcd3452c7b0d27",
+    "task_brief.py": "54756e6b042679d982cd74b671c4d3963375fcd627bd13a17981d8ad04396433",
+    "evals/evaluate_search_storage.py": "af9b47d9efc84db0a7698ab7dc4e9fa2d1c371407f1fc6d65db0cfae49cc6ed7"
+  },
+  "results": {
+    "retrieval": {
+      "oracle_selected_refs": [
+        "entry:policy-0",
+        "entry:policy-1",
+        "entry:policy-2"
+      ],
+      "read_database_unchanged": true,
+      "full_records_equal": true,
+      "workflow_tool_calls": {
+        "baseline": 4,
+        "candidate": 2
+      },
+      "wire": {
+        "recall": {
+          "chars": 15640,
+          "utf8_bytes": 15656,
+          "sha256": "9f1218e39249f58a361d62a2faa4d13a4ea22d970ea7b57fce5011e81eaaef11"
+        },
+        "discover": {
+          "chars": 7292,
+          "utf8_bytes": 7308,
+          "sha256": "806f65a5099f998d99f884cc581d506e9020e98bffc4b54edc9414e84507268a"
+        },
+        "individual_gets": {
+          "chars": 7764,
+          "utf8_bytes": 7764,
+          "sha256": "e92cde861ea97a7ec9adfe114b7d07d6ef68b3b4911f0039b05eeceb8cf0d99c"
+        },
+        "fetch": {
+          "chars": 8376,
+          "utf8_bytes": 8376,
+          "sha256": "9aff4df3480ad3f010248377070f8b1268b6c2d74e3c916c7069713a4cf45216"
+        },
+        "get_response_0": {
+          "chars": 2588,
+          "utf8_bytes": 2588,
+          "sha256": "ed799eccf0c85cd45db085fc6af34a9530f99b33566d95225ea143fc05e981a6"
+        },
+        "get_response_1": {
+          "chars": 2588,
+          "utf8_bytes": 2588,
+          "sha256": "31572a73d782630a534314713ace438eb7351ed279599e6691f88ba6c5d0ba89"
+        },
+        "get_response_2": {
+          "chars": 2588,
+          "utf8_bytes": 2588,
+          "sha256": "557cb7566e9bb2a84a64cb978c307a42d7499b6fffeb879e5b02d3366760146b"
+        },
+        "baseline_workflow": {
+          "chars": 23404,
+          "utf8_bytes": 23420,
+          "sha256": "fb9d1aa09f7f86fc0001f54eb0b6bc1eb951bf3d74ddb7d109441ca365e1d46f"
+        },
+        "candidate_workflow": {
+          "chars": 15668,
+          "utf8_bytes": 15684,
+          "sha256": "16988d55ae7cf7f65f6e94665270f3692b0e258c2e1619c9afa51205f02740e1"
+        }
+      },
+      "fetch_latency_ms": {
+        "individual_gets": {
+          "samples": [
+            868.56,
+            818.954,
+            714.845,
+            696.331,
+            822.156
+          ],
+          "median": 818.954
+        },
+        "batch_fetch": {
+          "samples": [
+            231.308,
+            230.251,
+            233.198,
+            343.444,
+            233.743
+          ],
+          "median": 233.198
+        }
+      }
+    },
+    "graph": {
+      "full": {
+        "chars": 276932,
+        "utf8_bytes": 276932,
+        "sha256": "dde194b2f0431ab24fff8c9c41d486ccea0afa85a96a95b56a1ffcfcdaed4e31"
+      },
+      "compact": {
+        "chars": 14905,
+        "utf8_bytes": 14927,
+        "sha256": "0dc5c09d334d2c08cef0d6046b62030f6be8c4399fe99884722c2f822b96b9cd"
+      },
+      "full_nodes": 30,
+      "shown_nodes": 11,
+      "declared_budget": {
+        "max_chars": 16000,
+        "output_chars": 14905,
+        "omitted_nodes": 19,
+        "omitted_edges": 19
+      },
+      "read_database_unchanged": true,
+      "root_retained": true,
+      "no_dangling_edges": true
+    },
+    "storage": {
+      "growth_snapshots": [
+        {
+          "additional_revisions": 0,
+          "storage": {
+            "status": "observed",
+            "scope": {
+              "kind": "workspace_database",
+              "workspace": null,
+              "database": "/private<synthetic-root>/growth/synthetic.sqlite3"
+            },
+            "observed_at": "2026-10-23T17:19:47.691122Z",
+            "sqlite_version": "3.43.2",
+            "coverage": {
+              "database_complete": true,
+              "files_requested": false,
+              "files_complete": null,
+              "deep_requested": true,
+              "output_complete": true
+            },
+            "schema_version": 2,
+            "search_backend": "fts5",
+            "database_pages": {
+              "page_size": 4096,
+              "page_count": 257,
+              "freelist_count": 0,
+              "allocated_bytes": 1052672,
+              "free_page_bytes": 0
+            },
+            "counts": {
+              "projects": 1,
+              "entries": 100,
+              "entry_projects": 100,
+              "relations": 0,
+              "entry_history": 100,
+              "entry_events": 0,
+              "entities": 0,
+              "graph_nodes": 101,
+              "graph_edges": 0,
+              "entity_history": 0,
+              "edge_history": 0
+            },
+            "deep": {
+              "logical_text_bytes": {
+                "entries": 229480,
+                "entities": 0,
+                "graph_edges": 0,
+                "entry_history": 258970,
+                "entity_history": 0,
+                "edge_history": 0
+              },
+              "logical_complete": true,
+              "physical_pages": {
+                "status": "measured",
+                "by_category": {
+                  "history": {
+                    "allocated_bytes": 438272,
+                    "unused_bytes": 170372,
+                    "pages": 107
+                  },
+                  "current_records": {
+                    "allocated_bytes": 430080,
+                    "unused_bytes": 187521,
+                    "pages": 105
+                  },
+                  "fts": {
+                    "allocated_bytes": 69632,
+                    "unused_bytes": 25599,
+                    "pages": 17
+                  },
+                  "secondary_indexes": {
+                    "allocated_bytes": 73728,
+                    "unused_bytes": 57860,
+                    "pages": 18
+                  },
+                  "idempotency": {
+                    "allocated_bytes": 8192,
+                    "unused_bytes": 8176,
+                    "pages": 2
+                  },
+                  "metadata_and_links": {
+                    "allocated_bytes": 32768,
+                    "unused_bytes": 16322,
+                    "pages": 8
+                  }
+                },
+                "excludes": "freelist, WAL and external files"
+              },
+              "logical_measurement": "UTF-8 bytes of named text columns, not complete rows or physical allocation",
+              "columns": {
+                "entries": [
+                  "title",
+                  "summary",
+                  "sources",
+                  "tags",
+                  "aliases"
+                ],
+                "entities": [
+                  "title",
+                  "summary",
+                  "sources",
+                  "tags",
+                  "aliases"
+                ],
+                "graph_edges": [
+                  "description",
+                  "sources"
+                ],
+                "entry_history": [
+                  "before_json",
+                  "after_json"
+                ],
+                "entity_history": [
+                  "before_json",
+                  "after_json"
+                ],
+                "edge_history": [
+                  "before_json",
+                  "after_json"
+                ]
+              }
+            },
+            "database_files": {
+              "main": {
+                "status": "present",
+                "bytes": 1052672
+              },
+              "wal": {
+                "status": "present",
+                "bytes": 0
+              },
+              "shm": {
+                "status": "present",
+                "bytes": 32768
+              }
+            },
+            "notes": [
+              "One observation measures size, not growth rate; file sizes are not an atomic snapshot.",
+              "Freelist bytes are reusable inside SQLite, not a promise of reclaimable disk space.",
+              "No checkpoint, integrity check, deletion or knowledge mutation was performed."
+            ],
+            "budget": {
+              "max_chars": 32000,
+              "output_chars": 2340,
+              "omitted_sections": []
+            }
+          }
+        },
+        {
+          "additional_revisions": 10,
+          "storage": {
+            "status": "observed",
+            "scope": {
+              "kind": "workspace_database",
+              "workspace": null,
+              "database": "/private<synthetic-root>/growth/synthetic.sqlite3"
+            },
+            "observed_at": "2026-10-23T17:19:53.227988Z",
+            "sqlite_version": "3.43.2",
+            "coverage": {
+              "database_complete": true,
+              "files_requested": false,
+              "files_complete": null,
+              "deep_requested": true,
+              "output_complete": true
+            },
+            "schema_version": 2,
+            "search_backend": "fts5",
+            "database_pages": {
+              "page_size": 4096,
+              "page_count": 272,
+              "freelist_count": 0,
+              "allocated_bytes": 1114112,
+              "free_page_bytes": 0
+            },
+            "counts": {
+              "projects": 1,
+              "entries": 100,
+              "entry_projects": 100,
+              "relations": 0,
+              "entry_history": 110,
+              "entry_events": 0,
+              "entities": 0,
+              "graph_nodes": 101,
+              "graph_edges": 0,
+              "entity_history": 0,
+              "edge_history": 0
+            },
+            "deep": {
+              "logical_text_bytes": {
+                "entries": 229480,
+                "entities": 0,
+                "graph_edges": 0,
+                "entry_history": 310780,
+                "entity_history": 0,
+                "edge_history": 0
+              },
+              "logical_complete": true,
+              "physical_pages": {
+                "status": "measured",
+                "by_category": {
+                  "history": {
+                    "allocated_bytes": 491520,
+                    "unused_bytes": 170955,
+                    "pages": 120
+                  },
+                  "current_records": {
+                    "allocated_bytes": 430080,
+                    "unused_bytes": 187521,
+                    "pages": 105
+                  },
+                  "fts": {
+                    "allocated_bytes": 77824,
+                    "unused_bytes": 27640,
+                    "pages": 19
+                  },
+                  "secondary_indexes": {
+                    "allocated_bytes": 73728,
+                    "unused_bytes": 57858,
+                    "pages": 18
+                  },
+                  "idempotency": {
+                    "allocated_bytes": 8192,
+                    "unused_bytes": 8176,
+                    "pages": 2
+                  },
+                  "metadata_and_links": {
+                    "allocated_bytes": 32768,
+                    "unused_bytes": 16322,
+                    "pages": 8
+                  }
+                },
+                "excludes": "freelist, WAL and external files"
+              },
+              "logical_measurement": "UTF-8 bytes of named text columns, not complete rows or physical allocation",
+              "columns": {
+                "entries": [
+                  "title",
+                  "summary",
+                  "sources",
+                  "tags",
+                  "aliases"
+                ],
+                "entities": [
+                  "title",
+                  "summary",
+                  "sources",
+                  "tags",
+                  "aliases"
+                ],
+                "graph_edges": [
+                  "description",
+                  "sources"
+                ],
+                "entry_history": [
+                  "before_json",
+                  "after_json"
+                ],
+                "entity_history": [
+                  "before_json",
+                  "after_json"
+                ],
+                "edge_history": [
+                  "before_json",
+                  "after_json"
+                ]
+              }
+            },
+            "database_files": {
+              "main": {
+                "status": "present",
+                "bytes": 1114112
+              },
+              "wal": {
+                "status": "present",
+                "bytes": 0
+              },
+              "shm": {
+                "status": "present",
+                "bytes": 32768
+              }
+            },
+            "notes": [
+              "One observation measures size, not growth rate; file sizes are not an atomic snapshot.",
+              "Freelist bytes are reusable inside SQLite, not a promise of reclaimable disk space.",
+              "No checkpoint, integrity check, deletion or knowledge mutation was performed."
+            ],
+            "budget": {
+              "max_chars": 32000,
+              "output_chars": 2340,
+              "omitted_sections": []
+            }
+          }
+        },
+        {
+          "additional_revisions": 100,
+          "storage": {
+            "status": "observed",
+            "scope": {
+              "kind": "workspace_database",
+              "workspace": null,
+              "database": "/private<synthetic-root>/growth/synthetic.sqlite3"
+            },
+            "observed_at": "2026-10-23T17:20:41.139308Z",
+            "sqlite_version": "3.43.2",
+            "coverage": {
+              "database_complete": true,
+              "files_requested": false,
+              "files_complete": null,
+              "deep_requested": true,
+              "output_complete": true
+            },
+            "schema_version": 2,
+            "search_backend": "fts5",
+            "database_pages": {
+              "page_size": 4096,
+              "page_count": 391,
+              "freelist_count": 0,
+              "allocated_bytes": 1601536,
+              "free_page_bytes": 0
+            },
+            "counts": {
+              "projects": 1,
+              "entries": 100,
+              "entry_projects": 100,
+              "relations": 0,
+              "entry_history": 200,
+              "entry_events": 0,
+              "entities": 0,
+              "graph_nodes": 101,
+              "graph_edges": 0,
+              "entity_history": 0,
+              "edge_history": 0
+            },
+            "deep": {
+              "logical_text_bytes": {
+                "entries": 229480,
+                "entities": 0,
+                "graph_edges": 0,
+                "entry_history": 777070,
+                "entity_history": 0,
+                "edge_history": 0
+              },
+              "logical_complete": true,
+              "physical_pages": {
+                "status": "measured",
+                "by_category": {
+                  "history": {
+                    "allocated_bytes": 983040,
+                    "unused_bytes": 188129,
+                    "pages": 240
+                  },
+                  "current_records": {
+                    "allocated_bytes": 430080,
+                    "unused_bytes": 187521,
+                    "pages": 105
+                  },
+                  "fts": {
+                    "allocated_bytes": 73728,
+                    "unused_bytes": 24991,
+                    "pages": 18
+                  },
+                  "secondary_indexes": {
+                    "allocated_bytes": 73728,
+                    "unused_bytes": 57858,
+                    "pages": 18
+                  },
+                  "idempotency": {
+                    "allocated_bytes": 8192,
+                    "unused_bytes": 8176,
+                    "pages": 2
+                  },
+                  "metadata_and_links": {
+                    "allocated_bytes": 32768,
+                    "unused_bytes": 16321,
+                    "pages": 8
+                  }
+                },
+                "excludes": "freelist, WAL and external files"
+              },
+              "logical_measurement": "UTF-8 bytes of named text columns, not complete rows or physical allocation",
+              "columns": {
+                "entries": [
+                  "title",
+                  "summary",
+                  "sources",
+                  "tags",
+                  "aliases"
+                ],
+                "entities": [
+                  "title",
+                  "summary",
+                  "sources",
+                  "tags",
+                  "aliases"
+                ],
+                "graph_edges": [
+                  "description",
+                  "sources"
+                ],
+                "entry_history": [
+                  "before_json",
+                  "after_json"
+                ],
+                "entity_history": [
+                  "before_json",
+                  "after_json"
+                ],
+                "edge_history": [
+                  "before_json",
+                  "after_json"
+                ]
+              }
+            },
+            "database_files": {
+              "main": {
+                "status": "present",
+                "bytes": 1601536
+              },
+              "wal": {
+                "status": "present",
+                "bytes": 0
+              },
+              "shm": {
+                "status": "present",
+                "bytes": 32768
+              }
+            },
+            "notes": [
+              "One observation measures size, not growth rate; file sizes are not an atomic snapshot.",
+              "Freelist bytes are reusable inside SQLite, not a promise of reclaimable disk space.",
+              "No checkpoint, integrity check, deletion or knowledge mutation was performed."
+            ],
+            "budget": {
+              "max_chars": 32000,
+              "output_chars": 2340,
+              "omitted_sections": []
+            }
+          }
+        }
+      ],
+      "maintenance": {
+        "status": "applied",
+        "scope": {
+          "kind": "workspace_database",
+          "workspace": null,
+          "database": "/private<synthetic-root>/growth/synthetic.sqlite3"
+        },
+        "actions": [
+          {
+            "action": "fts_optimize",
+            "status": "completed",
+            "reason": "merge_fts_segments"
+          },
+          {
+            "action": "planner_optimize",
+            "status": "completed",
+            "analysis_limit": 400,
+            "pragma": "optimize"
+          }
+        ],
+        "coverage": {
+          "output_complete": true
+        },
+        "backup": "/private<synthetic-root>/growth/backups/synthetic-20261023T172041741324Z.sqlite3",
+        "notice": "Index maintenance only: no deletion, VACUUM, checkpoint or application schema change. Speed and disk savings are not guaranteed.",
+        "budget": {
+          "max_chars": 32000,
+          "output_chars": 792,
+          "omitted_sections": []
+        }
+      },
+      "after_maintenance": {
+        "status": "observed",
+        "scope": {
+          "kind": "workspace_database",
+          "workspace": null,
+          "database": "/private<synthetic-root>/growth/synthetic.sqlite3"
+        },
+        "observed_at": "2026-10-23T17:20:41.988355Z",
+        "sqlite_version": "3.43.2",
+        "coverage": {
+          "database_complete": true,
+          "files_requested": false,
+          "files_complete": null,
+          "deep_requested": true,
+          "output_complete": true
+        },
+        "schema_version": 2,
+        "search_backend": "fts5",
+        "database_pages": {
+          "page_size": 4096,
+          "page_count": 402,
+          "freelist_count": 12,
+          "allocated_bytes": 1646592,
+          "free_page_bytes": 49152
+        },
+        "counts": {
+          "projects": 1,
+          "entries": 100,
+          "entry_projects": 100,
+          "relations": 0,
+          "entry_history": 200,
+          "entry_events": 0,
+          "entities": 0,
+          "graph_nodes": 101,
+          "graph_edges": 0,
+          "entity_history": 0,
+          "edge_history": 0
+        },
+        "deep": {
+          "logical_text_bytes": {
+            "entries": 229480,
+            "entities": 0,
+            "graph_edges": 0,
+            "entry_history": 777070,
+            "entity_history": 0,
+            "edge_history": 0
+          },
+          "logical_complete": true,
+          "physical_pages": {
+            "status": "measured",
+            "by_category": {
+              "history": {
+                "allocated_bytes": 983040,
+                "unused_bytes": 188129,
+                "pages": 240
+              },
+              "current_records": {
+                "allocated_bytes": 430080,
+                "unused_bytes": 187521,
+                "pages": 105
+              },
+              "fts": {
+                "allocated_bytes": 65536,
+                "unused_bytes": 22720,
+                "pages": 16
+              },
+              "secondary_indexes": {
+                "allocated_bytes": 73728,
+                "unused_bytes": 57858,
+                "pages": 18
+              },
+              "idempotency": {
+                "allocated_bytes": 8192,
+                "unused_bytes": 8176,
+                "pages": 2
+              },
+              "metadata_and_links": {
+                "allocated_bytes": 36864,
+                "unused_bytes": 20287,
+                "pages": 9
+              }
+            },
+            "excludes": "freelist, WAL and external files"
+          },
+          "logical_measurement": "UTF-8 bytes of named text columns, not complete rows or physical allocation",
+          "columns": {
+            "entries": [
+              "title",
+              "summary",
+              "sources",
+              "tags",
+              "aliases"
+            ],
+            "entities": [
+              "title",
+              "summary",
+              "sources",
+              "tags",
+              "aliases"
+            ],
+            "graph_edges": [
+              "description",
+              "sources"
+            ],
+            "entry_history": [
+              "before_json",
+              "after_json"
+            ],
+            "entity_history": [
+              "before_json",
+              "after_json"
+            ],
+            "edge_history": [
+              "before_json",
+              "after_json"
+            ]
+          }
+        },
+        "database_files": {
+          "main": {
+            "status": "present",
+            "bytes": 1646592
+          },
+          "wal": {
+            "status": "present",
+            "bytes": 0
+          },
+          "shm": {
+            "status": "present",
+            "bytes": 32768
+          }
+        },
+        "notes": [
+          "One observation measures size, not growth rate; file sizes are not an atomic snapshot.",
+          "Freelist bytes are reusable inside SQLite, not a promise of reclaimable disk space.",
+          "No checkpoint, integrity check, deletion or knowledge mutation was performed."
+        ],
+        "budget": {
+          "max_chars": 32000,
+          "output_chars": 2345,
+          "omitted_sections": []
+        }
+      },
+      "all_logical_rows_and_rowids_unchanged": true,
+      "recall_unchanged": true
+    }
+  },
+  "tokens": {
+    "version": "0.14.0",
+    "counts": {
+      "o200k_base": {
+        "recall": 3294,
+        "discover": 1869,
+        "fetch": 1556,
+        "get_response_0": 469,
+        "get_response_1": 469,
+        "get_response_2": 469,
+        "graph_full": 47147,
+        "graph_compact": 3916,
+        "individual_gets": 1407,
+        "baseline_workflow": 4701,
+        "candidate_workflow": 3425
+      },
+      "cl100k_base": {
+        "recall": 3154,
+        "discover": 1842,
+        "fetch": 1551,
+        "get_response_0": 468,
+        "get_response_1": 468,
+        "get_response_2": 468,
+        "graph_full": 47085,
+        "graph_compact": 3870,
+        "individual_gets": 1404,
+        "baseline_workflow": 4558,
+        "candidate_workflow": 3393
+      }
+    },
+    "measurement": "Each actual tool response encoded separately; workflow counts are sums."
+  },
+  "limitations": [
+    "Synthetic tool contracts and oracle-selected follow-up records, not blind agent quality.",
+    "Token counts cover returned tool text only, not billed model context or reasoning.",
+    "Fresh CLI processes share OS caches; timings are local observations, not SLA.",
+    "Compact graph deliberately omits content; follow exact record pointers for conclusions.",
+    "Index optimization preserves history; free pages need not shrink the database file."
+  ]
+}

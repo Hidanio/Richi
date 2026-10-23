@@ -44,6 +44,13 @@ explicit graph links; try observed RU/EN terms or aliases when a paraphrase miss
 No match does not prove work never happened. Confirmed knowledge is the default;
 include hypotheses/superseded records deliberately. Details: [RECALL.md](references/RECALL.md).
 
+When choosing records for full reading, start directly with `discover` instead
+of preliminary recall to get small routing cards,
+then `fetch --ref REF --ref REF` to read selected whole records in one call.
+Discovery is not evidence for conclusions. Only a `fetch` result with `status: found`
+contains a full current record; inspect continuation and missing/oversize outcomes.
+Contracts and examples: [RETRIEVAL_TOOLS.md](references/RETRIEVAL_TOOLS.md).
+
 When an ID is already known and full content is needed, call `entry get ID`,
 `entity get ID` or `edge get ID` directly; no preliminary recall/read is required.
 `entry read ID` is an optional bounded view. Add `--history` only for chronology.
@@ -96,6 +103,7 @@ only when its specific operation or contract is needed.
 
 | Operation | Reference |
 |---|---|
+| Find candidates, then read several exact records | [RETRIEVAL_TOOLS.md](references/RETRIEVAL_TOOLS.md) |
 | Neighbors/links of a known node | [NEIGHBORS.md](references/NEIGHBORS.md) |
 | Scoped definitions or ambiguous aliases | [ENCYCLOPEDIA.md](references/ENCYCLOPEDIA.md) |
 | Capture/attach checked code, including worktrees | [GIT_CAPTURE.md](references/GIT_CAPTURE.md) |
@@ -105,6 +113,7 @@ only when its specific operation or contract is needed.
 | Apply consolidation or split a task | [MAINTENANCE.md](references/MAINTENANCE.md); back up before live mutations |
 | Combined question/change context | [BRIEF.md](references/BRIEF.md); known diff only: [IMPACT.md](references/IMPACT.md) |
 | Health, diagnostic counters, source snapshots/checks | [DIAGNOSTICS.md](references/DIAGNOSTICS.md) |
+| Measure storage growth or explicitly maintain indexes | [STORAGE.md](references/STORAGE.md) |
 | Retrieval regression/quality evaluation | [EVALUATION.md](references/EVALUATION.md) |
 | Project/relation writes, backups, map or broader CLI | [CLI.md](references/CLI.md) |
 
