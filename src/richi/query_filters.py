@@ -158,6 +158,10 @@ class _Parser:
                 if DATE_LITERAL.fullmatch(literal) is None:
                     self.fail("date comparisons require YYYY-MM-DD or an ISO timestamp with timezone")
                 self.api.timestamp(literal, "where " + field)
+                try:
+                    _iso_timestamp(literal)
+                except (OverflowError, ValueError):
+                    self.fail("date comparison exceeds the supported UTC range (years 0001 through 9999)")
         operation = operator.lower()
         return self.node(("predicate", field, "not_" + operation if negated else operation, value))
 
@@ -201,7 +205,20 @@ def prepare(conn, api=None, *, need_json=True, need_dates=False):
         except sqlite3.Error as exc:
             raise api.MemoryError("Composite collection filters require SQLite JSON1 support") from exc
     if need_dates:
-        conn.create_function("richi_iso_timestamp", 1, _iso_timestamp, deterministic=True)
+        # Re-registering a function fails while another cursor is using it.
+        # The connection-local helper is shared by all parsed date filters;
+        # A small behavior probe avoids replacing the function while checking
+        # that a caller has not reused our reserved name for another function.
+        try:
+            probe = conn.execute("SELECT richi_iso_timestamp(NULL), "
+                                 "richi_iso_timestamp('2000-01-01T01:00:00+01:00')").fetchone()
+        except sqlite3.OperationalError as exc:
+            if "no such function: richi_iso_timestamp" not in str(exc):
+                raise api.MemoryError("Cannot verify reserved date function richi_iso_timestamp") from exc
+            conn.create_function("richi_iso_timestamp", 1, _iso_timestamp, deterministic=True)
+        else:
+            if tuple(probe) != (None, "2000-01-01T00:00:00+00:00"):
+                raise api.MemoryError("Incompatible reserved date function richi_iso_timestamp")
 
 
 class ParsedFilter:
@@ -297,15 +314,19 @@ class ParsedFilter:
             scope = "qf_project.entry_id = " + alias + ".id"
             column = "qf_project.project_id"
         else:
-            source = "graph_edges AS qf_edge JOIN projects AS qf_project ON (" + \
-                     "qf_edge.to_ref = 'project:' || qf_project.id OR qf_edge.from_ref = 'project:' || qf_project.id)"
             reference = "'entity:' || " + alias + ".id"
-            scope = ("qf_edge.knowledge_state = 'confirmed' AND json_array_length(qf_edge.sources) > 0 AND "
-                     "((" + alias + ".kind = 'concept' AND qf_edge.kind = 'used_in' AND "
-                     "qf_edge.from_ref = " + reference + " AND qf_edge.to_ref = 'project:' || qf_project.id) OR "
-                     "(" + alias + ".kind <> 'concept' AND ((qf_edge.from_ref = " + reference +
-                     " AND qf_edge.to_ref = 'project:' || qf_project.id) OR (qf_edge.to_ref = " + reference +
-                     " AND qf_edge.from_ref = 'project:' || qf_project.id))))")
+            other_ref = ("CASE WHEN qf_edge.from_ref = " + reference +
+                         " THEN qf_edge.to_ref ELSE qf_edge.from_ref END")
+            # Start from the entity's indexed incoming/outgoing links, then look
+            # up the project by its native primary key. Joining two concatenated
+            # refs with OR instead can scan projects × edges for every entity.
+            source = ("graph_edges AS qf_edge JOIN projects AS qf_project ON "
+                      "qf_project.id = substr(" + other_ref + ", 9)")
+            scope = ("(qf_edge.from_ref = " + reference + " OR qf_edge.to_ref = " + reference + ") AND "
+                     "substr(" + other_ref + ", 1, 8) = 'project:' AND "
+                     "qf_edge.knowledge_state = 'confirmed' AND json_array_length(qf_edge.sources) > 0 AND "
+                     "(" + alias + ".kind <> 'concept' OR (qf_edge.kind = 'used_in' AND "
+                     "qf_edge.from_ref = " + reference + "))")
             column = "qf_project.id"
         exists = "EXISTS (SELECT 1 FROM " + source + " WHERE 1=1 AND " + scope + ")"
         if operation in {"is_null", "is_not_null"}:

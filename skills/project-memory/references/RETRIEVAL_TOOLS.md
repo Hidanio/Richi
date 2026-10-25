@@ -1,5 +1,11 @@
 # Discover routes, then fetch whole records
 
+Use this two-step path when the relevant refs still need selection. For a small
+entry set already defined by a lexical query and strict predicates, `search QUERY
+--where EXPR` can return full matches in one call; see [FILTERS.md](FILTERS.md).
+Search remains limited and lexical: use `query` for complete metadata counts,
+existence and paginated inventories. A known ref goes straight to get/fetch.
+
 ```sh
 richi --compact-json --project-path /work/example discover 'pool sizing' --project example
 richi --compact-json --project-path /work/example fetch \
@@ -9,7 +15,9 @@ richi --compact-json --project-path /work/example fetch \
 `discover` is a small routing view: default eight results, 8000 characters;
 `--limit` 1–200, `--max-chars` 2000–100000. It uses the same ranking, issue-key
 checks, explicit one-hop expansion and project boost as `recall`. Project boost
-is not a strict filter. Only confirmed knowledge appears unless independently
+is not a strict filter. Use `--where "project = 'example' AND kind = 'decision'"`
+for mandatory scope before candidate limits and graph expansion; see [FILTERS.md](FILTERS.md).
+Only confirmed knowledge appears unless independently
 including `--include-hypotheses` / `--include-superseded`.
 The budget bounds returned text, not search CPU or peak memory: discovery still
 uses recall's candidate scans and record loading.

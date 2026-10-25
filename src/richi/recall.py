@@ -166,6 +166,8 @@ def fit_explained_response(response, maximum, trace):
              "budget": {"max_chars": maximum, "output_chars": 0,
                         "omitted_results": response["candidate_count"],
                         "omitted_edges": len(response["edges"])}}
+    if response.get("selection", {}).get("filter_applied"):
+        value["selection"] = {"filter_applied": True}
     if response.get("ambiguity"):
         count = response["ambiguity"]["concept_count"]
         value["ambiguity"] = {"detected": True, "concept_count": count,

@@ -5,6 +5,7 @@ def add_commands(commands, api):
     discover_cmd = commands.add_parser("discover", help="Find small routing cards, then fetch selected full records")
     discover_cmd.add_argument("query")
     discover_cmd.add_argument("--project")
+    discover_cmd.add_argument("--where", help="Strict composed metadata filter before shortlist and graph additions")
     discover_cmd.add_argument("--limit", type=api.limit, default=8)
     discover_cmd.add_argument("--max-chars", type=api.compact.max_chars, default=8000)
     discover_cmd.add_argument("--include-hypotheses", action="store_true")
@@ -121,6 +122,8 @@ def discover(conn, args, api):
                 "read_more": [_pointer(results[0]["ref"])] if selected_count else [],
                 "budget": {"max_chars": args.max_chars, "output_chars": 0,
                            "omitted_results": response["candidate_count"], "omitted_edges": edge_count}}
+    if response.get("selection", {}).get("filter_applied"):
+        fallback["selection"] = {"filter_applied": True}
     if response.get("coverage_note"):
         fallback["coverage_note"] = response["coverage_note"]
     if ambiguity:

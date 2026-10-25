@@ -48,6 +48,10 @@ class SearchIndexTests(unittest.TestCase):
         return search_index.entity_ids(conn or self.conn, query, terms, keys)
 
     def snapshot(self, tables):
+        tables = list(tables)
+        if search_index.KEYS in tables and search_index.RECORDS not in tables and self.conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE name = ?", (search_index.RECORDS,)).fetchone():
+            tables.append(search_index.RECORDS)
         return {table: [tuple(row) for row in self.conn.execute("SELECT * FROM " + table + " ORDER BY 1")]
                 for table in tables}
 
@@ -254,7 +258,8 @@ class SearchIndexTests(unittest.TestCase):
             self.assertIsNone(self.candidates("entity", query))
         for threshold in ("MAX_RECORD_KEYS", "MAX_RECORD_KEY_BYTES"):
             with self.subTest(threshold=threshold), mock.patch.object(search_index, threshold, 1):
-                self.assertIsNone(search_index._record_keys({"id": "x", "jira_key": None, "aliases": "[]"}, "entry"))
+                self.assertIsNone(search_index._record_keys({"id": "x", "jira_key": None,
+                                                            "aliases": '["another"]'}, "entry"))
 
     def test_missing_trigger_or_future_version_falls_back_readonly(self):
         self.insert("entity", "one")
@@ -288,8 +293,9 @@ class SearchIndexTests(unittest.TestCase):
         self.insert("entry", "later", updated_at="2026-09-21T08:00:00Z")
         self.build()
         plan = " ".join(row[3] for row in self.conn.execute(
-            "EXPLAIN QUERY PLAN SELECT id FROM " + search_index.KEYS +
-            " WHERE family = ? AND field = ? AND key >= ? AND key < ?", ("entity", "token", "str", "sts")))
+            "EXPLAIN QUERY PLAN SELECT r.id FROM " + search_index.KEYS + " k JOIN " + search_index.RECORDS +
+            " r ON r.record = k.record WHERE k.field = ? AND k.key >= ? AND k.key < ?",
+            (search_index.FIELDS["entity"]["token"], "str", "sts")))
         self.assertIn("SEARCH", plan)
         self.assertIn("PRIMARY KEY", plan)
         self.assertNotIn("SCAN", plan)
@@ -305,6 +311,119 @@ class SearchIndexTests(unittest.TestCase):
         plan = " ".join(row[3] for row in self.conn.execute("EXPLAIN QUERY PLAN " + sql, params))
         self.assertIn("richi_search_entries_state_kind", plan)
         self.assertIn("knowledge_state=? AND kind=?", plan)
+
+    def test_qualified_and_native_ids_remain_ambiguous_without_duplicate_keys(self):
+        for family in ("entry", "entity"):
+            self.insert(family, "anchor")
+            self.insert(family, family + ":anchor")
+        self.build()
+        for family in ("entry", "entity"):
+            with self.subTest(family=family):
+                self.assertEqual(self.candidates(family, family + ":anchor"), {"anchor", family + ":anchor"})
+                self.assertEqual(self.candidates(family, family + ":" + family + ":anchor"), {family + ":anchor"})
+                self.assertEqual(self.conn.execute("SELECT count(*) FROM " + search_index.KEYS + " WHERE field = ?",
+                                                  (search_index.FIELDS[family]["id"],)).fetchone()[0], 2)
+
+    def test_metadata_only_writes_do_not_rebuild_keys_or_hydrate_text(self):
+        self.insert("entry", "one", aliases=["Before alias"])
+        self.insert("entity", "two", title="Beforeterm")
+        self.build()
+        before = self.snapshot([search_index.KEYS, search_index.RECORDS, search_index.DIRTY])
+        statements = []
+        self.conn.set_trace_callback(statements.append)
+        with mock.patch.object(search_index, "_record_keys", side_effect=AssertionError("metadata parsed")):
+            for table, identity in (("entries", "one"), ("entities", "two")):
+                record = dict(self.conn.execute("SELECT * FROM " + table + " WHERE id = ?", (identity,)).fetchone())
+                record.update(verified_at="2026-10-25", sources='[{"reference":"test://new-evidence"}]')
+                memory.upsert(self.conn, table, tuple(record), record)
+        self.conn.set_trace_callback(None)
+        self.assertEqual(self.snapshot(before), before)
+        self.assertFalse(any(sql.startswith("SELECT id, ") for sql in statements), statements)
+        self.assertEqual(self.candidates("entity", "beforeterm"), {"two"})
+
+    def test_metadata_edit_still_refreshes_existing_old_writer_dirt(self):
+        self.insert("entry", "one", aliases=["Before alias"])
+        self.build()
+        self.conn.execute("UPDATE entries SET aliases = '[\"After alias\"]' WHERE id = 'one'")
+        record = dict(self.conn.execute("SELECT * FROM entries WHERE id = 'one'").fetchone())
+        record["verified_at"] = "2026-10-25"
+        memory.upsert(self.conn, "entries", tuple(record), record)
+        self.assertEqual(search_index.status(self.conn)["dirty"]["entry"], 0)
+        self.assertEqual(self.candidates("entry", "Before alias"), set())
+        self.assertEqual(self.candidates("entry", "After alias"), {"one"})
+
+    def test_oversized_fallback_retries_only_after_an_indexed_change(self):
+        self.insert("entity", "huge", summary="x" * (search_index.MAX_RECORD_CHARS + 1))
+        self.build()
+        self.conn.execute("UPDATE entities SET verified_at = '2026-10-25' WHERE id = 'huge'")
+        with mock.patch.object(search_index, "_record_keys", side_effect=AssertionError("metadata parsed")):
+            search_index.refresh_record(self.conn, "entities", "huge")
+        self.assertEqual(self.candidates("entity", "anything"), {"huge"})
+        self.conn.execute("UPDATE entities SET summary = 'Smallterm' WHERE id = 'huge'")
+        search_index.refresh_record(self.conn, "entities", "huge")
+        self.assertEqual(search_index.status(self.conn)["dirty"]["entity"], 0)
+        self.assertEqual(self.candidates("entity", "smallterm"), {"huge"})
+        self.assertEqual(self.candidates("entity", "anything"), set())
+
+    def test_explicit_v1_index_upgrade_and_failed_upgrade_preserve_knowledge(self):
+        self.insert("entry", "one", aliases=["Preserved alias"])
+        self.conn.execute("CREATE TABLE " + search_index.KEYS +
+                          " (family TEXT, field TEXT, key TEXT, id TEXT, PRIMARY KEY(family,field,key,id)) WITHOUT ROWID")
+        self.conn.execute("CREATE INDEX " + search_index.KEYS + "_record ON " + search_index.KEYS + " (family,id)")
+        self.conn.execute("CREATE TABLE " + search_index.DIRTY +
+                          " (family TEXT, id TEXT, reason TEXT DEFAULT 'write', PRIMARY KEY(family,id)) WITHOUT ROWID")
+        self.conn.execute("INSERT INTO " + search_index.KEYS + " VALUES ('entry','id','one','one')")
+        self.conn.execute("INSERT INTO metadata VALUES (?, '1')", (search_index.VERSION_KEY,))
+        before = self.snapshot(["entries", "metadata", "sqlite_master", search_index.KEYS, search_index.DIRTY])
+        self.assertIsNone(self.candidates("entry", "Preserved alias"))
+        self.assertFalse(search_index.status(self.conn)["available"])
+        self.assertEqual(self.snapshot(before), before)
+        with memory.transaction(self.conn), mock.patch.object(search_index, "_record_keys", side_effect=RuntimeError("abort")):
+            with self.assertRaisesRegex(RuntimeError, "abort"):
+                search_index.build(self.conn, memory)
+        self.assertEqual(self.snapshot(before), before)
+        self.assertEqual(self.build()["version"], "2")
+        self.assertEqual(self.snapshot(["entries"])["entries"], before["entries"])
+        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], 2)
+        self.assertEqual(self.candidates("entry", "Preserved alias"), {"one"})
+
+    def test_v1_upgrade_does_not_drop_an_unowned_new_record_map(self):
+        self.conn.execute("INSERT INTO metadata VALUES (?, '1')", (search_index.VERSION_KEY,))
+        self.conn.execute("CREATE TABLE " + search_index.RECORDS + " (valuable TEXT)")
+        self.conn.execute("INSERT INTO " + search_index.RECORDS + " VALUES ('keep')")
+        before = self.snapshot(["sqlite_master", "metadata", search_index.RECORDS])
+        with memory.transaction(self.conn), self.assertRaises(memory.MemoryError):
+            search_index.build(self.conn, memory)
+        self.assertEqual(self.snapshot(before), before)
+
+    def test_record_map_survives_source_rowid_change_and_reuse(self):
+        # Graph-v1 has no node references that would otherwise prohibit deletion.
+        path = self.path.with_name("rowids.sqlite3")
+        conn = memory.connect(path, create=True)
+        self.addCleanup(conn.close)
+        memory.execute_script(conn, (memory.BASE / "schema.sql").read_text())
+        conn.execute("INSERT INTO metadata VALUES ('search_backend', 'scan')")
+        conn.execute("PRAGMA user_version = 1")
+        for identity in ("removed", "survivor"):
+            conn.execute("INSERT INTO entries (id, kind, title, summary, knowledge_state, created_at, updated_at) "
+                         "VALUES (?, 'note', 'Title', 'Summary', 'hypothesis', '2026-09-20', '2026-09-20')", (identity,))
+        with memory.transaction(conn):
+            search_index.build(conn, memory)
+        mapping = dict(conn.execute("SELECT id, record FROM " + search_index.RECORDS))
+        conn.execute("DELETE FROM entries WHERE id = 'removed'")
+        conn.execute("VACUUM")
+        self.assertEqual(dict(conn.execute("SELECT id, record FROM " + search_index.RECORDS)), mapping)
+        search_index.refresh_record(conn, "entries", "removed")
+        conn.execute("INSERT INTO entries (rowid, id, kind, title, summary, knowledge_state, created_at, updated_at) "
+                     "VALUES (100, 'replacement', 'note', 'Title', 'Summary', 'hypothesis', '2026-09-20', '2026-09-20')")
+        search_index.refresh_record(conn, "entries", "replacement")
+        # Explicit rowid updates, like storage compaction, do not change IDs or
+        # indexed fields; lookup must remain independent of either operation.
+        conn.execute("UPDATE entries SET rowid = 200 WHERE id = 'survivor'")
+        for identity in ("survivor", "replacement"):
+            self.assertEqual(search_index.entry_ids(conn, identity, []), {identity})
+        self.assertEqual(search_index.entry_ids(conn, "removed", []), set())
+        self.assertEqual(list(conn.execute("PRAGMA foreign_key_check")), [])
 
     def test_v1_writers_rename_delete_and_explicit_v2_migration_remain_safe(self):
         path = self.path.with_name("v1.sqlite3")

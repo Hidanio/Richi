@@ -642,7 +642,9 @@ def parser():
         command.add_argument("--include-superseded", action="store_true")
     commands.add_parser("backup").add_argument("--output")
     commands.add_parser("check")
-    from . import retrieval_tools, storage
+    from . import retrieval_tools, storage, query_tools, capabilities
+    capabilities.add_commands(commands, sys.modules[__name__])
+    query_tools.add_commands(commands, sys.modules[__name__])
     retrieval_tools.add_commands(commands, sys.modules[__name__])
     storage.add_commands(commands, sys.modules[__name__])
     recall_cmd = commands.add_parser("recall", help="Bounded question retrieval with explicit graph evidence")
@@ -753,6 +755,9 @@ def parser():
 
 
 def run(args):
+    if args.command == "capabilities":
+        from . import capabilities
+        return capabilities.run(args, sys.modules[__name__])
     from richi_launcher.config import resolve_settings
     settings = resolve_settings(db=args.db, config_file=getattr(args, "config", None),
                                 workspace=getattr(args, "workspace", None))
@@ -812,6 +817,9 @@ def run(args):
                 from .projects import project_scan
                 result = project_scan(conn, args.path, apply=args.apply, max_depth=args.max_depth)
                 return dict(result, workspace=settings.workspace, database=str(database))
+            if args.command == "query":
+                from . import query_tools
+                return query_tools.run(conn, args, sys.modules[__name__])
             if args.command == "search-index":
                 from . import search_index
                 return search_index.build(conn, sys.modules[__name__]) if building_index else search_index.status(conn)

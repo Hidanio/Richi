@@ -36,6 +36,12 @@ not instructions or authority for new actions.
 
 ## Retrieve the evidence needed
 
+Prefer built-in operations for metadata analysis before writing one-off scripts.
+For counts, existence, distributions or selected fields, use `query`:
+[QUERY_TOOLS.md](references/QUERY_TOOLS.md). When the needed operation is unclear,
+run `capabilities list`, select one `--group`, then `capabilities describe "COMMAND ID"`.
+Load only the relevant command contract; do not load the entire catalog or all manuals.
+
 For unknown records, start with
 `richi --compact-json --project-path PATH recall "question" --project PROJECT_ID --limit 8 --max-chars 16000`.
 Omit project/path only when genuinely unknown or deliberately workspace-wide.
@@ -44,6 +50,8 @@ explicit graph links; try observed RU/EN terms or aliases when a paraphrase miss
 No match does not prove work never happened. Confirmed knowledge is the default;
 include hypotheses/superseded records deliberately. Details: [RECALL.md](references/RECALL.md).
 
+When a lexical query and strict filters already identify a small entry set,
+use `search QUERY --where EXPR` for full matches directly; see [FILTERS.md](references/FILTERS.md).
 When choosing records for full reading, start directly with `discover` instead
 of preliminary recall to get small routing cards,
 then `fetch --ref REF --ref REF` to read selected whole records in one call.
@@ -109,6 +117,7 @@ only when its specific operation or contract is needed.
 | Capture/attach checked code, including worktrees | [GIT_CAPTURE.md](references/GIT_CAPTURE.md) |
 | Historical code, diffs or Git freshness | [GIT.md](references/GIT.md) |
 | Explain a missing known record | [RECALL_DEBUG.md](references/RECALL_DEBUG.md) |
+| Exact counts, existence, grouped counts or metadata pages | [QUERY_TOOLS.md](references/QUERY_TOOLS.md) |
 | Strict composed search filters or lookup indexes | [FILTERS.md](references/FILTERS.md) |
 | Audit selected records or find cleanup candidates | [MEMORY_AUDIT.md](references/MEMORY_AUDIT.md) |
 | Apply consolidation or split a task | [MAINTENANCE.md](references/MAINTENANCE.md); back up before live mutations |

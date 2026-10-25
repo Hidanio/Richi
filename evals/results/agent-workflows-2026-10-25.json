@@ -1,0 +1,5175 @@
+{
+  "format_version": 1,
+  "declared_baseline_revision": "b8a2a9aa889a7d65d433e985ca3f6a9d4cec4c60",
+  "script_sha256": "9324484ae4b6b99776ebc8f4f96c247331d24be852cb812baba8756e758f39fb",
+  "fixture_sha256": "2947b766226595e1e125c407820a4ab7bcbab64714a188099133b6be091b5037",
+  "fixture_scope": {
+    "atlas_entries": 60,
+    "beacon_entries": 20,
+    "baseline_context_limit": 200,
+    "relations": 0
+  },
+  "oracle": {
+    "evidence_refs": [
+      "entry:atlas-000",
+      "entry:atlas-001",
+      "entry:atlas-002"
+    ],
+    "count": 50,
+    "groups": [
+      [
+        null,
+        6
+      ],
+      [
+        "blocked",
+        6
+      ],
+      [
+        "done",
+        10
+      ],
+      [
+        "implemented",
+        7
+      ],
+      [
+        "planned",
+        14
+      ],
+      [
+        "released",
+        7
+      ]
+    ],
+    "exists": [
+      true,
+      false
+    ],
+    "projection": [
+      [
+        "entry:atlas-000",
+        "Pool sizing observation atlas-000",
+        "done"
+      ],
+      [
+        "entry:atlas-001",
+        "Pool sizing observation atlas-001",
+        "done"
+      ],
+      [
+        "entry:atlas-002",
+        "Pool sizing observation atlas-002",
+        "done"
+      ],
+      [
+        "entry:atlas-003",
+        "Pool sizing observation atlas-003",
+        "planned"
+      ],
+      [
+        "entry:atlas-004",
+        "Pool sizing observation atlas-004",
+        "planned"
+      ],
+      [
+        "entry:atlas-005",
+        "Pool sizing observation atlas-005",
+        "planned"
+      ],
+      [
+        "entry:atlas-006",
+        "Pool sizing observation atlas-006",
+        "planned"
+      ],
+      [
+        "entry:atlas-007",
+        "Pool sizing observation atlas-007",
+        "planned"
+      ],
+      [
+        "entry:atlas-008",
+        "Pool sizing observation atlas-008",
+        "planned"
+      ],
+      [
+        "entry:atlas-009",
+        "Pool sizing observation atlas-009",
+        "planned"
+      ],
+      [
+        "entry:atlas-012",
+        "Receipt transport observation atlas-012",
+        "planned"
+      ],
+      [
+        "entry:atlas-013",
+        "Receipt transport observation atlas-013",
+        "done"
+      ],
+      [
+        "entry:atlas-014",
+        "Receipt transport observation atlas-014",
+        "blocked"
+      ],
+      [
+        "entry:atlas-015",
+        "Receipt transport observation atlas-015",
+        null
+      ],
+      [
+        "entry:atlas-016",
+        "Receipt transport observation atlas-016",
+        "implemented"
+      ],
+      [
+        "entry:atlas-017",
+        "Receipt transport observation atlas-017",
+        "released"
+      ],
+      [
+        "entry:atlas-018",
+        "Receipt transport observation atlas-018",
+        "planned"
+      ],
+      [
+        "entry:atlas-019",
+        "Receipt transport observation atlas-019",
+        "done"
+      ],
+      [
+        "entry:atlas-022",
+        "Receipt transport observation atlas-022",
+        "implemented"
+      ],
+      [
+        "entry:atlas-023",
+        "Receipt transport observation atlas-023",
+        "released"
+      ],
+      [
+        "entry:atlas-024",
+        "Receipt transport observation atlas-024",
+        "planned"
+      ],
+      [
+        "entry:atlas-025",
+        "Receipt transport observation atlas-025",
+        "done"
+      ],
+      [
+        "entry:atlas-026",
+        "Receipt transport observation atlas-026",
+        "blocked"
+      ],
+      [
+        "entry:atlas-027",
+        "Receipt transport observation atlas-027",
+        null
+      ],
+      [
+        "entry:atlas-028",
+        "Receipt transport observation atlas-028",
+        "implemented"
+      ],
+      [
+        "entry:atlas-029",
+        "Receipt transport observation atlas-029",
+        "released"
+      ],
+      [
+        "entry:atlas-032",
+        "Receipt transport observation atlas-032",
+        "blocked"
+      ],
+      [
+        "entry:atlas-033",
+        "Receipt transport observation atlas-033",
+        null
+      ],
+      [
+        "entry:atlas-034",
+        "Receipt transport observation atlas-034",
+        "implemented"
+      ],
+      [
+        "entry:atlas-035",
+        "Receipt transport observation atlas-035",
+        "released"
+      ],
+      [
+        "entry:atlas-036",
+        "Receipt transport observation atlas-036",
+        "planned"
+      ],
+      [
+        "entry:atlas-037",
+        "Receipt transport observation atlas-037",
+        "done"
+      ],
+      [
+        "entry:atlas-038",
+        "Receipt transport observation atlas-038",
+        "blocked"
+      ],
+      [
+        "entry:atlas-039",
+        "Receipt transport observation atlas-039",
+        null
+      ],
+      [
+        "entry:atlas-042",
+        "Receipt transport observation atlas-042",
+        "planned"
+      ],
+      [
+        "entry:atlas-043",
+        "Receipt transport observation atlas-043",
+        "done"
+      ],
+      [
+        "entry:atlas-044",
+        "Receipt transport observation atlas-044",
+        "blocked"
+      ],
+      [
+        "entry:atlas-045",
+        "Receipt transport observation atlas-045",
+        null
+      ],
+      [
+        "entry:atlas-046",
+        "Receipt transport observation atlas-046",
+        "implemented"
+      ],
+      [
+        "entry:atlas-047",
+        "Receipt transport observation atlas-047",
+        "released"
+      ],
+      [
+        "entry:atlas-048",
+        "Receipt transport observation atlas-048",
+        "planned"
+      ],
+      [
+        "entry:atlas-049",
+        "Receipt transport observation atlas-049",
+        "done"
+      ],
+      [
+        "entry:atlas-052",
+        "Receipt transport observation atlas-052",
+        "implemented"
+      ],
+      [
+        "entry:atlas-053",
+        "Receipt transport observation atlas-053",
+        "released"
+      ],
+      [
+        "entry:atlas-054",
+        "Receipt transport observation atlas-054",
+        "planned"
+      ],
+      [
+        "entry:atlas-055",
+        "Receipt transport observation atlas-055",
+        "done"
+      ],
+      [
+        "entry:atlas-056",
+        "Receipt transport observation atlas-056",
+        "blocked"
+      ],
+      [
+        "entry:atlas-057",
+        "Receipt transport observation atlas-057",
+        null
+      ],
+      [
+        "entry:atlas-058",
+        "Receipt transport observation atlas-058",
+        "implemented"
+      ],
+      [
+        "entry:atlas-059",
+        "Receipt transport observation atlas-059",
+        "released"
+      ]
+    ],
+    "known_refs": [
+      "entry:atlas-000",
+      "entry:missing-from-fixture"
+    ]
+  },
+  "baseline_only": false,
+  "tokenizer_version": "0.14.0",
+  "workflows": [
+    {
+      "workflow": "evidence",
+      "arm": "baseline_raw",
+      "answer": {
+        "refs": [
+          "entry:atlas-000",
+          "entry:atlas-001",
+          "entry:atlas-002"
+        ],
+        "full_record_sha256": {
+          "entry:atlas-000": "06458104844c63fb183c1e9b0bac8bba0418e390557e3b42da73a9540ab9053b",
+          "entry:atlas-001": "5c6cb163fbd849738ad578cb34c7e6b4f50088f1255ee3fccd61de19c810506f",
+          "entry:atlas-002": "57271b4c505bf4558bc04f52d4d02a07abfd3e4d5a050189c6feab1b8747ffaf"
+        }
+      },
+      "answer_sha256": "8eaf7895d76a8b47b2c4ad3726e3057e17ac624fdd8c8cb95e0103f77eaa33dd",
+      "core_sha256": "78f6cf9b7179e0e1ee34425f5d078d4c7f2dc27c39eb8a20e88882c080aaf9c5",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/CLI.md 'section: Поиск и контекст'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 3323,
+          "response_sha256": "a60f82694de15a521857e06fb74f2ef3ef82378b1d627be163e3c00193445ccc",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 26,
+              "stdout": 860,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 28,
+              "stdout": 1304,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json search pool --project atlas --limit 200"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 16230,
+          "response_sha256": "34a25230594e3419221b2fa3ae7135546f8e93cc47ed1e2ba85a4027be9c1cb8",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 18,
+              "stdout": 3294,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 18,
+              "stdout": 3323,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1694,
+          "tool_arguments": 44,
+          "documentation_responses": 860,
+          "data_responses": 3294,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 5921,
+            "cumulative_replayed_visible_input": 10253,
+            "context_at_model_boundaries": [
+              1723,
+              2609,
+              5921
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 3341,
+            "cumulative_replayed_visible_input": 3370,
+            "context_at_model_boundaries": [
+              29,
+              3341
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1692,
+          "tool_arguments": 46,
+          "documentation_responses": 1304,
+          "data_responses": 3323,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 6394,
+            "cumulative_replayed_visible_input": 11168,
+            "context_at_model_boundaries": [
+              1721,
+              3053,
+              6394
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 3370,
+            "cumulative_replayed_visible_input": 3399,
+            "context_at_model_boundaries": [
+              29,
+              3370
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        }
+      }
+    },
+    {
+      "workflow": "evidence",
+      "arm": "baseline_python",
+      "answer": {
+        "refs": [
+          "entry:atlas-000",
+          "entry:atlas-001",
+          "entry:atlas-002"
+        ],
+        "full_record_sha256": {
+          "entry:atlas-000": "06458104844c63fb183c1e9b0bac8bba0418e390557e3b42da73a9540ab9053b",
+          "entry:atlas-001": "5c6cb163fbd849738ad578cb34c7e6b4f50088f1255ee3fccd61de19c810506f",
+          "entry:atlas-002": "57271b4c505bf4558bc04f52d4d02a07abfd3e4d5a050189c6feab1b8747ffaf"
+        }
+      },
+      "answer_sha256": "8eaf7895d76a8b47b2c4ad3726e3057e17ac624fdd8c8cb95e0103f77eaa33dd",
+      "core_sha256": "78f6cf9b7179e0e1ee34425f5d078d4c7f2dc27c39eb8a20e88882c080aaf9c5",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/CLI.md 'section: Поиск и контекст'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 3323,
+          "response_sha256": "a60f82694de15a521857e06fb74f2ef3ef82378b1d627be163e3c00193445ccc",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 26,
+              "stdout": 860,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 28,
+              "stdout": 1304,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json search pool --project atlas --limit 200 | python3 -c 'import json,sys\nrows=[r for r in json.load(sys.stdin)['\"'\"'entries'\"'\"'] if '\"'\"'atlas'\"'\"' in r['\"'\"'project_ids'\"'\"'] and r['\"'\"'knowledge_state'\"'\"']=='\"'\"'confirmed'\"'\"']\nanswer={'\"'\"'entries'\"'\"':[r for r in rows if r['\"'\"'kind'\"'\"']=='\"'\"'decision'\"'\"' and r['\"'\"'work_state'\"'\"']=='\"'\"'done'\"'\"']}\nprint(json.dumps(answer,ensure_ascii=False,separators=('\"'\"','\"'\"','\"'\"':'\"'\"')))\n'"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 4420,
+          "response_sha256": "df05dfc7df6ae6756e9a5d1e72d0ea27a58f24a179f6f4b2c3bf93b7de446952",
+          "analysis_code_chars": 291,
+          "intermediate_off_model_bytes": 16230,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 199,
+              "stdout": 897,
+              "analysis_code": 75
+            },
+            "cl100k_base": {
+              "arguments": 200,
+              "stdout": 901,
+              "analysis_code": 77
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1694,
+          "tool_arguments": 225,
+          "documentation_responses": 860,
+          "data_responses": 897,
+          "unescaped_handcrafted_code_tokens_not_additive": 75,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3705,
+            "cumulative_replayed_visible_input": 8037,
+            "context_at_model_boundaries": [
+              1723,
+              2609,
+              3705
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 1125,
+            "cumulative_replayed_visible_input": 1154,
+            "context_at_model_boundaries": [
+              29,
+              1125
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1692,
+          "tool_arguments": 228,
+          "documentation_responses": 1304,
+          "data_responses": 901,
+          "unescaped_handcrafted_code_tokens_not_additive": 77,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 4154,
+            "cumulative_replayed_visible_input": 8928,
+            "context_at_model_boundaries": [
+              1721,
+              3053,
+              4154
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 1130,
+            "cumulative_replayed_visible_input": 1159,
+            "context_at_model_boundaries": [
+              29,
+              1130
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        }
+      }
+    },
+    {
+      "workflow": "evidence",
+      "arm": "baseline_discovery",
+      "answer": {
+        "refs": [
+          "entry:atlas-000",
+          "entry:atlas-001",
+          "entry:atlas-002"
+        ],
+        "full_record_sha256": {
+          "entry:atlas-000": "06458104844c63fb183c1e9b0bac8bba0418e390557e3b42da73a9540ab9053b",
+          "entry:atlas-001": "5c6cb163fbd849738ad578cb34c7e6b4f50088f1255ee3fccd61de19c810506f",
+          "entry:atlas-002": "57271b4c505bf4558bc04f52d4d02a07abfd3e4d5a050189c6feab1b8747ffaf"
+        }
+      },
+      "answer_sha256": "8eaf7895d76a8b47b2c4ad3726e3057e17ac624fdd8c8cb95e0103f77eaa33dd",
+      "core_sha256": "78f6cf9b7179e0e1ee34425f5d078d4c7f2dc27c39eb8a20e88882c080aaf9c5",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/RETRIEVAL_TOOLS.md 'whole focused document'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 3524,
+          "response_sha256": "493554f6c8700b89a6a59dcd5f92d9619a3a0105eaf888bbc87e854d448cb91b",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 27,
+              "stdout": 777,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 27,
+              "stdout": 777,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json discover pool --project atlas --limit 100 --max-chars 100000"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 15314,
+          "response_sha256": "14f91c4deeebb032bc866dddf7da8f68d65fe55bb1b8af5d3d5cee1fabf542ef",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 25,
+              "stdout": 3969,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 25,
+              "stdout": 3968,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json fetch --ref entry:atlas-000 --ref entry:atlas-001 --ref entry:atlas-002 --max-chars 16000"
+          },
+          "kind": "data",
+          "round": 3,
+          "response_chars": 5021,
+          "response_sha256": "046368a81729e223dee335391155f9299308f471eaba13c3584160c6276cf1d0",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 38,
+              "stdout": 1041,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 41,
+              "stdout": 1048,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1694,
+          "tool_arguments": 90,
+          "documentation_responses": 777,
+          "data_responses": 5010,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 7600,
+            "cumulative_replayed_visible_input": 18371,
+            "context_at_model_boundaries": [
+              1723,
+              2527,
+              6521,
+              7600
+            ],
+            "declared_model_decision_rounds_including_final": 4,
+            "logical_tool_calls": 3
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 5102,
+            "cumulative_replayed_visible_input": 9154,
+            "context_at_model_boundaries": [
+              29,
+              4023,
+              5102
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1692,
+          "tool_arguments": 93,
+          "documentation_responses": 777,
+          "data_responses": 5016,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 7607,
+            "cumulative_replayed_visible_input": 18371,
+            "context_at_model_boundaries": [
+              1721,
+              2525,
+              6518,
+              7607
+            ],
+            "declared_model_decision_rounds_including_final": 4,
+            "logical_tool_calls": 3
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 5111,
+            "cumulative_replayed_visible_input": 9162,
+            "context_at_model_boundaries": [
+              29,
+              4022,
+              5111
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          }
+        }
+      }
+    },
+    {
+      "workflow": "evidence",
+      "arm": "candidate_native",
+      "answer": {
+        "refs": [
+          "entry:atlas-000",
+          "entry:atlas-001",
+          "entry:atlas-002"
+        ],
+        "full_record_sha256": {
+          "entry:atlas-000": "06458104844c63fb183c1e9b0bac8bba0418e390557e3b42da73a9540ab9053b",
+          "entry:atlas-001": "5c6cb163fbd849738ad578cb34c7e6b4f50088f1255ee3fccd61de19c810506f",
+          "entry:atlas-002": "57271b4c505bf4558bc04f52d4d02a07abfd3e4d5a050189c6feab1b8747ffaf"
+        }
+      },
+      "answer_sha256": "8eaf7895d76a8b47b2c4ad3726e3057e17ac624fdd8c8cb95e0103f77eaa33dd",
+      "core_sha256": "a76e3b60b86dcd855ace638a1a1e1c93df24824e1de16efd71c98e2d06852dcb",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/RETRIEVAL_TOOLS.md 'whole focused document'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 4076,
+          "response_sha256": "784ce2776bbef28e086c11e17ce0481ab0eea1190e7513e7f0c4f8186f2d1f85",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 27,
+              "stdout": 902,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 27,
+              "stdout": 902,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/FILTERS.md 'prefix: strict scope, grammar and string predicates'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 2307,
+          "response_sha256": "5167e3e8f64782959829967fe36b379cdfb4e83859cee3a0ebb8a885f3c0be43",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 29,
+              "stdout": 566,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 29,
+              "stdout": 571,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json discover pool --project atlas --where 'project = '\"'\"'atlas'\"'\"' AND kind = '\"'\"'decision'\"'\"' AND work_state = '\"'\"'done'\"'\"'' --limit 100 --max-chars 100000"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 3089,
+          "response_sha256": "6a2b697f7deaa25f5d6d37d54bcc615cdf06daa1ada89676b2e30ffdc784e775",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 70,
+              "stdout": 787,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 68,
+              "stdout": 788,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json fetch --ref entry:atlas-000 --ref entry:atlas-001 --ref entry:atlas-002 --max-chars 16000"
+          },
+          "kind": "data",
+          "round": 3,
+          "response_chars": 5021,
+          "response_sha256": "046368a81729e223dee335391155f9299308f471eaba13c3584160c6276cf1d0",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 38,
+              "stdout": 1041,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 41,
+              "stdout": 1048,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1868,
+          "tool_arguments": 164,
+          "documentation_responses": 1468,
+          "data_responses": 1828,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 5357,
+            "cumulative_replayed_visible_input": 14953,
+            "context_at_model_boundaries": [
+              1897,
+              3421,
+              4278,
+              5357
+            ],
+            "declared_model_decision_rounds_including_final": 4,
+            "logical_tool_calls": 4
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 1965,
+            "cumulative_replayed_visible_input": 2880,
+            "context_at_model_boundaries": [
+              29,
+              886,
+              1965
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1865,
+          "tool_arguments": 165,
+          "documentation_responses": 1473,
+          "data_responses": 1836,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 5368,
+            "cumulative_replayed_visible_input": 14964,
+            "context_at_model_boundaries": [
+              1894,
+              3423,
+              4279,
+              5368
+            ],
+            "declared_model_decision_rounds_including_final": 4,
+            "logical_tool_calls": 4
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 1974,
+            "cumulative_replayed_visible_input": 2888,
+            "context_at_model_boundaries": [
+              29,
+              885,
+              1974
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          }
+        }
+      }
+    },
+    {
+      "workflow": "evidence",
+      "arm": "candidate_catalog",
+      "answer": {
+        "refs": [
+          "entry:atlas-000",
+          "entry:atlas-001",
+          "entry:atlas-002"
+        ],
+        "full_record_sha256": {
+          "entry:atlas-000": "06458104844c63fb183c1e9b0bac8bba0418e390557e3b42da73a9540ab9053b",
+          "entry:atlas-001": "5c6cb163fbd849738ad578cb34c7e6b4f50088f1255ee3fccd61de19c810506f",
+          "entry:atlas-002": "57271b4c505bf4558bc04f52d4d02a07abfd3e4d5a050189c6feab1b8747ffaf"
+        }
+      },
+      "answer_sha256": "8eaf7895d76a8b47b2c4ad3726e3057e17ac624fdd8c8cb95e0103f77eaa33dd",
+      "core_sha256": "a76e3b60b86dcd855ace638a1a1e1c93df24824e1de16efd71c98e2d06852dcb",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "richi --compact-json capabilities list --group search"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 795,
+          "response_sha256": "6a5b9448f990a3bbb4f258c582faac6c74524cab1381cb1a615ad5b88316ea6a",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 14,
+              "stdout": 174,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 14,
+              "stdout": 168,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json capabilities describe discover"
+          },
+          "kind": "documentation",
+          "round": 2,
+          "response_chars": 870,
+          "response_sha256": "f543527411d3703fed23f9aa06db3034817fce2fac29608aea791bd0c09be60d",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 12,
+              "stdout": 202,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 12,
+              "stdout": 190,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json capabilities describe fetch"
+          },
+          "kind": "documentation",
+          "round": 2,
+          "response_chars": 771,
+          "response_sha256": "ad86ebc82b541065ce9fbebba2908cb2d32c7066b8bb93f32049d02040d91b3e",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 12,
+              "stdout": 187,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 12,
+              "stdout": 181,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/RETRIEVAL_TOOLS.md 'whole focused document'"
+          },
+          "kind": "documentation",
+          "round": 3,
+          "response_chars": 4076,
+          "response_sha256": "784ce2776bbef28e086c11e17ce0481ab0eea1190e7513e7f0c4f8186f2d1f85",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 27,
+              "stdout": 902,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 27,
+              "stdout": 902,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/FILTERS.md 'prefix: strict scope, grammar and string predicates'"
+          },
+          "kind": "documentation",
+          "round": 3,
+          "response_chars": 2307,
+          "response_sha256": "5167e3e8f64782959829967fe36b379cdfb4e83859cee3a0ebb8a885f3c0be43",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 29,
+              "stdout": 566,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 29,
+              "stdout": 571,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json discover pool --project atlas --where 'project = '\"'\"'atlas'\"'\"' AND kind = '\"'\"'decision'\"'\"' AND work_state = '\"'\"'done'\"'\"'' --limit 100 --max-chars 100000"
+          },
+          "kind": "data",
+          "round": 4,
+          "response_chars": 3089,
+          "response_sha256": "6a2b697f7deaa25f5d6d37d54bcc615cdf06daa1ada89676b2e30ffdc784e775",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 70,
+              "stdout": 787,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 68,
+              "stdout": 788,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json fetch --ref entry:atlas-000 --ref entry:atlas-001 --ref entry:atlas-002 --max-chars 16000"
+          },
+          "kind": "data",
+          "round": 5,
+          "response_chars": 5021,
+          "response_sha256": "046368a81729e223dee335391155f9299308f471eaba13c3584160c6276cf1d0",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 38,
+              "stdout": 1041,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 41,
+              "stdout": 1048,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1868,
+          "tool_arguments": 202,
+          "documentation_responses": 2031,
+          "data_responses": 1828,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 5958,
+            "cumulative_replayed_visible_input": 21339,
+            "context_at_model_boundaries": [
+              1897,
+              2085,
+              2498,
+              4022,
+              4879,
+              5958
+            ],
+            "declared_model_decision_rounds_including_final": 6,
+            "logical_tool_calls": 7
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 1965,
+            "cumulative_replayed_visible_input": 2880,
+            "context_at_model_boundaries": [
+              29,
+              886,
+              1965
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1865,
+          "tool_arguments": 203,
+          "documentation_responses": 2012,
+          "data_responses": 1836,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 5945,
+            "cumulative_replayed_visible_input": 21242,
+            "context_at_model_boundaries": [
+              1894,
+              2076,
+              2471,
+              4000,
+              4856,
+              5945
+            ],
+            "declared_model_decision_rounds_including_final": 6,
+            "logical_tool_calls": 7
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 1974,
+            "cumulative_replayed_visible_input": 2888,
+            "context_at_model_boundaries": [
+              29,
+              885,
+              1974
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          }
+        }
+      }
+    },
+    {
+      "workflow": "evidence",
+      "arm": "candidate_filtered_search",
+      "answer": {
+        "refs": [
+          "entry:atlas-000",
+          "entry:atlas-001",
+          "entry:atlas-002"
+        ],
+        "full_record_sha256": {
+          "entry:atlas-000": "06458104844c63fb183c1e9b0bac8bba0418e390557e3b42da73a9540ab9053b",
+          "entry:atlas-001": "5c6cb163fbd849738ad578cb34c7e6b4f50088f1255ee3fccd61de19c810506f",
+          "entry:atlas-002": "57271b4c505bf4558bc04f52d4d02a07abfd3e4d5a050189c6feab1b8747ffaf"
+        }
+      },
+      "answer_sha256": "8eaf7895d76a8b47b2c4ad3726e3057e17ac624fdd8c8cb95e0103f77eaa33dd",
+      "core_sha256": "a76e3b60b86dcd855ace638a1a1e1c93df24824e1de16efd71c98e2d06852dcb",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/CLI.md 'section: Поиск и контекст'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 3323,
+          "response_sha256": "a60f82694de15a521857e06fb74f2ef3ef82378b1d627be163e3c00193445ccc",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 26,
+              "stdout": 860,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 28,
+              "stdout": 1304,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/FILTERS.md 'prefix: strict scope, grammar and string predicates'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 2307,
+          "response_sha256": "5167e3e8f64782959829967fe36b379cdfb4e83859cee3a0ebb8a885f3c0be43",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 29,
+              "stdout": 566,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 29,
+              "stdout": 571,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json search pool --project atlas --limit 200 --where 'project = '\"'\"'atlas'\"'\"' AND kind = '\"'\"'decision'\"'\"' AND work_state = '\"'\"'done'\"'\"''"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 4487,
+          "response_sha256": "9ee52b775c5f1f666a5687e43fd9760f9ab6cff2a27d1e2c7ab8d4bc022a14f3",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 63,
+              "stdout": 914,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 61,
+              "stdout": 918,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1868,
+          "tool_arguments": 118,
+          "documentation_responses": 1426,
+          "data_responses": 914,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 4355,
+            "cumulative_replayed_visible_input": 9630,
+            "context_at_model_boundaries": [
+              1897,
+              3378,
+              4355
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 3
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 1006,
+            "cumulative_replayed_visible_input": 1035,
+            "context_at_model_boundaries": [
+              29,
+              1006
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1865,
+          "tool_arguments": 118,
+          "documentation_responses": 1875,
+          "data_responses": 918,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 4805,
+            "cumulative_replayed_visible_input": 10525,
+            "context_at_model_boundaries": [
+              1894,
+              3826,
+              4805
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 3
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 1008,
+            "cumulative_replayed_visible_input": 1037,
+            "context_at_model_boundaries": [
+              29,
+              1008
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        }
+      }
+    },
+    {
+      "workflow": "distribution",
+      "arm": "baseline_raw",
+      "answer": {
+        "count": 50,
+        "groups": [
+          [
+            null,
+            6
+          ],
+          [
+            "blocked",
+            6
+          ],
+          [
+            "done",
+            10
+          ],
+          [
+            "implemented",
+            7
+          ],
+          [
+            "planned",
+            14
+          ],
+          [
+            "released",
+            7
+          ]
+        ]
+      },
+      "answer_sha256": "b422e4e5f26007d330d315cefffea2c28336282735e6287bc26706526174cb97",
+      "core_sha256": "78f6cf9b7179e0e1ee34425f5d078d4c7f2dc27c39eb8a20e88882c080aaf9c5",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/CLI.md 'section: Поиск и контекст'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 3323,
+          "response_sha256": "a60f82694de15a521857e06fb74f2ef3ef82378b1d627be163e3c00193445ccc",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 26,
+              "stdout": 860,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 28,
+              "stdout": 1304,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json context --project atlas --limit 200"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 81637,
+          "response_sha256": "610f6acf99d5ff996ec8fd79e69ceb485a7a402081da118529add3fbd37fcb85",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 17,
+              "stdout": 16421,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 17,
+              "stdout": 16551,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1694,
+          "tool_arguments": 43,
+          "documentation_responses": 860,
+          "data_responses": 16421,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 19047,
+            "cumulative_replayed_visible_input": 23379,
+            "context_at_model_boundaries": [
+              1723,
+              2609,
+              19047
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 16467,
+            "cumulative_replayed_visible_input": 16496,
+            "context_at_model_boundaries": [
+              29,
+              16467
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1692,
+          "tool_arguments": 45,
+          "documentation_responses": 1304,
+          "data_responses": 16551,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 19621,
+            "cumulative_replayed_visible_input": 24395,
+            "context_at_model_boundaries": [
+              1721,
+              3053,
+              19621
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 16597,
+            "cumulative_replayed_visible_input": 16626,
+            "context_at_model_boundaries": [
+              29,
+              16597
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        }
+      }
+    },
+    {
+      "workflow": "distribution",
+      "arm": "baseline_python",
+      "answer": {
+        "count": 50,
+        "groups": [
+          [
+            null,
+            6
+          ],
+          [
+            "blocked",
+            6
+          ],
+          [
+            "done",
+            10
+          ],
+          [
+            "implemented",
+            7
+          ],
+          [
+            "planned",
+            14
+          ],
+          [
+            "released",
+            7
+          ]
+        ]
+      },
+      "answer_sha256": "b422e4e5f26007d330d315cefffea2c28336282735e6287bc26706526174cb97",
+      "core_sha256": "78f6cf9b7179e0e1ee34425f5d078d4c7f2dc27c39eb8a20e88882c080aaf9c5",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/CLI.md 'section: Поиск и контекст'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 3323,
+          "response_sha256": "a60f82694de15a521857e06fb74f2ef3ef82378b1d627be163e3c00193445ccc",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 26,
+              "stdout": 860,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 28,
+              "stdout": 1304,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json context --project atlas --limit 200 | python3 -c 'import json,sys\nrows=[r for r in json.load(sys.stdin)['\"'\"'entries'\"'\"'] if '\"'\"'atlas'\"'\"' in r['\"'\"'project_ids'\"'\"'] and r['\"'\"'knowledge_state'\"'\"']=='\"'\"'confirmed'\"'\"']\nfrom collections import Counter\ngroups=Counter(r['\"'\"'work_state'\"'\"'] for r in rows)\nanswer={'\"'\"'count'\"'\"':len(rows),'\"'\"'groups'\"'\"':sorted([[k,v] for k,v in groups.items()],key=lambda r:(r[0] is not None,r[0] or '\"'\"''\"'\"'))}\nprint(json.dumps(answer,ensure_ascii=False,separators=('\"'\"','\"'\"','\"'\"':'\"'\"')))\n'"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 107,
+          "response_sha256": "e8925a9bd357e55846b2146fbe47cb38451cd4fb2d6eed22ab675b29bd6183ed",
+          "analysis_code_chars": 400,
+          "intermediate_off_model_bytes": 81637,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 224,
+              "stdout": 38,
+              "analysis_code": 109
+            },
+            "cl100k_base": {
+              "arguments": 224,
+              "stdout": 39,
+              "analysis_code": 110
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1694,
+          "tool_arguments": 250,
+          "documentation_responses": 860,
+          "data_responses": 38,
+          "unescaped_handcrafted_code_tokens_not_additive": 109,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 2871,
+            "cumulative_replayed_visible_input": 7203,
+            "context_at_model_boundaries": [
+              1723,
+              2609,
+              2871
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 291,
+            "cumulative_replayed_visible_input": 320,
+            "context_at_model_boundaries": [
+              29,
+              291
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1692,
+          "tool_arguments": 252,
+          "documentation_responses": 1304,
+          "data_responses": 39,
+          "unescaped_handcrafted_code_tokens_not_additive": 110,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3316,
+            "cumulative_replayed_visible_input": 8090,
+            "context_at_model_boundaries": [
+              1721,
+              3053,
+              3316
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 292,
+            "cumulative_replayed_visible_input": 321,
+            "context_at_model_boundaries": [
+              29,
+              292
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        }
+      }
+    },
+    {
+      "workflow": "distribution",
+      "arm": "candidate_native",
+      "answer": {
+        "count": 50,
+        "groups": [
+          [
+            null,
+            6
+          ],
+          [
+            "blocked",
+            6
+          ],
+          [
+            "done",
+            10
+          ],
+          [
+            "implemented",
+            7
+          ],
+          [
+            "planned",
+            14
+          ],
+          [
+            "released",
+            7
+          ]
+        ]
+      },
+      "answer_sha256": "b422e4e5f26007d330d315cefffea2c28336282735e6287bc26706526174cb97",
+      "core_sha256": "a76e3b60b86dcd855ace638a1a1e1c93df24824e1de16efd71c98e2d06852dcb",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/QUERY_TOOLS.md 'whole focused document'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 4254,
+          "response_sha256": "af07cb3829c7796b6e5a4c5ee319de3fb296fa6cfe0b5917d480cbea5a6b803b",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 24,
+              "stdout": 944,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 24,
+              "stdout": 947,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query count --project atlas"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 213,
+          "response_sha256": "6e341f55c88e40f75aef0f310a5a9db0d6841ed5d27db7bf6e8c9110502c44ea",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 14,
+              "stdout": 55,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 14,
+              "stdout": 53,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query facets --project atlas --by work_state --limit 200"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 365,
+          "response_sha256": "4e3533966832728d2bc795843afcbb398c1ce0a14139ea6d19e8b23e8a3616da",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 22,
+              "stdout": 102,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 22,
+              "stdout": 100,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1868,
+          "tool_arguments": 60,
+          "documentation_responses": 944,
+          "data_responses": 157,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3058,
+            "cumulative_replayed_visible_input": 7820,
+            "context_at_model_boundaries": [
+              1897,
+              2865,
+              3058
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 3
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 222,
+            "cumulative_replayed_visible_input": 251,
+            "context_at_model_boundaries": [
+              29,
+              222
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 2
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1865,
+          "tool_arguments": 60,
+          "documentation_responses": 947,
+          "data_responses": 153,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3054,
+            "cumulative_replayed_visible_input": 7813,
+            "context_at_model_boundaries": [
+              1894,
+              2865,
+              3054
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 3
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 218,
+            "cumulative_replayed_visible_input": 247,
+            "context_at_model_boundaries": [
+              29,
+              218
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 2
+          }
+        }
+      }
+    },
+    {
+      "workflow": "distribution",
+      "arm": "candidate_catalog",
+      "answer": {
+        "count": 50,
+        "groups": [
+          [
+            null,
+            6
+          ],
+          [
+            "blocked",
+            6
+          ],
+          [
+            "done",
+            10
+          ],
+          [
+            "implemented",
+            7
+          ],
+          [
+            "planned",
+            14
+          ],
+          [
+            "released",
+            7
+          ]
+        ]
+      },
+      "answer_sha256": "b422e4e5f26007d330d315cefffea2c28336282735e6287bc26706526174cb97",
+      "core_sha256": "a76e3b60b86dcd855ace638a1a1e1c93df24824e1de16efd71c98e2d06852dcb",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "richi --compact-json capabilities list --group analysis"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 699,
+          "response_sha256": "afde69f36d5d80064c96f149a738681bbd1d7e837e54789d7d794cfe1d682759",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 14,
+              "stdout": 144,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 14,
+              "stdout": 142,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json capabilities describe 'query count'"
+          },
+          "kind": "documentation",
+          "round": 2,
+          "response_chars": 883,
+          "response_sha256": "ebfdbc142ce96401b63500ebacdc7bd3859dc2ebf4ddf7c28243617e69823e0e",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 15,
+              "stdout": 207,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 15,
+              "stdout": 195,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json capabilities describe 'query facets'"
+          },
+          "kind": "documentation",
+          "round": 2,
+          "response_chars": 1160,
+          "response_sha256": "4fbe3e4a47080f9ee99eb11a33edbd149f74c57e2459fcc0d7ec3af87c19012f",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 15,
+              "stdout": 269,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 15,
+              "stdout": 255,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/QUERY_TOOLS.md 'whole focused document'"
+          },
+          "kind": "documentation",
+          "round": 3,
+          "response_chars": 4254,
+          "response_sha256": "af07cb3829c7796b6e5a4c5ee319de3fb296fa6cfe0b5917d480cbea5a6b803b",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 24,
+              "stdout": 944,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 24,
+              "stdout": 947,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query count --project atlas"
+          },
+          "kind": "data",
+          "round": 4,
+          "response_chars": 213,
+          "response_sha256": "6e341f55c88e40f75aef0f310a5a9db0d6841ed5d27db7bf6e8c9110502c44ea",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 14,
+              "stdout": 55,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 14,
+              "stdout": 53,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query facets --project atlas --by work_state --limit 200"
+          },
+          "kind": "data",
+          "round": 4,
+          "response_chars": 365,
+          "response_sha256": "4e3533966832728d2bc795843afcbb398c1ce0a14139ea6d19e8b23e8a3616da",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 22,
+              "stdout": 102,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 22,
+              "stdout": 100,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1868,
+          "tool_arguments": 104,
+          "documentation_responses": 1564,
+          "data_responses": 157,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3722,
+            "cumulative_replayed_visible_input": 13764,
+            "context_at_model_boundaries": [
+              1897,
+              2055,
+              2561,
+              3529,
+              3722
+            ],
+            "declared_model_decision_rounds_including_final": 5,
+            "logical_tool_calls": 6
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 222,
+            "cumulative_replayed_visible_input": 251,
+            "context_at_model_boundaries": [
+              29,
+              222
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 2
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 29,
+          "loaded_core_skill": 1865,
+          "tool_arguments": 104,
+          "documentation_responses": 1539,
+          "data_responses": 153,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3690,
+            "cumulative_replayed_visible_input": 13665,
+            "context_at_model_boundaries": [
+              1894,
+              2050,
+              2530,
+              3501,
+              3690
+            ],
+            "declared_model_decision_rounds_including_final": 5,
+            "logical_tool_calls": 6
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 218,
+            "cumulative_replayed_visible_input": 247,
+            "context_at_model_boundaries": [
+              29,
+              218
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 2
+          }
+        }
+      }
+    },
+    {
+      "workflow": "existence",
+      "arm": "baseline_raw",
+      "answer": {
+        "exists": [
+          true,
+          false
+        ]
+      },
+      "answer_sha256": "71f01867e75ad58a6e3c518c01c307afbc24ac847942b946bf01b10f53084e75",
+      "core_sha256": "78f6cf9b7179e0e1ee34425f5d078d4c7f2dc27c39eb8a20e88882c080aaf9c5",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/CLI.md 'section: Поиск и контекст'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 3323,
+          "response_sha256": "a60f82694de15a521857e06fb74f2ef3ef82378b1d627be163e3c00193445ccc",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 26,
+              "stdout": 860,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 28,
+              "stdout": 1304,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json context --project atlas --limit 200"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 81637,
+          "response_sha256": "610f6acf99d5ff996ec8fd79e69ceb485a7a402081da118529add3fbd37fcb85",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 17,
+              "stdout": 16421,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 17,
+              "stdout": 16551,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 33,
+          "loaded_core_skill": 1694,
+          "tool_arguments": 43,
+          "documentation_responses": 860,
+          "data_responses": 16421,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 19051,
+            "cumulative_replayed_visible_input": 23391,
+            "context_at_model_boundaries": [
+              1727,
+              2613,
+              19051
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 16471,
+            "cumulative_replayed_visible_input": 16504,
+            "context_at_model_boundaries": [
+              33,
+              16471
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 34,
+          "loaded_core_skill": 1692,
+          "tool_arguments": 45,
+          "documentation_responses": 1304,
+          "data_responses": 16551,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 19626,
+            "cumulative_replayed_visible_input": 24410,
+            "context_at_model_boundaries": [
+              1726,
+              3058,
+              19626
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 16602,
+            "cumulative_replayed_visible_input": 16636,
+            "context_at_model_boundaries": [
+              34,
+              16602
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        }
+      }
+    },
+    {
+      "workflow": "existence",
+      "arm": "baseline_python",
+      "answer": {
+        "exists": [
+          true,
+          false
+        ]
+      },
+      "answer_sha256": "71f01867e75ad58a6e3c518c01c307afbc24ac847942b946bf01b10f53084e75",
+      "core_sha256": "78f6cf9b7179e0e1ee34425f5d078d4c7f2dc27c39eb8a20e88882c080aaf9c5",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/CLI.md 'section: Поиск и контекст'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 3323,
+          "response_sha256": "a60f82694de15a521857e06fb74f2ef3ef82378b1d627be163e3c00193445ccc",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 26,
+              "stdout": 860,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 28,
+              "stdout": 1304,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json context --project atlas --limit 200 | python3 -c 'import json,sys\nrows=[r for r in json.load(sys.stdin)['\"'\"'entries'\"'\"'] if '\"'\"'atlas'\"'\"' in r['\"'\"'project_ids'\"'\"'] and r['\"'\"'knowledge_state'\"'\"']=='\"'\"'confirmed'\"'\"']\nanswer={'\"'\"'exists'\"'\"':[any(r['\"'\"'kind'\"'\"']=='\"'\"'decision'\"'\"' and r['\"'\"'work_state'\"'\"']=='\"'\"'done'\"'\"' for r in rows),any('\"'\"'not-observed-in-fixture'\"'\"' in r['\"'\"'tags'\"'\"'] for r in rows)]}\nprint(json.dumps(answer,ensure_ascii=False,separators=('\"'\"','\"'\"','\"'\"':'\"'\"')))\n'"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 24,
+          "response_sha256": "570e24d12e566692d0d44090ac46a8f13d681ce2854a84941341e6c9314a3ac3",
+          "analysis_code_chars": 348,
+          "intermediate_off_model_bytes": 81637,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 233,
+              "stdout": 6,
+              "analysis_code": 95
+            },
+            "cl100k_base": {
+              "arguments": 235,
+              "stdout": 6,
+              "analysis_code": 98
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 33,
+          "loaded_core_skill": 1694,
+          "tool_arguments": 259,
+          "documentation_responses": 860,
+          "data_responses": 6,
+          "unescaped_handcrafted_code_tokens_not_additive": 95,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 2852,
+            "cumulative_replayed_visible_input": 7192,
+            "context_at_model_boundaries": [
+              1727,
+              2613,
+              2852
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 272,
+            "cumulative_replayed_visible_input": 305,
+            "context_at_model_boundaries": [
+              33,
+              272
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 34,
+          "loaded_core_skill": 1692,
+          "tool_arguments": 263,
+          "documentation_responses": 1304,
+          "data_responses": 6,
+          "unescaped_handcrafted_code_tokens_not_additive": 98,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3299,
+            "cumulative_replayed_visible_input": 8083,
+            "context_at_model_boundaries": [
+              1726,
+              3058,
+              3299
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 275,
+            "cumulative_replayed_visible_input": 309,
+            "context_at_model_boundaries": [
+              34,
+              275
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        }
+      }
+    },
+    {
+      "workflow": "existence",
+      "arm": "candidate_native",
+      "answer": {
+        "exists": [
+          true,
+          false
+        ]
+      },
+      "answer_sha256": "71f01867e75ad58a6e3c518c01c307afbc24ac847942b946bf01b10f53084e75",
+      "core_sha256": "a76e3b60b86dcd855ace638a1a1e1c93df24824e1de16efd71c98e2d06852dcb",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/QUERY_TOOLS.md 'whole focused document'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 4254,
+          "response_sha256": "af07cb3829c7796b6e5a4c5ee319de3fb296fa6cfe0b5917d480cbea5a6b803b",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 24,
+              "stdout": 944,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 24,
+              "stdout": 947,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/FILTERS.md 'prefix: strict scope, grammar and string predicates'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 2307,
+          "response_sha256": "5167e3e8f64782959829967fe36b379cdfb4e83859cee3a0ebb8a885f3c0be43",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 29,
+              "stdout": 566,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 29,
+              "stdout": 571,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query exists --project atlas --where 'kind = '\"'\"'decision'\"'\"' AND work_state = '\"'\"'done'\"'\"''"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 216,
+          "response_sha256": "1e64997e51ffa6c06cb9e001e53cdd22651123fd95838514cf8fd4d0a3bdcd40",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 45,
+              "stdout": 55,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 43,
+              "stdout": 53,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query exists --project atlas --where 'tags HAS '\"'\"'not-observed-in-fixture'\"'\"''"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 217,
+          "response_sha256": "9577376d704324a8bf9b3b9eac5976930b47fc94ef42e1e4605809c82da4bc4c",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 35,
+              "stdout": 55,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 35,
+              "stdout": 53,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 33,
+          "loaded_core_skill": 1868,
+          "tool_arguments": 133,
+          "documentation_responses": 1510,
+          "data_responses": 110,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3654,
+            "cumulative_replayed_visible_input": 9019,
+            "context_at_model_boundaries": [
+              1901,
+              3464,
+              3654
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 4
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 223,
+            "cumulative_replayed_visible_input": 256,
+            "context_at_model_boundaries": [
+              33,
+              223
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 2
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 34,
+          "loaded_core_skill": 1865,
+          "tool_arguments": 131,
+          "documentation_responses": 1518,
+          "data_responses": 106,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3654,
+            "cumulative_replayed_visible_input": 9023,
+            "context_at_model_boundaries": [
+              1899,
+              3470,
+              3654
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 4
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 218,
+            "cumulative_replayed_visible_input": 252,
+            "context_at_model_boundaries": [
+              34,
+              218
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 2
+          }
+        }
+      }
+    },
+    {
+      "workflow": "existence",
+      "arm": "candidate_catalog",
+      "answer": {
+        "exists": [
+          true,
+          false
+        ]
+      },
+      "answer_sha256": "71f01867e75ad58a6e3c518c01c307afbc24ac847942b946bf01b10f53084e75",
+      "core_sha256": "a76e3b60b86dcd855ace638a1a1e1c93df24824e1de16efd71c98e2d06852dcb",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "richi --compact-json capabilities list --group analysis"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 699,
+          "response_sha256": "afde69f36d5d80064c96f149a738681bbd1d7e837e54789d7d794cfe1d682759",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 14,
+              "stdout": 144,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 14,
+              "stdout": 142,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json capabilities describe 'query exists'"
+          },
+          "kind": "documentation",
+          "round": 2,
+          "response_chars": 896,
+          "response_sha256": "96595d4f977d6efd9ebc8aba9db61596f9d2ce0d5ce6e216c60595b19407740b",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 15,
+              "stdout": 210,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 15,
+              "stdout": 197,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/QUERY_TOOLS.md 'whole focused document'"
+          },
+          "kind": "documentation",
+          "round": 3,
+          "response_chars": 4254,
+          "response_sha256": "af07cb3829c7796b6e5a4c5ee319de3fb296fa6cfe0b5917d480cbea5a6b803b",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 24,
+              "stdout": 944,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 24,
+              "stdout": 947,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/FILTERS.md 'prefix: strict scope, grammar and string predicates'"
+          },
+          "kind": "documentation",
+          "round": 3,
+          "response_chars": 2307,
+          "response_sha256": "5167e3e8f64782959829967fe36b379cdfb4e83859cee3a0ebb8a885f3c0be43",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 29,
+              "stdout": 566,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 29,
+              "stdout": 571,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query exists --project atlas --where 'kind = '\"'\"'decision'\"'\"' AND work_state = '\"'\"'done'\"'\"''"
+          },
+          "kind": "data",
+          "round": 4,
+          "response_chars": 216,
+          "response_sha256": "1e64997e51ffa6c06cb9e001e53cdd22651123fd95838514cf8fd4d0a3bdcd40",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 45,
+              "stdout": 55,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 43,
+              "stdout": 53,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query exists --project atlas --where 'tags HAS '\"'\"'not-observed-in-fixture'\"'\"''"
+          },
+          "kind": "data",
+          "round": 4,
+          "response_chars": 217,
+          "response_sha256": "9577376d704324a8bf9b3b9eac5976930b47fc94ef42e1e4605809c82da4bc4c",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 35,
+              "stdout": 55,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 35,
+              "stdout": 53,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 33,
+          "loaded_core_skill": 1868,
+          "tool_arguments": 162,
+          "documentation_responses": 1864,
+          "data_responses": 110,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 4037,
+            "cumulative_replayed_visible_input": 14128,
+            "context_at_model_boundaries": [
+              1901,
+              2059,
+              2284,
+              3847,
+              4037
+            ],
+            "declared_model_decision_rounds_including_final": 5,
+            "logical_tool_calls": 6
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 223,
+            "cumulative_replayed_visible_input": 256,
+            "context_at_model_boundaries": [
+              33,
+              223
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 2
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 34,
+          "loaded_core_skill": 1865,
+          "tool_arguments": 160,
+          "documentation_responses": 1857,
+          "data_responses": 106,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 4022,
+            "cumulative_replayed_visible_input": 14081,
+            "context_at_model_boundaries": [
+              1899,
+              2055,
+              2267,
+              3838,
+              4022
+            ],
+            "declared_model_decision_rounds_including_final": 5,
+            "logical_tool_calls": 6
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 218,
+            "cumulative_replayed_visible_input": 252,
+            "context_at_model_boundaries": [
+              34,
+              218
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 2
+          }
+        }
+      }
+    },
+    {
+      "workflow": "projection",
+      "arm": "baseline_raw",
+      "answer": {
+        "rows": [
+          [
+            "entry:atlas-000",
+            "Pool sizing observation atlas-000",
+            "done"
+          ],
+          [
+            "entry:atlas-001",
+            "Pool sizing observation atlas-001",
+            "done"
+          ],
+          [
+            "entry:atlas-002",
+            "Pool sizing observation atlas-002",
+            "done"
+          ],
+          [
+            "entry:atlas-003",
+            "Pool sizing observation atlas-003",
+            "planned"
+          ],
+          [
+            "entry:atlas-004",
+            "Pool sizing observation atlas-004",
+            "planned"
+          ],
+          [
+            "entry:atlas-005",
+            "Pool sizing observation atlas-005",
+            "planned"
+          ],
+          [
+            "entry:atlas-006",
+            "Pool sizing observation atlas-006",
+            "planned"
+          ],
+          [
+            "entry:atlas-007",
+            "Pool sizing observation atlas-007",
+            "planned"
+          ],
+          [
+            "entry:atlas-008",
+            "Pool sizing observation atlas-008",
+            "planned"
+          ],
+          [
+            "entry:atlas-009",
+            "Pool sizing observation atlas-009",
+            "planned"
+          ],
+          [
+            "entry:atlas-012",
+            "Receipt transport observation atlas-012",
+            "planned"
+          ],
+          [
+            "entry:atlas-013",
+            "Receipt transport observation atlas-013",
+            "done"
+          ],
+          [
+            "entry:atlas-014",
+            "Receipt transport observation atlas-014",
+            "blocked"
+          ],
+          [
+            "entry:atlas-015",
+            "Receipt transport observation atlas-015",
+            null
+          ],
+          [
+            "entry:atlas-016",
+            "Receipt transport observation atlas-016",
+            "implemented"
+          ],
+          [
+            "entry:atlas-017",
+            "Receipt transport observation atlas-017",
+            "released"
+          ],
+          [
+            "entry:atlas-018",
+            "Receipt transport observation atlas-018",
+            "planned"
+          ],
+          [
+            "entry:atlas-019",
+            "Receipt transport observation atlas-019",
+            "done"
+          ],
+          [
+            "entry:atlas-022",
+            "Receipt transport observation atlas-022",
+            "implemented"
+          ],
+          [
+            "entry:atlas-023",
+            "Receipt transport observation atlas-023",
+            "released"
+          ],
+          [
+            "entry:atlas-024",
+            "Receipt transport observation atlas-024",
+            "planned"
+          ],
+          [
+            "entry:atlas-025",
+            "Receipt transport observation atlas-025",
+            "done"
+          ],
+          [
+            "entry:atlas-026",
+            "Receipt transport observation atlas-026",
+            "blocked"
+          ],
+          [
+            "entry:atlas-027",
+            "Receipt transport observation atlas-027",
+            null
+          ],
+          [
+            "entry:atlas-028",
+            "Receipt transport observation atlas-028",
+            "implemented"
+          ],
+          [
+            "entry:atlas-029",
+            "Receipt transport observation atlas-029",
+            "released"
+          ],
+          [
+            "entry:atlas-032",
+            "Receipt transport observation atlas-032",
+            "blocked"
+          ],
+          [
+            "entry:atlas-033",
+            "Receipt transport observation atlas-033",
+            null
+          ],
+          [
+            "entry:atlas-034",
+            "Receipt transport observation atlas-034",
+            "implemented"
+          ],
+          [
+            "entry:atlas-035",
+            "Receipt transport observation atlas-035",
+            "released"
+          ],
+          [
+            "entry:atlas-036",
+            "Receipt transport observation atlas-036",
+            "planned"
+          ],
+          [
+            "entry:atlas-037",
+            "Receipt transport observation atlas-037",
+            "done"
+          ],
+          [
+            "entry:atlas-038",
+            "Receipt transport observation atlas-038",
+            "blocked"
+          ],
+          [
+            "entry:atlas-039",
+            "Receipt transport observation atlas-039",
+            null
+          ],
+          [
+            "entry:atlas-042",
+            "Receipt transport observation atlas-042",
+            "planned"
+          ],
+          [
+            "entry:atlas-043",
+            "Receipt transport observation atlas-043",
+            "done"
+          ],
+          [
+            "entry:atlas-044",
+            "Receipt transport observation atlas-044",
+            "blocked"
+          ],
+          [
+            "entry:atlas-045",
+            "Receipt transport observation atlas-045",
+            null
+          ],
+          [
+            "entry:atlas-046",
+            "Receipt transport observation atlas-046",
+            "implemented"
+          ],
+          [
+            "entry:atlas-047",
+            "Receipt transport observation atlas-047",
+            "released"
+          ],
+          [
+            "entry:atlas-048",
+            "Receipt transport observation atlas-048",
+            "planned"
+          ],
+          [
+            "entry:atlas-049",
+            "Receipt transport observation atlas-049",
+            "done"
+          ],
+          [
+            "entry:atlas-052",
+            "Receipt transport observation atlas-052",
+            "implemented"
+          ],
+          [
+            "entry:atlas-053",
+            "Receipt transport observation atlas-053",
+            "released"
+          ],
+          [
+            "entry:atlas-054",
+            "Receipt transport observation atlas-054",
+            "planned"
+          ],
+          [
+            "entry:atlas-055",
+            "Receipt transport observation atlas-055",
+            "done"
+          ],
+          [
+            "entry:atlas-056",
+            "Receipt transport observation atlas-056",
+            "blocked"
+          ],
+          [
+            "entry:atlas-057",
+            "Receipt transport observation atlas-057",
+            null
+          ],
+          [
+            "entry:atlas-058",
+            "Receipt transport observation atlas-058",
+            "implemented"
+          ],
+          [
+            "entry:atlas-059",
+            "Receipt transport observation atlas-059",
+            "released"
+          ]
+        ]
+      },
+      "answer_sha256": "b2998bc65b4af03c041755c42c0f5b21345ac620bd29aa29597bfe506e9c8463",
+      "core_sha256": "78f6cf9b7179e0e1ee34425f5d078d4c7f2dc27c39eb8a20e88882c080aaf9c5",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/CLI.md 'section: Поиск и контекст'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 3323,
+          "response_sha256": "a60f82694de15a521857e06fb74f2ef3ef82378b1d627be163e3c00193445ccc",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 26,
+              "stdout": 860,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 28,
+              "stdout": 1304,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json context --project atlas --limit 200"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 81637,
+          "response_sha256": "610f6acf99d5ff996ec8fd79e69ceb485a7a402081da118529add3fbd37fcb85",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 17,
+              "stdout": 16421,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 17,
+              "stdout": 16551,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 25,
+          "loaded_core_skill": 1694,
+          "tool_arguments": 43,
+          "documentation_responses": 860,
+          "data_responses": 16421,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 19043,
+            "cumulative_replayed_visible_input": 23367,
+            "context_at_model_boundaries": [
+              1719,
+              2605,
+              19043
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 16463,
+            "cumulative_replayed_visible_input": 16488,
+            "context_at_model_boundaries": [
+              25,
+              16463
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 25,
+          "loaded_core_skill": 1692,
+          "tool_arguments": 45,
+          "documentation_responses": 1304,
+          "data_responses": 16551,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 19617,
+            "cumulative_replayed_visible_input": 24383,
+            "context_at_model_boundaries": [
+              1717,
+              3049,
+              19617
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 16593,
+            "cumulative_replayed_visible_input": 16618,
+            "context_at_model_boundaries": [
+              25,
+              16593
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        }
+      }
+    },
+    {
+      "workflow": "projection",
+      "arm": "baseline_python",
+      "answer": {
+        "rows": [
+          [
+            "entry:atlas-000",
+            "Pool sizing observation atlas-000",
+            "done"
+          ],
+          [
+            "entry:atlas-001",
+            "Pool sizing observation atlas-001",
+            "done"
+          ],
+          [
+            "entry:atlas-002",
+            "Pool sizing observation atlas-002",
+            "done"
+          ],
+          [
+            "entry:atlas-003",
+            "Pool sizing observation atlas-003",
+            "planned"
+          ],
+          [
+            "entry:atlas-004",
+            "Pool sizing observation atlas-004",
+            "planned"
+          ],
+          [
+            "entry:atlas-005",
+            "Pool sizing observation atlas-005",
+            "planned"
+          ],
+          [
+            "entry:atlas-006",
+            "Pool sizing observation atlas-006",
+            "planned"
+          ],
+          [
+            "entry:atlas-007",
+            "Pool sizing observation atlas-007",
+            "planned"
+          ],
+          [
+            "entry:atlas-008",
+            "Pool sizing observation atlas-008",
+            "planned"
+          ],
+          [
+            "entry:atlas-009",
+            "Pool sizing observation atlas-009",
+            "planned"
+          ],
+          [
+            "entry:atlas-012",
+            "Receipt transport observation atlas-012",
+            "planned"
+          ],
+          [
+            "entry:atlas-013",
+            "Receipt transport observation atlas-013",
+            "done"
+          ],
+          [
+            "entry:atlas-014",
+            "Receipt transport observation atlas-014",
+            "blocked"
+          ],
+          [
+            "entry:atlas-015",
+            "Receipt transport observation atlas-015",
+            null
+          ],
+          [
+            "entry:atlas-016",
+            "Receipt transport observation atlas-016",
+            "implemented"
+          ],
+          [
+            "entry:atlas-017",
+            "Receipt transport observation atlas-017",
+            "released"
+          ],
+          [
+            "entry:atlas-018",
+            "Receipt transport observation atlas-018",
+            "planned"
+          ],
+          [
+            "entry:atlas-019",
+            "Receipt transport observation atlas-019",
+            "done"
+          ],
+          [
+            "entry:atlas-022",
+            "Receipt transport observation atlas-022",
+            "implemented"
+          ],
+          [
+            "entry:atlas-023",
+            "Receipt transport observation atlas-023",
+            "released"
+          ],
+          [
+            "entry:atlas-024",
+            "Receipt transport observation atlas-024",
+            "planned"
+          ],
+          [
+            "entry:atlas-025",
+            "Receipt transport observation atlas-025",
+            "done"
+          ],
+          [
+            "entry:atlas-026",
+            "Receipt transport observation atlas-026",
+            "blocked"
+          ],
+          [
+            "entry:atlas-027",
+            "Receipt transport observation atlas-027",
+            null
+          ],
+          [
+            "entry:atlas-028",
+            "Receipt transport observation atlas-028",
+            "implemented"
+          ],
+          [
+            "entry:atlas-029",
+            "Receipt transport observation atlas-029",
+            "released"
+          ],
+          [
+            "entry:atlas-032",
+            "Receipt transport observation atlas-032",
+            "blocked"
+          ],
+          [
+            "entry:atlas-033",
+            "Receipt transport observation atlas-033",
+            null
+          ],
+          [
+            "entry:atlas-034",
+            "Receipt transport observation atlas-034",
+            "implemented"
+          ],
+          [
+            "entry:atlas-035",
+            "Receipt transport observation atlas-035",
+            "released"
+          ],
+          [
+            "entry:atlas-036",
+            "Receipt transport observation atlas-036",
+            "planned"
+          ],
+          [
+            "entry:atlas-037",
+            "Receipt transport observation atlas-037",
+            "done"
+          ],
+          [
+            "entry:atlas-038",
+            "Receipt transport observation atlas-038",
+            "blocked"
+          ],
+          [
+            "entry:atlas-039",
+            "Receipt transport observation atlas-039",
+            null
+          ],
+          [
+            "entry:atlas-042",
+            "Receipt transport observation atlas-042",
+            "planned"
+          ],
+          [
+            "entry:atlas-043",
+            "Receipt transport observation atlas-043",
+            "done"
+          ],
+          [
+            "entry:atlas-044",
+            "Receipt transport observation atlas-044",
+            "blocked"
+          ],
+          [
+            "entry:atlas-045",
+            "Receipt transport observation atlas-045",
+            null
+          ],
+          [
+            "entry:atlas-046",
+            "Receipt transport observation atlas-046",
+            "implemented"
+          ],
+          [
+            "entry:atlas-047",
+            "Receipt transport observation atlas-047",
+            "released"
+          ],
+          [
+            "entry:atlas-048",
+            "Receipt transport observation atlas-048",
+            "planned"
+          ],
+          [
+            "entry:atlas-049",
+            "Receipt transport observation atlas-049",
+            "done"
+          ],
+          [
+            "entry:atlas-052",
+            "Receipt transport observation atlas-052",
+            "implemented"
+          ],
+          [
+            "entry:atlas-053",
+            "Receipt transport observation atlas-053",
+            "released"
+          ],
+          [
+            "entry:atlas-054",
+            "Receipt transport observation atlas-054",
+            "planned"
+          ],
+          [
+            "entry:atlas-055",
+            "Receipt transport observation atlas-055",
+            "done"
+          ],
+          [
+            "entry:atlas-056",
+            "Receipt transport observation atlas-056",
+            "blocked"
+          ],
+          [
+            "entry:atlas-057",
+            "Receipt transport observation atlas-057",
+            null
+          ],
+          [
+            "entry:atlas-058",
+            "Receipt transport observation atlas-058",
+            "implemented"
+          ],
+          [
+            "entry:atlas-059",
+            "Receipt transport observation atlas-059",
+            "released"
+          ]
+        ]
+      },
+      "answer_sha256": "b2998bc65b4af03c041755c42c0f5b21345ac620bd29aa29597bfe506e9c8463",
+      "core_sha256": "78f6cf9b7179e0e1ee34425f5d078d4c7f2dc27c39eb8a20e88882c080aaf9c5",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/CLI.md 'section: Поиск и контекст'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 3323,
+          "response_sha256": "a60f82694de15a521857e06fb74f2ef3ef82378b1d627be163e3c00193445ccc",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 26,
+              "stdout": 860,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 28,
+              "stdout": 1304,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json context --project atlas --limit 200 | python3 -c 'import json,sys\nrows=[r for r in json.load(sys.stdin)['\"'\"'entries'\"'\"'] if '\"'\"'atlas'\"'\"' in r['\"'\"'project_ids'\"'\"'] and r['\"'\"'knowledge_state'\"'\"']=='\"'\"'confirmed'\"'\"']\nanswer={'\"'\"'rows'\"'\"':[['\"'\"'entry:'\"'\"'+r['\"'\"'id'\"'\"'],r['\"'\"'title'\"'\"'],r['\"'\"'work_state'\"'\"']] for r in sorted(rows,key=lambda r:r['\"'\"'id'\"'\"'])]}\nprint(json.dumps(answer,ensure_ascii=False,separators=('\"'\"','\"'\"','\"'\"':'\"'\"')))\n'"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 3526,
+          "response_sha256": "1a44f760fcab6999abe7c835d5db8d7b6e20c57090ee7df772f79c00e7637207",
+          "analysis_code_chars": 308,
+          "intermediate_off_model_bytes": 81637,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 215,
+              "stdout": 804,
+              "analysis_code": 84
+            },
+            "cl100k_base": {
+              "arguments": 216,
+              "stdout": 825,
+              "analysis_code": 86
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 25,
+          "loaded_core_skill": 1694,
+          "tool_arguments": 241,
+          "documentation_responses": 860,
+          "data_responses": 804,
+          "unescaped_handcrafted_code_tokens_not_additive": 84,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3624,
+            "cumulative_replayed_visible_input": 7948,
+            "context_at_model_boundaries": [
+              1719,
+              2605,
+              3624
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 1044,
+            "cumulative_replayed_visible_input": 1069,
+            "context_at_model_boundaries": [
+              25,
+              1044
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 25,
+          "loaded_core_skill": 1692,
+          "tool_arguments": 244,
+          "documentation_responses": 1304,
+          "data_responses": 825,
+          "unescaped_handcrafted_code_tokens_not_additive": 86,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 4090,
+            "cumulative_replayed_visible_input": 8856,
+            "context_at_model_boundaries": [
+              1717,
+              3049,
+              4090
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 1066,
+            "cumulative_replayed_visible_input": 1091,
+            "context_at_model_boundaries": [
+              25,
+              1066
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        }
+      }
+    },
+    {
+      "workflow": "projection",
+      "arm": "candidate_native",
+      "answer": {
+        "rows": [
+          [
+            "entry:atlas-000",
+            "Pool sizing observation atlas-000",
+            "done"
+          ],
+          [
+            "entry:atlas-001",
+            "Pool sizing observation atlas-001",
+            "done"
+          ],
+          [
+            "entry:atlas-002",
+            "Pool sizing observation atlas-002",
+            "done"
+          ],
+          [
+            "entry:atlas-003",
+            "Pool sizing observation atlas-003",
+            "planned"
+          ],
+          [
+            "entry:atlas-004",
+            "Pool sizing observation atlas-004",
+            "planned"
+          ],
+          [
+            "entry:atlas-005",
+            "Pool sizing observation atlas-005",
+            "planned"
+          ],
+          [
+            "entry:atlas-006",
+            "Pool sizing observation atlas-006",
+            "planned"
+          ],
+          [
+            "entry:atlas-007",
+            "Pool sizing observation atlas-007",
+            "planned"
+          ],
+          [
+            "entry:atlas-008",
+            "Pool sizing observation atlas-008",
+            "planned"
+          ],
+          [
+            "entry:atlas-009",
+            "Pool sizing observation atlas-009",
+            "planned"
+          ],
+          [
+            "entry:atlas-012",
+            "Receipt transport observation atlas-012",
+            "planned"
+          ],
+          [
+            "entry:atlas-013",
+            "Receipt transport observation atlas-013",
+            "done"
+          ],
+          [
+            "entry:atlas-014",
+            "Receipt transport observation atlas-014",
+            "blocked"
+          ],
+          [
+            "entry:atlas-015",
+            "Receipt transport observation atlas-015",
+            null
+          ],
+          [
+            "entry:atlas-016",
+            "Receipt transport observation atlas-016",
+            "implemented"
+          ],
+          [
+            "entry:atlas-017",
+            "Receipt transport observation atlas-017",
+            "released"
+          ],
+          [
+            "entry:atlas-018",
+            "Receipt transport observation atlas-018",
+            "planned"
+          ],
+          [
+            "entry:atlas-019",
+            "Receipt transport observation atlas-019",
+            "done"
+          ],
+          [
+            "entry:atlas-022",
+            "Receipt transport observation atlas-022",
+            "implemented"
+          ],
+          [
+            "entry:atlas-023",
+            "Receipt transport observation atlas-023",
+            "released"
+          ],
+          [
+            "entry:atlas-024",
+            "Receipt transport observation atlas-024",
+            "planned"
+          ],
+          [
+            "entry:atlas-025",
+            "Receipt transport observation atlas-025",
+            "done"
+          ],
+          [
+            "entry:atlas-026",
+            "Receipt transport observation atlas-026",
+            "blocked"
+          ],
+          [
+            "entry:atlas-027",
+            "Receipt transport observation atlas-027",
+            null
+          ],
+          [
+            "entry:atlas-028",
+            "Receipt transport observation atlas-028",
+            "implemented"
+          ],
+          [
+            "entry:atlas-029",
+            "Receipt transport observation atlas-029",
+            "released"
+          ],
+          [
+            "entry:atlas-032",
+            "Receipt transport observation atlas-032",
+            "blocked"
+          ],
+          [
+            "entry:atlas-033",
+            "Receipt transport observation atlas-033",
+            null
+          ],
+          [
+            "entry:atlas-034",
+            "Receipt transport observation atlas-034",
+            "implemented"
+          ],
+          [
+            "entry:atlas-035",
+            "Receipt transport observation atlas-035",
+            "released"
+          ],
+          [
+            "entry:atlas-036",
+            "Receipt transport observation atlas-036",
+            "planned"
+          ],
+          [
+            "entry:atlas-037",
+            "Receipt transport observation atlas-037",
+            "done"
+          ],
+          [
+            "entry:atlas-038",
+            "Receipt transport observation atlas-038",
+            "blocked"
+          ],
+          [
+            "entry:atlas-039",
+            "Receipt transport observation atlas-039",
+            null
+          ],
+          [
+            "entry:atlas-042",
+            "Receipt transport observation atlas-042",
+            "planned"
+          ],
+          [
+            "entry:atlas-043",
+            "Receipt transport observation atlas-043",
+            "done"
+          ],
+          [
+            "entry:atlas-044",
+            "Receipt transport observation atlas-044",
+            "blocked"
+          ],
+          [
+            "entry:atlas-045",
+            "Receipt transport observation atlas-045",
+            null
+          ],
+          [
+            "entry:atlas-046",
+            "Receipt transport observation atlas-046",
+            "implemented"
+          ],
+          [
+            "entry:atlas-047",
+            "Receipt transport observation atlas-047",
+            "released"
+          ],
+          [
+            "entry:atlas-048",
+            "Receipt transport observation atlas-048",
+            "planned"
+          ],
+          [
+            "entry:atlas-049",
+            "Receipt transport observation atlas-049",
+            "done"
+          ],
+          [
+            "entry:atlas-052",
+            "Receipt transport observation atlas-052",
+            "implemented"
+          ],
+          [
+            "entry:atlas-053",
+            "Receipt transport observation atlas-053",
+            "released"
+          ],
+          [
+            "entry:atlas-054",
+            "Receipt transport observation atlas-054",
+            "planned"
+          ],
+          [
+            "entry:atlas-055",
+            "Receipt transport observation atlas-055",
+            "done"
+          ],
+          [
+            "entry:atlas-056",
+            "Receipt transport observation atlas-056",
+            "blocked"
+          ],
+          [
+            "entry:atlas-057",
+            "Receipt transport observation atlas-057",
+            null
+          ],
+          [
+            "entry:atlas-058",
+            "Receipt transport observation atlas-058",
+            "implemented"
+          ],
+          [
+            "entry:atlas-059",
+            "Receipt transport observation atlas-059",
+            "released"
+          ]
+        ]
+      },
+      "answer_sha256": "b2998bc65b4af03c041755c42c0f5b21345ac620bd29aa29597bfe506e9c8463",
+      "core_sha256": "a76e3b60b86dcd855ace638a1a1e1c93df24824e1de16efd71c98e2d06852dcb",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/QUERY_TOOLS.md 'whole focused document'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 4254,
+          "response_sha256": "af07cb3829c7796b6e5a4c5ee319de3fb296fa6cfe0b5917d480cbea5a6b803b",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 24,
+              "stdout": 944,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 24,
+              "stdout": 947,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query select --project atlas --fields ref,title,work_state --limit 200 --max-chars 8000"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 3839,
+          "response_sha256": "f403b6c3fff6efab8f4eeedffff4ac583ecdcb35a210c114179af4ed33ed43be",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 32,
+              "stdout": 884,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 32,
+              "stdout": 902,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 25,
+          "loaded_core_skill": 1868,
+          "tool_arguments": 56,
+          "documentation_responses": 944,
+          "data_responses": 884,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3777,
+            "cumulative_replayed_visible_input": 8531,
+            "context_at_model_boundaries": [
+              1893,
+              2861,
+              3777
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 941,
+            "cumulative_replayed_visible_input": 966,
+            "context_at_model_boundaries": [
+              25,
+              941
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 25,
+          "loaded_core_skill": 1865,
+          "tool_arguments": 56,
+          "documentation_responses": 947,
+          "data_responses": 902,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3795,
+            "cumulative_replayed_visible_input": 8546,
+            "context_at_model_boundaries": [
+              1890,
+              2861,
+              3795
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 959,
+            "cumulative_replayed_visible_input": 984,
+            "context_at_model_boundaries": [
+              25,
+              959
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        }
+      }
+    },
+    {
+      "workflow": "projection",
+      "arm": "candidate_catalog",
+      "answer": {
+        "rows": [
+          [
+            "entry:atlas-000",
+            "Pool sizing observation atlas-000",
+            "done"
+          ],
+          [
+            "entry:atlas-001",
+            "Pool sizing observation atlas-001",
+            "done"
+          ],
+          [
+            "entry:atlas-002",
+            "Pool sizing observation atlas-002",
+            "done"
+          ],
+          [
+            "entry:atlas-003",
+            "Pool sizing observation atlas-003",
+            "planned"
+          ],
+          [
+            "entry:atlas-004",
+            "Pool sizing observation atlas-004",
+            "planned"
+          ],
+          [
+            "entry:atlas-005",
+            "Pool sizing observation atlas-005",
+            "planned"
+          ],
+          [
+            "entry:atlas-006",
+            "Pool sizing observation atlas-006",
+            "planned"
+          ],
+          [
+            "entry:atlas-007",
+            "Pool sizing observation atlas-007",
+            "planned"
+          ],
+          [
+            "entry:atlas-008",
+            "Pool sizing observation atlas-008",
+            "planned"
+          ],
+          [
+            "entry:atlas-009",
+            "Pool sizing observation atlas-009",
+            "planned"
+          ],
+          [
+            "entry:atlas-012",
+            "Receipt transport observation atlas-012",
+            "planned"
+          ],
+          [
+            "entry:atlas-013",
+            "Receipt transport observation atlas-013",
+            "done"
+          ],
+          [
+            "entry:atlas-014",
+            "Receipt transport observation atlas-014",
+            "blocked"
+          ],
+          [
+            "entry:atlas-015",
+            "Receipt transport observation atlas-015",
+            null
+          ],
+          [
+            "entry:atlas-016",
+            "Receipt transport observation atlas-016",
+            "implemented"
+          ],
+          [
+            "entry:atlas-017",
+            "Receipt transport observation atlas-017",
+            "released"
+          ],
+          [
+            "entry:atlas-018",
+            "Receipt transport observation atlas-018",
+            "planned"
+          ],
+          [
+            "entry:atlas-019",
+            "Receipt transport observation atlas-019",
+            "done"
+          ],
+          [
+            "entry:atlas-022",
+            "Receipt transport observation atlas-022",
+            "implemented"
+          ],
+          [
+            "entry:atlas-023",
+            "Receipt transport observation atlas-023",
+            "released"
+          ],
+          [
+            "entry:atlas-024",
+            "Receipt transport observation atlas-024",
+            "planned"
+          ],
+          [
+            "entry:atlas-025",
+            "Receipt transport observation atlas-025",
+            "done"
+          ],
+          [
+            "entry:atlas-026",
+            "Receipt transport observation atlas-026",
+            "blocked"
+          ],
+          [
+            "entry:atlas-027",
+            "Receipt transport observation atlas-027",
+            null
+          ],
+          [
+            "entry:atlas-028",
+            "Receipt transport observation atlas-028",
+            "implemented"
+          ],
+          [
+            "entry:atlas-029",
+            "Receipt transport observation atlas-029",
+            "released"
+          ],
+          [
+            "entry:atlas-032",
+            "Receipt transport observation atlas-032",
+            "blocked"
+          ],
+          [
+            "entry:atlas-033",
+            "Receipt transport observation atlas-033",
+            null
+          ],
+          [
+            "entry:atlas-034",
+            "Receipt transport observation atlas-034",
+            "implemented"
+          ],
+          [
+            "entry:atlas-035",
+            "Receipt transport observation atlas-035",
+            "released"
+          ],
+          [
+            "entry:atlas-036",
+            "Receipt transport observation atlas-036",
+            "planned"
+          ],
+          [
+            "entry:atlas-037",
+            "Receipt transport observation atlas-037",
+            "done"
+          ],
+          [
+            "entry:atlas-038",
+            "Receipt transport observation atlas-038",
+            "blocked"
+          ],
+          [
+            "entry:atlas-039",
+            "Receipt transport observation atlas-039",
+            null
+          ],
+          [
+            "entry:atlas-042",
+            "Receipt transport observation atlas-042",
+            "planned"
+          ],
+          [
+            "entry:atlas-043",
+            "Receipt transport observation atlas-043",
+            "done"
+          ],
+          [
+            "entry:atlas-044",
+            "Receipt transport observation atlas-044",
+            "blocked"
+          ],
+          [
+            "entry:atlas-045",
+            "Receipt transport observation atlas-045",
+            null
+          ],
+          [
+            "entry:atlas-046",
+            "Receipt transport observation atlas-046",
+            "implemented"
+          ],
+          [
+            "entry:atlas-047",
+            "Receipt transport observation atlas-047",
+            "released"
+          ],
+          [
+            "entry:atlas-048",
+            "Receipt transport observation atlas-048",
+            "planned"
+          ],
+          [
+            "entry:atlas-049",
+            "Receipt transport observation atlas-049",
+            "done"
+          ],
+          [
+            "entry:atlas-052",
+            "Receipt transport observation atlas-052",
+            "implemented"
+          ],
+          [
+            "entry:atlas-053",
+            "Receipt transport observation atlas-053",
+            "released"
+          ],
+          [
+            "entry:atlas-054",
+            "Receipt transport observation atlas-054",
+            "planned"
+          ],
+          [
+            "entry:atlas-055",
+            "Receipt transport observation atlas-055",
+            "done"
+          ],
+          [
+            "entry:atlas-056",
+            "Receipt transport observation atlas-056",
+            "blocked"
+          ],
+          [
+            "entry:atlas-057",
+            "Receipt transport observation atlas-057",
+            null
+          ],
+          [
+            "entry:atlas-058",
+            "Receipt transport observation atlas-058",
+            "implemented"
+          ],
+          [
+            "entry:atlas-059",
+            "Receipt transport observation atlas-059",
+            "released"
+          ]
+        ]
+      },
+      "answer_sha256": "b2998bc65b4af03c041755c42c0f5b21345ac620bd29aa29597bfe506e9c8463",
+      "core_sha256": "a76e3b60b86dcd855ace638a1a1e1c93df24824e1de16efd71c98e2d06852dcb",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "richi --compact-json capabilities list --group analysis"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 699,
+          "response_sha256": "afde69f36d5d80064c96f149a738681bbd1d7e837e54789d7d794cfe1d682759",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 14,
+              "stdout": 144,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 14,
+              "stdout": 142,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json capabilities describe 'query select'"
+          },
+          "kind": "documentation",
+          "round": 2,
+          "response_chars": 1247,
+          "response_sha256": "2fb1f107c63668e751e9871d5ce4c38ecbe6b45923c0b327d5b04787bc878972",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 15,
+              "stdout": 279,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 15,
+              "stdout": 263,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/QUERY_TOOLS.md 'whole focused document'"
+          },
+          "kind": "documentation",
+          "round": 3,
+          "response_chars": 4254,
+          "response_sha256": "af07cb3829c7796b6e5a4c5ee319de3fb296fa6cfe0b5917d480cbea5a6b803b",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 24,
+              "stdout": 944,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 24,
+              "stdout": 947,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query select --project atlas --fields ref,title,work_state --limit 200 --max-chars 8000"
+          },
+          "kind": "data",
+          "round": 4,
+          "response_chars": 3839,
+          "response_sha256": "f403b6c3fff6efab8f4eeedffff4ac583ecdcb35a210c114179af4ed33ed43be",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 32,
+              "stdout": 884,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 32,
+              "stdout": 902,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 25,
+          "loaded_core_skill": 1868,
+          "tool_arguments": 85,
+          "documentation_responses": 1367,
+          "data_responses": 884,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 4229,
+            "cumulative_replayed_visible_input": 13831,
+            "context_at_model_boundaries": [
+              1893,
+              2051,
+              2345,
+              3313,
+              4229
+            ],
+            "declared_model_decision_rounds_including_final": 5,
+            "logical_tool_calls": 4
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 941,
+            "cumulative_replayed_visible_input": 966,
+            "context_at_model_boundaries": [
+              25,
+              941
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 25,
+          "loaded_core_skill": 1865,
+          "tool_arguments": 85,
+          "documentation_responses": 1352,
+          "data_responses": 902,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 4229,
+            "cumulative_replayed_visible_input": 13784,
+            "context_at_model_boundaries": [
+              1890,
+              2046,
+              2324,
+              3295,
+              4229
+            ],
+            "declared_model_decision_rounds_including_final": 5,
+            "logical_tool_calls": 4
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 959,
+            "cumulative_replayed_visible_input": 984,
+            "context_at_model_boundaries": [
+              25,
+              959
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        }
+      }
+    },
+    {
+      "workflow": "known_refs",
+      "arm": "baseline_direct",
+      "answer": {
+        "refs": [
+          "entry:atlas-000"
+        ],
+        "full_record_sha256": {
+          "entry:atlas-000": "06458104844c63fb183c1e9b0bac8bba0418e390557e3b42da73a9540ab9053b"
+        },
+        "missing": [
+          "entry:missing-from-fixture"
+        ]
+      },
+      "answer_sha256": "a8121c0302c143c91c2c1127b5cb233cc635440a677cb1d092ebb832b6daecf0",
+      "core_sha256": "78f6cf9b7179e0e1ee34425f5d078d4c7f2dc27c39eb8a20e88882c080aaf9c5",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/RETRIEVAL_TOOLS.md 'whole focused document'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 3524,
+          "response_sha256": "493554f6c8700b89a6a59dcd5f92d9619a3a0105eaf888bbc87e854d448cb91b",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 27,
+              "stdout": 777,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 27,
+              "stdout": 777,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json fetch --ref entry:atlas-000 --ref entry:missing-from-fixture --max-chars 16000"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 2103,
+          "response_sha256": "0e4a00a8de02ced48ba69ad01abc30766ab82fdf75899cce1e57426cf33f8da9",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 32,
+              "stdout": 448,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 33,
+              "stdout": 450,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 26,
+          "loaded_core_skill": 1694,
+          "tool_arguments": 59,
+          "documentation_responses": 777,
+          "data_responses": 448,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3004,
+            "cumulative_replayed_visible_input": 7248,
+            "context_at_model_boundaries": [
+              1720,
+              2524,
+              3004
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 506,
+            "cumulative_replayed_visible_input": 532,
+            "context_at_model_boundaries": [
+              26,
+              506
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 27,
+          "loaded_core_skill": 1692,
+          "tool_arguments": 60,
+          "documentation_responses": 777,
+          "data_responses": 450,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3006,
+            "cumulative_replayed_visible_input": 7248,
+            "context_at_model_boundaries": [
+              1719,
+              2523,
+              3006
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 510,
+            "cumulative_replayed_visible_input": 537,
+            "context_at_model_boundaries": [
+              27,
+              510
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        }
+      }
+    },
+    {
+      "workflow": "known_refs",
+      "arm": "candidate_native",
+      "answer": {
+        "refs": [
+          "entry:atlas-000"
+        ],
+        "full_record_sha256": {
+          "entry:atlas-000": "06458104844c63fb183c1e9b0bac8bba0418e390557e3b42da73a9540ab9053b"
+        },
+        "missing": [
+          "entry:missing-from-fixture"
+        ]
+      },
+      "answer_sha256": "a8121c0302c143c91c2c1127b5cb233cc635440a677cb1d092ebb832b6daecf0",
+      "core_sha256": "a76e3b60b86dcd855ace638a1a1e1c93df24824e1de16efd71c98e2d06852dcb",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/RETRIEVAL_TOOLS.md 'whole focused document'"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 4076,
+          "response_sha256": "784ce2776bbef28e086c11e17ce0481ab0eea1190e7513e7f0c4f8186f2d1f85",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 27,
+              "stdout": 902,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 27,
+              "stdout": 902,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json fetch --ref entry:atlas-000 --ref entry:missing-from-fixture --max-chars 16000"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 2103,
+          "response_sha256": "0e4a00a8de02ced48ba69ad01abc30766ab82fdf75899cce1e57426cf33f8da9",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 32,
+              "stdout": 448,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 33,
+              "stdout": 450,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 26,
+          "loaded_core_skill": 1868,
+          "tool_arguments": 59,
+          "documentation_responses": 902,
+          "data_responses": 448,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3303,
+            "cumulative_replayed_visible_input": 8020,
+            "context_at_model_boundaries": [
+              1894,
+              2823,
+              3303
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 506,
+            "cumulative_replayed_visible_input": 532,
+            "context_at_model_boundaries": [
+              26,
+              506
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 27,
+          "loaded_core_skill": 1865,
+          "tool_arguments": 60,
+          "documentation_responses": 902,
+          "data_responses": 450,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3304,
+            "cumulative_replayed_visible_input": 8017,
+            "context_at_model_boundaries": [
+              1892,
+              2821,
+              3304
+            ],
+            "declared_model_decision_rounds_including_final": 3,
+            "logical_tool_calls": 2
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 510,
+            "cumulative_replayed_visible_input": 537,
+            "context_at_model_boundaries": [
+              27,
+              510
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        }
+      }
+    },
+    {
+      "workflow": "known_refs",
+      "arm": "candidate_catalog",
+      "answer": {
+        "refs": [
+          "entry:atlas-000"
+        ],
+        "full_record_sha256": {
+          "entry:atlas-000": "06458104844c63fb183c1e9b0bac8bba0418e390557e3b42da73a9540ab9053b"
+        },
+        "missing": [
+          "entry:missing-from-fixture"
+        ]
+      },
+      "answer_sha256": "a8121c0302c143c91c2c1127b5cb233cc635440a677cb1d092ebb832b6daecf0",
+      "core_sha256": "a76e3b60b86dcd855ace638a1a1e1c93df24824e1de16efd71c98e2d06852dcb",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "richi --compact-json capabilities list --group search"
+          },
+          "kind": "documentation",
+          "round": 1,
+          "response_chars": 795,
+          "response_sha256": "6a5b9448f990a3bbb4f258c582faac6c74524cab1381cb1a615ad5b88316ea6a",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 14,
+              "stdout": 174,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 14,
+              "stdout": 168,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json capabilities describe fetch"
+          },
+          "kind": "documentation",
+          "round": 2,
+          "response_chars": 771,
+          "response_sha256": "ad86ebc82b541065ce9fbebba2908cb2d32c7066b8bb93f32049d02040d91b3e",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 12,
+              "stdout": 187,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 12,
+              "stdout": 181,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "read_document /installed/skills/project-memory/references/RETRIEVAL_TOOLS.md 'whole focused document'"
+          },
+          "kind": "documentation",
+          "round": 3,
+          "response_chars": 4076,
+          "response_sha256": "784ce2776bbef28e086c11e17ce0481ab0eea1190e7513e7f0c4f8186f2d1f85",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 27,
+              "stdout": 902,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 27,
+              "stdout": 902,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json fetch --ref entry:atlas-000 --ref entry:missing-from-fixture --max-chars 16000"
+          },
+          "kind": "data",
+          "round": 4,
+          "response_chars": 2103,
+          "response_sha256": "0e4a00a8de02ced48ba69ad01abc30766ab82fdf75899cce1e57426cf33f8da9",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 32,
+              "stdout": 448,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 33,
+              "stdout": 450,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 26,
+          "loaded_core_skill": 1868,
+          "tool_arguments": 85,
+          "documentation_responses": 1263,
+          "data_responses": 448,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3690,
+            "cumulative_replayed_visible_input": 13157,
+            "context_at_model_boundaries": [
+              1894,
+              2082,
+              2281,
+              3210,
+              3690
+            ],
+            "declared_model_decision_rounds_including_final": 5,
+            "logical_tool_calls": 4
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 506,
+            "cumulative_replayed_visible_input": 532,
+            "context_at_model_boundaries": [
+              26,
+              506
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 27,
+          "loaded_core_skill": 1865,
+          "tool_arguments": 86,
+          "documentation_responses": 1251,
+          "data_responses": 450,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3679,
+            "cumulative_replayed_visible_input": 13108,
+            "context_at_model_boundaries": [
+              1892,
+              2074,
+              2267,
+              3196,
+              3679
+            ],
+            "declared_model_decision_rounds_including_final": 5,
+            "logical_tool_calls": 4
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 510,
+            "cumulative_replayed_visible_input": 537,
+            "context_at_model_boundaries": [
+              27,
+              510
+            ],
+            "declared_model_decision_rounds_including_final": 2,
+            "logical_tool_calls": 1
+          }
+        }
+      }
+    },
+    {
+      "workflow": "projection_cursor_contract",
+      "arm": "candidate_native",
+      "answer": {
+        "rows": [
+          [
+            "entry:atlas-000",
+            "Pool sizing observation atlas-000",
+            "done"
+          ],
+          [
+            "entry:atlas-001",
+            "Pool sizing observation atlas-001",
+            "done"
+          ],
+          [
+            "entry:atlas-002",
+            "Pool sizing observation atlas-002",
+            "done"
+          ],
+          [
+            "entry:atlas-003",
+            "Pool sizing observation atlas-003",
+            "planned"
+          ],
+          [
+            "entry:atlas-004",
+            "Pool sizing observation atlas-004",
+            "planned"
+          ],
+          [
+            "entry:atlas-005",
+            "Pool sizing observation atlas-005",
+            "planned"
+          ],
+          [
+            "entry:atlas-006",
+            "Pool sizing observation atlas-006",
+            "planned"
+          ],
+          [
+            "entry:atlas-007",
+            "Pool sizing observation atlas-007",
+            "planned"
+          ],
+          [
+            "entry:atlas-008",
+            "Pool sizing observation atlas-008",
+            "planned"
+          ],
+          [
+            "entry:atlas-009",
+            "Pool sizing observation atlas-009",
+            "planned"
+          ],
+          [
+            "entry:atlas-012",
+            "Receipt transport observation atlas-012",
+            "planned"
+          ],
+          [
+            "entry:atlas-013",
+            "Receipt transport observation atlas-013",
+            "done"
+          ],
+          [
+            "entry:atlas-014",
+            "Receipt transport observation atlas-014",
+            "blocked"
+          ],
+          [
+            "entry:atlas-015",
+            "Receipt transport observation atlas-015",
+            null
+          ],
+          [
+            "entry:atlas-016",
+            "Receipt transport observation atlas-016",
+            "implemented"
+          ],
+          [
+            "entry:atlas-017",
+            "Receipt transport observation atlas-017",
+            "released"
+          ],
+          [
+            "entry:atlas-018",
+            "Receipt transport observation atlas-018",
+            "planned"
+          ],
+          [
+            "entry:atlas-019",
+            "Receipt transport observation atlas-019",
+            "done"
+          ],
+          [
+            "entry:atlas-022",
+            "Receipt transport observation atlas-022",
+            "implemented"
+          ],
+          [
+            "entry:atlas-023",
+            "Receipt transport observation atlas-023",
+            "released"
+          ],
+          [
+            "entry:atlas-024",
+            "Receipt transport observation atlas-024",
+            "planned"
+          ],
+          [
+            "entry:atlas-025",
+            "Receipt transport observation atlas-025",
+            "done"
+          ],
+          [
+            "entry:atlas-026",
+            "Receipt transport observation atlas-026",
+            "blocked"
+          ],
+          [
+            "entry:atlas-027",
+            "Receipt transport observation atlas-027",
+            null
+          ],
+          [
+            "entry:atlas-028",
+            "Receipt transport observation atlas-028",
+            "implemented"
+          ],
+          [
+            "entry:atlas-029",
+            "Receipt transport observation atlas-029",
+            "released"
+          ],
+          [
+            "entry:atlas-032",
+            "Receipt transport observation atlas-032",
+            "blocked"
+          ],
+          [
+            "entry:atlas-033",
+            "Receipt transport observation atlas-033",
+            null
+          ],
+          [
+            "entry:atlas-034",
+            "Receipt transport observation atlas-034",
+            "implemented"
+          ],
+          [
+            "entry:atlas-035",
+            "Receipt transport observation atlas-035",
+            "released"
+          ],
+          [
+            "entry:atlas-036",
+            "Receipt transport observation atlas-036",
+            "planned"
+          ],
+          [
+            "entry:atlas-037",
+            "Receipt transport observation atlas-037",
+            "done"
+          ],
+          [
+            "entry:atlas-038",
+            "Receipt transport observation atlas-038",
+            "blocked"
+          ],
+          [
+            "entry:atlas-039",
+            "Receipt transport observation atlas-039",
+            null
+          ],
+          [
+            "entry:atlas-042",
+            "Receipt transport observation atlas-042",
+            "planned"
+          ],
+          [
+            "entry:atlas-043",
+            "Receipt transport observation atlas-043",
+            "done"
+          ],
+          [
+            "entry:atlas-044",
+            "Receipt transport observation atlas-044",
+            "blocked"
+          ],
+          [
+            "entry:atlas-045",
+            "Receipt transport observation atlas-045",
+            null
+          ],
+          [
+            "entry:atlas-046",
+            "Receipt transport observation atlas-046",
+            "implemented"
+          ],
+          [
+            "entry:atlas-047",
+            "Receipt transport observation atlas-047",
+            "released"
+          ],
+          [
+            "entry:atlas-048",
+            "Receipt transport observation atlas-048",
+            "planned"
+          ],
+          [
+            "entry:atlas-049",
+            "Receipt transport observation atlas-049",
+            "done"
+          ],
+          [
+            "entry:atlas-052",
+            "Receipt transport observation atlas-052",
+            "implemented"
+          ],
+          [
+            "entry:atlas-053",
+            "Receipt transport observation atlas-053",
+            "released"
+          ],
+          [
+            "entry:atlas-054",
+            "Receipt transport observation atlas-054",
+            "planned"
+          ],
+          [
+            "entry:atlas-055",
+            "Receipt transport observation atlas-055",
+            "done"
+          ],
+          [
+            "entry:atlas-056",
+            "Receipt transport observation atlas-056",
+            "blocked"
+          ],
+          [
+            "entry:atlas-057",
+            "Receipt transport observation atlas-057",
+            null
+          ],
+          [
+            "entry:atlas-058",
+            "Receipt transport observation atlas-058",
+            "implemented"
+          ],
+          [
+            "entry:atlas-059",
+            "Receipt transport observation atlas-059",
+            "released"
+          ]
+        ]
+      },
+      "answer_sha256": "b2998bc65b4af03c041755c42c0f5b21345ac620bd29aa29597bfe506e9c8463",
+      "core_sha256": "a76e3b60b86dcd855ace638a1a1e1c93df24824e1de16efd71c98e2d06852dcb",
+      "steps": [
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query select --project atlas --fields ref,title,work_state --limit 7 --max-chars 8000"
+          },
+          "kind": "data",
+          "round": 1,
+          "response_chars": 787,
+          "response_sha256": "1a5f3ad21b2c15794f8713e16a3a86d9d4165379e826cb1ea45090f417975e92",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 32,
+              "stdout": 199,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 32,
+              "stdout": 202,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query select --project atlas --fields ref,title,work_state --limit 7 --max-chars 8000 --after entry:atlas-006"
+          },
+          "kind": "data",
+          "round": 2,
+          "response_chars": 812,
+          "response_sha256": "b4a327f716acdc0ee08fe4e5f92220c91265f827772baaf803bfbab2149cabd5",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 39,
+              "stdout": 199,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 40,
+              "stdout": 202,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query select --project atlas --fields ref,title,work_state --limit 7 --max-chars 8000 --after entry:atlas-015"
+          },
+          "kind": "data",
+          "round": 3,
+          "response_chars": 845,
+          "response_sha256": "3d1305e5a8bed93de079d0252665568a1aba4b87e5e643d85e2fa142958e7cf4",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 39,
+              "stdout": 199,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 40,
+              "stdout": 200,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query select --project atlas --fields ref,title,work_state --limit 7 --max-chars 8000 --after entry:atlas-024"
+          },
+          "kind": "data",
+          "round": 4,
+          "response_chars": 830,
+          "response_sha256": "3de91d864139b85d000652f6deba07b4611ea429f6c4579b17dec24082ffaf0b",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 39,
+              "stdout": 199,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 40,
+              "stdout": 199,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query select --project atlas --fields ref,title,work_state --limit 7 --max-chars 8000 --after entry:atlas-033"
+          },
+          "kind": "data",
+          "round": 5,
+          "response_chars": 835,
+          "response_sha256": "80db501dfc37546d6cb6c29696ac7350ee7cdd4ab081e3f16146d6c9e461b4ac",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 39,
+              "stdout": 199,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 40,
+              "stdout": 201,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query select --project atlas --fields ref,title,work_state --limit 7 --max-chars 8000 --after entry:atlas-042"
+          },
+          "kind": "data",
+          "round": 6,
+          "response_chars": 832,
+          "response_sha256": "c71102c5e5e9213a292646eec72e105d0d6de337026a7aace04ef1e0dc6267e4",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 39,
+              "stdout": 199,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 40,
+              "stdout": 200,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query select --project atlas --fields ref,title,work_state --limit 7 --max-chars 8000 --after entry:atlas-049"
+          },
+          "kind": "data",
+          "round": 7,
+          "response_chars": 839,
+          "response_sha256": "c53f808108e15ec72985a36658531c09af208f2fbc57ee0f9580b62ea084f0cf",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 39,
+              "stdout": 199,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 40,
+              "stdout": 200,
+              "analysis_code": 0
+            }
+          }
+        },
+        {
+          "arguments": {
+            "cmd": "richi --compact-json query select --project atlas --fields ref,title,work_state --limit 7 --max-chars 8000 --after entry:atlas-058"
+          },
+          "kind": "data",
+          "round": 8,
+          "response_chars": 395,
+          "response_sha256": "35bda5fd2612640190333dfc11e2286f8c8044b505aeed15b9cd65806553f8e6",
+          "analysis_code_chars": 0,
+          "intermediate_off_model_bytes": 0,
+          "tokens": {
+            "o200k_base": {
+              "arguments": 39,
+              "stdout": 99,
+              "analysis_code": 0
+            },
+            "cl100k_base": {
+              "arguments": 40,
+              "stdout": 97,
+              "analysis_code": 0
+            }
+          }
+        }
+      ],
+      "tokens": {
+        "o200k_base": {
+          "user_prompt": 9,
+          "loaded_core_skill": 1868,
+          "tool_arguments": 305,
+          "documentation_responses": 0,
+          "data_responses": 1492,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3674,
+            "cumulative_replayed_visible_input": 25305,
+            "context_at_model_boundaries": [
+              1877,
+              2108,
+              2346,
+              2584,
+              2822,
+              3060,
+              3298,
+              3536,
+              3674
+            ],
+            "declared_model_decision_rounds_including_final": 9,
+            "logical_tool_calls": 8
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 1806,
+            "cumulative_replayed_visible_input": 8493,
+            "context_at_model_boundaries": [
+              9,
+              240,
+              478,
+              716,
+              954,
+              1192,
+              1430,
+              1668,
+              1806
+            ],
+            "declared_model_decision_rounds_including_final": 9,
+            "logical_tool_calls": 8
+          }
+        },
+        "cl100k_base": {
+          "user_prompt": 9,
+          "loaded_core_skill": 1865,
+          "tool_arguments": 312,
+          "documentation_responses": 0,
+          "data_responses": 1501,
+          "unescaped_handcrafted_code_tokens_not_additive": 0,
+          "cold_bound_chat": {
+            "terminal_visible_tokens": 3687,
+            "cumulative_replayed_visible_input": 25368,
+            "context_at_model_boundaries": [
+              1874,
+              2108,
+              2350,
+              2590,
+              2829,
+              3070,
+              3310,
+              3550,
+              3687
+            ],
+            "declared_model_decision_rounds_including_final": 9,
+            "logical_tool_calls": 8
+          },
+          "operation_only_increment": {
+            "terminal_visible_tokens": 1822,
+            "cumulative_replayed_visible_input": 8583,
+            "context_at_model_boundaries": [
+              9,
+              243,
+              485,
+              725,
+              964,
+              1205,
+              1445,
+              1685,
+              1822
+            ],
+            "declared_model_decision_rounds_including_final": 9,
+            "logical_tool_calls": 8
+          }
+        }
+      }
+    }
+  ],
+  "pagination_contract": {
+    "calls": 8,
+    "rows": 50,
+    "exact_order_and_union": true,
+    "calls_excluded_from_main_workflows": true
+  },
+  "read_invariants": {
+    "baseline": {
+      "canonical_unchanged": true,
+      "physical_unchanged": true
+    },
+    "candidate": {
+      "canonical_unchanged": true,
+      "physical_unchanged": true
+    }
+  },
+  "runtime": {
+    "baseline": {
+      "python": "3.9.6",
+      "sqlite": "3.43.2",
+      "code_sha256": {
+        "__init__.py": "81481a8e54d6b9b63b318fecfb0354ef4521f08265d784ce54d6755460979335",
+        "__main__.py": "375fc231133ef59286ab1754b74f79ec89fb8e52d9b70ea6c5ef43ed938f497f",
+        "brief_checks.py": "ac2c6ece85a4e3d785b4a058dbac8e6a6a984439ae4e4700b8d188c154222c38",
+        "cli.py": "69668bf7975c7de79a770c3876a26442dd810cedded717e8e6afc4b421b077aa",
+        "compact.py": "423099d2399875950cd440191a9457eaa633ce1a68dbd214daa7b7cab6a637e3",
+        "git_evidence.py": "306c5b7bd8041ae62659c0b592296e58e352732c63b4f4e86a98711af9c3008d",
+        "git_impact.py": "6df1cf5e607c46373a009792b61b63436c5b2769384ef3447821fddd41effe1e",
+        "git_legacy.py": "7655a075c228a4beb06bcfdd13270297e9af08240080b696c6cdc40abf846ed1",
+        "git_sources.py": "31d7bff3616a9158a472a5e39e1474770041f43612aaf2bea45d492f3fceff1b",
+        "graph.py": "ef3edb03161e474236c74d82b62f4e0fc0b2d1a1773fcb3702a045237257eb78",
+        "graph_view.py": "70b6ee52696d6d019d2ad1942a46498a26424df0c67d8b2cf362aab9e6ccf6dc",
+        "launch_map.py": "d310c43d5e3e4f95af1b75f21c17ca066f10e1a46b3be976be8405766dcd629a",
+        "memory.py": "06a7300a8dd9636e9eed24b949dcfc086a2ae6d37b9da3adf7ca5794cff9ee48",
+        "output.py": "6e5c027ac19ce7dbccd29e056cbe075eace8d25867b82ded59352fffa9508737",
+        "projects.py": "4b24e6b61b36ad666b83847dde6896ede6056689e0e94750bf966744f195b431",
+        "punisher.py": "504d3b683e24aacc4cca312a608a6fdff91fb938c60e727c75c259c8d595723b",
+        "recall.py": "891db35bd7ac21f82b39ac2c619641621d84039f63cb7f6e552ce50be02e6d14",
+        "retrieval_tools.py": "4cfc592c2bf94f721e67aa0f6c4e6aa843c084051a78e21bf3458bb49a5e0abe",
+        "serve.py": "f4c1301adedeb72640ce1559fa6e1247f6f6ec7fd4ce703d1397adddb3438bf9",
+        "source_watch.py": "328bf273f57d0af66f46d891df2b0a990ec4954aa8a748006960ded4197c592b",
+        "status.py": "d7fcd7fa496e287555c79b42d28c0cbd3610ccae112fe22a88f62fa9b16205c5",
+        "storage.py": "c231caf3c81ef99d36830e462f543664bf4a0559b22bd01772fcd3452c7b0d27",
+        "task_brief.py": "54756e6b042679d982cd74b671c4d3963375fcd627bd13a17981d8ad04396433"
+      }
+    },
+    "candidate": {
+      "python": "3.9.6",
+      "sqlite": "3.43.2",
+      "code_sha256": {
+        "__init__.py": "81481a8e54d6b9b63b318fecfb0354ef4521f08265d784ce54d6755460979335",
+        "__main__.py": "375fc231133ef59286ab1754b74f79ec89fb8e52d9b70ea6c5ef43ed938f497f",
+        "brief_checks.py": "ac2c6ece85a4e3d785b4a058dbac8e6a6a984439ae4e4700b8d188c154222c38",
+        "capabilities.py": "aac5146c3a1c391e74ffa57dc666da33d83cd8554e5c637b1e516caf13b48423",
+        "cli.py": "69668bf7975c7de79a770c3876a26442dd810cedded717e8e6afc4b421b077aa",
+        "compact.py": "967046025c92baa9df835fc0b495763c6ef6c38c8e0e2db61c264ea9f30e8996",
+        "git_evidence.py": "306c5b7bd8041ae62659c0b592296e58e352732c63b4f4e86a98711af9c3008d",
+        "git_impact.py": "6df1cf5e607c46373a009792b61b63436c5b2769384ef3447821fddd41effe1e",
+        "git_legacy.py": "7655a075c228a4beb06bcfdd13270297e9af08240080b696c6cdc40abf846ed1",
+        "git_sources.py": "31d7bff3616a9158a472a5e39e1474770041f43612aaf2bea45d492f3fceff1b",
+        "graph.py": "ef3edb03161e474236c74d82b62f4e0fc0b2d1a1773fcb3702a045237257eb78",
+        "graph_view.py": "70b6ee52696d6d019d2ad1942a46498a26424df0c67d8b2cf362aab9e6ccf6dc",
+        "launch_map.py": "d310c43d5e3e4f95af1b75f21c17ca066f10e1a46b3be976be8405766dcd629a",
+        "memory.py": "a9df3675ba2b1b89a7107b1aaafb49d5bea466470142110753d60037a28934c4",
+        "output.py": "6e5c027ac19ce7dbccd29e056cbe075eace8d25867b82ded59352fffa9508737",
+        "projects.py": "4b24e6b61b36ad666b83847dde6896ede6056689e0e94750bf966744f195b431",
+        "punisher.py": "504d3b683e24aacc4cca312a608a6fdff91fb938c60e727c75c259c8d595723b",
+        "query_filters.py": "31a4ab86d17c32475d87c4dc7fa99d3713bf2e8530af8d74317c09ba96017dd6",
+        "query_tools.py": "8c746cba4ee4e2f3659afe07e8c63d27cab3ee7dba65bc0c55c93bff49978da8",
+        "recall.py": "7c25798db131230c982be0b0f1658aa21d544e6f3b1db3ebab5ed7c0b5e0f02d",
+        "retrieval_tools.py": "9400d3cacf45ca5b68fec791ad0c8b2dff05d7586c4bbdce3e06ca95c438d8fc",
+        "search_index.py": "d732c0186a1ffe5258ae2679931114cc23c5c11d6a7ea829a4184c69235a925e",
+        "serve.py": "f4c1301adedeb72640ce1559fa6e1247f6f6ec7fd4ce703d1397adddb3438bf9",
+        "source_watch.py": "328bf273f57d0af66f46d891df2b0a990ec4954aa8a748006960ded4197c592b",
+        "status.py": "d7fcd7fa496e287555c79b42d28c0cbd3610ccae112fe22a88f62fa9b16205c5",
+        "storage.py": "c231caf3c81ef99d36830e462f543664bf4a0559b22bd01772fcd3452c7b0d27",
+        "task_brief.py": "54756e6b042679d982cd74b671c4d3963375fcd627bd13a17981d8ad04396433"
+      }
+    }
+  },
+  "build_canonical_unchanged": true,
+  "limitations": [
+    "Prerecorded plans and deterministic fixture oracles; no model answer, accuracy, reasoning or billing was measured.",
+    "Normalized model-visible command arguments exclude harness DB/config/home flags and provider transport/framing.",
+    "Core skill and semantic guides are measured in every candidate mode; optional catalog adds list/describe. Direct evidence search loads the search guide section and filter semantics. Workspace binding/project validation are assumed already complete.",
+    "Cold bound-chat context includes loaded core and operation docs; operation-only increment excludes unknown prior context, not an assertion that prior context is free.",
+    "Cumulative input sums independently encoded visible messages at each declared model decision boundary; assumes no compaction/caching and excludes generated reasoning/answers.",
+    "Every extra prior-context token adds one terminal token and one token per model decision boundary to cumulative input.",
+    "Raw-baseline oracle operations represent unmeasured model-side selection/arithmetic, not a tested autonomous agent.",
+    "Python baseline executes the recorded code; its raw intermediate data stays off-model and is not charged as visible context.",
+    "Aggregates and projections deliberately omit evidence bodies; only evidence/known-ref workflows require full-record fidelity.",
+    "Index construction and fixture/oracle setup are outside agent read workflows; no latency is measured.",
+    "Workflows are independent task scenarios; summing their cold totals is not a measured single-session conversation."
+  ]
+}

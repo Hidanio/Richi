@@ -101,6 +101,38 @@ class QueryFilterTests(unittest.TestCase):
         sql, _ = query_filters.parse("updated_at > '2026-10-01'", memory).sql("entry")
         self.assertIn("julianday(e.updated_at)", sql)
 
+    def test_date_literals_outside_utc_calendar_fail_before_sql_execution(self):
+        for literal in ("0001-01-01T00:00:00+01:00", "9999-12-31T23:00:00-02:00",
+                        "0001-01-01T00:00:00+23:00"):
+            for expression in ("verified_at = '" + literal + "'", "verified_at IN ('" + literal + "')"):
+                with self.subTest(expression=expression), self.assertRaisesRegex(memory.MemoryError, "UTC range"):
+                    query_filters.parse(expression, memory)
+        self.entry("earliest", verified_at="0001-01-01T00:00:00Z")
+        self.entry("latest", verified_at="9999-12-31T23:59:59Z")
+        self.assertEqual(self.refs("verified_at = '0001-01-01T00:00:00Z'"), {"entry:earliest"})
+        self.assertEqual(self.refs("verified_at = '9999-12-31T23:59:59Z'"), {"entry:latest"})
+
+    def test_date_filters_reuse_helper_with_an_active_read_cursor(self):
+        first = query_filters.parse("verified_at >= '2026-10-01'", memory)
+        first.prepare(self.conn)
+        sql, parameters = first.sql("entry")
+        cursor = self.conn.execute("SELECT e.id FROM entries AS e WHERE " + sql + " ORDER BY e.id", parameters)
+        self.assertEqual(cursor.fetchone()[0], "task:alpha-1")
+        before = self.conn.total_changes
+        second = query_filters.parse("verified_at < '2026-10-20'", memory)
+        second.prepare(self.conn)
+        second_sql, second_parameters = second.sql("entry")
+        self.assertEqual([row[0] for row in self.conn.execute(
+            "SELECT e.id FROM entries AS e WHERE " + second_sql, second_parameters)], ["task:alpha-1"])
+        self.assertEqual([row[0] for row in cursor.fetchall()], ["task:beta-2"])
+        self.assertEqual(self.conn.total_changes, before)
+
+        foreign = sqlite3.connect(":memory:")
+        self.addCleanup(foreign.close)
+        foreign.create_function("richi_iso_timestamp", 1, lambda value: value)
+        with self.assertRaisesRegex(memory.MemoryError, "Incompatible reserved date function"):
+            second.prepare(foreign)
+
     def test_missing_fields_follow_sql_null_logic(self):
         self.assertEqual(self.refs("family='entity' AND jira_key IS NULL AND work_state IS NULL"),
                          {"entity:concept:one", "entity:component:one", "entity:concept:unscoped"})
@@ -165,6 +197,50 @@ class QueryFilterTests(unittest.TestCase):
         sql, params = parsed.sql("entity")
         rows = self.conn.execute("SELECT e.id FROM entities AS e WHERE " + sql, params).fetchall()
         self.assertEqual([row[0] for row in rows], ["concept:one"])
+
+    def test_broad_entity_project_filters_have_bounded_indexed_work(self):
+        # Count SQLite VM work instead of timing: a projects-times-edges scan
+        # previously exceeded 600 million steps on this small fixture.
+        conn = sqlite3.connect(":memory:")
+        self.addCleanup(conn.close)
+        conn.executescript("""
+            CREATE TABLE projects (id TEXT PRIMARY KEY);
+            CREATE TABLE entities (id TEXT PRIMARY KEY, kind TEXT);
+            CREATE TABLE graph_edges (
+                id TEXT PRIMARY KEY, from_ref TEXT, to_ref TEXT, kind TEXT,
+                sources TEXT, knowledge_state TEXT
+            );
+            CREATE INDEX graph_edges_from ON graph_edges (from_ref);
+            CREATE INDEX graph_edges_to ON graph_edges (to_ref);
+        """)
+        conn.executemany("INSERT INTO projects VALUES (?)", [("p" + str(i),) for i in range(500)])
+        conn.executemany("INSERT INTO entities VALUES (?, ?)",
+                         [("e" + str(i), "concept" if i % 2 else "component") for i in range(500)])
+        conn.executemany("INSERT INTO graph_edges VALUES (?, ?, ?, ?, ?, ?)",
+                         [("g" + str(i), "entity:e" + str(i), "project:p" + str(i),
+                           "used_in", '[{"reference":"test://link"}]', "confirmed") for i in range(250)])
+        for expression, indexes in (("project IS NULL", range(250, 500)),
+                                    ("project LIKE 'p%'", range(250)),
+                                    ("project = 'p0'", range(1))):
+            with self.subTest(expression=expression):
+                parsed = query_filters.parse(expression, memory)
+                parsed.prepare(conn)
+                sql, parameters = parsed.sql("entity")
+                callbacks = [0]
+
+                def bound_work():
+                    callbacks[0] += 1
+                    return callbacks[0] > 1000
+
+                conn.set_progress_handler(bound_work, 1000)
+                try:
+                    actual = {row[0] for row in conn.execute("SELECT e.id FROM entities AS e WHERE " + sql, parameters)}
+                except sqlite3.OperationalError as exc:
+                    self.fail("Project filter exceeded 1 million SQLite VM steps: " + str(exc))
+                finally:
+                    conn.set_progress_handler(None, 0)
+                self.assertEqual(actual, {"e" + str(i) for i in indexes})
+                self.assertLess(callbacks[0], 1000)
 
     def test_parameterization_and_injection_rejection(self):
         payload = "x' OR 1=1 --"

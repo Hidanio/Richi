@@ -10,11 +10,17 @@ import json
 import re
 
 
-VERSION = "1"
+VERSION = "2"
 VERSION_KEY = "richi_search_index_version"
 KEYS = "richi_search_keys"
+RECORDS = "richi_search_records"
 DIRTY = "richi_search_dirty"
 TABLES = {"entries": "entry", "entities": "entity"}
+FAMILIES = {"entry": 1, "entity": 2}
+FIELDS = {"entry": {"id": 1, "jira": 2, "alias": 3},
+          "entity": {"id": 4, "alias": 5, "token": 6}}
+INDEXED_COLUMNS = {"entries": ("id", "jira_key", "aliases"),
+                   "entities": ("id", "title", "summary", "tags", "aliases")}
 MAX_QUERY_CHARS = 4096
 MAX_QUERY_WORDS = 64
 MAX_RECORD_CHARS = 262144
@@ -38,7 +44,7 @@ def _schema(conn):
     row = (conn.execute("SELECT value FROM metadata WHERE key = ?", (VERSION_KEY,)).fetchone()
            if objects.get("metadata") == "table" else None)
     version = row[0] if row else None
-    required = {KEYS: "table", DIRTY: "table", KEYS + "_record": "index"}
+    required = {KEYS: "table", RECORDS: "table", DIRTY: "table", KEYS + "_record": "index"}
     for table in families:
         required.update({name: "trigger" for name in _trigger_names(table)})
     ready = (version == VERSION and "entries" in families and
@@ -60,8 +66,9 @@ def status(conn):
         return result
     result["status"] = "ready"
     for family in families.values():
+        fields = tuple(FIELDS[family].values())
         row = conn.execute("SELECT count(*), coalesce(sum(length(CAST(key AS BLOB))), 0) FROM " +
-                           KEYS + " WHERE family = ?", (family,)).fetchone()
+                           KEYS + " WHERE field IN (" + ",".join("?" for _ in fields) + ")", fields).fetchone()
         result["keys"][family] = row[0]
         result["key_bytes"] += row[1]
         result["dirty"][family] = conn.execute(
@@ -101,7 +108,9 @@ def _record_keys(record, family):
         return len(keys) <= MAX_RECORD_KEYS and key_bytes <= MAX_RECORD_KEY_BYTES
 
     identity = normalized[0]
-    if not add("id", identity) or not add("id", family + ":" + identity):
+    # Store each native ID once. Query routing also strips one matching family
+    # prefix, retaining both interpretations when an ID itself contains it.
+    if not add("id", identity):
         return None
     alias_phrases = [recall.phrase(alias) for alias in aliases]
     for alias in alias_phrases:
@@ -134,13 +143,21 @@ def _fields(table):
 
 def _replace(conn, family, identity, record):
     keys = _record_keys(record, family) if record is not None else set()
-    conn.execute("DELETE FROM " + KEYS + " WHERE family = ? AND id = ?", (family, identity))
+    mapped = conn.execute("SELECT record FROM " + RECORDS + " WHERE family = ? AND id = ?",
+                          (FAMILIES[family], identity)).fetchone()
+    if mapped is not None:
+        conn.execute("DELETE FROM " + KEYS + " WHERE record = ?", (mapped[0],))
+    if record is None or keys is None:
+        conn.execute("DELETE FROM " + RECORDS + " WHERE family = ? AND id = ?", (FAMILIES[family], identity))
     if keys is None:
         conn.execute("INSERT OR REPLACE INTO " + DIRTY + " (family, id, reason) VALUES (?, ?, 'oversized')",
                      (family, identity))
         return
-    conn.executemany("INSERT INTO " + KEYS + " (family, field, key, id) VALUES (?, ?, ?, ?)",
-                     ((family, field, key, identity) for field, key in sorted(keys)))
+    if record is not None:
+        record_id = mapped[0] if mapped is not None else conn.execute(
+            "INSERT INTO " + RECORDS + " (family, id) VALUES (?, ?)", (FAMILIES[family], identity)).lastrowid
+        conn.executemany("INSERT INTO " + KEYS + " (field, key, record) VALUES (?, ?, ?)",
+                         ((FIELDS[family][field], key, record_id) for field, key in sorted(keys)))
     conn.execute("DELETE FROM " + DIRTY + " WHERE family = ? AND id = ?", (family, identity))
 
 
@@ -155,6 +172,14 @@ def refresh_record(conn, table, identity):
         return
     conn.execute("SAVEPOINT richi_search_refresh")
     try:
+        dirty = conn.execute("SELECT reason FROM " + DIRTY + " WHERE family = ? AND id = ?",
+                             (TABLES[table], identity)).fetchone()
+        # Relevant SQL changes mark dirty even for older writers. Metadata and
+        # evidence edits need no new keys; oversized records stay on the scan
+        # path until an indexed field changes or an explicit rebuild retries.
+        if dirty is None or dirty[0] == "oversized":
+            conn.execute("RELEASE richi_search_refresh")
+            return
         row = conn.execute("SELECT " + _fields(table) + " FROM " + table + " WHERE id = ?", (identity,)).fetchone()
         _replace(conn, TABLES[table], identity, dict(row) if row is not None else None)
         conn.execute("RELEASE richi_search_refresh")
@@ -175,12 +200,14 @@ def build(conn, api):
         raise api.MemoryError("Search index build requires an explicit write transaction")
     api.backend(conn)
     objects, families, version, _ = _schema(conn)
-    owned = {KEYS, DIRTY, KEYS + "_record", *FILTER_INDEXES}
+    owned = {KEYS, RECORDS, DIRTY, KEYS + "_record", *FILTER_INDEXES}
     owned.update(name for table in TABLES for name in _trigger_names(table))
-    if version not in {None, VERSION}:
+    if version not in {None, "1", VERSION}:
         raise api.MemoryError("Unsupported derived search index version; no rebuild was attempted")
     if version is None and owned.intersection(objects):
         raise api.MemoryError("Reserved search index objects already exist without an ownership marker")
+    if version == "1" and RECORDS in objects:
+        raise api.MemoryError("Reserved record-map object already exists outside the version 1 index")
     conn.execute("SAVEPOINT richi_search_build")
     try:
         for table in TABLES:
@@ -189,11 +216,15 @@ def build(conn, api):
         for name in FILTER_INDEXES:
             conn.execute("DROP INDEX IF EXISTS " + name)
         conn.execute("DROP TABLE IF EXISTS " + KEYS)
+        conn.execute("DROP TABLE IF EXISTS " + RECORDS)
         conn.execute("DROP TABLE IF EXISTS " + DIRTY)
-        conn.execute("CREATE TABLE " + KEYS + " (family TEXT NOT NULL, field TEXT NOT NULL, "
-                     "key TEXT COLLATE BINARY NOT NULL, id TEXT NOT NULL, "
-                     "PRIMARY KEY (family, field, key, id)) WITHOUT ROWID")
-        conn.execute("CREATE INDEX " + KEYS + "_record ON " + KEYS + " (family, id)")
+        # Named INTEGER PRIMARY KEY refs belong to this derived map, not the
+        # authoritative tables' implicit rowids (which can change on VACUUM).
+        conn.execute("CREATE TABLE " + RECORDS + " (record INTEGER PRIMARY KEY, family INTEGER NOT NULL, "
+                     "id TEXT NOT NULL, UNIQUE (family, id))")
+        conn.execute("CREATE TABLE " + KEYS + " (field INTEGER NOT NULL, key TEXT COLLATE BINARY NOT NULL, "
+                     "record INTEGER NOT NULL REFERENCES " + RECORDS + " (record), "
+                     "PRIMARY KEY (field, key, record)) WITHOUT ROWID")
         conn.execute("CREATE TABLE " + DIRTY + " (family TEXT NOT NULL, id TEXT NOT NULL, "
                      "reason TEXT NOT NULL DEFAULT 'write', PRIMARY KEY (family, id)) WITHOUT ROWID")
         for table, family in families.items():
@@ -208,10 +239,15 @@ def build(conn, api):
                     " (family, id, reason) SELECT '" + family + "', " + ref + ".id, 'write' "
                     "WHERE NOT EXISTS (SELECT 1 FROM " + DIRTY + " WHERE family = '" + family +
                     "' AND id = " + ref + ".id);" for ref in refs)
+                condition = (" WHEN " + " OR ".join("OLD." + column + " IS NOT NEW." + column
+                             for column in INDEXED_COLUMNS[table])) if event == "UPDATE" else ""
                 conn.execute("CREATE TRIGGER " + name + " AFTER " + event + " ON " + table +
-                             " BEGIN " + statements + " END")
+                             condition + " BEGIN " + statements + " END")
             for row in conn.execute("SELECT " + _fields(table) + " FROM " + table):
                 _replace(conn, family, row["id"], dict(row))
+        # Fresh maps have no old keys to delete. Bulk-constructing the secondary
+        # index packs it once instead of maintaining it for every inserted key.
+        conn.execute("CREATE INDEX " + KEYS + "_record ON " + KEYS + " (record)")
         for name, (table, columns) in FILTER_INDEXES.items():
             if table in families:
                 conn.execute("CREATE INDEX " + name + " ON " + table + " (" + columns + ")")
@@ -243,8 +279,9 @@ def _equal_ids(conn, family, field, values):
     for start in range(0, len(values), 400):
         batch = values[start:start + 400]
         result.update(row[0] for row in conn.execute(
-            "SELECT id FROM " + KEYS + " WHERE family = ? AND field = ? AND key IN (" +
-            ",".join("?" for _ in batch) + ")", [family, field, *batch]))
+            "SELECT r.id FROM " + KEYS + " k JOIN " + RECORDS + " r ON r.record = k.record "
+            "WHERE k.field = ? AND k.key IN (" + ",".join("?" for _ in batch) + ")",
+            [FIELDS[family][field], *batch]))
     return result
 
 
@@ -260,9 +297,10 @@ def _prefix_ids(conn, family, prefix):
             upper = prefix[:index] + chr(ord(prefix[index]) + 1)
             break
     clause = " AND key < ?" if upper is not None else ""
-    params = [family, "token", prefix] + ([upper] if upper is not None else [])
+    params = [FIELDS[family]["token"], prefix] + ([upper] if upper is not None else [])
     return {row[0] for row in conn.execute(
-        "SELECT id FROM " + KEYS + " WHERE family = ? AND field = ? AND key >= ?" + clause, params)}
+        "SELECT r.id FROM " + KEYS + " k JOIN " + RECORDS + " r ON r.record = k.record "
+        "WHERE k.field = ? AND key >= ?" + clause, params)}
 
 
 def _routing_ids(conn, query, keys, family, words):
@@ -270,9 +308,12 @@ def _routing_ids(conn, query, keys, family, words):
 
     variants = {variant for key in keys for variant in recall.key_variants(key)}
     identities = {query}
+    if query.startswith(family + ":"):
+        identities.add(query[len(family) + 1:])
     identities.update(value for key in variants for value in (key, "task:" + key, "jira:" + key))
     result = _equal_ids(conn, family, "id", identities)
-    result.update(_equal_ids(conn, family, "jira", variants))
+    if family == "entry":
+        result.update(_equal_ids(conn, family, "jira", variants))
     # Concepts can have deliberate single-symbol/stopword aliases. Include all
     # spans for entities; lexical() decides which of them really add a score.
     spans = {" ".join(words)}

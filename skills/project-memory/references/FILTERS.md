@@ -1,7 +1,8 @@
 # Composed filters and indexed retrieval
 
-Use `--where` on `recall` or `search` when the question requires a strict scope.
-The query still supplies the lexical anchor. All existing state, provenance,
+Use `--where` on `discover`, `recall` or `search` when the question requires a strict scope.
+The query still supplies the lexical anchor. For complete metadata operations without
+a lexical shortlist, use [QUERY_TOOLS.md](QUERY_TOOLS.md). All existing state, provenance,
 result-count and character-budget rules apply.
 
 ```sh
