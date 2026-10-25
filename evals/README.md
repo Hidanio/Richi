@@ -37,6 +37,9 @@ is inferred from these tool measurements.
 
 See [the complete protocol and commands](../docs/TRACKS_EVAL.md). Full runs require
 committed runtime hashes and a cached tokenizer; `--smoke` is diagnostic only.
+The [2026-10-25 measurements](../docs/TRACKS_EVAL_RESULTS.md) and
+[machine samples](results/tracks-2026-10-25.json) record the completed run against
+`f1ade89`, including its latency/token regressions and stronger write contract.
 
 ## Retrieval tools and storage growth
 

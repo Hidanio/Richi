@@ -7,6 +7,12 @@ installed runtime, launcher and SQL/HTML resource hashes against each declared c
 installations. Python and SQLite versions, seed, fixture/script hashes and raw
 samples are saved. No user store or private corpus is accepted as input.
 
+The completed run on runtime `f1ade897da23bb1f1514677387e3ac44379385d9` is in
+[the measured results report](TRACKS_EVAL_RESULTS.md), with
+[all machine samples](../evals/results/tracks-2026-10-25.json). It shows mixed
+results: faster change polling and atomic writes, larger/slower native task
+context, and no measured improvement in model solution quality.
+
 ## Corpus and acceptance
 
 The seed is `20261025`; scales are **40, 1,000 and 10,000 total entries**. The
@@ -124,6 +130,26 @@ TIKTOKEN_CACHE_DIR=/private/tmp/richi-tokenizer-cache \
 `--smoke --repeats 1 --core-repeats 1` checks one small corpus and is marked
 `smoke_only`; it cannot substantiate performance claims. A full run requires the
 tokenizer and at least 30 repeats. The output path must not already exist.
+
+The recorded run used normally installed wheels in separate disposable Python
+3.9.6 virtual environments; neither environment redirected to development
+source. The baseline wheel was built from the archived `2084321` source; the
+candidate wheel was rebuilt from frozen `f1ade89`. Its exact evaluation command
+was:
+
+```sh
+TIKTOKEN_CACHE_DIR=/private/tmp/richi-token-research/tokenizer-cache \
+  /private/tmp/richi-tracks-candidate-venv/bin/python evals/evaluate_tracks.py \
+  --baseline-python /private/tmp/richi-tracks-baseline-venv/bin/python \
+  --candidate-python /private/tmp/richi-tracks-candidate-venv/bin/python \
+  --candidate-revision f1ade897da23bb1f1514677387e3ac44379385d9 \
+  --tokenizer-python /private/tmp/richi-token-research-venv/bin/python \
+  --output /private/tmp/tracks-results-final.json
+```
+
+The linked machine-results file preserves all measurements. Only three disposable
+migration database paths had their OS temporary-directory prefix replaced with
+`<synthetic-temp>`; this path-only sanitization changes no samples or token counts.
 
 Visible token accounting uses named/versioned `o200k_base`: skill/instructions,
 task, argument text, baseline script and final output. Local intermediate CLI
