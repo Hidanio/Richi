@@ -1,4 +1,4 @@
-# Граф знаний: схемы 2 и 3
+# Knowledge graph: schemas 2 and 3
 
 Граф дополняет существующую память. Проекты и записи остаются в своих таблицах, а `graph_nodes` хранит только ссылки на них. Новая сущность нужна, если объекту — PR, метрике, компоненту, понятию, документу или Jira-задаче — требуется отдельная карточка. Если задача уже сохранена как entry, используйте её узел; дублировать её сущностью `jira` не требуется.
 
@@ -22,11 +22,11 @@ richi migrate
 richi check
 ```
 
-`migrate` — явная атомарная миграция 1→2→3 или 2→3: проверяет исходную базу, добавляет необходимые таблицы/индексы/триггеры, создаёт ссылки на существующие проекты и записи, затем меняет `user_version`. Старые таблицы, записи, история и FTS остаются на месте. Ошибка откатывает всю транзакцию. Неизвестная версия отклоняется; повторный вызов на версии 3 возвращает `existing`.
+`migrate` explicitly and atomically upgrades 1→2→3 or 2→3: it validates the original store, adds the required tables/indexes/triggers, creates graph references for existing projects and entries, then updates `user_version`. Existing tables, records, history and FTS remain. Errors roll back the transaction. Unknown versions are rejected; repeating migration on schema 3 returns `existing`.
 
-Старые команды чтения и записи поддерживают версии 1, 2 и 3. Команды графа требуют минимум версию 2 и не запускают миграцию сами. `init` создаёт новую базу версии 3; на существующей версии 1/2 предлагает выполнить `migrate`. Backup можно сделать до миграции. Миграция получает блокировку записи SQLite, поэтому параллельные авторы ждут освобождения блокировки в пределах таймаута. Треки и типизированные исследования требуют версии 3; порядок внедрения — [TRACKS_DEPLOYMENT.md](TRACKS_DEPLOYMENT.md).
+Legacy read/write commands support schemas 1, 2 and 3. Graph operations require at least schema 2 and never migrate automatically. `init` creates schema 3; existing schema 1/2 stores require `migrate`. Back up before migration. Migration holds a SQLite write lock, so concurrent writers wait within their configured timeout. Tracks and typed research require schema 3; deployment: [TRACKS_DEPLOYMENT.md](TRACKS_DEPLOYMENT.md).
 
-Файл `schema.sql` содержит общую схему версии 1; `graph_schema.sql` — расширение графа, `research_schema.sql` — типизированные роли, ревизии и события. `init` и `migrate` применяют расширения одной транзакцией. Не запускайте эти SQL-файлы вручную поверх рабочей базы.
+`schema.sql` defines schema 1; `graph_schema.sql` extends the graph; `research_schema.sql` adds typed roles, revisions and events. `init` and `migrate` apply the extensions in one transaction. Do not run these SQL files directly against a live store.
 
 ## Сущности
 
@@ -76,18 +76,18 @@ JSON
 richi edge get pr42-implements-abc123
 ```
 
-Все объекты и ссылки примера демонстрационные; endpoints нужно предварительно создать. Обязательны `id`, `from_ref`, `to_ref`, `kind`. `kind` — свободная строка, например `implements`, `measures`, `depends_on`, `documents`, `supersedes`; схема 3 дополнительно проверяет endpoints типизированных отношений исследования из [TRACKS.md](TRACKS.md). Дополнительные поля: `description`, `sources`, `knowledge_state`, `verified_at`, `expected_updated_at`, `expected_revision`. Для `confirmed` нужен источник. Направление значимо для смысла связи; просмотр соседей обходит оба направления.
+Example objects and links are synthetic; create endpoints first. Required fields: `id`, `from_ref`, `to_ref`, `kind`. `kind` remains a free-form string such as `implements`, `measures`, `depends_on`, `documents` or `supersedes`; schema 3 also validates endpoints for typed research relationships from [TRACKS.md](TRACKS.md). Optional fields: `description`, `sources`, `knowledge_state`, `verified_at`, `expected_updated_at`, `expected_revision`. Confirmed edges require a source. Direction conveys meaning; neighbor reads inspect both directions.
 
-В схеме 3 `get` типизированного отношения или связанного документа бизнес-цели
-возвращает также read-only `revision`. Обычные legacy-объекты сохраняют прежний
-формат ответа и timestamp CAS. Уберите `revision` из payload и
-передайте как `expected_revision` при изменении типизированного отношения.
-Для создания можно передать 0. Это дополняет timestamp CAS и защищает от правок
-с одинаковым временем. Операции трека, роли и точный scope описаны в [TRACKS.md](TRACKS.md).
-Старые свободные названия рёбер, совпавшие с новыми типизированными названиями,
-не становятся отношениями исследования только из-за миграции. Нативные endpoints
-определяют участие в новом контракте; при добавлении роли к старой карточке
-проверяются связанные рёбра, чтобы не превратить их в некорректные утверждения.
+In schema 3, `get` for a typed relationship or linked business-goal document
+also returns read-only `revision`. Ordinary legacy objects keep their previous
+response shape and timestamp CAS. Remove `revision` from the payload and pass
+it as `expected_revision` when changing a typed relationship.
+Creation may assert 0. This complements timestamp CAS and protects edits with
+identical timestamps. Track operations, roles and exact scope are documented in [TRACKS.md](TRACKS.md).
+Legacy free-form edge names do not become research assertions merely because
+migration introduces a matching typed name. Native endpoints opt into the new
+contract; promoting a legacy card validates its incident edges to avoid
+creating invalid typed assertions.
 
 `entity put` и `edge put` принимают одиночный объект либо массив и полностью заменяют поля по ID, как `entry put`. Пакет атомарен. `get` возвращает текущую полную карточку; `get ID --history` дополнительно возвращает неизменяемую историю `before`/`after`. При обновлении передавайте `expected_updated_at` из последнего чтения: устаревшее время отклоняет изменение. `null` означает ожидание отсутствующей карточки. Одинаковая нормализованная запись даёт `unchanged` без изменения времени и истории. Новые entity/edge команды не принимают `event_id`; идемпотентность повтора обеспечивается содержимым, а защита от устаревшего обновления — `expected_updated_at`.
 
