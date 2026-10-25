@@ -52,7 +52,7 @@ def excerpt(text, limit):
 def card(record, ref, summary_chars=1100):
     summary, partial = excerpt(record.get("summary", ""), summary_chars)
     title = record.get("title", record.get("name", ""))
-    sources = copy.deepcopy(record.get("sources", []))
+    sources = record.get("sources", [])
     projects = record.get("project_ids", [])
     result = {"id": record["id"], "ref": ref, "kind": record.get("kind", "project"),
               "title": title[:300] + ("…" if len(title) > 300 else ""),
@@ -60,7 +60,7 @@ def card(record, ref, summary_chars=1100):
               "summary_chars": len(record.get("summary", "")),
               "knowledge_state": record.get("knowledge_state"), "work_state": record.get("work_state"),
               "verified_at": record.get("verified_at"), "updated_at": record.get("updated_at"),
-              "project_ids": projects[:8], "sources": sources[:2], "source_count": len(sources),
+              "project_ids": projects[:8], "sources": copy.deepcopy(sources[:2]), "source_count": len(sources),
               "sources_omitted": max(0, len(sources) - 2),
               "read_more": {"command": ref.split(":", 1)[0] + " get", "id": record["id"]}}
     if partial:
@@ -155,6 +155,8 @@ def fit_response(response, maximum):
              "read_more": read_more,
              "budget": {"max_chars": maximum, "output_chars": 0,
                         "omitted_results": original_omitted + original_results, "omitted_edges": original_edges}}
+    if response.get("selection", {}).get("filter_applied"):
+        value["selection"] = {"filter_applied": True}
     if original_entry:
         value["entry"] = None
         value["entry_omitted"] = True

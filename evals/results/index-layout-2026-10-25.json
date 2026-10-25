@@ -1,0 +1,766 @@
+{
+  "fixture_entries": 10000,
+  "fixture_entities": 1000,
+  "frozen_v1_sha256": "14ac854296fb7607ae9910fc9db626f7409811b7584f99a06f757321c36f9ae8",
+  "candidate_source_sha256": "d732c0186a1ffe5258ae2679931114cc23c5c11d6a7ea829a4184c69235a925e",
+  "arms": {
+    "v1": {
+      "build_ms": 463.17012500000004,
+      "added_page_bytes": 10387456,
+      "status": {
+        "available": true,
+        "version": "1",
+        "supported_version": "1",
+        "keys": {
+          "entry": 39990,
+          "entity": 58904
+        },
+        "dirty": {
+          "entry": 0,
+          "entity": 0
+        },
+        "fallback_records": {
+          "entry": 0,
+          "entity": 0
+        },
+        "key_bytes": 1104860,
+        "filter_indexes": [
+          "richi_search_entities_state_kind",
+          "richi_search_entries_state_kind",
+          "richi_search_entries_state_work"
+        ],
+        "dirty_behavior": "Scan dirty records directly, including oversized records.",
+        "status": "ready"
+      },
+      "pages": [
+        {
+          "name": "richi_search_dirty",
+          "bytes": 4096,
+          "payload": 0,
+          "unused": 4088
+        },
+        {
+          "name": "richi_search_entities_state_kind",
+          "bytes": 32768,
+          "payload": 23868,
+          "unused": 5808
+        },
+        {
+          "name": "richi_search_entries_state_kind",
+          "bytes": 229376,
+          "payload": 191880,
+          "unused": 6828
+        },
+        {
+          "name": "richi_search_entries_state_work",
+          "bytes": 229376,
+          "payload": 191881,
+          "unused": 6827
+        },
+        {
+          "name": "richi_search_keys",
+          "bytes": 5029888,
+          "payload": 4104492,
+          "unused": 613982
+        },
+        {
+          "name": "richi_search_keys_record",
+          "bytes": 4857856,
+          "payload": 4104492,
+          "unused": 442454
+        }
+      ],
+      "lookup": {
+        "entry:DEMO-17": {
+          "p50_ms": 0.0643745,
+          "ids": 1
+        },
+        "entity:DEMO-17": {
+          "p50_ms": 0.068125,
+          "ids": 0
+        },
+        "entry:ПУЛ СОЕДИНЕНИЙ": {
+          "p50_ms": 0.0484785,
+          "ids": 2
+        },
+        "entity:ПУЛ СОЕДИНЕНИЙ": {
+          "p50_ms": 0.0616045,
+          "ids": 0
+        },
+        "entry:entry:fact:budget": {
+          "p50_ms": 0.0497085,
+          "ids": 1
+        },
+        "entity:entry:fact:budget": {
+          "p50_ms": 0.048646,
+          "ids": 0
+        },
+        "entry:What is Q?": {
+          "p50_ms": 0.050437499999999996,
+          "ids": 0
+        },
+        "entity:What is Q?": {
+          "p50_ms": 0.053396,
+          "ids": 2
+        },
+        "entry:What happened in DEMO-999999 cache warmup?": {
+          "p50_ms": 0.0808535,
+          "ids": 0
+        },
+        "entity:What happened in DEMO-999999 cache warmup?": {
+          "p50_ms": 0.0968335,
+          "ids": 0
+        },
+        "entry:zzzxunknowntransportxzzz": {
+          "p50_ms": 0.0437295,
+          "ids": 0
+        },
+        "entity:zzzxunknowntransportxzzz": {
+          "p50_ms": 0.050687499999999996,
+          "ids": 0
+        },
+        "entry:DEMO-17 уже выкатили в прод сейчас?": {
+          "p50_ms": 0.08506250000000001,
+          "ids": 1
+        },
+        "entity:DEMO-17 уже выкатили в прод сейчас?": {
+          "p50_ms": 0.10772899999999999,
+          "ids": 0
+        },
+        "entry:STRASSE ΩЕ": {
+          "p50_ms": 0.05175,
+          "ids": 1
+        },
+        "entity:STRASSE ΩЕ": {
+          "p50_ms": 0.056875,
+          "ids": 0
+        },
+        "entry:why flux canal failed": {
+          "p50_ms": 0.0530835,
+          "ids": 1
+        },
+        "entity:why flux canal failed": {
+          "p50_ms": 0.2686455,
+          "ids": 998
+        },
+        "entry:entity:concept:queue": {
+          "p50_ms": 0.043917,
+          "ids": 0
+        },
+        "entity:entity:concept:queue": {
+          "p50_ms": 0.045417,
+          "ids": 1
+        },
+        "entry:hiddenprobe": {
+          "p50_ms": 0.0425835,
+          "ids": 1
+        },
+        "entity:hiddenprobe": {
+          "p50_ms": 0.0460205,
+          "ids": 0
+        },
+        "entry:oldprobe": {
+          "p50_ms": 0.04275,
+          "ids": 1
+        },
+        "entity:oldprobe": {
+          "p50_ms": 0.0443955,
+          "ids": 0
+        },
+        "entry:receipt transport": {
+          "p50_ms": 0.042646,
+          "ids": 0
+        },
+        "entity:receipt transport": {
+          "p50_ms": 0.469041,
+          "ids": 998
+        },
+        "entry:transport": {
+          "p50_ms": 0.042396,
+          "ids": 0
+        },
+        "entity:transport": {
+          "p50_ms": 0.246167,
+          "ids": 998
+        },
+        "entry:component": {
+          "p50_ms": 0.042521,
+          "ids": 0
+        },
+        "entity:component": {
+          "p50_ms": 0.454646,
+          "ids": 998
+        },
+        "entry:route": {
+          "p50_ms": 0.0425205,
+          "ids": 0
+        },
+        "entity:route": {
+          "p50_ms": 0.247396,
+          "ids": 998
+        },
+        "entry:arch": {
+          "p50_ms": 0.041271,
+          "ids": 0
+        },
+        "entity:arch": {
+          "p50_ms": 0.0454585,
+          "ids": 0
+        },
+        "entry:entry:background-00001": {
+          "p50_ms": 0.0632295,
+          "ids": 1
+        },
+        "entity:entry:background-00001": {
+          "p50_ms": 0.069854,
+          "ids": 0
+        }
+      },
+      "writes": {
+        "metadata": {
+          "p50_ms": 0.2596455,
+          "samples_ms": [
+            2.023834,
+            0.306708,
+            0.27575,
+            0.279292,
+            0.2505,
+            0.261375,
+            0.25475,
+            0.245334,
+            0.259541,
+            0.25975,
+            0.260375,
+            0.244125,
+            0.242541,
+            0.253041,
+            0.262792,
+            0.391708,
+            0.248042,
+            0.250208,
+            0.244416,
+            0.264667
+          ]
+        },
+        "text": {
+          "p50_ms": 0.249854,
+          "samples_ms": [
+            0.244958,
+            0.252708,
+            0.277416,
+            0.257416,
+            0.237375,
+            0.237625,
+            0.241042,
+            0.239,
+            0.2415,
+            0.247,
+            0.242875,
+            0.360375,
+            0.240833,
+            2.934875,
+            0.972333,
+            0.260417,
+            0.276375,
+            0.2645,
+            0.221584,
+            0.259875
+          ]
+        }
+      },
+      "old_v1_reader_on_v2_fallback": null
+    },
+    "v2": {
+      "build_ms": 281.8343750000001,
+      "added_page_bytes": 4857856,
+      "status": {
+        "available": true,
+        "version": "2",
+        "supported_version": "2",
+        "keys": {
+          "entry": 29990,
+          "entity": 57904
+        },
+        "dirty": {
+          "entry": 0,
+          "entity": 0
+        },
+        "fallback_records": {
+          "entry": 0,
+          "entity": 0
+        },
+        "key_bytes": 862883,
+        "filter_indexes": [
+          "richi_search_entities_state_kind",
+          "richi_search_entries_state_kind",
+          "richi_search_entries_state_work"
+        ],
+        "dirty_behavior": "Scan dirty records directly, including oversized records.",
+        "status": "ready"
+      },
+      "pages": [
+        {
+          "name": "richi_search_dirty",
+          "bytes": 4096,
+          "payload": 0,
+          "unused": 4088
+        },
+        {
+          "name": "richi_search_entities_state_kind",
+          "bytes": 32768,
+          "payload": 23868,
+          "unused": 5808
+        },
+        {
+          "name": "richi_search_entries_state_kind",
+          "bytes": 229376,
+          "payload": 191880,
+          "unused": 6828
+        },
+        {
+          "name": "richi_search_entries_state_work",
+          "bytes": 229376,
+          "payload": 191881,
+          "unused": 6827
+        },
+        {
+          "name": "richi_search_keys",
+          "bytes": 2011136,
+          "payload": 1467768,
+          "unused": 273798
+        },
+        {
+          "name": "richi_search_keys_record",
+          "bytes": 1748992,
+          "payload": 1467768,
+          "unused": 12422
+        },
+        {
+          "name": "richi_search_records",
+          "bytes": 282624,
+          "payload": 219977,
+          "unused": 6682
+        },
+        {
+          "name": "sqlite_autoindex_richi_search_records_1",
+          "bytes": 315392,
+          "payload": 241849,
+          "unused": 39623
+        }
+      ],
+      "lookup": {
+        "entry:DEMO-17": {
+          "p50_ms": 0.066604,
+          "ids": 1
+        },
+        "entity:DEMO-17": {
+          "p50_ms": 0.0630625,
+          "ids": 0
+        },
+        "entry:ПУЛ СОЕДИНЕНИЙ": {
+          "p50_ms": 0.049937999999999996,
+          "ids": 2
+        },
+        "entity:ПУЛ СОЕДИНЕНИЙ": {
+          "p50_ms": 0.065271,
+          "ids": 0
+        },
+        "entry:entry:fact:budget": {
+          "p50_ms": 0.058479500000000004,
+          "ids": 1
+        },
+        "entity:entry:fact:budget": {
+          "p50_ms": 0.0529165,
+          "ids": 0
+        },
+        "entry:What is Q?": {
+          "p50_ms": 0.050771,
+          "ids": 0
+        },
+        "entity:What is Q?": {
+          "p50_ms": 0.056542,
+          "ids": 2
+        },
+        "entry:What happened in DEMO-999999 cache warmup?": {
+          "p50_ms": 0.07768749999999999,
+          "ids": 0
+        },
+        "entity:What happened in DEMO-999999 cache warmup?": {
+          "p50_ms": 0.0909995,
+          "ids": 0
+        },
+        "entry:zzzxunknowntransportxzzz": {
+          "p50_ms": 0.0451665,
+          "ids": 0
+        },
+        "entity:zzzxunknowntransportxzzz": {
+          "p50_ms": 0.0552085,
+          "ids": 0
+        },
+        "entry:DEMO-17 уже выкатили в прод сейчас?": {
+          "p50_ms": 0.0835415,
+          "ids": 1
+        },
+        "entity:DEMO-17 уже выкатили в прод сейчас?": {
+          "p50_ms": 0.09875,
+          "ids": 0
+        },
+        "entry:STRASSE ΩЕ": {
+          "p50_ms": 0.052479,
+          "ids": 1
+        },
+        "entity:STRASSE ΩЕ": {
+          "p50_ms": 0.062562,
+          "ids": 0
+        },
+        "entry:why flux canal failed": {
+          "p50_ms": 0.053375,
+          "ids": 1
+        },
+        "entity:why flux canal failed": {
+          "p50_ms": 0.280104,
+          "ids": 998
+        },
+        "entry:entity:concept:queue": {
+          "p50_ms": 0.044042,
+          "ids": 0
+        },
+        "entity:entity:concept:queue": {
+          "p50_ms": 0.056021,
+          "ids": 1
+        },
+        "entry:hiddenprobe": {
+          "p50_ms": 0.043958,
+          "ids": 1
+        },
+        "entity:hiddenprobe": {
+          "p50_ms": 0.0489585,
+          "ids": 0
+        },
+        "entry:oldprobe": {
+          "p50_ms": 0.0440835,
+          "ids": 1
+        },
+        "entity:oldprobe": {
+          "p50_ms": 0.0459375,
+          "ids": 0
+        },
+        "entry:receipt transport": {
+          "p50_ms": 0.043521,
+          "ids": 0
+        },
+        "entity:receipt transport": {
+          "p50_ms": 0.488083,
+          "ids": 998
+        },
+        "entry:transport": {
+          "p50_ms": 0.04325,
+          "ids": 0
+        },
+        "entity:transport": {
+          "p50_ms": 0.255792,
+          "ids": 998
+        },
+        "entry:component": {
+          "p50_ms": 0.043271,
+          "ids": 0
+        },
+        "entity:component": {
+          "p50_ms": 0.46195850000000005,
+          "ids": 998
+        },
+        "entry:route": {
+          "p50_ms": 0.043,
+          "ids": 0
+        },
+        "entity:route": {
+          "p50_ms": 0.2593125,
+          "ids": 998
+        },
+        "entry:arch": {
+          "p50_ms": 0.042375,
+          "ids": 0
+        },
+        "entity:arch": {
+          "p50_ms": 0.0481665,
+          "ids": 0
+        },
+        "entry:entry:background-00001": {
+          "p50_ms": 0.0615625,
+          "ids": 1
+        },
+        "entity:entry:background-00001": {
+          "p50_ms": 0.06535450000000001,
+          "ids": 0
+        }
+      },
+      "writes": {
+        "metadata": {
+          "p50_ms": 0.24556250000000002,
+          "samples_ms": [
+            1.108833,
+            0.280333,
+            0.238334,
+            0.250292,
+            0.253584,
+            0.254166,
+            0.228125,
+            0.233583,
+            0.236666,
+            0.231166,
+            0.236792,
+            0.237417,
+            0.237166,
+            0.251042,
+            0.260042,
+            0.410458,
+            0.254625,
+            0.240833,
+            0.222166,
+            0.260083
+          ]
+        },
+        "text": {
+          "p50_ms": 0.23414600000000002,
+          "samples_ms": [
+            0.226292,
+            0.23425,
+            0.244417,
+            0.250417,
+            0.216,
+            0.234042,
+            0.230667,
+            0.237625,
+            0.231,
+            0.241958,
+            0.216083,
+            0.362333,
+            0.226625,
+            0.25325,
+            0.23575,
+            0.235167,
+            0.223625,
+            0.23075,
+            0.221458,
+            0.240625
+          ]
+        }
+      },
+      "old_v1_reader_on_v2_fallback": true
+    }
+  },
+  "routing_parity": true,
+  "format_version": 1,
+  "old_revision": "84e1b6c3684dd17ca7385d511fcd1b408d11a68a",
+  "old_source_alias_revision": "c130086",
+  "provenance_note": "Measured frozen c130086 search_index.py bytes equal 84e1b6c bytes; both SHA-256 values were independently verified.",
+  "fixture_sha256": "3cc3188d2996522c32da66253f7a66dc44de5f9feda85b4989d388c89d23d762",
+  "harness_sha256": "72194c722422ff7f1e5ca92275150bdec211b685b5bbc49c2ee616bdcfd0b687",
+  "candidate_source_matches_measured": true,
+  "ordinary_response_parity": [
+    {
+      "id": "ticket-exact",
+      "equal": true,
+      "serialized_equal": true,
+      "output_chars": {
+        "v1": 1169,
+        "v2": 1169
+      },
+      "sha256": {
+        "v1": "9451415610e07b35189b9e821cd907cbe074fd6c3a260e3573b3c077847a8a82",
+        "v2": "9451415610e07b35189b9e821cd907cbe074fd6c3a260e3573b3c077847a8a82"
+      }
+    },
+    {
+      "id": "alias-and-cross-project-link",
+      "equal": true,
+      "serialized_equal": true,
+      "output_chars": {
+        "v1": 2159,
+        "v2": 2159
+      },
+      "sha256": {
+        "v1": "cb97070637a0b0c794a212dd5456aafc5962b5b348f9fc77f5f6f0e441ac3396",
+        "v2": "cb97070637a0b0c794a212dd5456aafc5962b5b348f9fc77f5f6f0e441ac3396"
+      }
+    },
+    {
+      "id": "qualified-reference",
+      "equal": true,
+      "serialized_equal": true,
+      "output_chars": {
+        "v1": 2099,
+        "v2": 2099
+      },
+      "sha256": {
+        "v1": "211431d702a597146e5df571a8bcd2300e32c1c462a58bcdd9d0714242fce53a",
+        "v2": "211431d702a597146e5df571a8bcd2300e32c1c462a58bcdd9d0714242fce53a"
+      }
+    },
+    {
+      "id": "ambiguous-concept",
+      "equal": true,
+      "serialized_equal": true,
+      "output_chars": {
+        "v1": 2261,
+        "v2": 2261
+      },
+      "sha256": {
+        "v1": "19128828e49cffc906d5dde57b6e8343c8ce929afb42ffac826ac0116c6257b9",
+        "v2": "19128828e49cffc906d5dde57b6e8343c8ce929afb42ffac826ac0116c6257b9"
+      }
+    },
+    {
+      "id": "unknown-ticket",
+      "equal": true,
+      "serialized_equal": true,
+      "output_chars": {
+        "v1": 658,
+        "v2": 658
+      },
+      "sha256": {
+        "v1": "48b67f018a132779f0c5e1af902806376223e5e5707ff16ec692c576fc18d384",
+        "v2": "48b67f018a132779f0c5e1af902806376223e5e5707ff16ec692c576fc18d384"
+      }
+    },
+    {
+      "id": "unknown-subject",
+      "equal": true,
+      "serialized_equal": true,
+      "output_chars": {
+        "v1": 611,
+        "v2": 611
+      },
+      "sha256": {
+        "v1": "8746d5035d596530f64f219d934a27dda769c17221a3c8d59eb825372d04fc03",
+        "v2": "8746d5035d596530f64f219d934a27dda769c17221a3c8d59eb825372d04fc03"
+      }
+    },
+    {
+      "id": "unverified-release",
+      "equal": true,
+      "serialized_equal": true,
+      "output_chars": {
+        "v1": 1358,
+        "v2": 1358
+      },
+      "sha256": {
+        "v1": "7b651020fc82edb766fbf3dbd5da85a055a3753e09e25858e3036ca92912cda4",
+        "v2": "7b651020fc82edb766fbf3dbd5da85a055a3753e09e25858e3036ca92912cda4"
+      }
+    },
+    {
+      "id": "unicode-folded-alias",
+      "equal": true,
+      "serialized_equal": true,
+      "output_chars": {
+        "v1": 1515,
+        "v2": 1515
+      },
+      "sha256": {
+        "v1": "a449be818740f7219be2e893c034970c2095f4ba058a40a025ee8eee247ea147",
+        "v2": "a449be818740f7219be2e893c034970c2095f4ba058a40a025ee8eee247ea147"
+      }
+    },
+    {
+      "id": "alias-phrase",
+      "equal": true,
+      "serialized_equal": true,
+      "output_chars": {
+        "v1": 8718,
+        "v2": 8718
+      },
+      "sha256": {
+        "v1": "0e459a4f97643ebaff1519f1a41c15090646ab15f3bd568003323971d3f917e2",
+        "v2": "0e459a4f97643ebaff1519f1a41c15090646ab15f3bd568003323971d3f917e2"
+      }
+    },
+    {
+      "id": "exact-entity",
+      "equal": true,
+      "serialized_equal": true,
+      "output_chars": {
+        "v1": 1082,
+        "v2": 1082
+      },
+      "sha256": {
+        "v1": "9502feffdb20265837b8a1b6d269c3384c382f834a3552757437750148a3f553",
+        "v2": "9502feffdb20265837b8a1b6d269c3384c382f834a3552757437750148a3f553"
+      }
+    },
+    {
+      "id": "hypothesis-excluded",
+      "equal": true,
+      "serialized_equal": true,
+      "output_chars": {
+        "v1": 585,
+        "v2": 585
+      },
+      "sha256": {
+        "v1": "d06dc7a15f24503e4b77044fb8c1269080a3e26057a5d353ab15ce2a275650e5",
+        "v2": "d06dc7a15f24503e4b77044fb8c1269080a3e26057a5d353ab15ce2a275650e5"
+      }
+    },
+    {
+      "id": "hypothesis-included",
+      "equal": true,
+      "serialized_equal": true,
+      "output_chars": {
+        "v1": 1563,
+        "v2": 1563
+      },
+      "sha256": {
+        "v1": "51fa15ed913dd98f64fb6f34f5155083060f59c9c38fdbd3b0e2c3a3bbcddbdd",
+        "v2": "51fa15ed913dd98f64fb6f34f5155083060f59c9c38fdbd3b0e2c3a3bbcddbdd"
+      }
+    },
+    {
+      "id": "superseded-included",
+      "equal": true,
+      "serialized_equal": true,
+      "output_chars": {
+        "v1": 1554,
+        "v2": 1554
+      },
+      "sha256": {
+        "v1": "42ab09a1a1612d2667d75f054b6437818e82e00763cc0b2bb6339d80246c9b74",
+        "v2": "42ab09a1a1612d2667d75f054b6437818e82e00763cc0b2bb6339d80246c9b74"
+      }
+    },
+    {
+      "id": "broad-background",
+      "equal": true,
+      "serialized_equal": true,
+      "output_chars": {
+        "v1": 9160,
+        "v2": 9160
+      },
+      "sha256": {
+        "v1": "671a92f64770025d2392e677d15b04e6e775c9fe7f48c8ed261d638dd6f76740",
+        "v2": "671a92f64770025d2392e677d15b04e6e775c9fe7f48c8ed261d638dd6f76740"
+      }
+    }
+  ],
+  "measurement": {
+    "scope": "in-process index layout ablation inside one shared source runtime",
+    "lookup_repeats": 40,
+    "lookup_order": "alternating arms per repeat",
+    "lookup_raw_samples_retained": false,
+    "build_repeats": 1,
+    "build_order": [
+      "v1",
+      "v2"
+    ],
+    "write_samples_per_kind": 20,
+    "write_arm_order": [
+      "v1",
+      "v2"
+    ],
+    "caches": "not flushed",
+    "bytes": "allocated SQLite pages; new builds on identical clean copies; not peak WAL",
+    "ordinary_parity": "separate untimed14-case check on identical untouched knowledge rows",
+    "token_scope": "serialized JSON identity; no billed token/agent-quality claim"
+  },
+  "canonical_rows_preserved": true,
+  "old_v1_reader_on_v2_fallback": true
+}

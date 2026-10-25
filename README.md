@@ -124,6 +124,12 @@ richi use
   поэтапная загрузка инструкций и проверенные ограничения экономии токенов.
 - [Поиск и пакетное чтение](skills/project-memory/references/RETRIEVAL_TOOLS.md):
   короткие карточки `discover` и полные записи через `fetch`.
+- [Метаданные без выгрузки карточек](skills/project-memory/references/QUERY_TOOLS.md):
+  `query count`, `exists`, `facets`, `select`; каталог операций — `capabilities list`.
+- [Составные фильтры и индексированный поиск](skills/project-memory/references/FILTERS.md):
+  строгий `--where` и явное построение производного индекса.
+- [Замеры токенов и контекста](docs/AGENT_WORKFLOW_EVAL.md): сравнение встроенных
+  операций с чтением карточек и рабочими Python-скриптами.
 - [Рост базы и обслуживание индексов](docs/STORAGE.md): учёт текущих записей,
   истории и файлов; предварительный план и резервная копия перед оптимизацией.
 

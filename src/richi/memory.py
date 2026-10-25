@@ -265,6 +265,9 @@ def upsert(conn, table, columns, record):
     assignments = ", ".join("{0} = excluded.{0}".format(key) for key in columns if key != "id")
     conn.execute("INSERT INTO {} ({}) VALUES ({}) ON CONFLICT(id) DO UPDATE SET {}".format(
         table, ", ".join(columns), placeholders, assignments), [record[key] for key in columns])
+    if table in {"entries", "entities"}:
+        from . import search_index
+        search_index.refresh_record(conn, table, record["id"])
 
 
 def project_put(conn, obj):
@@ -438,6 +441,10 @@ def search(conn, args, search_backend):
         raise MemoryError("Search query must contain at most 64 words")
     if args.project:
         require_project(conn, args.project)
+    from . import query_filters
+    selection_filter = query_filters.parse(getattr(args, "where", None), sys.modules[__name__])
+    if selection_filter:
+        selection_filter.prepare(conn)
     if not tokens:
         return {"entries": [], "search_backend": search_backend, "limit": args.limit}
     parameters = []
@@ -447,6 +454,10 @@ def search(conn, args, search_backend):
     if args.project:
         where += " AND EXISTS (SELECT 1 FROM entry_projects ep WHERE 1=1 AND ep.entry_id = e.id AND ep.project_id = ?)"
         parameters.append(args.project)
+    if selection_filter:
+        clause, values = selection_filter.sql("entry")
+        where += " AND (" + clause + ")"
+        parameters.extend(values)
     if search_backend == "fts5":
         sql = "SELECT e.id FROM entries e JOIN entries_fts ON entries_fts.rowid = e.rowid" + where
         sql += " AND entries_fts MATCH ? ORDER BY bm25(entries_fts), e.updated_at DESC, e.id LIMIT ?"
@@ -623,6 +634,7 @@ def parser():
     query = commands.add_parser("search")
     query.add_argument("query")
     query.add_argument("--project")
+    query.add_argument("--where", help="Strict composed filter; AND/OR/NOT, comparisons, IN, LIKE, HAS")
     ctx = commands.add_parser("context")
     ctx.add_argument("--project", required=True)
     for command in (query, ctx):
@@ -630,18 +642,25 @@ def parser():
         command.add_argument("--include-superseded", action="store_true")
     commands.add_parser("backup").add_argument("--output")
     commands.add_parser("check")
-    from . import retrieval_tools, storage
+    from . import retrieval_tools, storage, query_tools, capabilities
+    capabilities.add_commands(commands, sys.modules[__name__])
+    query_tools.add_commands(commands, sys.modules[__name__])
     retrieval_tools.add_commands(commands, sys.modules[__name__])
     storage.add_commands(commands, sys.modules[__name__])
     recall_cmd = commands.add_parser("recall", help="Bounded question retrieval with explicit graph evidence")
     recall_cmd.add_argument("query")
     recall_cmd.add_argument("--project")
+    recall_cmd.add_argument("--where", help="Strict composed filter applied before shortlist and to graph results")
     recall_cmd.add_argument("--limit", type=limit, default=8)
     recall_cmd.add_argument("--max-chars", type=compact.max_chars, default=16000)
     recall_cmd.add_argument("--include-hypotheses", action="store_true")
     recall_cmd.add_argument("--include-superseded", action="store_true")
     recall_cmd.add_argument("--explain", action="store_true", help="Explain the actual retrieval stages within the output budget")
     recall_cmd.add_argument("--expect", help="Diagnose one expected entry:<id> or entity:<id>; implies --explain")
+    index_cmd = commands.add_parser("search-index", help="Explicit derived lookup index maintenance; never changes knowledge/history")
+    index_actions = index_cmd.add_subparsers(dest="action", required=True)
+    index_actions.add_parser("build", help="Build or rebuild lookup keys and filter indexes atomically")
+    index_actions.add_parser("status", help="Report index availability and fallback records without writes")
     brief_cmd = commands.add_parser("brief", help="Task context from a question, optional Git changes and explicit evidence links")
     brief_cmd.add_argument("query")
     brief_cmd.add_argument("--project", help="Recall project boost; scopes optional Git source checks and identifies a diff repository")
@@ -736,6 +755,9 @@ def parser():
 
 
 def run(args):
+    if args.command == "capabilities":
+        from . import capabilities
+        return capabilities.run(args, sys.modules[__name__])
     from richi_launcher.config import resolve_settings
     settings = resolve_settings(db=args.db, config_file=getattr(args, "config", None),
                                 workspace=getattr(args, "workspace", None))
@@ -749,12 +771,13 @@ def run(args):
     applying_scan = scanning and args.apply
     storage_apply = (args.command == "storage" and args.action == "optimize"
                      and args.apply)
+    building_index = args.command == "search-index" and args.action == "build"
     project_path = getattr(args, "project_path", None)
     if storage_apply and project_path is not None:
         raise MemoryError("Storage optimization affects the whole workspace; omit --project-path")
     if project_path is not None and (args.command in {"init", "migrate", "backup"} or adding_project or scanning):
         raise MemoryError("--project-path is for existing project operations; omit it for initialization, registration or a workspace backup")
-    writing = args.command in {"init", "migrate"} or getattr(args, "action", None) in {"put", "upsert"} or source_attach or adding_project or applying_scan or storage_apply
+    writing = args.command in {"init", "migrate"} or getattr(args, "action", None) in {"put", "upsert"} or source_attach or adding_project or applying_scan or storage_apply or building_index
     conn = connect(database, create=args.command == "init", readonly=not writing)
     try:
         if args.command == "init":
@@ -776,7 +799,7 @@ def run(args):
             return storage.run(conn, args, sys.modules[__name__], database)
         writing = getattr(args, "action", None) in {"put", "upsert"}
         items = payload(args.json) if writing else None
-        with transaction(conn, write=writing or source_attach or adding_project or applying_scan):
+        with transaction(conn, write=writing or source_attach or adding_project or applying_scan or building_index):
             if project_path is not None:
                 from .projects import ensure_project_context
                 project = ensure_project_context(conn, project_path, expected_id=getattr(args, "project", None))
@@ -794,6 +817,12 @@ def run(args):
                 from .projects import project_scan
                 result = project_scan(conn, args.path, apply=args.apply, max_depth=args.max_depth)
                 return dict(result, workspace=settings.workspace, database=str(database))
+            if args.command == "query":
+                from . import query_tools
+                return query_tools.run(conn, args, sys.modules[__name__])
+            if args.command == "search-index":
+                from . import search_index
+                return search_index.build(conn, sys.modules[__name__]) if building_index else search_index.status(conn)
             if args.command == "project" and args.action == "check":
                 from .projects import project_check
                 return dict(project_check(conn, args.path, project_id=args.project_id),
