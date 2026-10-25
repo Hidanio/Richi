@@ -318,6 +318,7 @@ class ReleaseTests(unittest.TestCase):
         data = wheel_bytes()
         path.write_bytes(data)
         expected = manifest(data)
+        expected.update(database_schemas=[1, 2, 3], map_schema=3)
         self.assertEqual(builder.build_manifest(path, source, "v1.2.3"), expected)
         self.assertEqual(builder.build_manifest(path, source), expected)
         with self.assertRaises(ConfigError):

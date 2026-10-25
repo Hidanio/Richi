@@ -4,8 +4,10 @@ from . import query_filters
 
 
 SCALARS = ('id', 'kind', 'title', 'knowledge_state', 'work_state', 'jira_key',
-           'created_at', 'updated_at', 'verified_at')
-GROUP_FIELDS = ('family', 'kind', 'knowledge_state', 'work_state', 'jira_key')
+           'created_at', 'updated_at', 'verified_at', 'role', 'assessment', 'outcome',
+           'applicability', 'observed_at')
+GROUP_FIELDS = ('family', 'kind', 'knowledge_state', 'work_state', 'jira_key',
+                'role', 'assessment', 'outcome', 'applicability')
 DEFAULT_FIELDS = 'ref,kind,title,knowledge_state,work_state,verified_at'
 
 
@@ -15,6 +17,7 @@ def add_commands(commands, api):
         command = actions.add_parser(name)
         command.add_argument('--family', choices=('entry', 'entity', 'all'), default='entry')
         command.add_argument('--project', help='Strict justified project membership')
+        command.add_argument('--track', help='Strict direct active track membership; includes all knowledge states')
         command.add_argument('--where', help='Composed metadata predicate; same grammar as recall --where')
         command.add_argument('--include-hypotheses', action='store_true')
         command.add_argument('--include-superseded', action='store_true')
@@ -37,6 +40,8 @@ def _expression(family, field):
         return "'" + family + ":' || e.id"
     if family == 'entity' and field in query_filters.ENTITY_MISSING:
         return 'NULL'
+    if field in query_filters.RESEARCH_FIELDS:
+        return query_filters.research_column(field)
     return 'e.' + field
 
 
@@ -48,10 +53,21 @@ def _selection(conn, args, api):
         api.identifier(args.project, 'project')
         project_filter = query_filters.parse("project = '" + args.project.replace("'", "''") + "'", api)
         project_filter.prepare(conn)
+    track = getattr(args, 'track', None)
+    track_filter = None
+    if track is not None:
+        query_filters.require_research(conn, api)
+        track = api.string(track, 'track')
+        track = track[6:] if track.startswith('entry:') else track
+        api.identifier(track, 'track ID')
+        if not conn.execute("SELECT 1 FROM entry_research WHERE entry_id = ? AND role = 'track'", (track,)).fetchone():
+            raise api.MemoryError('Unknown track: ' + track + '; use an existing entry with research.role=track')
+        track_filter = query_filters.parse("track = '" + track.replace("'", "''") + "'", api)
+        track_filter.prepare(conn)
     states = ['confirmed']
-    if args.include_hypotheses:
+    if args.include_hypotheses or track is not None:
         states.append('hypothesis')
-    if args.include_superseded:
+    if args.include_superseded or track is not None:
         states.append('superseded')
     families = ['entry', 'entity'] if args.family == 'all' else [args.family]
     has_entities = conn.execute("SELECT 1 FROM sqlite_master WHERE 1=1 AND type = 'table' AND name = 'entities'").fetchone()
@@ -68,10 +84,20 @@ def _selection(conn, args, api):
             scope, values = project_filter.sql(family)
             where += ' AND ' + scope
             params += values
+        if track_filter is not None:
+            predicate, values = track_filter.sql(family)
+            where += ' AND ' + predicate
+            params += values
         selections.append((family, 'entries' if family == 'entry' else 'entities', where, params))
     scope = {'families': families, 'knowledge_states': states, 'filter_applied': bool(parsed)}
     if args.project is not None:
         scope['project'] = args.project
+    if args.where is not None:
+        scope['where'] = args.where
+    if track is not None:
+        scope.update(track='entry:' + track, membership='direct_active_in_track',
+                     checked_areas=['explicit_track_members'],
+                     expand_search='Remove --track to search the bound workspace; keep --project for its strict intersection.')
     return selections, scope
 
 
@@ -247,6 +273,10 @@ def run(conn, args, api):
     if not conn.in_transaction:
         with api.transaction(conn, write=False):
             return run(conn, args, api)
+    requested = (_fields(args.fields, api) if args.action == 'select' else
+                 args.by if args.action == 'facets' else ())
+    if any(field in query_filters.RESEARCH_FIELDS for field in requested):
+        query_filters.require_research(conn, api)
     selections, scope = _selection(conn, args, api)
     response = {'view': 'query', 'operation': args.action, 'scope': scope,
                 'budget': {'max_chars': args.max_chars, 'output_chars': 0}}
@@ -263,6 +293,7 @@ def run(conn, args, api):
             else:
                 value += row[0]
         response.update({args.action: bool(value) if args.action == 'exists' else value, 'exact': True})
-        _measure(response, api)
+        if _measure(response, api) > args.max_chars:
+            raise api.MemoryError('Query metadata exceeds output budget; increase --max-chars')
         return response
     return (_select if args.action == 'select' else _facets)(conn, args, selections, response, api)

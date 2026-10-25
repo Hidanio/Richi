@@ -172,7 +172,8 @@ def _compatible(manifest):
     if (not isinstance(minimum, list) or len(minimum) != 2
             or any(type(part) is not int for part in minimum) or tuple(minimum) > sys.version_info[:2]):
         raise ConfigError("Release is incompatible with this Python interpreter")
-    if manifest.get("database_schemas") != [1, 2] or manifest.get("map_schema") != 2:
+    supported = (([1, 2], 2), ([1, 2, 3], 3))
+    if (manifest.get("database_schemas"), manifest.get("map_schema")) not in supported:
         raise ConfigError("Release schema compatibility does not match updater protocol 1; no database was changed")
 
 

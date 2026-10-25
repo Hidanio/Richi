@@ -10,6 +10,7 @@ richi --compact-json query exists --project example --where "jira_key = 'DEMO-42
 richi --compact-json query facets --project example --by kind --by work_state
 richi --compact-json query select --project example \
   --fields ref,title,work_state,verified_at --limit 50
+richi --compact-json query facets --track entry:track:example --by role --by outcome
 ```
 
 `count` and `exists` cover **all** matching current records, with no lexical or
@@ -23,13 +24,25 @@ ranking boost on recall/discover. `--where` shares the bounded composed grammar
 and project-provenance/date/NULL semantics in [FILTERS.md](FILTERS.md); it combines
 with the project and state selectors. Default family is `entry`; use
 `--family entity` or `--family all`. Entities have NULL work_state and jira_key.
-Default knowledge state is confirmed; include hypotheses/superseded deliberately
+Without `--track`, default knowledge state is confirmed; include hypotheses/superseded deliberately
 with their separate flags. A filter cannot override these state gates. Schema-1
 stores support entries; all uses available families, entity requires schema 2.
 Every response states its actual scope.
 
+`--track REF` accepts a track's native ID or `entry:<id>` and requires an existing
+entry with `research.role: track`. It selects direct active `in_track` memberships
+only; `--project` intersects that set. It includes confirmed, hypothesis and
+superseded **members** by default, while superseded membership edges are detached.
+Use `--where "knowledge_state = 'confirmed'"` to narrow states deliberately.
+The scope reports the normalized track, exact predicate and expansion guidance.
+Common projects, `part_of`, shared tags and nested graph paths never expand it.
+A valid empty track returns zero; an unknown/non-track ref is an explicit error.
+Research predicates/projections and track selection require schema 3 without
+automatic migration. Details: [TRACKS.md](TRACKS.md).
+
 `facets --by FIELD` returns parallel `columns` and `rows`, grouped by one to three
-distinct fields: family, kind, knowledge_state, work_state, jira_key. Repeat
+distinct fields: family, kind, knowledge_state, work_state, jira_key, role,
+assessment, outcome, applicability. Repeat
 `--by` to form combined groups. Counts are exact for each returned group. NULL
 is a distinct group, not an empty string. Groups sort by descending count, then
 binary field order; `--limit` (1–200, default 20) and the character budget bound
@@ -41,7 +54,10 @@ max-chars in UTF-8 bytes) fail explicitly before loading into Python. Narrow
 the predicate or increase the budget. This operation has no pagination cursor.
 
 `select` projects only requested scalar fields: id, kind, title, knowledge_state,
-work_state, jira_key, created_at, updated_at, verified_at. `ref` is always first;
+work_state, jira_key, created_at, updated_at, verified_at, role, assessment,
+outcome, applicability, observed_at. Research fields are NULL for entries without
+research and for entities; they come from scalar columns without loading JSON.
+`ref` is always first;
 default fields are ref,kind,title,knowledge_state,work_state,verified_at. The
 compact table contains `columns` and aligned `rows`; fields are never silently
 truncated. Full records, arrays and arbitrary SQL expressions are not projections.

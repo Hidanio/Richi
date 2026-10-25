@@ -42,6 +42,14 @@ For counts, existence, distributions or selected fields, use `query`:
 run `capabilities list`, select one `--group`, then `capabilities describe "COMMAND ID"`.
 Load only the relevant command contract; do not load the entire catalog or all manuals.
 
+For a known engineering task, start with `task context REF` to obtain its own
+motivation, constraints and explicit track evidence. Standalone tasks are valid;
+do not invent a track or require one. Related tracks guide investigation; strict
+`query select --track REF` limits one call to explicit members. Keep negative results,
+conditions and unknowns; expand to relevant projects or the bound workspace when
+needed. Exact known records remain directly readable. Load [TRACKS.md](references/TRACKS.md)
+only when using tracks, structured experiments or their change feed.
+
 For unknown records, start with
 `richi --compact-json --project-path PATH recall "question" --project PROJECT_ID --limit 8 --max-chars 16000`.
 Omit project/path only when genuinely unknown or deliberately workspace-wide.
@@ -89,10 +97,14 @@ For creating/updating entries (or drafting the payload), read
 concurrency and task/detail writing. For entity/edge payloads use
 [GRAPH.md](references/GRAPH.md). Keep stable IDs, current searchable evidence
 and the full sources, scope and states. Never write back an excerpt.
+For shared experiments, store each result once with its sources, conditions and
+explicit links; separate planned work, observation, hypothesis assessment and
+applicability. The structured write contract is in [TRACKS.md](references/TRACKS.md).
 
 Every entry/entity/edge `put` replaces the payload. Full `get` first; remove
-`created_at`, `updated_at`, `history` and pass that version as
+`created_at`, `updated_at`, `history` and read-only `revision`, and pass the timestamp as
 `expected_updated_at` (`null` for create-only). Preserve unrelated fields.
+For typed research updates also pass the read integer as `expected_revision`.
 On conflict reread and reconcile; verify successful writes by full get.
 Use transactional CLI writes, not direct SQL, and report unavailable saves.
 
@@ -112,6 +124,7 @@ only when its specific operation or contract is needed.
 | Operation | Reference |
 |---|---|
 | Find candidates, then read several exact records | [RETRIEVAL_TOOLS.md](references/RETRIEVAL_TOOLS.md) |
+| Context of a known task, tracks or shared experiments | [TRACKS.md](references/TRACKS.md) |
 | Neighbors/links of a known node | [NEIGHBORS.md](references/NEIGHBORS.md) |
 | Scoped definitions or ambiguous aliases | [ENCYCLOPEDIA.md](references/ENCYCLOPEDIA.md) |
 | Capture/attach checked code, including worktrees | [GIT_CAPTURE.md](references/GIT_CAPTURE.md) |

@@ -37,8 +37,8 @@ public compatibility metadata plus the wheel's filename, SHA256 and byte size:
   "version": "0.1.0",
   "updater_protocol": 1,
   "python_min": [3, 9],
-  "database_schemas": [1, 2],
-  "map_schema": 2,
+  "database_schemas": [1, 2, 3],
+  "map_schema": 3,
   "wheel": {
     "filename": "richi-0.1.0-py3-none-any.whl",
     "sha256": "<64 lowercase hexadecimal digits>",
@@ -51,6 +51,15 @@ Compatibility fields describe this runtime and must be reviewed when Python,
 SQLite schema or map requirements change. New manifest formats or updater
 protocols require an explicit launcher upgrade path. The client enforces a
 50 MiB wheel limit and verifies the checksum and metadata before installation.
+
+The first schema-3 runtime requires a manual package upgrade from launchers that
+only accept `[1, 2]` manifests. Install the new package and launcher in the
+dedicated environment; switching development sources alone does not replace
+that launcher. Installing or selecting a runtime never migrates a database.
+Back up and explicitly run `richi migrate` after accepting the new runtime.
+Older runtimes refuse schema 3 instead of silently discarding native research
+fields. The new updater still accepts legacy schema-2 releases, whose runtime
+will refuse a migrated store; restoring a backup is a separate deliberate step.
 Downloads start at fixed repository URLs and follow redirects only to GitHub's
 release asset hosts. No manifest field can select a download host or command.
 SHA256 detects corruption; publisher authenticity relies on GitHub HTTPS and

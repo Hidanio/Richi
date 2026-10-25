@@ -164,7 +164,7 @@ class StorageTests(unittest.TestCase):
             backup.close()
         if memory.backend(self.conn) == "fts5":
             self.assertEqual(self.conn.execute("SELECT id FROM entries_fts WHERE entries_fts MATCH 'needle'").fetchone()[0], "entry")
-        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], 2)
+        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], memory.VERSION)
 
     def test_backup_failure_prevents_any_index_mutation(self):
         before = self.all_tables()

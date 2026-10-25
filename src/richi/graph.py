@@ -15,19 +15,19 @@ MAX_EDGES = 10000
 
 
 def require_v2(conn, api):
-    if conn.execute("PRAGMA user_version").fetchone()[0] != 2:
-        raise api.MemoryError("Graph commands require schema 2; make a backup and run migrate explicitly")
+    if conn.execute("PRAGMA user_version").fetchone()[0] not in {2, 3}:
+        raise api.MemoryError("Graph commands require schema 2 or 3; make a backup and run migrate explicitly")
 
 
 def migrate(conn, path, api):
     with api.transaction(conn):
         version = conn.execute("PRAGMA user_version").fetchone()[0]
-        if version not in {1, 2}:
+        if version not in {1, 2, 3}:
             raise api.MemoryError("Cannot migrate unknown schema version: " + str(version))
         api.backend(conn)
-        if version == 2:
+        if version == 3:
             require_v2(conn, api)
-            return {"status": "existing", "schema_version": 2, "database": str(path)}
+            return {"status": "existing", "schema_version": 3, "database": str(path)}
         expected = {"projects", "entries", "entry_projects", "relations", "entry_history", "entry_events", "metadata"}
         existing = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE 1=1 AND type = 'table'")}
         if not expected.issubset(existing):
@@ -36,11 +36,13 @@ def migrate(conn, path, api):
             raise api.MemoryError("Existing foreign key violations; migration refused")
         if [row[0] for row in conn.execute("PRAGMA integrity_check")] != ["ok"]:
             raise api.MemoryError("Existing integrity errors; migration refused")
-        api.execute_script(conn, (api.BASE / "graph_schema.sql").read_text(encoding="utf-8"))
+        if version == 1:
+            api.execute_script(conn, (api.BASE / "graph_schema.sql").read_text(encoding="utf-8"))
+        api.execute_script(conn, (api.BASE / "research_schema.sql").read_text(encoding="utf-8"))
         if conn.execute("PRAGMA foreign_key_check").fetchone():
             raise api.MemoryError("Migration foreign key check failed")
-        conn.execute("PRAGMA user_version = 2")
-    return {"status": "migrated", "from_version": 1, "schema_version": 2, "database": str(path)}
+        conn.execute("PRAGMA user_version = 3")
+    return {"status": "migrated", "from_version": version, "schema_version": 3, "database": str(path)}
 
 
 def ref(value, api):
@@ -73,6 +75,14 @@ def get(conn, kind, identity, api, history=True):
     if row is None:
         raise api.MemoryError("Unknown {}: {}".format(kind, identity))
     record = decode(row, ("sources", "tags", "aliases") if kind == "entity" else ("sources",))
+    from . import research
+    native = (kind == 'edge' and research.native_edge(conn, record) or
+              kind == 'entity' and research.enabled(conn) and conn.execute(
+                  "SELECT 1 FROM graph_edges g JOIN entry_research r ON g.from_ref='entry:'||r.entry_id "
+                  "AND r.role='track' WHERE g.to_ref=? AND g.kind='pursues_goal' "
+                  "AND g.knowledge_state <> 'superseded' LIMIT 1", ('entity:' + identity,)).fetchone() is not None)
+    if native:
+        record["revision"] = research.revision(conn, kind + ":" + identity)
     if history:
         record["history"] = []
         for row in conn.execute("SELECT * FROM " + history_table + " WHERE 1=1 AND object_id = ? ORDER BY id", (identity,)):
@@ -84,9 +94,25 @@ def get(conn, kind, identity, api, history=True):
     return record
 
 
-def put(conn, obj, kind, api):
+def put(conn, obj, kind, api, *, _research_bundle=False):
+    if not conn.in_transaction:
+        with api.transaction(conn):
+            return put(conn, obj, kind, api, _research_bundle=_research_bundle)
+    conn.execute('SAVEPOINT richi_graph_write')
+    try:
+        result = _put(conn, obj, kind, api, _research_bundle=_research_bundle)
+        conn.execute('RELEASE richi_graph_write')
+        return result
+    except BaseException:
+        conn.execute('ROLLBACK TO richi_graph_write')
+        conn.execute('RELEASE richi_graph_write')
+        raise
+
+
+def _put(conn, obj, kind, api, *, _research_bundle=False):
+    from . import research
     columns = ENTITY_FIELDS if kind == "entity" else EDGE_FIELDS
-    api.fields(obj, set(columns) - {"created_at", "updated_at"} | {"expected_updated_at"})
+    api.fields(obj, set(columns) - {"created_at", "updated_at"} | {"expected_updated_at", "expected_revision"})
     record = {"id": api.identifier(obj.get("id")),
               "sources": api.sources(obj.get("sources", [])),
               "knowledge_state": api.enum(obj.get("knowledge_state", "hypothesis"), "knowledge_state", api.KNOWLEDGE),
@@ -114,8 +140,22 @@ def put(conn, obj, kind, api):
     expected = api.timestamp(obj.get("expected_updated_at"), "expected_updated_at")
     exists = conn.execute("SELECT id FROM " + table + " WHERE 1=1 AND id = ?", (record["id"],)).fetchone()
     old = get(conn, kind, record["id"], api, history=False) if exists else None
-    comparable = {key: value for key, value in old.items() if key not in {"created_at", "updated_at"}} if old else None
+    if kind == "edge":
+        research.validate_edge(conn, record, api, old=old, bundle=_research_bundle)
+    elif old and old['kind'] != record['kind'] and research.enabled(conn):
+        if conn.execute("SELECT 1 FROM graph_edges g JOIN entry_research r ON g.from_ref='entry:'||r.entry_id "
+                        "AND r.role='track' WHERE g.to_ref=? AND g.kind='pursues_goal' "
+                        "AND g.knowledge_state <> 'superseded' LIMIT 1", ('entity:' + record['id'],)).fetchone():
+            raise api.MemoryError('A referenced business-goal document cannot change kind')
+    comparable = {key: value for key, value in old.items() if key not in {"created_at", "updated_at", "revision"}} if old else None
     status = "created" if old is None else "unchanged" if comparable == record else "updated"
+    native = kind == 'edge' and research.native_edge(conn, record)
+    if kind == 'entity' and research.enabled(conn):
+        native = conn.execute("SELECT 1 FROM graph_edges g JOIN entry_research r ON g.from_ref='entry:'||r.entry_id "
+                              "AND r.role='track' WHERE g.to_ref=? AND g.kind='pursues_goal' "
+                              "AND g.knowledge_state <> 'superseded' LIMIT 1", ('entity:' + record['id'],)).fetchone() is not None
+    research.check_revision(conn, obj, kind + ':' + record['id'], api,
+                            required=old is not None and status == 'updated' and native)
     if status == "unchanged":
         return {"id": record["id"], "status": status}
     if "expected_updated_at" in obj and expected != (old["updated_at"] if old else None):
@@ -125,10 +165,28 @@ def put(conn, obj, kind, api):
     stored = dict(record)
     for key in ("sources", "tags", "aliases") if kind == "entity" else ("sources",):
         stored[key] = api.dumps(record[key])
+    scopes = (research.edge_scopes(conn, old) | research.edge_scopes(conn, record) if kind == 'edge'
+              else research.track_scopes(conn, 'entity:' + record['id']))
     api.upsert(conn, table, columns, stored)
+    scopes |= (research.edge_scopes(conn, old) | research.edge_scopes(conn, record) if kind == 'edge'
+               else research.track_scopes(conn, 'entity:' + record['id']))
+    event_kind = kind + '_' + status
+    if kind == 'edge' and record['kind'] == 'in_track' and native:
+        was_active = old is not None and old['knowledge_state'] != 'superseded'
+        active = record['knowledge_state'] != 'superseded'
+        if active and not was_active:
+            event_kind = 'attached'
+        elif was_active and not active:
+            event_kind = 'detached'
+    research.notify(conn, kind + ':' + record['id'], event_kind, record['updated_at'], scopes, api)
+    if native:
+        record['revision'] = research.revision(conn, kind + ':' + record['id'])
     conn.execute("INSERT INTO " + history_table + "(object_id, changed_at, before_json, after_json) VALUES (?, ?, ?, ?)",
                  (record["id"], record["updated_at"], api.dumps(old) if old else None, api.dumps(record)))
-    return {"id": record["id"], "status": status}
+    response = {"id": record["id"], "status": status}
+    if native:
+        response['revision'] = record['revision']
+    return response
 
 
 def allowed_states(args):

@@ -192,9 +192,11 @@ def attach(conn, args, api, database):
     if source in record["sources"]:
         return _bound({"ref": args.ref, "status": "unchanged", "source_index": record["sources"].index(source) + 1,
                 "updated_at": record["updated_at"]}, getattr(args, "max_chars", 16000))
-    payload = {key: value for key, value in record.items() if key not in ("created_at", "updated_at", "history")}
+    payload = {key: value for key, value in record.items() if key not in ("created_at", "updated_at", "history", "revision")}
     payload["sources"] = record["sources"] + [source]
     payload["expected_updated_at"] = expected
+    if 'revision' in record:
+        payload['expected_revision'] = record['revision']
     result = api.entry_put(conn, payload) if family == "entry" else graph.put(conn, payload, family, api)
     _, after = _record(conn, args.ref, api)
     return _bound({"ref": args.ref, "status": result["status"], "source_index": len(after["sources"]),
@@ -248,7 +250,7 @@ def _scan(conn, api, refs=None, repo_id=None):
     else:
         api.require_project(conn, repo_id)
         tables = [("entry", "entries", "title")]
-        if conn.execute("PRAGMA user_version").fetchone()[0] == 2:
+        if conn.execute("PRAGMA user_version").fetchone()[0] in (2, 3):
             tables += [("entity", "entities", "title"), ("edge", "graph_edges", "description")]
         for family, table, title in tables:
             if coverage["source_chars_scanned"] >= MAX_SCAN_SOURCE_CHARS:

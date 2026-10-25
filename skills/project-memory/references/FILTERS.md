@@ -32,7 +32,9 @@ Supported operations:
 
 Fields: `family` (`entry` or `entity`), `id`, `kind`, `knowledge_state`,
 `work_state`, `jira_key`, `title`, `project`, `tags`, `aliases`, `created_at`,
-`updated_at`, `verified_at`. Values are single-quoted strings; double an embedded
+`updated_at`, `verified_at`, `track`, `role`, `assessment`, `outcome`,
+`applicability`, `observed_at`. The research fields require schema 3; reads never
+migrate a store. Values are single-quoted strings; double an embedded
 quote (`'team''s decision'`). Raw SQL, subqueries, functions and comments are
 rejected. The parser bounds expression length, nesting and list sizes.
 `id` is the record's native ID; combine it with `family` when necessary.
@@ -50,7 +52,9 @@ Precision follows SQLite's date functions (milliseconds), so they are unsuitable
 for distinguishing revisions within one millisecond. LIKE on a date field still
 matches its stored text. Use the exact `updated_at` value with the existing
 optimistic-concurrency write API when updating a record.
-Entities have NULL `work_state` and `jira_key`. SQL three-valued logic applies:
+Entities have NULL `work_state`, `jira_key` and all research scalar fields.
+Entries without structured research also have NULL research fields.
+SQL three-valued logic applies:
 `NOT work_state = 'planned'` does not select NULL; use
 `work_state IS NULL OR work_state != 'planned'` when missing state is allowed.
 
@@ -61,6 +65,32 @@ are a set: positive project predicates mean any matching membership; negative
 predicates mean none, including unscoped records. `project IS NULL` selects only
 unscoped records. Hypotheses/superseded records remain excluded by recall unless their
 existing inclusion flags are supplied, even when a filter names that state.
+
+`track = 'track:example'` matches only direct active `in_track` edges from an
+entry to the track entry. Use the track's native entry ID in `--where` (without
+the outer `entry:` prefix). Both confirmed and hypothesis edges are active;
+superseded edges are detached. Members retain their own knowledge state, sources
+and project IDs. There is no inheritance from `part_of`, common projects, shared
+tags, graph paths or a parent track. Entities have an empty track set. Positive
+track predicates mean any matching membership; negative predicates mean none;
+`track IS NULL` includes standalone entries and entities. Track and project
+predicates intersect through AND. `role` selects the structured role, independently
+of legacy entry kind. Scalar research fields use indexed extension values and
+do not hydrate the full research payload.
+
+```sh
+richi query count --track entry:track:example --where "outcome = 'negative'"
+richi recall 'cache' --include-hypotheses --include-superseded \
+  --where "track = 'track:example' AND project = 'example'"
+```
+
+`--where track=…` keeps each command's existing knowledge-state defaults. Include
+hypotheses and historical records explicitly when investigating results.
+The convenient `query --track REF` instead includes all member knowledge states
+by default, so negative or superseded evidence remains visible; use an explicit
+`knowledge_state` predicate to narrow it. A zero in this strict scope says nothing
+about knowledge outside it. Remove the track predicate to expand within the
+bound workspace. See [TRACKS.md](TRACKS.md) for context, membership and change feeds.
 
 ## Enable the derived index explicitly
 

@@ -27,12 +27,13 @@ MAX_NODES = 128
 MAX_DEPTH = 16
 MAX_IN = 64
 MAX_PARAMETERS = 256
-DATE_FIELDS = frozenset({"created_at", "updated_at", "verified_at"})
+DATE_FIELDS = frozenset({"created_at", "updated_at", "verified_at", "observed_at"})
+RESEARCH_FIELDS = frozenset({"role", "assessment", "outcome", "applicability", "observed_at"})
 DATE_LITERAL = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}(?:[T ][0-9]{2}:[0-9]{2}(?::[0-9]{2}(?:\.[0-9]+)?)?(?:Z|[+-][0-9]{2}:[0-9]{2}))?\Z")
 FIELDS = frozenset({"family", "id", "kind", "knowledge_state", "work_state", "jira_key",
-                    "created_at", "updated_at", "verified_at", "project", "tags", "aliases", "title"})
+                    "created_at", "updated_at", "verified_at", "project", "track", "tags", "aliases", "title"}) | RESEARCH_FIELDS
 ARRAY_FIELDS = frozenset({"tags", "aliases"})
-ENTITY_MISSING = frozenset({"work_state", "jira_key"})
+ENTITY_MISSING = frozenset({"work_state", "jira_key"}) | RESEARCH_FIELDS
 KEYWORDS = frozenset({"AND", "OR", "NOT", "IN", "IS", "NULL", "LIKE", "HAS"})
 IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z", re.ASCII)
 TOKEN = re.compile(r"\s+|'(?:[^']|'')*'|!=|<=|>=|[=<>(),]|[A-Za-z_][A-Za-z0-9_]*", re.ASCII)
@@ -221,6 +222,17 @@ def prepare(conn, api=None, *, need_json=True, need_dates=False):
                 raise api.MemoryError("Incompatible reserved date function richi_iso_timestamp")
 
 
+def require_research(conn, api):
+    """Research is an explicit schema extension; a query never creates it."""
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'entry_research'").fetchone():
+        raise api.MemoryError("Research filters and projections require schema 3; run migrate explicitly")
+
+
+def research_column(field, alias="e"):
+    return ("(SELECT qf_research." + field + " FROM entry_research AS qf_research "
+            "WHERE qf_research.entry_id = " + alias + ".id)")
+
+
 class ParsedFilter:
     def __init__(self, tree, api):
         self.tree = tree
@@ -250,8 +262,14 @@ class ParsedFilter:
         return self._requires(lambda node: node[1] in DATE_FIELDS and node[2] not in
                               {"is_null", "is_not_null", "like", "not_like"})
 
+    @property
+    def requires_research(self):
+        return self._requires(lambda node: node[1] in RESEARCH_FIELDS or node[1] == "track")
+
     def prepare(self, conn):
         if conn not in self._prepared:
+            if self.requires_research:
+                require_research(conn, self.api)
             prepare(conn, self.api, need_json=self.requires_json, need_dates=self.requires_dates)
             self._prepared.add(conn)
 
@@ -259,7 +277,7 @@ class ParsedFilter:
         if family not in {"entry", "entity"}:
             raise self.api.MemoryError("Filter family must be entry or entity")
         if (not isinstance(alias, str) or IDENTIFIER.fullmatch(alias) is None or
-                alias.lower() in {"qf_project", "qf_edge", "qf_item"}):
+                alias.lower() in {"qf_project", "qf_edge", "qf_item", "qf_track", "qf_research"}):
             raise self.api.MemoryError("Invalid internal filter SQL alias")
         return self._compile(self.tree, family, alias)
 
@@ -276,6 +294,8 @@ class ParsedFilter:
         _, field, operation, value = node
         if field == "project":
             return self._project(family, alias, operation, value)
+        if field == "track":
+            return self._track(family, alias, operation, value)
         if operation in {"has", "not_has"}:
             sql = ("EXISTS (SELECT 1 FROM json_each(" + alias + "." + field + ") AS qf_item "
                    "WHERE 1=1 AND qf_item.type = 'text' AND qf_item.value COLLATE BINARY = ?)")
@@ -284,6 +304,8 @@ class ParsedFilter:
             column, parameters = "?", [family]
         elif family == "entity" and field in ENTITY_MISSING:
             column, parameters = "NULL", []
+        elif field in RESEARCH_FIELDS:
+            column, parameters = research_column(field, alias), []
         else:
             column, parameters = alias + "." + field, []
         sql, values = self._comparison(column, operation, value, date=field in DATE_FIELDS)
@@ -336,6 +358,28 @@ class ParsedFilter:
         predicate, parameters = self._comparison(column, positive, value)
         matching = "EXISTS (SELECT 1 FROM " + source + " WHERE 1=1 AND " + scope + " AND " + predicate + ")"
         return ("(NOT " + matching + ")" if negative else matching), parameters
+
+    def _track(self, family, alias, operation, value):
+        # A track is a set of direct, active entry -> track edges. Neither
+        # project connectivity nor part_of is membership. Entities have no
+        # track memberships in schema 3. Negation includes the empty set.
+        negative = operation in {"!=", "not_in", "not_like", "is_null"}
+        if family == "entity":
+            return ("1" if negative else "0"), []
+        source = ("graph_edges AS qf_track JOIN entry_research AS qf_research ON "
+                  "qf_research.entry_id = substr(qf_track.to_ref, 7)")
+        scope = ("qf_track.kind = 'in_track' AND qf_track.knowledge_state <> 'superseded' AND "
+                 "substr(qf_track.from_ref, 1, 6) = 'entry:' AND "
+                 "substr(qf_track.to_ref, 1, 6) = 'entry:' AND qf_research.role = 'track'")
+        parameters = []
+        if operation not in {"is_null", "is_not_null"}:
+            positive = {"!=": "=", "not_in": "in", "not_like": "like"}.get(operation, operation)
+            prefixed = tuple("entry:" + item for item in value) if isinstance(value, tuple) else "entry:" + value
+            predicate, parameters = self._comparison("qf_track.to_ref", positive, prefixed)
+            scope += " AND " + predicate
+        matching = (alias + ".id IN (SELECT substr(qf_track.from_ref, 7) FROM " + source +
+                    " WHERE " + scope + ")")
+        return ("(NOT " + matching + ")" if negative else "(" + matching + ")"), parameters
 
     def matches_ref(self, conn, node_ref):
         self.api.string(node_ref, "node ref")

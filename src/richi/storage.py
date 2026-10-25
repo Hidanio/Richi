@@ -10,8 +10,12 @@ from .compact import max_chars
 from .output import rendered
 
 BASE_TABLES = ("projects", "entries", "entry_projects", "relations", "entry_history", "entry_events")
+RESEARCH_TABLES = ("entry_research", "research_revisions", "research_events", "research_event_tracks", "research_requests")
 GRAPH_TABLES = ("entities", "graph_nodes", "graph_edges", "entity_history", "edge_history")
 LOGICAL_COLUMNS = {
+    "entry_research": ("payload",),
+    "research_events": ("object_ref", "event_kind", "recorded_at"),
+    "research_requests": ("request_id", "payload_hash", "response"),
     "entries": ("title", "summary", "sources", "tags", "aliases"),
     "entities": ("title", "summary", "sources", "tags", "aliases"),
     "graph_edges": ("description", "sources"),
@@ -197,7 +201,7 @@ def _stats(conn, args, api, database):
                  for name in ("page_size", "page_count", "freelist_count")}
         report["database_pages"] = dict(pages, allocated_bytes=pages["page_size"] * pages["page_count"],
                                         free_page_bytes=pages["page_size"] * pages["freelist_count"])
-        tables = BASE_TABLES + (GRAPH_TABLES if version == 2 else ())
+        tables = BASE_TABLES + (GRAPH_TABLES if version in (2, 3) else ()) + (RESEARCH_TABLES if version == 3 else ())
         report["counts"] = {}
         try:
             for table in tables:

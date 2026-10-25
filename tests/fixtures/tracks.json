@@ -1,0 +1,2367 @@
+{
+  "format_version": 1,
+  "seed": 20261025,
+  "frozen_before_measurement": true,
+  "scales": [
+    40,
+    1000,
+    10000
+  ],
+  "projects": [
+    {
+      "id": "relay",
+      "name": "Synthetic relay"
+    },
+    {
+      "id": "ledger",
+      "name": "Synthetic ledger"
+    }
+  ],
+  "entries": [
+    {
+      "id": "track:reliability",
+      "kind": "task",
+      "title": "Reliability technical track; no business goal",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Bound restore latency without lost receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/technical-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"technical-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"track\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Reliability technical track; no business goal\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "in_progress",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks"
+      ],
+      "research": {
+        "role": "track",
+        "motivation": {
+          "text": "technical-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/technical-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Bound restore latency without lost receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "track:productivity",
+      "kind": "task",
+      "title": "Productivity revised direction",
+      "summary": "{\"evidence_refs\":[\"entity:goal:latency\",\"entity:goal:operator-time\"],\"explicit_tracks\":[],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"direction_changes\":[{\"changed_at\":\"2026-10-20\",\"expected_outcome\":\"Current direction: improve recovery predictability\",\"reason\":\"Latency variance became the priority\",\"sources\":[{\"reference\":\"https://example.test/tracks/revised-direction-2026-10-20\"}]}],\"expected_outcome\":\"Current direction: improve recovery predictability\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-product-need\"}],\"text\":\"Original operator-time need 2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"track\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Productivity revised direction\"}",
+      "project_ids": [
+        "relay",
+        "ledger"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "in_progress",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/track:productivity",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks"
+      ],
+      "research": {
+        "role": "track",
+        "motivation": {
+          "text": "Original operator-time need 2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-product-need"
+            }
+          ]
+        },
+        "expected_outcome": "Current direction: improve recovery predictability",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ],
+        "direction_changes": [
+          {
+            "changed_at": "2026-10-20",
+            "reason": "Latency variance became the priority",
+            "sources": [
+              {
+                "reference": "https://example.test/tracks/revised-direction-2026-10-20"
+              }
+            ],
+            "expected_outcome": "Current direction: improve recovery predictability"
+          }
+        ]
+      }
+    },
+    {
+      "id": "task:01",
+      "kind": "task",
+      "title": "Synthetic task 01",
+      "summary": "{\"evidence_refs\":[\"entry:experiment:shared\"],\"explicit_tracks\":[\"entry:track:reliability\",\"entry:track:productivity\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 01\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:01",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability",
+        "in-track:entry:track:productivity"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:02",
+      "kind": "task",
+      "title": "Synthetic task 02",
+      "summary": "{\"evidence_refs\":[\"entry:experiment:shared\"],\"explicit_tracks\":[\"entry:track:reliability\",\"entry:track:productivity\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 02\"}",
+      "project_ids": [
+        "ledger"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:02",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability",
+        "in-track:entry:track:productivity"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:03",
+      "kind": "task",
+      "title": "Synthetic task 03",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 03\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:03",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:04",
+      "kind": "task",
+      "title": "Synthetic task 04",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 04\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:04",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:05",
+      "kind": "task",
+      "title": "Synthetic task 05",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 05\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:05",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:06",
+      "kind": "task",
+      "title": "Synthetic task 06",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 06\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:06",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:07",
+      "kind": "task",
+      "title": "Synthetic task 07",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 07\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:07",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:08",
+      "kind": "task",
+      "title": "Synthetic task 08",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 08\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:08",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:09",
+      "kind": "task",
+      "title": "Synthetic task 09",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 09\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:09",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:10",
+      "kind": "task",
+      "title": "Synthetic task 10",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 10\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:10",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:11",
+      "kind": "task",
+      "title": "Synthetic task 11",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 11\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:11",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:12",
+      "kind": "task",
+      "title": "Synthetic task 12",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 12\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:12",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:13",
+      "kind": "task",
+      "title": "Synthetic task 13",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 13\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:13",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:14",
+      "kind": "task",
+      "title": "Synthetic task 14",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 14\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:14",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:15",
+      "kind": "task",
+      "title": "Synthetic task 15",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 15\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:15",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:16",
+      "kind": "task",
+      "title": "Synthetic task 16",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 16\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:16",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:17",
+      "kind": "task",
+      "title": "Synthetic task 17",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 17\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:17",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:18",
+      "kind": "task",
+      "title": "Synthetic task 18",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 18\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:18",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:19",
+      "kind": "task",
+      "title": "Synthetic task 19",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Restore without losing acknowledged receipts\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/original-task-need-2026-10-01\",\"type\":\"synthetic\"}],\"text\":\"original-task-need-2026-10-01\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 19\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:19",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "original-task-need-2026-10-01",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/original-task-need-2026-10-01",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Restore without losing acknowledged receipts",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "task:20",
+      "kind": "task",
+      "title": "Synthetic task 20",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[],\"research\":{\"constraints\":[\"Never acknowledge before durable receipt\"],\"expected_outcome\":\"Document isolated checksum format\",\"motivation\":{\"sources\":[{\"reference\":\"https://example.test/tracks/standalone-checksum-need\",\"type\":\"synthetic\"}],\"text\":\"standalone-checksum-need\"},\"open_questions\":[\"Is the result applicable to production traffic?\"],\"role\":\"task\",\"success_criteria\":[\"Keep durable receipts; measure effect separately\"]},\"text\":\"Synthetic task 20\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:20",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks"
+      ],
+      "research": {
+        "role": "task",
+        "motivation": {
+          "text": "standalone-checksum-need",
+          "sources": [
+            {
+              "reference": "https://example.test/tracks/standalone-checksum-need",
+              "type": "synthetic"
+            }
+          ]
+        },
+        "expected_outcome": "Document isolated checksum format",
+        "success_criteria": [
+          "Keep durable receipts; measure effect separately"
+        ],
+        "constraints": [
+          "Never acknowledge before durable receipt"
+        ],
+        "open_questions": [
+          "Is the result applicable to production traffic?"
+        ]
+      }
+    },
+    {
+      "id": "hypothesis:cache",
+      "kind": "investigation",
+      "title": "Cache reduces restore latency in its measured conditions",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\",\"entry:track:productivity\"],\"research\":{\"assessment\":\"insufficient\",\"assessments\":[{\"assessment\":\"supported\",\"conditions\":\"dataset=small; code=a1\",\"evidence_refs\":[\"entry:run:support\"]},{\"assessment\":\"refuted\",\"conditions\":\"dataset=large; code=a1\",\"evidence_refs\":[\"entry:run:negative\"]}],\"claim\":\"Caching reduces restore p95\",\"expected_effect\":\"Lower p95 with durable receipts\",\"role\":\"hypothesis\",\"scope\":\"Synthetic datasets only\",\"validation_method\":\"Paired replay\"},\"text\":\"Cache reduces restore latency in its measured conditions\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "hypothesis",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/hypothesis:cache",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability",
+        "in-track:entry:track:productivity"
+      ],
+      "research": {
+        "role": "hypothesis",
+        "claim": "Caching reduces restore p95",
+        "scope": "Synthetic datasets only",
+        "expected_effect": "Lower p95 with durable receipts",
+        "validation_method": "Paired replay",
+        "assessment": "insufficient",
+        "assessments": [
+          {
+            "assessment": "supported",
+            "conditions": "dataset=small; code=a1",
+            "evidence_refs": [
+              "entry:run:support"
+            ]
+          },
+          {
+            "assessment": "refuted",
+            "conditions": "dataset=large; code=a1",
+            "evidence_refs": [
+              "entry:run:negative"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "hypothesis:conflict",
+      "kind": "investigation",
+      "title": "Repeated identical conditions have conflicting observations",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"assessment\":\"conflicting\",\"assessments\":[{\"assessment\":\"supported\",\"conditions\":\"dataset=same; code=a1\",\"evidence_refs\":[\"entry:run:same-support\"]},{\"assessment\":\"refuted\",\"conditions\":\"dataset=same; code=a1\",\"evidence_refs\":[\"entry:run:same-negative\"]}],\"claim\":\"Parallel replay preserves acknowledgement order\",\"expected_effect\":\"No ordering violations\",\"role\":\"hypothesis\",\"scope\":\"dataset=same; code=a1\",\"validation_method\":\"Repeat deterministic replay\"},\"text\":\"Repeated identical conditions have conflicting observations\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "hypothesis",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/hypothesis:conflict",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "hypothesis",
+        "claim": "Parallel replay preserves acknowledgement order",
+        "scope": "dataset=same; code=a1",
+        "expected_effect": "No ordering violations",
+        "validation_method": "Repeat deterministic replay",
+        "assessment": "conflicting",
+        "assessments": [
+          {
+            "assessment": "supported",
+            "conditions": "dataset=same; code=a1",
+            "evidence_refs": [
+              "entry:run:same-support"
+            ]
+          },
+          {
+            "assessment": "refuted",
+            "conditions": "dataset=same; code=a1",
+            "evidence_refs": [
+              "entry:run:same-negative"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "experiment:shared",
+      "kind": "experiment",
+      "title": "Shared replay experiment; one canonical plan",
+      "summary": "{\"evidence_refs\":[\"entry:hypothesis:cache\",\"entry:hypothesis:conflict\"],\"explicit_tracks\":[\"entry:track:reliability\",\"entry:track:productivity\"],\"research\":{\"baseline\":\"durable journal a1\",\"interpretation_criteria\":[\"Negative measured result does not become supportive\",\"Infrastructure failure is not a hypothesis refutation\"],\"method\":\"Paired replay with identical seed\",\"metrics\":[\"restore_p95_ms\",\"ordering_violations\"],\"role\":\"experiment\",\"variant\":\"cache a1\"},\"text\":\"Shared replay experiment; one canonical plan\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/experiment:shared",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability",
+        "in-track:entry:track:productivity"
+      ],
+      "research": {
+        "role": "experiment",
+        "method": "Paired replay with identical seed",
+        "baseline": "durable journal a1",
+        "variant": "cache a1",
+        "metrics": [
+          "restore_p95_ms",
+          "ordering_violations"
+        ],
+        "interpretation_criteria": [
+          "Negative measured result does not become supportive",
+          "Infrastructure failure is not a hypothesis refutation"
+        ]
+      }
+    },
+    {
+      "id": "run:support",
+      "kind": "experiment",
+      "title": "Run support",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\",\"entry:track:productivity\"],\"research\":{\"applicability\":\"unknown\",\"conditions\":\"dataset=small; code=a1\",\"limitations\":[\"Synthetic data only\"],\"measurements\":[{\"name\":\"restore_p95\",\"unit\":\"ms\",\"value\":45}],\"observed_at\":\"2026-10-10T10:00:00+00:00\",\"outcome\":\"supporting\",\"revisions\":[{\"reference\":\"synthetic-code\",\"revision\":\"a1\"}],\"role\":\"run\"},\"text\":\"Run support\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run:support",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability",
+        "in-track:entry:track:productivity"
+      ],
+      "research": {
+        "role": "run",
+        "observed_at": "2026-10-10T10:00:00+00:00",
+        "conditions": "dataset=small; code=a1",
+        "revisions": [
+          {
+            "reference": "synthetic-code",
+            "revision": "a1"
+          }
+        ],
+        "measurements": [
+          {
+            "name": "restore_p95",
+            "value": 45,
+            "unit": "ms"
+          }
+        ],
+        "limitations": [
+          "Synthetic data only"
+        ],
+        "outcome": "supporting",
+        "applicability": "unknown"
+      }
+    },
+    {
+      "id": "run:negative",
+      "kind": "experiment",
+      "title": "Run negative",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\",\"entry:track:productivity\"],\"research\":{\"applicability\":\"unknown\",\"conditions\":\"dataset=large; code=a1\",\"limitations\":[\"Synthetic data only\"],\"measurements\":[{\"name\":\"restore_p95\",\"unit\":\"ms\",\"value\":220}],\"observed_at\":\"2026-10-10T10:00:00+00:00\",\"outcome\":\"negative\",\"revisions\":[{\"reference\":\"synthetic-code\",\"revision\":\"a1\"}],\"role\":\"run\"},\"text\":\"Run negative\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run:negative",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability",
+        "in-track:entry:track:productivity"
+      ],
+      "research": {
+        "role": "run",
+        "observed_at": "2026-10-10T10:00:00+00:00",
+        "conditions": "dataset=large; code=a1",
+        "revisions": [
+          {
+            "reference": "synthetic-code",
+            "revision": "a1"
+          }
+        ],
+        "measurements": [
+          {
+            "name": "restore_p95",
+            "value": 220,
+            "unit": "ms"
+          }
+        ],
+        "limitations": [
+          "Synthetic data only"
+        ],
+        "outcome": "negative",
+        "applicability": "unknown"
+      }
+    },
+    {
+      "id": "run:infra",
+      "kind": "experiment",
+      "title": "Run infra",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\",\"entry:track:productivity\"],\"research\":{\"applicability\":\"unknown\",\"conditions\":\"dataset=small; code=a1\",\"limitations\":[\"Synthetic data only\",\"Runner failed before observations\"],\"measurements\":[],\"observed_at\":\"2026-10-10T10:00:00+00:00\",\"outcome\":\"not_completed\",\"revisions\":[{\"reference\":\"synthetic-code\",\"revision\":\"a1\"}],\"role\":\"run\"},\"text\":\"Run infra\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run:infra",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability",
+        "in-track:entry:track:productivity"
+      ],
+      "research": {
+        "role": "run",
+        "observed_at": "2026-10-10T10:00:00+00:00",
+        "conditions": "dataset=small; code=a1",
+        "revisions": [
+          {
+            "reference": "synthetic-code",
+            "revision": "a1"
+          }
+        ],
+        "measurements": [],
+        "limitations": [
+          "Synthetic data only",
+          "Runner failed before observations"
+        ],
+        "outcome": "not_completed",
+        "applicability": "unknown"
+      }
+    },
+    {
+      "id": "run:same-support",
+      "kind": "experiment",
+      "title": "Run same-support",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"applicability\":\"unknown\",\"conditions\":\"dataset=same; code=a1\",\"limitations\":[\"Synthetic data only\"],\"measurements\":[{\"name\":\"ordering_violations\",\"unit\":\"count\",\"value\":0}],\"observed_at\":\"2026-10-10T10:00:00+00:00\",\"outcome\":\"supporting\",\"revisions\":[{\"reference\":\"synthetic-code\",\"revision\":\"a1\"}],\"role\":\"run\"},\"text\":\"Run same-support\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run:same-support",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "run",
+        "observed_at": "2026-10-10T10:00:00+00:00",
+        "conditions": "dataset=same; code=a1",
+        "revisions": [
+          {
+            "reference": "synthetic-code",
+            "revision": "a1"
+          }
+        ],
+        "measurements": [
+          {
+            "name": "ordering_violations",
+            "value": 0,
+            "unit": "count"
+          }
+        ],
+        "limitations": [
+          "Synthetic data only"
+        ],
+        "outcome": "supporting",
+        "applicability": "unknown"
+      }
+    },
+    {
+      "id": "run:same-negative",
+      "kind": "experiment",
+      "title": "Run same-negative",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"applicability\":\"unknown\",\"conditions\":\"dataset=same; code=a1\",\"limitations\":[\"Synthetic data only\"],\"measurements\":[{\"name\":\"ordering_violations\",\"unit\":\"count\",\"value\":3}],\"observed_at\":\"2026-10-10T10:00:00+00:00\",\"outcome\":\"negative\",\"revisions\":[{\"reference\":\"synthetic-code\",\"revision\":\"a1\"}],\"role\":\"run\"},\"text\":\"Run same-negative\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run:same-negative",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "run",
+        "observed_at": "2026-10-10T10:00:00+00:00",
+        "conditions": "dataset=same; code=a1",
+        "revisions": [
+          {
+            "reference": "synthetic-code",
+            "revision": "a1"
+          }
+        ],
+        "measurements": [
+          {
+            "name": "ordering_violations",
+            "value": 3,
+            "unit": "count"
+          }
+        ],
+        "limitations": [
+          "Synthetic data only"
+        ],
+        "outcome": "negative",
+        "applicability": "unknown"
+      }
+    },
+    {
+      "id": "decision:old-rejection",
+      "kind": "decision",
+      "title": "Historical rejection of optimistic acknowledgement",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\"],\"research\":{\"action\":\"Reject optimistic acknowledgements\",\"conditions\":\"crash injection; journal a0\",\"rationale\":\"Negative replay lost receipts under crash injection\",\"rejected_options\":[\"Acknowledge before journal commit\"],\"revisit_conditions\":[\"Only reconsider with crash safety evidence\"],\"role\":\"decision\"},\"text\":\"Historical rejection of optimistic acknowledgement\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "superseded",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/decision:old-rejection",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability"
+      ],
+      "research": {
+        "role": "decision",
+        "action": "Reject optimistic acknowledgements",
+        "rationale": "Negative replay lost receipts under crash injection",
+        "rejected_options": [
+          "Acknowledge before journal commit"
+        ],
+        "revisit_conditions": [
+          "Only reconsider with crash safety evidence"
+        ],
+        "conditions": "crash injection; journal a0"
+      }
+    },
+    {
+      "id": "decision:current",
+      "kind": "decision",
+      "title": "Keep durable journal and reassess cached replay",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[\"entry:track:reliability\",\"entry:track:productivity\"],\"research\":{\"action\":\"Retain durable receipts\",\"rationale\":\"Mixed datasets and conflicting replay need scoped follow-up\",\"rejected_options\":[\"Global claim that caching always helps\"],\"revisit_conditions\":[\"Paired production-like replay\"],\"role\":\"decision\"},\"text\":\"Keep durable journal and reassess cached replay\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/decision:current",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks",
+        "in-track:entry:track:reliability",
+        "in-track:entry:track:productivity"
+      ],
+      "research": {
+        "role": "decision",
+        "action": "Retain durable receipts",
+        "rationale": "Mixed datasets and conflicting replay need scoped follow-up",
+        "rejected_options": [
+          "Global claim that caching always helps"
+        ],
+        "revisit_conditions": [
+          "Paired production-like replay"
+        ]
+      }
+    },
+    {
+      "id": "note:outside",
+      "kind": "note",
+      "title": "External-to-track component fact",
+      "summary": "{\"evidence_refs\":[],\"explicit_tracks\":[],\"research\":{\"role\":\"note\"},\"text\":\"External-to-track component fact\"}",
+      "project_ids": [
+        "relay"
+      ],
+      "knowledge_state": "confirmed",
+      "work_state": "done",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/note:outside",
+          "type": "synthetic"
+        }
+      ],
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "fixture:tracks"
+      ]
+    }
+  ],
+  "entities": [
+    {
+      "id": "goal:latency",
+      "kind": "document",
+      "title": "goal:latency",
+      "summary": "Independent goal source; effect unmeasured. Revision on 2026-10-20 changed priority, not the original task motivation.",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/goal:latency",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "business-goal"
+      ]
+    },
+    {
+      "id": "goal:operator-time",
+      "kind": "document",
+      "title": "goal:operator-time",
+      "summary": "Independent goal source; effect unmeasured. Revision on 2026-10-20 changed priority, not the original task motivation.",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/goal:operator-time",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24",
+      "aliases": [],
+      "tags": [
+        "business-goal"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "pursues:goal:latency",
+      "from_ref": "entry:track:productivity",
+      "to_ref": "entity:goal:latency",
+      "kind": "pursues_goal",
+      "description": "Track contributes to independent source-backed goal",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/pursues:goal:latency",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "pursues:goal:operator-time",
+      "from_ref": "entry:track:productivity",
+      "to_ref": "entity:goal:operator-time",
+      "kind": "pursues_goal",
+      "description": "Track contributes to independent source-backed goal",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/pursues:goal:operator-time",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:01@entry:track:reliability",
+      "from_ref": "entry:task:01",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:01@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:01@entry:track:productivity",
+      "from_ref": "entry:task:01",
+      "to_ref": "entry:track:productivity",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:01@entry:track:productivity",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:02@entry:track:reliability",
+      "from_ref": "entry:task:02",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:02@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:02@entry:track:productivity",
+      "from_ref": "entry:task:02",
+      "to_ref": "entry:track:productivity",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:02@entry:track:productivity",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:03@entry:track:reliability",
+      "from_ref": "entry:task:03",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:03@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:04@entry:track:reliability",
+      "from_ref": "entry:task:04",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:04@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:05@entry:track:reliability",
+      "from_ref": "entry:task:05",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:05@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:06@entry:track:reliability",
+      "from_ref": "entry:task:06",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:06@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:07@entry:track:reliability",
+      "from_ref": "entry:task:07",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:07@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:08@entry:track:reliability",
+      "from_ref": "entry:task:08",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:08@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:09@entry:track:reliability",
+      "from_ref": "entry:task:09",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:09@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:10@entry:track:reliability",
+      "from_ref": "entry:task:10",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:10@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:11@entry:track:reliability",
+      "from_ref": "entry:task:11",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:11@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:12@entry:track:reliability",
+      "from_ref": "entry:task:12",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:12@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:13@entry:track:reliability",
+      "from_ref": "entry:task:13",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:13@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:14@entry:track:reliability",
+      "from_ref": "entry:task:14",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:14@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:15@entry:track:reliability",
+      "from_ref": "entry:task:15",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:15@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:16@entry:track:reliability",
+      "from_ref": "entry:task:16",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:16@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:17@entry:track:reliability",
+      "from_ref": "entry:task:17",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:17@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:18@entry:track:reliability",
+      "from_ref": "entry:task:18",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:18@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "task:19@entry:track:reliability",
+      "from_ref": "entry:task:19",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/task:19@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "hypothesis:cache@entry:track:reliability",
+      "from_ref": "entry:hypothesis:cache",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: hypothesis",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/hypothesis:cache@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "hypothesis:cache@entry:track:productivity",
+      "from_ref": "entry:hypothesis:cache",
+      "to_ref": "entry:track:productivity",
+      "kind": "in_track",
+      "description": "explicit contribution: hypothesis",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/hypothesis:cache@entry:track:productivity",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "hypothesis:conflict@entry:track:reliability",
+      "from_ref": "entry:hypothesis:conflict",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: hypothesis",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/hypothesis:conflict@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "experiment:shared@entry:track:reliability",
+      "from_ref": "entry:experiment:shared",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: experiment",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/experiment:shared@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "experiment:shared@entry:track:productivity",
+      "from_ref": "entry:experiment:shared",
+      "to_ref": "entry:track:productivity",
+      "kind": "in_track",
+      "description": "explicit contribution: experiment",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/experiment:shared@entry:track:productivity",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "tests:cache",
+      "from_ref": "entry:experiment:shared",
+      "to_ref": "entry:hypothesis:cache",
+      "kind": "tests",
+      "description": "Experiment checks scoped claim",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/tests:cache",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "tests:conflict",
+      "from_ref": "entry:experiment:shared",
+      "to_ref": "entry:hypothesis:conflict",
+      "kind": "tests",
+      "description": "Experiment checks scoped claim",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/tests:conflict",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "informs:01",
+      "from_ref": "entry:experiment:shared",
+      "to_ref": "entry:task:01",
+      "kind": "informs",
+      "description": "Canonical experiment is relevant to this task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/informs:01",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "informs:02",
+      "from_ref": "entry:experiment:shared",
+      "to_ref": "entry:task:02",
+      "kind": "informs",
+      "description": "Canonical experiment is relevant to this task",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/informs:02",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "run:support@entry:track:reliability",
+      "from_ref": "entry:run:support",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: run",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run:support@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "run:support@entry:track:productivity",
+      "from_ref": "entry:run:support",
+      "to_ref": "entry:track:productivity",
+      "kind": "in_track",
+      "description": "explicit contribution: run",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run:support@entry:track:productivity",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "run-of:support",
+      "from_ref": "entry:run:support",
+      "to_ref": "entry:experiment:shared",
+      "kind": "run_of",
+      "description": "Observed execution of shared plan",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run-of:support",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "run:negative@entry:track:reliability",
+      "from_ref": "entry:run:negative",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: run",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run:negative@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "run:negative@entry:track:productivity",
+      "from_ref": "entry:run:negative",
+      "to_ref": "entry:track:productivity",
+      "kind": "in_track",
+      "description": "explicit contribution: run",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run:negative@entry:track:productivity",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "run-of:negative",
+      "from_ref": "entry:run:negative",
+      "to_ref": "entry:experiment:shared",
+      "kind": "run_of",
+      "description": "Observed execution of shared plan",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run-of:negative",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "run:infra@entry:track:reliability",
+      "from_ref": "entry:run:infra",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: run",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run:infra@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "run:infra@entry:track:productivity",
+      "from_ref": "entry:run:infra",
+      "to_ref": "entry:track:productivity",
+      "kind": "in_track",
+      "description": "explicit contribution: run",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run:infra@entry:track:productivity",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "run-of:infra",
+      "from_ref": "entry:run:infra",
+      "to_ref": "entry:experiment:shared",
+      "kind": "run_of",
+      "description": "Observed execution of shared plan",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run-of:infra",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "run:same-support@entry:track:reliability",
+      "from_ref": "entry:run:same-support",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: run",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run:same-support@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "run-of:same-support",
+      "from_ref": "entry:run:same-support",
+      "to_ref": "entry:experiment:shared",
+      "kind": "run_of",
+      "description": "Observed execution of shared plan",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run-of:same-support",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "run:same-negative@entry:track:reliability",
+      "from_ref": "entry:run:same-negative",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: run",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run:same-negative@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "run-of:same-negative",
+      "from_ref": "entry:run:same-negative",
+      "to_ref": "entry:experiment:shared",
+      "kind": "run_of",
+      "description": "Observed execution of shared plan",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/run-of:same-negative",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "decision:old-rejection@entry:track:reliability",
+      "from_ref": "entry:decision:old-rejection",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: decision",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/decision:old-rejection@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "decision:current@entry:track:reliability",
+      "from_ref": "entry:decision:current",
+      "to_ref": "entry:track:reliability",
+      "kind": "in_track",
+      "description": "explicit contribution: decision",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/decision:current@entry:track:reliability",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    },
+    {
+      "id": "decision:current@entry:track:productivity",
+      "from_ref": "entry:decision:current",
+      "to_ref": "entry:track:productivity",
+      "kind": "in_track",
+      "description": "explicit contribution: decision",
+      "sources": [
+        {
+          "reference": "https://example.test/tracks/decision:current@entry:track:productivity",
+          "type": "synthetic"
+        }
+      ],
+      "knowledge_state": "confirmed",
+      "verified_at": "2026-10-24"
+    }
+  ],
+  "expected": {
+    "task_count": 20,
+    "standalone_ref": "entry:task:20",
+    "shared_task_ref": "entry:task:01",
+    "track_refs": [
+      "entry:track:reliability",
+      "entry:track:productivity"
+    ],
+    "technical_goal_refs": [],
+    "product_goal_refs": [
+      "entity:goal:latency",
+      "entity:goal:operator-time"
+    ],
+    "excluded_track_refs": [
+      "entry:task:20",
+      "entry:note:outside"
+    ],
+    "shared_experiment_ref": "entry:experiment:shared",
+    "required_evidence_refs": [
+      "entry:hypothesis:cache",
+      "entry:hypothesis:conflict",
+      "entry:experiment:shared",
+      "entry:run:support",
+      "entry:run:negative",
+      "entry:run:infra",
+      "entry:run:same-support",
+      "entry:run:same-negative",
+      "entry:decision:old-rejection",
+      "entry:decision:current"
+    ],
+    "observation_time": "2026-10-10T10:00:00+00:00",
+    "goal_effect": "unknown",
+    "baseline_kind_roles": {
+      "task": [
+        "task",
+        "track"
+      ],
+      "investigation": [
+        "hypothesis"
+      ],
+      "experiment": [
+        "experiment",
+        "run"
+      ],
+      "decision": [
+        "decision"
+      ]
+    }
+  },
+  "acceptance": [
+    {
+      "id": "A01",
+      "expected": "standalone own context; no fabricated membership",
+      "verification": "fixture + installed runtime tests"
+    },
+    {
+      "id": "A02",
+      "expected": "technical track has zero goal links",
+      "verification": "fixture + installed runtime tests"
+    },
+    {
+      "id": "A03",
+      "expected": "two track links, two goal sources, unchanged independent projects",
+      "verification": "fixture + installed runtime tests"
+    },
+    {
+      "id": "A04",
+      "expected": "same-project outsiders excluded from strict membership",
+      "verification": "fixture + installed runtime tests"
+    },
+    {
+      "id": "A05",
+      "expected": "original task source and revised direction source both retained",
+      "verification": "fixture + installed runtime tests"
+    },
+    {
+      "id": "A06",
+      "expected": "superseded rejection and negative measurements discoverable",
+      "verification": "fixture + installed runtime tests"
+    },
+    {
+      "id": "A07",
+      "expected": "one experiment shared by task 01 and task 02; all canonical runs",
+      "verification": "fixture + installed runtime tests"
+    },
+    {
+      "id": "A08",
+      "expected": "supporting,negative,not_completed and scoped conflicting assessments retained",
+      "verification": "fixture + installed runtime tests"
+    },
+    {
+      "id": "A09",
+      "expected": "strict scope excludes outside fact; workspace expansion explicit",
+      "verification": "fixture + installed runtime tests"
+    },
+    {
+      "id": "A10",
+      "expected": "title/code revisions cannot alter observed_at or imply applicability",
+      "verification": "installed runtime mutation/protocol tests"
+    },
+    {
+      "id": "A11",
+      "expected": "all tasks done; effect unknown",
+      "verification": "fixture + installed runtime tests"
+    },
+    {
+      "id": "A12",
+      "expected": "cursor tied to scope; tied timestamps, edits, detach and filter exit visible",
+      "verification": "installed runtime mutation/protocol tests"
+    },
+    {
+      "id": "A13",
+      "expected": "CAS conflict, idempotent replay, complete rollback",
+      "verification": "installed runtime mutation/protocol tests"
+    },
+    {
+      "id": "A14",
+      "expected": "actual JSON budget with Unicode, escaping, huge value; explicit omissions",
+      "verification": "installed runtime mutation/protocol tests"
+    },
+    {
+      "id": "A15",
+      "expected": "wrong workspace/scope cursor rejected; no cross-store disclosure",
+      "verification": "installed runtime mutation/protocol tests"
+    },
+    {
+      "id": "A16",
+      "expected": "old data/history survives explicit migration; previous CLI works",
+      "verification": "installed runtime mutation/protocol tests"
+    }
+  ]
+}
