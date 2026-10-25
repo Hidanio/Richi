@@ -83,7 +83,7 @@ class SearchIndexTests(unittest.TestCase):
         self.assertEqual(result["dirty"], {"entry": 0, "entity": 0})
         self.assertLess(result["key_bytes"], 1000)
         self.assertEqual(self.snapshot(authoritative), before)
-        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], 2)
+        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], 3)
         self.assertEqual(memory.backend(self.conn), backend_before)
         self.assertEqual(self.conn.execute("SELECT count(*) FROM " + search_index.KEYS +
                                            " WHERE instr(key, 'provenanceonlyneedle') > 0").fetchone()[0], 0)
@@ -384,7 +384,7 @@ class SearchIndexTests(unittest.TestCase):
         self.assertEqual(self.snapshot(before), before)
         self.assertEqual(self.build()["version"], "2")
         self.assertEqual(self.snapshot(["entries"])["entries"], before["entries"])
-        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], 2)
+        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], 3)
         self.assertEqual(self.candidates("entry", "Preserved alias"), {"one"})
 
     def test_v1_upgrade_does_not_drop_an_unowned_new_record_map(self):
@@ -425,7 +425,7 @@ class SearchIndexTests(unittest.TestCase):
         self.assertEqual(search_index.entry_ids(conn, "removed", []), set())
         self.assertEqual(list(conn.execute("PRAGMA foreign_key_check")), [])
 
-    def test_v1_writers_rename_delete_and_explicit_v2_migration_remain_safe(self):
+    def test_v1_writers_rename_delete_and_explicit_migration_remain_safe(self):
         path = self.path.with_name("v1.sqlite3")
         conn = memory.connect(path, create=True)
         self.addCleanup(conn.close)
@@ -450,7 +450,7 @@ class SearchIndexTests(unittest.TestCase):
         self.assertFalse(search_index.status(conn)["available"])
         with memory.transaction(conn):
             self.assertTrue(search_index.build(conn, memory)["available"])
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 2)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 3)
 
 
 if __name__ == "__main__":

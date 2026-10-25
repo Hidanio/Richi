@@ -164,7 +164,7 @@ class RuntimeSelectionTests(unittest.TestCase):
                     hashlib.sha256(artifact.read_bytes()).hexdigest())
 
         baseline = snapshot()
-        self.assertEqual(baseline[0], 2)
+        self.assertEqual(baseline[0], 3)
         for enabled in (True, False):
             if enabled:
                 result = self.enable_development()

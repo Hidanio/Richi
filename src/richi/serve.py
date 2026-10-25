@@ -437,7 +437,7 @@ def _main(argv=None):
     if not 1 <= args.port <= 65535:
         parser.error("Port must be 1–65535")
     with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True) as conn:
-        if conn.execute("PRAGMA user_version").fetchone()[0] != 2:
+        if conn.execute("PRAGMA user_version").fetchone()[0] not in (2, 3):
             parser.error("The map requires schema 2; run richi backup and richi migrate")
     runtime = current_runtime()
     config_required = args.config is not None or "RICHI_CONFIG" in os.environ

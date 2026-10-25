@@ -16,7 +16,7 @@ from . import compact
 from . import output
 
 
-VERSION = 2
+VERSION = 3
 BASE = Path(__file__).resolve().parent
 KINDS = {"task", "decision", "fact", "note", "investigation", "experiment", "procedure"}
 STATES = {"planned", "in_progress", "implemented", "merged", "released", "blocked", "done"}
@@ -212,8 +212,8 @@ def connect(path, create=False, readonly=False):
 
 def backend(conn):
     version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if version not in {1, VERSION}:
-        raise MemoryError("Unsupported schema version {}; this CLI supports 1 and {}. No migration was attempted.".format(version, VERSION))
+    if version not in {1, 2, VERSION}:
+        raise MemoryError("Unsupported schema version {}; this CLI supports 1, 2 and {}. No migration was attempted.".format(version, VERSION))
     row = conn.execute("SELECT value FROM metadata WHERE 1=1 AND key = 'search_backend'").fetchone()
     if row is None or row[0] not in {"fts5", "scan"}:
         raise MemoryError("Missing or invalid search_backend metadata")
@@ -223,8 +223,8 @@ def backend(conn):
 def initialize(conn, path):
     # Validate before changing even the journal mode of an existing database.
     version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if version == 1:
-        raise MemoryError("Existing schema 1 requires an explicit migrate command; make a backup first")
+    if version in {1, 2}:
+        raise MemoryError("Existing schema {} requires an explicit migrate command; make a backup first".format(version))
     if version not in {0, VERSION}:
         backend(conn)
     if version == 0 and conn.execute(
@@ -244,6 +244,7 @@ def initialize(conn, path):
             raise MemoryError("Refusing to initialize a nonempty database with an unknown schema")
         execute_script(conn, (BASE / "schema.sql").read_text(encoding="utf-8"))
         execute_script(conn, (BASE / "graph_schema.sql").read_text(encoding="utf-8"))
+        execute_script(conn, (BASE / "research_schema.sql").read_text(encoding="utf-8"))
         conn.execute("SAVEPOINT optional_fts")
         try:
             execute_script(conn, FTS_SQL)
@@ -255,7 +256,7 @@ def initialize(conn, path):
             search_backend = "scan"
         conn.execute("RELEASE optional_fts")
         conn.execute("INSERT INTO metadata(key, value) VALUES ('search_backend', ?)", (search_backend,))
-        conn.execute("PRAGMA user_version = 2")
+        conn.execute("PRAGMA user_version = 3")
     return {"database": str(path), "schema_version": VERSION, "search_backend": search_backend, "status": "created"}
 
 
@@ -335,11 +336,33 @@ def entry_record(conn, entry_id):
         record[key] = json.loads(record[key])
     record["project_ids"] = [x[0] for x in conn.execute(
         "SELECT project_id FROM entry_projects WHERE 1=1 AND entry_id = ? ORDER BY project_id", (entry_id,))]
+    from . import research
+    if research.enabled(conn):
+        details = research.get(conn, entry_id)
+        if details is not None:
+            record["research"] = details
+            record["revision"] = research.revision(conn, "entry:" + entry_id)
     return record
 
 
-def entry_put(conn, obj):
-    allowed = set(ENTRY_FIELDS) - {"created_at", "updated_at"} | {"project_ids", "event_id", "expected_updated_at"}
+def entry_put(conn, obj, *, _research_bundle=False):
+    if not conn.in_transaction:
+        with transaction(conn):
+            return entry_put(conn, obj, _research_bundle=_research_bundle)
+    conn.execute('SAVEPOINT richi_entry_write')
+    try:
+        result = _entry_put(conn, obj, _research_bundle=_research_bundle)
+        conn.execute('RELEASE richi_entry_write')
+        return result
+    except BaseException:
+        conn.execute('ROLLBACK TO richi_entry_write')
+        conn.execute('RELEASE richi_entry_write')
+        raise
+
+
+def _entry_put(conn, obj, *, _research_bundle=False):
+    from . import research
+    allowed = set(ENTRY_FIELDS) - {"created_at", "updated_at"} | {"project_ids", "event_id", "expected_updated_at", "expected_revision", "research"}
     fields(obj, allowed)
     record = {"id": identifier(obj.get("id")), "kind": enum(obj.get("kind"), "kind", KINDS),
               "title": string(obj.get("title"), "title"), "summary": string(obj.get("summary"), "summary"),
@@ -358,6 +381,13 @@ def entry_put(conn, obj):
         raise MemoryError("Confirmed facts and decisions require at least one source")
     event_id = identifier(obj["event_id"], "event_id") if "event_id" in obj else None
     expected_updated_at = timestamp(obj.get("expected_updated_at"), "expected_updated_at")
+    old = entry_record(conn, record["id"])
+    old_details = old.get("research") if old else None
+    if "research" in obj or old_details is not None:
+        record["research"] = research.validate(conn, obj.get("research", old_details), record["kind"],
+                                               sys.modules[__name__], old=old_details, bundle=_research_bundle)
+        if record["research"]["role"] == "run" and record["knowledge_state"] == "confirmed" and not record["sources"]:
+            raise MemoryError("Confirmed observations require at least one source")
     digest = hashlib.sha256(dumps(record).encode("utf-8")).hexdigest()
     if event_id:
         event = conn.execute("SELECT * FROM entry_events WHERE 1=1 AND event_id = ?", (event_id,)).fetchone()
@@ -367,14 +397,16 @@ def entry_put(conn, obj):
             return {"id": record["id"], "status": "replayed"}
     for project_id in record["project_ids"]:
         require_project(conn, project_id)
-    old = entry_record(conn, record["id"])
-    comparable = {k: v for k, v in old.items() if k not in {"created_at", "updated_at"}} if old else None
+    comparable = {k: v for k, v in old.items() if k not in {"created_at", "updated_at", "revision"}} if old else None
     status = "created" if old is None else "unchanged" if comparable == record else "updated"
+    research.check_revision(conn, obj, "entry:" + record["id"], sys.modules[__name__],
+                            required=old is not None and "research" in record and status == "updated")
     if status != "unchanged" and "expected_updated_at" in obj:
         actual_updated_at = old["updated_at"] if old else None
         if expected_updated_at != actual_updated_at:
             raise MemoryError("Entry update conflict for {}: expected_updated_at does not match the current record; read it again before updating".format(record["id"]))
     if status != "unchanged":
+        scopes = research.track_scopes(conn, "entry:" + record["id"])
         changed_at = now()
         record["created_at"] = old["created_at"] if old else changed_at
         record["updated_at"] = changed_at
@@ -385,12 +417,22 @@ def entry_put(conn, obj):
         conn.execute("DELETE FROM entry_projects WHERE 1=1 AND entry_id = ?", (record["id"],))
         conn.executemany("INSERT INTO entry_projects(entry_id, project_id) VALUES (?, ?)",
                          [(record["id"], x) for x in record["project_ids"]])
+        research.store(conn, record["id"], record.get("research"), sys.modules[__name__])
+        if not _research_bundle and 'research' in record and old_details is None:
+            research.validate_neighbors(conn, record['id'], sys.modules[__name__])
+        scopes |= research.track_scopes(conn, "entry:" + record["id"])
+        research.notify(conn, "entry:" + record["id"], "entry_" + status, changed_at, scopes, sys.modules[__name__])
+        if "research" in record:
+            record["revision"] = research.revision(conn, "entry:" + record["id"])
         conn.execute("INSERT INTO entry_history(entry_id, changed_at, before_json, after_json, event_id) VALUES (?, ?, ?, ?, ?)",
                      (record["id"], changed_at, dumps(old) if old else None, dumps(record), event_id))
     if event_id:
         conn.execute("INSERT INTO entry_events(event_id, entry_id, payload_hash) VALUES (?, ?, ?)",
                      (event_id, record["id"], digest))
-    return {"id": record["id"], "status": status}
+    response = {"id": record["id"], "status": status}
+    if "research" in record:
+        response["revision"] = research.revision(conn, "entry:" + record["id"])
+    return response
 
 
 def relation_put(conn, obj):
@@ -628,6 +670,7 @@ def parser():
             read = group.add_parser("get")
             read.add_argument("id")
             read.add_argument("--history", action="store_true", help="Include full revision history")
+            read.add_argument("--revision", action="store_true", help="Include the schema-3 CAS token, including for a legacy card")
             short = group.add_parser("read")
             short.add_argument("id")
             short.add_argument("--max-chars", type=compact.max_chars, default=6000)
@@ -642,7 +685,8 @@ def parser():
         command.add_argument("--include-superseded", action="store_true")
     commands.add_parser("backup").add_argument("--output")
     commands.add_parser("check")
-    from . import retrieval_tools, storage, query_tools, capabilities
+    from . import retrieval_tools, storage, query_tools, capabilities, tracks
+    tracks.add_commands(commands, sys.modules[__name__])
     capabilities.add_commands(commands, sys.modules[__name__])
     query_tools.add_commands(commands, sys.modules[__name__])
     retrieval_tools.add_commands(commands, sys.modules[__name__])
@@ -772,12 +816,14 @@ def run(args):
     storage_apply = (args.command == "storage" and args.action == "optimize"
                      and args.apply)
     building_index = args.command == "search-index" and args.action == "build"
+    research_writing = (args.command == "research" and args.action == "put" or
+                        args.command == "track" and args.action in {"attach", "detach"})
     project_path = getattr(args, "project_path", None)
     if storage_apply and project_path is not None:
         raise MemoryError("Storage optimization affects the whole workspace; omit --project-path")
     if project_path is not None and (args.command in {"init", "migrate", "backup"} or adding_project or scanning):
         raise MemoryError("--project-path is for existing project operations; omit it for initialization, registration or a workspace backup")
-    writing = args.command in {"init", "migrate"} or getattr(args, "action", None) in {"put", "upsert"} or source_attach or adding_project or applying_scan or storage_apply or building_index
+    writing = args.command in {"init", "migrate"} or getattr(args, "action", None) in {"put", "upsert"} or source_attach or adding_project or applying_scan or storage_apply or building_index or research_writing
     conn = connect(database, create=args.command == "init", readonly=not writing)
     try:
         if args.command == "init":
@@ -797,9 +843,9 @@ def run(args):
                     ensure_project_context(conn, project_path)
             args.storage_workspace = settings.workspace
             return storage.run(conn, args, sys.modules[__name__], database)
-        writing = getattr(args, "action", None) in {"put", "upsert"}
+        writing = getattr(args, "action", None) in {"put", "upsert"} and args.command not in {"research", "track"}
         items = payload(args.json) if writing else None
-        with transaction(conn, write=writing or source_attach or adding_project or applying_scan or building_index):
+        with transaction(conn, write=writing or source_attach or adding_project or applying_scan or building_index or research_writing):
             if project_path is not None:
                 from .projects import ensure_project_context
                 project = ensure_project_context(conn, project_path, expected_id=getattr(args, "project", None))
@@ -820,6 +866,9 @@ def run(args):
             if args.command == "query":
                 from . import query_tools
                 return query_tools.run(conn, args, sys.modules[__name__])
+            if args.command in {"task", "track", "research"}:
+                from . import tracks
+                return tracks.run(conn, args, sys.modules[__name__], database)
             if args.command == "search-index":
                 from . import search_index
                 return search_index.build(conn, sys.modules[__name__]) if building_index else search_index.status(conn)
@@ -853,6 +902,10 @@ def run(args):
                 return {"projects": [dict(row) for row in conn.execute("SELECT * FROM projects ORDER BY id")]}
             if args.command == "entry":
                 record = entry_get(conn, args.id, history=getattr(args, "history", False))
+                if getattr(args, 'revision', False):
+                    from . import research
+                    research.require(conn, sys.modules[__name__])
+                    record['revision'] = research.revision(conn, 'entry:' + args.id)
                 if args.action == "read":
                     return compact.fit_response({"entry": compact.card(record, "entry:" + args.id)}, args.max_chars)
                 return record

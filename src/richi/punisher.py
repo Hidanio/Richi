@@ -163,10 +163,10 @@ def punisher(conn, args, api):
         project = api.identifier(project, "project")
         api.require_project(conn, project)
     version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if version not in (1, 2):
-        raise api.MemoryError("Punisher supports schema 1 and 2; no migration was attempted")
+    if version not in (1, 2, 3):
+        raise api.MemoryError("Punisher supports schema 1, 2 and 3; no migration was attempted")
 
-    tables = ("projects", "entries", "relations") + (("entities", "graph_edges") if version == 2 else ())
+    tables = ("projects", "entries", "relations") + (("entities", "graph_edges") if version in (2, 3) else ())
     totals = {}
     for table in tables:
         # All interpolated table names are constants from the tuple above.
@@ -198,14 +198,14 @@ SELECT
 FROM graph_edges
 ORDER BY id
 LIMIT ?
-;""", (EDGE_SCAN_LIMIT,)) if version == 2 else []
+;""", (EDGE_SCAN_LIMIT,)) if version in (2, 3) else []
     entities = _rows(conn, """
 SELECT
     *
 FROM entities
 ORDER BY id
 LIMIT ?
-;""", (RECORD_SCAN_LIMIT,)) if version == 2 else []
+;""", (RECORD_SCAN_LIMIT,)) if version in (2, 3) else []
     entries_sql = """
 SELECT
     e.*
@@ -355,7 +355,7 @@ ORDER BY project_id
         if record["knowledge_state"] != "confirmed":
             add("nonconfirmed_knowledge", "info", "This state is intentional context, not a defect or deletion candidate.", ref,
                 knowledge_state=record["knowledge_state"])
-        if version == 2 and not conn.execute("""
+        if version in (2, 3) and not conn.execute("""
 SELECT
     1
 FROM graph_nodes

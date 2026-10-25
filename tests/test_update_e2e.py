@@ -111,7 +111,7 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
         data = wheel.read_bytes()
         filename = wheel.name
         manifest = {"format_version": 1, "version": version, "updater_protocol": 1,
-                    "python_min": [3, 9], "database_schemas": [1, 2], "map_schema": 2,
+                    "python_min": [3, 9], "database_schemas": [1, 2, 3], "map_schema": 3,
                     "wheel": {"filename": filename, "sha256": hashlib.sha256(data).hexdigest(),
                               "size": len(data)}}
         base = "https://github.com/Hidanio/Richi/releases/"

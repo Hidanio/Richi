@@ -390,7 +390,7 @@ class RecallCandidateTests(unittest.TestCase):
         self.assertEqual(value["explain"]["counts"]["entries_prefiltered"], 0)
         self.assertFalse(any("entries_fts MATCH" in sql for sql in audit.statements))
 
-    def test_fts_no_match_reads_no_full_payload_and_keeps_schema_two_read_only(self):
+    def test_fts_no_match_reads_no_full_payload_and_keeps_current_schema_read_only(self):
         if not recall.table_exists(self.conn, "entries_fts"):
             self.skipTest("SQLite build has no FTS5")
         self.entry("ordinary", title="A separate subject", summary="Large unrelated text " * 1000)
@@ -408,7 +408,7 @@ class RecallCandidateTests(unittest.TestCase):
                 self.assertEqual(score.call_count, 0)
                 self.assertEqual(audit.full_entry_ids, [])
                 self.assertEqual(value["explain"]["counts"]["entries_scored"], 0)
-        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], 2)
+        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], 3)
         self.conn.close()
         self.assertEqual(self.db.read_bytes(), before)
 

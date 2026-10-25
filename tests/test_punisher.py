@@ -432,8 +432,8 @@ WHERE 1=1
         self.assertEqual(report["coverage"]["eligible_entries"], 5)
         self.assertEqual(report["finding_counts"]["long_summary"], 3)
 
-    def test_long_summary_is_read_only_for_schema_one_and_two_without_external_io(self):
-        for version in (1, 2):
+    def test_long_summary_is_read_only_for_supported_schemas_without_external_io(self):
+        for version in (1, 2, 3):
             with self.subTest(version=version):
                 if version == 1:
                     self.conn.close()
@@ -446,10 +446,17 @@ WHERE 1=1
                     memory.project_put(self.conn, {"id": "alpha", "name": "alpha", "source": "fixture"})
                 else:
                     self.conn.close()
-                    self.db = Path(self.temp.name) / "schema-two.sqlite3"
+                    self.db = Path(self.temp.name) / ("schema-%d.sqlite3" % version)
                     self.conn = memory.connect(self.db, create=True)
                     self.addCleanup(self.conn.close)
-                    memory.initialize(self.conn, self.db)
+                    if version == 2:
+                        memory.execute_script(self.conn, (BASE / 'schema.sql').read_text())
+                        memory.execute_script(self.conn, (BASE / 'graph_schema.sql').read_text())
+                        memory.execute_script(self.conn, memory.FTS_SQL)
+                        self.conn.execute("INSERT INTO metadata VALUES ('search_backend','fts5')")
+                        self.conn.execute('PRAGMA user_version=2')
+                    else:
+                        memory.initialize(self.conn, self.db)
                     memory.project_put(self.conn, {"id": "alpha", "name": "alpha", "source": "fixture"})
                     self.entity("concept:detail", summary="Long entity context")
                     self.edge("scope", "entity:concept:detail", "project:alpha", kind="used_in")
@@ -466,7 +473,7 @@ WHERE 1=1
                     second = self.report(summary_warn_chars=1)
                 self.assertEqual(first, second)
                 self.assertEqual(first["schema_version"], version)
-                self.assertEqual(first["finding_counts"]["long_summary"], version)
+                self.assertEqual(first["finding_counts"]["long_summary"], 1 if version == 1 else 2)
                 self.assertEqual(first["health"]["status"], "ok")
                 self.assertEqual(list(self.conn.iterdump()), before)
                 self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], version)

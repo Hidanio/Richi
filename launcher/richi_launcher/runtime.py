@@ -132,7 +132,7 @@ try:
         from richi import memory, serve
         with memory.connect(pathlib.Path(arguments[0]), readonly=True) as connection:
             memory.backend(connection)
-            if connection.execute("PRAGMA user_version").fetchone()[0] != 2:
+            if connection.execute("PRAGMA user_version").fetchone()[0] not in (2, 3):
                 raise ValueError("The map requires schema 2; no migration was attempted")
         result = 0
     elif action == "serve":

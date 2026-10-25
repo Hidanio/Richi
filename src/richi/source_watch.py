@@ -63,8 +63,8 @@ def _database(conn, db_path):
     if not actual or str(Path(actual).resolve()) != path:
         raise ValueError("Source-watch database path does not match the open connection")
     version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if version not in (1, 2):
-        raise ValueError("Source-watch supports database schema 1 or 2 only")
+    if version not in (1, 2, 3):
+        raise ValueError("Source-watch supports database schema 1, 2 or 3 only")
     return path, version
 
 
@@ -179,7 +179,7 @@ LIMIT ?
 ;
 """, (project, MAX_REFS + 1)).fetchall()
     refs.update("entry:" + row[0] for row in entries)
-    if version == 2:
+    if version in (2, 3):
         scope_edges = _rows(conn, """
 SELECT
     from_ref
@@ -218,7 +218,7 @@ def _collect(conn, selection, version, *, require_all):
         records.append({"ref": ref, "sha256": _hash(record)})
         _register_sources(owners, record, ref, evidence_bytes)
     edges = []
-    if version == 2 and requested:
+    if version in (2, 3) and requested:
         marks = ",".join("?" for _ in requested)
         rows = _rows(conn, f"""
 SELECT
@@ -423,7 +423,7 @@ def _validate_manifest(value):
                   "selection", "records", "edges", "sources", "limits", "notice"))
     if value["format"] != FORMAT or type(value["version"]) is not int or value["version"] != VERSION:
         raise ValueError("Unsupported source-watch manifest format/version")
-    if type(value["database_schema_version"]) is not int or value["database_schema_version"] not in (1, 2):
+    if type(value["database_schema_version"]) is not int or value["database_schema_version"] not in (1, 2, 3):
         raise ValueError("Invalid manifest database schema")
     _text(value["created_at"], "manifest timestamp", 100)
     _text(value["notice"], "manifest notice", 1000)

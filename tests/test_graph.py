@@ -78,8 +78,14 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(self.cli("migrate")["status"], "existing")
         with sqlite3.connect(str(self.db)) as conn:
             after = {t: conn.execute("SELECT * FROM " + t).fetchall() for t in tables}
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 2)
-        self.assertEqual(before, after)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], memory.VERSION)
+        self.assertEqual({k: v for k, v in before.items() if k != 'metadata'},
+                         {k: v for k, v in after.items() if k != 'metadata'})
+        extra_metadata = [row for row in after['metadata'] if row not in before['metadata']]
+        self.assertEqual(len(extra_metadata), 1)
+        self.assertEqual(extra_metadata[0][0], 'research_store_uuid')
+        self.assertRegex(extra_metadata[0][1], '^[0-9a-f]{32}$')
+        self.assertEqual([row for row in after['metadata'] if row[0] != 'research_store_uuid'], before['metadata'])
         self.assertIn("old", json.dumps(self.cli("search", "FTSneedlepersist")))
         self.assertEqual(len(self.cli("entry", "get", "old", "--history")["history"]), 2)
         self.assertEqual(len(self.graph()["nodes"]), 2)

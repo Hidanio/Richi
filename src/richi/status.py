@@ -211,7 +211,7 @@ def inspect(database, project_path=None, project_id=None, all_projects=False, li
         conn.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
         version = conn.execute("PRAGMA user_version").fetchone()[0]
         report["database"]["schema_version"] = version
-        if version not in {1, memory.VERSION}:
+        if version not in {1, 2, memory.VERSION}:
             report["database"]["status"] = "unsupported_schema"
             report["issues"].append(_issue("unsupported_schema", "Unsupported database schema; no migration was attempted.",
                                            severity="error", path=str(database)))

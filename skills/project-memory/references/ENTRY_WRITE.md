@@ -8,11 +8,20 @@ Workspace selection, repository membership and write authorization follow
 
 `entry put` replaces all persisted fields; omitted optional fields reset to defaults.
 For an existing ID, read `entry get ID`, copy its full payload, remove only
-`created_at`, `updated_at`, `history`, then apply the intended edits. Set
+`created_at`, `updated_at`, `history`, and read-only `revision`, then apply the intended edits. Set
 `expected_updated_at` to the exact `updated_at` just read. Preserve unrelated
 fields, sources and their metadata, project memberships, states and dates.
 Do not construct an update from recall, read, brief or a graph excerpt.
 For a new ID, use `expected_updated_at: null` (create-only).
+Schema-3 typed research cards additionally expose an integer `revision`; ordinary
+legacy cards retain their existing response shape and timestamp CAS. When updating a typed
+research card, pass that integer as `expected_revision`; a changed typed card
+requires it. Before promoting a legacy card to a research role, read
+`richi entry get ID --revision` and pass its token as `expected_revision`.
+The flag requires schema 3; default legacy reads keep their previous shape.
+Creation can assert `expected_revision: 0`. This protects concurrent
+edits even when timestamps coincide. Research role content is preserved if an
+update omits `research`; explicitly read and retain it when drafting full updates.
 
 ```sh
 richi --compact-json --project-path /work/example entry get task:EXAMPLE-42
@@ -45,14 +54,18 @@ Required: `id`, `kind`, `title`, `summary`. Caller-chosen stable IDs are at most
 | `verified_at` | ISO date or timezone-aware ISO timestamp, or `null`; date of evidence check, never automatically advanced |
 | `expected_updated_at` | Exact version from get for an update; explicit `null` for create-only; not persisted |
 | `event_id` | Optional unique delivery ID, entry-only, not persisted |
+| `research` | Optional structured task/track/hypothesis/experiment/run/decision role; schema 3, full contract in [TRACKS.md](TRACKS.md) |
+| `expected_revision` | Integer revision from get for concurrency; required for changed typed cards, 0 for create-only; not persisted |
 
 Project, source, tag and alias arrays each allow 100 items. Unknown fields/types
 are rejected. Confirmed facts and decisions require at least one source; presence
 of a source does not verify truth. Generate structured `source.git` with
 [GIT_CAPTURE.md](GIT_CAPTURE.md); exact manual anchors: [DIAGNOSTICS.md](DIAGNOSTICS.md#точные-источники-в-записях).
 
-Identical normalized content returns `unchanged` without a new history revision,
-even with stale CAS. Reusing `event_id` with the same normalized payload returns
+Identical normalized content returns `unchanged` without a new history revision
+under the legacy timestamp-CAS contract. An explicitly supplied integer
+`expected_revision` is checked even for identical content. Reusing `event_id`
+with the same normalized payload returns
 `replayed`, even after later edits; different content with that ID is an error.
 Use a new event ID or omit it for a new intended change. Other statuses are
 `created`/`updated` in `results`. Entity/edge writes do not accept `event_id`;

@@ -25,6 +25,22 @@ checks, not a blind benchmark or a claim about production recall accuracy.
 Historical private datasets remain outside this repository; this fixture does
 not replace them or reproduce their results.
 
+## Tracks and shared research
+
+`evaluate_tracks.py` compares fixed installed baseline/candidate revisions on the
+frozen `tests/fixtures/tracks.json` corpus, with a real CLI postprocessor in
+`track_baseline.py`. It checks evidence parity and measures 30 alternating fresh
+processes per scenario at 40/1,000/10,000 entries, query cores, sufficient-context
+workflows, visible tokens, migration, indexes and result-write growth. Prepared
+summary and standalone-task controls are separate. No model-quality improvement
+is inferred from these tool measurements.
+
+See [the complete protocol and commands](../docs/TRACKS_EVAL.md). Full runs require
+committed runtime hashes and a cached tokenizer; `--smoke` is diagnostic only.
+The [2026-10-25 measurements](../docs/TRACKS_EVAL_RESULTS.md) and
+[machine samples](results/tracks-2026-10-25.json) record the completed run against
+`f1ade89`, including its latency/token regressions and stronger write contract.
+
 ## Retrieval tools and storage growth
 
 After installing the candidate package in a disposable environment:

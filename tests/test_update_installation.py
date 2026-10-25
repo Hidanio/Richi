@@ -213,6 +213,16 @@ class InstallationTests(unittest.TestCase):
                     installation.apply_release(release)
                 self.assertFalse(self.root.exists())
 
+    def test_schema_three_release_and_legacy_release_are_explicitly_compatible(self):
+        manifest = self.release('0.2.0')['manifest']
+        installation._compatible(manifest)
+        manifest.update(database_schemas=[1, 2, 3], map_schema=3)
+        installation._compatible(manifest)
+        manifest['map_schema'] = 2
+        with self.assertRaisesRegex(ConfigError, 'schema compatibility'):
+            installation._compatible(manifest)
+        self.assertFalse(self.root.exists())
+
     def test_downgrade_refused_and_rollback_swaps_existing_generations(self):
         first = self.apply("0.2.0")
         with self.assertRaisesRegex(ConfigError, "downgrade"):
