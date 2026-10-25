@@ -398,16 +398,38 @@ def entry_routing_match(row, normalized_query, query_phrase, variants):
     return False
 
 
-def entry_candidate_rows(conn, query, keys, states, fts_ranks, has_fts, trace):
+def filtered_rows(conn, table, states, fields="*", selection_filter=None, identities=None):
+    """Intersect candidates and mandatory predicates before materializing payloads."""
+    family = "entry" if table == "entries" else "entity"
+    clause, values = selection_filter.sql(family) if selection_filter else ("1", [])
+    sql = ("SELECT " + fields + " FROM " + table + " e WHERE 1=1 AND e.knowledge_state IN (" +
+           ",".join("?" for _ in states) + ") AND (" + clause + ")")
+    if identities is None:
+        yield from conn.execute(sql, states + values)
+    else:
+        # Stay below the older SQLite 999-variable limit, even with a filter.
+        ids = sorted(identities)
+        for start in range(0, len(ids), 200):
+            batch = ids[start:start + 200]
+            yield from conn.execute(sql + " AND e.id IN (" + ",".join("?" for _ in batch) + ")",
+                                    states + values + batch)
+
+
+def entry_candidate_rows(conn, query, keys, states, fts_ranks, has_fts, trace, selection_filter=None):
     """Read full entries only after routing; preserve the no-FTS fallback.
 
     recall() keeps a read snapshot while metadata and PK lookups run.
     An excluded --expect target may be read once to explain its old lexical
     guard, but that diagnostic probe never enters retrieval's candidate set.
     """
-    states_sql = ",".join("?" for _ in states)
+    from . import search_index
     fields = "id, jira_key, aliases" if has_fts else "*"
-    rows = conn.execute("SELECT " + fields + " FROM entries WHERE 1=1 AND knowledge_state IN (" + states_sql + ")", states)
+    identities = search_index.entry_ids(conn, query, keys) if has_fts else None
+    if identities is not None:
+        identities.update(fts_ranks)
+        if trace and trace.expected and trace.expected["ref"].startswith("entry:"):
+            identities.add(trace.expected["ref"][len("entry:"):])
+    rows = filtered_rows(conn, "entries", states, fields, selection_filter, identities)
     normalized_query = normalize(query).strip()
     query_phrase = phrase(query)
     variants = {variant for key in keys for variant in key_variants(key)}
@@ -436,13 +458,14 @@ def entry_candidate_rows(conn, query, keys, states, fts_ranks, has_fts, trace):
         yield full, probe
 
 
-def candidates(conn, query, terms, keys, states, project, api, trace=None):
+def candidates(conn, query, terms, keys, states, project, api, trace=None, selection_filter=None):
     states_sql = ",".join("?" for _ in states)
     candidates_by_ref, fts_ranks, discarded_weak = {}, {}, 0
     subjects = technical_subjects(query)
     symbols = short_subjects(query)
     has_fts = table_exists(conn, "entries_fts")
     fts_truncated = False
+    clause, values = selection_filter.sql("entry") if selection_filter else ("1", [])
     if has_fts and (terms or keys):
         expression = " OR ".join('"' + word.replace('"', '""') + '"*' for word in terms)
         key_expressions = ['"' + variant.replace('"', '""') + '"' for key in keys for variant in key_variants(key)]
@@ -451,17 +474,17 @@ def candidates(conn, query, terms, keys, states, project, api, trace=None):
             SELECT e.id
             FROM entries e
                 JOIN entries_fts ON entries_fts.rowid = e.rowid
-            WHERE 1=1 AND entries_fts MATCH ? AND e.knowledge_state IN (""" + states_sql + """ )
+            WHERE 1=1 AND entries_fts MATCH ? AND e.knowledge_state IN (""" + states_sql + ") AND (" + clause + """ )
             ORDER BY bm25(entries_fts, 8.0, 6.0, 1.0, 10.0, 3.0, 5.0), e.id
             LIMIT ?
-        """, [expression] + states + [CANDIDATE_LIMIT + 1]).fetchall()
+        """, [expression] + states + values + [CANDIDATE_LIMIT + 1]).fetchall()
         fts_truncated = len(rows) > CANDIDATE_LIMIT
         fts_ranks = {row[0]: rank for rank, row in enumerate(rows[:CANDIDATE_LIMIT])}
         if trace:
             trace.counts.update(fts_rows_fetched=len(rows), fts_shortlisted=len(fts_ranks))
 
     # Preserve all FTS exceptions without loading/scoring unrelated full texts.
-    for row, probe in entry_candidate_rows(conn, query, keys, states, fts_ranks, has_fts, trace):
+    for row, probe in entry_candidate_rows(conn, query, keys, states, fts_ranks, has_fts, trace, selection_filter):
         record = decode(row)
         node_ref = "entry:" + record["id"]
         if trace and not probe:
@@ -500,7 +523,11 @@ def candidates(conn, query, terms, keys, states, project, api, trace=None):
             trace.direct(node_ref, "candidate")
 
     if table_exists(conn, "entities"):
-        for row in conn.execute("SELECT * FROM entities WHERE 1=1 AND knowledge_state IN (" + states_sql + ")", states):
+        from . import search_index
+        identities = search_index.entity_ids(conn, query, terms, keys)
+        if identities is not None and trace and trace.expected and trace.expected["ref"].startswith("entity:"):
+            identities.add(trace.expected["ref"][len("entity:"):])
+        for row in filtered_rows(conn, "entities", states, selection_filter=selection_filter, identities=identities):
             record = decode(row)
             node_ref = "entity:" + record["id"]
             if trace:
@@ -548,7 +575,7 @@ def load_node(conn, node_ref, states, api):
     return record if record and record["knowledge_state"] in states else None
 
 
-def graph_candidates(conn, direct, states, api, keys=(), trace=None):
+def graph_candidates(conn, direct, states, api, keys=(), trace=None, selection_filter=None):
     result, edges, truncated = {}, {}, False
     if not table_exists(conn, "graph_edges"):
         return result, edges, truncated
@@ -572,6 +599,10 @@ def graph_candidates(conn, direct, states, api, keys=(), trace=None):
             if neighbor == anchor["ref"]:
                 if trace:
                     trace.graph(neighbor, "self_link")
+                continue
+            if selection_filter and not selection_filter.matches_ref(conn, neighbor):
+                if trace:
+                    trace.graph(neighbor, "filtered_where")
                 continue
             record = load_node(conn, neighbor, states, api)
             if record is None or not matches_key(record, keys):
@@ -659,10 +690,18 @@ def _recall(conn, args, api, *, bounded=True):
         states.append("superseded")
     expected_ref = getattr(args, "expect", None)
     trace = RecallTrace(conn, expected_ref, states, api) if getattr(args, "explain", False) or expected_ref is not None else None
+    from . import query_filters
+    selection_filter = query_filters.parse(getattr(args, "where", None), api)
+    if selection_filter:
+        selection_filter.prepare(conn)
+        if trace and trace.expected and trace.expected["direct_stage"] == "not_evaluated":
+            if not selection_filter.matches_ref(conn, trace.expected["ref"]):
+                trace.expected["direct_stage"] = "filtered_where"
     terms, keys = terms_for(query)
-    direct_by_ref, fts_truncated, backend, discarded_weak = candidates(conn, query, terms, keys, states, project, api, trace)
+    options = {"selection_filter": selection_filter} if selection_filter else {}
+    direct_by_ref, fts_truncated, backend, discarded_weak = candidates(conn, query, terms, keys, states, project, api, trace, **options)
     direct = rank(direct_by_ref.values())
-    graph_by_ref, edges_by_id, graph_truncated = graph_candidates(conn, direct, states, api, keys, trace)
+    graph_by_ref, edges_by_id, graph_truncated = graph_candidates(conn, direct, states, api, keys, trace, **options)
     # Reserve at most two places for connected evidence; keep exact/lexical hits first.
     graph_only = rank(item for node_ref, item in graph_by_ref.items() if node_ref not in {x["ref"] for x in direct[:args.limit]})
     protected = sum(any(reason in {"exact_id", "exact_jira_key", "exact_alias", "exact_concept_alias"} for reason in item["reasons"]) for item in direct[:args.limit])
@@ -697,6 +736,8 @@ def _recall(conn, args, api, *, bounded=True):
                       "result_limit": args.limit},
     }
     ambiguity = concept_ambiguity(direct)
+    if selection_filter:
+        response["selection"]["filter_applied"] = True
     if ambiguity:
         response["ambiguity"] = ambiguity
     if len(terms) > 16 or len(keys) > 20:

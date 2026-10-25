@@ -109,6 +109,7 @@ only when its specific operation or contract is needed.
 | Capture/attach checked code, including worktrees | [GIT_CAPTURE.md](references/GIT_CAPTURE.md) |
 | Historical code, diffs or Git freshness | [GIT.md](references/GIT.md) |
 | Explain a missing known record | [RECALL_DEBUG.md](references/RECALL_DEBUG.md) |
+| Strict composed search filters or lookup indexes | [FILTERS.md](references/FILTERS.md) |
 | Audit selected records or find cleanup candidates | [MEMORY_AUDIT.md](references/MEMORY_AUDIT.md) |
 | Apply consolidation or split a task | [MAINTENANCE.md](references/MAINTENANCE.md); back up before live mutations |
 | Combined question/change context | [BRIEF.md](references/BRIEF.md); known diff only: [IMPACT.md](references/IMPACT.md) |

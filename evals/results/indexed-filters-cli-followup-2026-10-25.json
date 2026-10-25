@@ -1,0 +1,3252 @@
+{
+  "format_version": 1,
+  "observed_at": "2026-10-25T11:46:08.297984+00:00",
+  "configuration": {
+    "sizes": [
+      10000
+    ],
+    "engine_repeats": 20,
+    "cli_repeats": 30,
+    "legacy_included": false
+  },
+  "provenance": {
+    "declared_baseline_revision": "b8a2a9aa889a7d65d433e985ca3f6a9d4cec4c60",
+    "script_sha256": "00c53bd44b9187187a8c11f4087529a8a31053a7a92c7ebbcde998def3fce816",
+    "acceptance_sha256": "3cc3188d2996522c32da66253f7a66dc44de5f9feda85b4989d388c89d23d762",
+    "legacy_fixture_sha256": null
+  },
+  "scale": [
+    {
+      "entries": 10000,
+      "entities": 1000,
+      "corpus_sha256": "480a0e527d431fd4a2fb6a62e08c49338a8b7fd4438aea111183a96f94baba17",
+      "engine_arm_order": [
+        "baseline",
+        "candidate"
+      ],
+      "index_build": {
+        "wall_ms": 724.762708,
+        "timing_scope": "complete CLI process including status/serialization",
+        "size_scope": "post-close main/WAL bytes; not peak build WAL",
+        "report": {
+          "available": true,
+          "version": "1",
+          "supported_version": "1",
+          "keys": {
+            "entry": 39990,
+            "entity": 58904
+          },
+          "dirty": {
+            "entry": 0,
+            "entity": 0
+          },
+          "fallback_records": {
+            "entry": 0,
+            "entity": 0
+          },
+          "key_bytes": 1104860,
+          "filter_indexes": [
+            "richi_search_entities_state_kind",
+            "richi_search_entries_state_kind",
+            "richi_search_entries_state_work"
+          ],
+          "dirty_behavior": "Scan dirty records directly, including oversized records.",
+          "status": "ready"
+        },
+        "before": {
+          "main": {
+            "bytes": 27668480,
+            "sha256": "eb4c84fdb0ba97c1b9e475ef705ddb2e62f770b867dbc6d2dfb3d5dab6c7de92"
+          }
+        },
+        "after": {
+          "main": {
+            "bytes": 38055936,
+            "sha256": "dc0f1fa80d418f97225d7fb60de220cf2aa799506c2f929d8f8345e60a642b7d"
+          }
+        },
+        "canonical_rows_preserved": true
+      },
+      "runtime": {
+        "baseline": {
+          "python": "3.9.6",
+          "sqlite": "3.43.2",
+          "code_sha256": {
+            "__init__.py": "81481a8e54d6b9b63b318fecfb0354ef4521f08265d784ce54d6755460979335",
+            "__main__.py": "375fc231133ef59286ab1754b74f79ec89fb8e52d9b70ea6c5ef43ed938f497f",
+            "brief_checks.py": "ac2c6ece85a4e3d785b4a058dbac8e6a6a984439ae4e4700b8d188c154222c38",
+            "cli.py": "69668bf7975c7de79a770c3876a26442dd810cedded717e8e6afc4b421b077aa",
+            "compact.py": "423099d2399875950cd440191a9457eaa633ce1a68dbd214daa7b7cab6a637e3",
+            "git_evidence.py": "306c5b7bd8041ae62659c0b592296e58e352732c63b4f4e86a98711af9c3008d",
+            "git_impact.py": "6df1cf5e607c46373a009792b61b63436c5b2769384ef3447821fddd41effe1e",
+            "git_legacy.py": "7655a075c228a4beb06bcfdd13270297e9af08240080b696c6cdc40abf846ed1",
+            "git_sources.py": "31d7bff3616a9158a472a5e39e1474770041f43612aaf2bea45d492f3fceff1b",
+            "graph.py": "ef3edb03161e474236c74d82b62f4e0fc0b2d1a1773fcb3702a045237257eb78",
+            "graph_view.py": "70b6ee52696d6d019d2ad1942a46498a26424df0c67d8b2cf362aab9e6ccf6dc",
+            "launch_map.py": "d310c43d5e3e4f95af1b75f21c17ca066f10e1a46b3be976be8405766dcd629a",
+            "memory.py": "06a7300a8dd9636e9eed24b949dcfc086a2ae6d37b9da3adf7ca5794cff9ee48",
+            "output.py": "6e5c027ac19ce7dbccd29e056cbe075eace8d25867b82ded59352fffa9508737",
+            "projects.py": "4b24e6b61b36ad666b83847dde6896ede6056689e0e94750bf966744f195b431",
+            "punisher.py": "504d3b683e24aacc4cca312a608a6fdff91fb938c60e727c75c259c8d595723b",
+            "recall.py": "891db35bd7ac21f82b39ac2c619641621d84039f63cb7f6e552ce50be02e6d14",
+            "retrieval_tools.py": "4cfc592c2bf94f721e67aa0f6c4e6aa843c084051a78e21bf3458bb49a5e0abe",
+            "serve.py": "f4c1301adedeb72640ce1559fa6e1247f6f6ec7fd4ce703d1397adddb3438bf9",
+            "source_watch.py": "328bf273f57d0af66f46d891df2b0a990ec4954aa8a748006960ded4197c592b",
+            "status.py": "d7fcd7fa496e287555c79b42d28c0cbd3610ccae112fe22a88f62fa9b16205c5",
+            "storage.py": "c231caf3c81ef99d36830e462f543664bf4a0559b22bd01772fcd3452c7b0d27",
+            "task_brief.py": "54756e6b042679d982cd74b671c4d3963375fcd627bd13a17981d8ad04396433"
+          }
+        },
+        "candidate": {
+          "python": "3.9.6",
+          "sqlite": "3.43.2",
+          "code_sha256": {
+            "__init__.py": "81481a8e54d6b9b63b318fecfb0354ef4521f08265d784ce54d6755460979335",
+            "__main__.py": "375fc231133ef59286ab1754b74f79ec89fb8e52d9b70ea6c5ef43ed938f497f",
+            "brief_checks.py": "ac2c6ece85a4e3d785b4a058dbac8e6a6a984439ae4e4700b8d188c154222c38",
+            "cli.py": "69668bf7975c7de79a770c3876a26442dd810cedded717e8e6afc4b421b077aa",
+            "compact.py": "423099d2399875950cd440191a9457eaa633ce1a68dbd214daa7b7cab6a637e3",
+            "git_evidence.py": "306c5b7bd8041ae62659c0b592296e58e352732c63b4f4e86a98711af9c3008d",
+            "git_impact.py": "6df1cf5e607c46373a009792b61b63436c5b2769384ef3447821fddd41effe1e",
+            "git_legacy.py": "7655a075c228a4beb06bcfdd13270297e9af08240080b696c6cdc40abf846ed1",
+            "git_sources.py": "31d7bff3616a9158a472a5e39e1474770041f43612aaf2bea45d492f3fceff1b",
+            "graph.py": "ef3edb03161e474236c74d82b62f4e0fc0b2d1a1773fcb3702a045237257eb78",
+            "graph_view.py": "70b6ee52696d6d019d2ad1942a46498a26424df0c67d8b2cf362aab9e6ccf6dc",
+            "launch_map.py": "d310c43d5e3e4f95af1b75f21c17ca066f10e1a46b3be976be8405766dcd629a",
+            "memory.py": "d0211e39f76b9fc043abbd4f5eebff8ce9550333021132e86930b3d29d226b25",
+            "output.py": "6e5c027ac19ce7dbccd29e056cbe075eace8d25867b82ded59352fffa9508737",
+            "projects.py": "4b24e6b61b36ad666b83847dde6896ede6056689e0e94750bf966744f195b431",
+            "punisher.py": "504d3b683e24aacc4cca312a608a6fdff91fb938c60e727c75c259c8d595723b",
+            "query_filters.py": "2ccd7c9eb1a9606ea5962485dfaed24c9db6db23035fc9f734d76f23f4f844c5",
+            "recall.py": "fd046d00959420fa3695ac302d8d7e6a7deb211cf115c95b4813301bd38de155",
+            "retrieval_tools.py": "4cfc592c2bf94f721e67aa0f6c4e6aa843c084051a78e21bf3458bb49a5e0abe",
+            "search_index.py": "14ac854296fb7607ae9910fc9db626f7409811b7584f99a06f757321c36f9ae8",
+            "serve.py": "f4c1301adedeb72640ce1559fa6e1247f6f6ec7fd4ce703d1397adddb3438bf9",
+            "source_watch.py": "328bf273f57d0af66f46d891df2b0a990ec4954aa8a748006960ded4197c592b",
+            "status.py": "d7fcd7fa496e287555c79b42d28c0cbd3610ccae112fe22a88f62fa9b16205c5",
+            "storage.py": "c231caf3c81ef99d36830e462f543664bf4a0559b22bd01772fcd3452c7b0d27",
+            "task_brief.py": "54756e6b042679d982cd74b671c4d3963375fcd627bd13a17981d8ad04396433"
+          }
+        }
+      },
+      "read_only": {
+        "baseline": {
+          "logical_unchanged": true,
+          "physical_unchanged": true
+        },
+        "candidate": {
+          "logical_unchanged": true,
+          "physical_unchanged": true
+        }
+      },
+      "cases": [
+        {
+          "id": "ticket-exact",
+          "normal_response_equal": true,
+          "baseline": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                72.530208,
+                75.367791,
+                70.54175,
+                69.1935,
+                68.6125,
+                67.633333,
+                67.275542,
+                71.172125,
+                148.743083,
+                101.079916,
+                79.477166,
+                74.042333,
+                69.757875,
+                71.670208,
+                68.54325,
+                69.34825,
+                66.544583,
+                66.322542,
+                67.299917,
+                67.452042
+              ],
+              "p50_ms": 69.5530625,
+              "p95_ms": 101.079916,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 1,
+              "fts_shortlisted": 1,
+              "entries_scanned": 7998,
+              "entities_scanned": 1000,
+              "entries_scored": 1,
+              "entries_prefiltered": 7997,
+              "expected_entry_probes": 0,
+              "direct_rejected": {
+                "routing_prefilter": 7997,
+                "jira_guard": 1000
+              },
+              "direct_candidates": 1,
+              "graph_seeds": 1,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 1,
+              "selected": 1,
+              "returned": 1,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [],
+              "jira_keys": [
+                "demo-17"
+              ],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8,
+              "jira_mode": "required_whole_key"
+            },
+            "response_sha256": "a13ec207fb073e3a011ebee323170871bf0e329a38954eeed5b4f811c15848e7",
+            "output_chars": 1169,
+            "returned_refs": [
+              "entry:task:DEMO-17"
+            ]
+          },
+          "candidate": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                0.319959,
+                0.290792,
+                0.275458,
+                0.284917,
+                0.4435,
+                0.347042,
+                0.317208,
+                0.309333,
+                0.309042,
+                0.292458,
+                0.294917,
+                0.3035,
+                0.29425,
+                0.294959,
+                0.291666,
+                0.274041,
+                0.284,
+                0.266625,
+                0.284792,
+                0.276292
+              ],
+              "p50_ms": 0.293354,
+              "p95_ms": 0.347042,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 1,
+              "fts_shortlisted": 1,
+              "entries_scanned": 1,
+              "entities_scanned": 0,
+              "entries_scored": 1,
+              "entries_prefiltered": 0,
+              "expected_entry_probes": 0,
+              "direct_rejected": {},
+              "direct_candidates": 1,
+              "graph_seeds": 1,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 1,
+              "selected": 1,
+              "returned": 1,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [],
+              "jira_keys": [
+                "demo-17"
+              ],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8,
+              "jira_mode": "required_whole_key"
+            },
+            "response_sha256": "a13ec207fb073e3a011ebee323170871bf0e329a38954eeed5b4f811c15848e7",
+            "output_chars": 1169,
+            "returned_refs": [
+              "entry:task:DEMO-17"
+            ]
+          }
+        },
+        {
+          "id": "alias-and-cross-project-link",
+          "normal_response_equal": true,
+          "baseline": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                52.830667,
+                52.563416,
+                51.872291,
+                51.952625,
+                52.260208,
+                55.9625,
+                176.824375,
+                58.529458,
+                58.94175,
+                54.669375,
+                55.074667,
+                52.293625,
+                53.701042,
+                52.468084,
+                52.753166,
+                51.456875,
+                52.306875,
+                51.551208,
+                53.952458,
+                52.639458
+              ],
+              "p50_ms": 52.696312,
+              "p95_ms": 58.94175,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 1,
+              "fts_shortlisted": 1,
+              "entries_scanned": 7998,
+              "entities_scanned": 1000,
+              "entries_scored": 1,
+              "entries_prefiltered": 7997,
+              "expected_entry_probes": 0,
+              "direct_rejected": {
+                "routing_prefilter": 7997,
+                "weak_lexical": 1000
+              },
+              "direct_candidates": 1,
+              "graph_seeds": 1,
+              "graph_links_fetched": 1,
+              "graph_links_examined": 1,
+              "graph_rejected": {},
+              "graph_candidates": 1,
+              "candidates": 2,
+              "selected": 2,
+              "returned": 2,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "пул",
+                "соединений"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8
+            },
+            "response_sha256": "4b9baae43bda758a627048bb3d13e1965029ee04729306879a83d6cc28952e69",
+            "output_chars": 2159,
+            "returned_refs": [
+              "entry:decision:pool",
+              "entry:fact:budget"
+            ]
+          },
+          "candidate": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                0.562458,
+                0.517958,
+                0.449458,
+                0.410917,
+                0.37575,
+                0.330167,
+                0.403833,
+                0.352125,
+                0.38625,
+                0.334292,
+                0.336333,
+                0.335583,
+                0.345833,
+                0.339458,
+                0.342417,
+                0.344042,
+                0.349334,
+                0.3585,
+                0.3635,
+                0.370792
+              ],
+              "p50_ms": 0.35531250000000003,
+              "p95_ms": 0.517958,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 1,
+              "fts_shortlisted": 1,
+              "entries_scanned": 1,
+              "entities_scanned": 0,
+              "entries_scored": 1,
+              "entries_prefiltered": 0,
+              "expected_entry_probes": 0,
+              "direct_rejected": {},
+              "direct_candidates": 1,
+              "graph_seeds": 1,
+              "graph_links_fetched": 1,
+              "graph_links_examined": 1,
+              "graph_rejected": {},
+              "graph_candidates": 1,
+              "candidates": 2,
+              "selected": 2,
+              "returned": 2,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "пул",
+                "соединений"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8
+            },
+            "response_sha256": "4b9baae43bda758a627048bb3d13e1965029ee04729306879a83d6cc28952e69",
+            "output_chars": 2159,
+            "returned_refs": [
+              "entry:decision:pool",
+              "entry:fact:budget"
+            ]
+          }
+        },
+        {
+          "id": "qualified-reference",
+          "normal_response_equal": true,
+          "baseline": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                42.156792,
+                42.177875,
+                42.560458,
+                42.245083,
+                44.163875,
+                43.043459,
+                43.883041,
+                104.287291,
+                111.718458,
+                50.081208,
+                47.615,
+                48.047708,
+                43.934083,
+                43.905917,
+                43.737917,
+                45.018042,
+                45.034042,
+                44.355,
+                43.109,
+                42.79425
+              ],
+              "p50_ms": 43.92,
+              "p95_ms": 104.287291,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 0,
+              "fts_shortlisted": 0,
+              "entries_scanned": 7998,
+              "entities_scanned": 1000,
+              "entries_scored": 1,
+              "entries_prefiltered": 7997,
+              "expected_entry_probes": 0,
+              "direct_rejected": {
+                "routing_prefilter": 7997,
+                "weak_lexical": 1000
+              },
+              "direct_candidates": 1,
+              "graph_seeds": 1,
+              "graph_links_fetched": 1,
+              "graph_links_examined": 1,
+              "graph_rejected": {},
+              "graph_candidates": 1,
+              "candidates": 2,
+              "selected": 2,
+              "returned": 2,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "entry:fact:budget"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8
+            },
+            "response_sha256": "80f3f6ba04f33efa6be878b1fb39847038c505d436ad378504f71e8c9ca57425",
+            "output_chars": 2099,
+            "returned_refs": [
+              "entry:fact:budget",
+              "entry:decision:pool"
+            ]
+          },
+          "candidate": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                0.316291,
+                0.31375,
+                0.30075,
+                0.281292,
+                0.27525,
+                0.280541,
+                0.276208,
+                0.275917,
+                0.275917,
+                0.3025,
+                0.274833,
+                0.272833,
+                0.274,
+                0.280083,
+                0.286792,
+                0.310625,
+                0.270666,
+                0.274292,
+                0.2765,
+                0.27075
+              ],
+              "p50_ms": 0.276354,
+              "p95_ms": 0.31375,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 0,
+              "fts_shortlisted": 0,
+              "entries_scanned": 1,
+              "entities_scanned": 0,
+              "entries_scored": 1,
+              "entries_prefiltered": 0,
+              "expected_entry_probes": 0,
+              "direct_rejected": {},
+              "direct_candidates": 1,
+              "graph_seeds": 1,
+              "graph_links_fetched": 1,
+              "graph_links_examined": 1,
+              "graph_rejected": {},
+              "graph_candidates": 1,
+              "candidates": 2,
+              "selected": 2,
+              "returned": 2,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "entry:fact:budget"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8
+            },
+            "response_sha256": "80f3f6ba04f33efa6be878b1fb39847038c505d436ad378504f71e8c9ca57425",
+            "output_chars": 2099,
+            "returned_refs": [
+              "entry:fact:budget",
+              "entry:decision:pool"
+            ]
+          }
+        },
+        {
+          "id": "ambiguous-concept",
+          "normal_response_equal": true,
+          "baseline": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                32.780792,
+                33.381708,
+                35.071625,
+                35.099709,
+                34.960458,
+                33.868625,
+                34.041709,
+                32.560292,
+                32.79875,
+                32.521791,
+                32.841125,
+                36.855541,
+                34.685959,
+                33.785375,
+                33.5075,
+                33.119708,
+                36.117333,
+                125.094625,
+                51.160458,
+                38.233375
+              ],
+              "p50_ms": 33.955167,
+              "p95_ms": 51.160458,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 0,
+              "fts_shortlisted": 0,
+              "entries_scanned": 7998,
+              "entities_scanned": 1000,
+              "entries_scored": 0,
+              "entries_prefiltered": 7998,
+              "expected_entry_probes": 0,
+              "direct_rejected": {
+                "routing_prefilter": 7998,
+                "weak_lexical": 998
+              },
+              "direct_candidates": 2,
+              "graph_seeds": 2,
+              "graph_links_fetched": 2,
+              "graph_links_examined": 2,
+              "graph_rejected": {
+                "node_unavailable": 2
+              },
+              "graph_candidates": 0,
+              "candidates": 2,
+              "selected": 2,
+              "returned": 2,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8
+            },
+            "response_sha256": "2e25b1a0b2668194633fbbf73aaf87999fd7b3449c48314e684b3cf43317ad52",
+            "output_chars": 2261,
+            "returned_refs": [
+              "entity:concept:quality",
+              "entity:concept:queue"
+            ]
+          },
+          "candidate": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                0.358375,
+                0.367791,
+                0.395,
+                0.339625,
+                0.337333,
+                0.334208,
+                0.338791,
+                0.337709,
+                0.333959,
+                0.332708,
+                0.331,
+                0.330542,
+                0.337125,
+                0.337292,
+                0.329125,
+                0.332542,
+                0.332958,
+                0.327917,
+                0.33,
+                0.336583
+              ],
+              "p50_ms": 0.3353955,
+              "p95_ms": 0.367791,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 0,
+              "fts_shortlisted": 0,
+              "entries_scanned": 0,
+              "entities_scanned": 2,
+              "entries_scored": 0,
+              "entries_prefiltered": 0,
+              "expected_entry_probes": 0,
+              "direct_rejected": {},
+              "direct_candidates": 2,
+              "graph_seeds": 2,
+              "graph_links_fetched": 2,
+              "graph_links_examined": 2,
+              "graph_rejected": {
+                "node_unavailable": 2
+              },
+              "graph_candidates": 0,
+              "candidates": 2,
+              "selected": 2,
+              "returned": 2,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8
+            },
+            "response_sha256": "2e25b1a0b2668194633fbbf73aaf87999fd7b3449c48314e684b3cf43317ad52",
+            "output_chars": 2261,
+            "returned_refs": [
+              "entity:concept:quality",
+              "entity:concept:queue"
+            ]
+          }
+        },
+        {
+          "id": "unknown-ticket",
+          "normal_response_equal": true,
+          "baseline": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                69.465875,
+                69.747417,
+                70.085792,
+                78.662125,
+                68.253833,
+                67.7345,
+                68.574958,
+                68.427125,
+                67.718416,
+                67.714083,
+                67.308208,
+                67.614417,
+                66.7495,
+                66.5795,
+                119.775958,
+                187.238291,
+                84.745459,
+                75.10725,
+                73.549417,
+                71.064375
+              ],
+              "p50_ms": 69.0204165,
+              "p95_ms": 119.775958,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 0,
+              "fts_shortlisted": 0,
+              "entries_scanned": 7998,
+              "entities_scanned": 1000,
+              "entries_scored": 0,
+              "entries_prefiltered": 7998,
+              "expected_entry_probes": 0,
+              "direct_rejected": {
+                "routing_prefilter": 7998,
+                "jira_guard": 1000
+              },
+              "direct_candidates": 0,
+              "graph_seeds": 0,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 0,
+              "selected": 0,
+              "returned": 0,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "cache",
+                "warmup"
+              ],
+              "jira_keys": [
+                "demo-999999"
+              ],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8,
+              "jira_mode": "required_whole_key",
+              "abstention_reason": "no_matching_issue_key"
+            },
+            "response_sha256": "209e5a612e671de9406304c5bb0f702eb93a158238229b9d881102ec71e0bc1a",
+            "output_chars": 658,
+            "returned_refs": []
+          },
+          "candidate": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                0.275917,
+                0.261709,
+                0.259584,
+                0.253834,
+                0.251417,
+                0.252042,
+                0.263083,
+                0.25075,
+                0.251834,
+                0.249167,
+                0.251125,
+                0.248333,
+                0.254542,
+                0.246792,
+                0.257458,
+                0.247666,
+                0.249041,
+                0.247666,
+                0.249708,
+                0.248167
+              ],
+              "p50_ms": 0.251271,
+              "p95_ms": 0.263083,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 0,
+              "fts_shortlisted": 0,
+              "entries_scanned": 0,
+              "entities_scanned": 0,
+              "entries_scored": 0,
+              "entries_prefiltered": 0,
+              "expected_entry_probes": 0,
+              "direct_rejected": {},
+              "direct_candidates": 0,
+              "graph_seeds": 0,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 0,
+              "selected": 0,
+              "returned": 0,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "cache",
+                "warmup"
+              ],
+              "jira_keys": [
+                "demo-999999"
+              ],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8,
+              "jira_mode": "required_whole_key",
+              "abstention_reason": "no_matching_issue_key"
+            },
+            "response_sha256": "209e5a612e671de9406304c5bb0f702eb93a158238229b9d881102ec71e0bc1a",
+            "output_chars": 658,
+            "returned_refs": []
+          }
+        },
+        {
+          "id": "unknown-subject",
+          "normal_response_equal": true,
+          "baseline": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                44.43025,
+                44.394125,
+                44.950417,
+                46.10625,
+                43.941958,
+                42.901541,
+                42.795084,
+                42.85775,
+                43.041833,
+                42.287958,
+                42.654542,
+                42.227125,
+                42.846041,
+                42.96525,
+                44.835042,
+                43.340542,
+                43.182708,
+                45.666542,
+                109.893625,
+                69.001917
+              ],
+              "p50_ms": 43.261624999999995,
+              "p95_ms": 69.001917,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 0,
+              "fts_shortlisted": 0,
+              "entries_scanned": 7998,
+              "entities_scanned": 1000,
+              "entries_scored": 0,
+              "entries_prefiltered": 7998,
+              "expected_entry_probes": 0,
+              "direct_rejected": {
+                "routing_prefilter": 7998,
+                "weak_lexical": 1000
+              },
+              "direct_candidates": 0,
+              "graph_seeds": 0,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 0,
+              "selected": 0,
+              "returned": 0,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "zzzxunknowntransportxzzz"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8,
+              "abstention_reason": "no_meaningful_lexical_anchor"
+            },
+            "response_sha256": "0345b37f7ef282d41908dc3b0a15732f4c76c2dc6ea5143c506b2de404edfb0c",
+            "output_chars": 611,
+            "returned_refs": []
+          },
+          "candidate": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                0.180625,
+                0.165666,
+                0.165291,
+                0.161334,
+                0.158375,
+                0.169583,
+                0.163375,
+                0.155833,
+                0.161667,
+                0.158708,
+                0.162459,
+                0.158166,
+                0.158083,
+                0.157791,
+                0.158292,
+                0.168458,
+                0.159459,
+                0.157709,
+                0.158584,
+                0.157542
+              ],
+              "p50_ms": 0.1590835,
+              "p95_ms": 0.169583,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 0,
+              "fts_shortlisted": 0,
+              "entries_scanned": 0,
+              "entities_scanned": 0,
+              "entries_scored": 0,
+              "entries_prefiltered": 0,
+              "expected_entry_probes": 0,
+              "direct_rejected": {},
+              "direct_candidates": 0,
+              "graph_seeds": 0,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 0,
+              "selected": 0,
+              "returned": 0,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "zzzxunknowntransportxzzz"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8,
+              "abstention_reason": "no_meaningful_lexical_anchor"
+            },
+            "response_sha256": "0345b37f7ef282d41908dc3b0a15732f4c76c2dc6ea5143c506b2de404edfb0c",
+            "output_chars": 611,
+            "returned_refs": []
+          }
+        },
+        {
+          "id": "unverified-release",
+          "normal_response_equal": true,
+          "baseline": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                67.87175,
+                67.297667,
+                67.863083,
+                67.022792,
+                69.127167,
+                68.106542,
+                68.432292,
+                68.536959,
+                71.017084,
+                69.156709,
+                68.959459,
+                67.497084,
+                67.704666,
+                68.818958,
+                75.371916,
+                192.001209,
+                75.375875,
+                70.335333,
+                69.796916,
+                68.562375
+              ],
+              "p50_ms": 68.69066649999999,
+              "p95_ms": 75.375875,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 1,
+              "fts_shortlisted": 1,
+              "entries_scanned": 7998,
+              "entities_scanned": 1000,
+              "entries_scored": 1,
+              "entries_prefiltered": 7997,
+              "expected_entry_probes": 0,
+              "direct_rejected": {
+                "routing_prefilter": 7997,
+                "jira_guard": 1000
+              },
+              "direct_candidates": 1,
+              "graph_seeds": 1,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 1,
+              "selected": 1,
+              "returned": 1,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "выкатили",
+                "прод",
+                "сейчас"
+              ],
+              "jira_keys": [
+                "demo-17"
+              ],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8,
+              "current_status_requested": true,
+              "jira_mode": "required_whole_key"
+            },
+            "response_sha256": "6af6195aa55b9251e855b4a102daf5604d68658018a89f44dd8a7c8f5965c10d",
+            "output_chars": 1358,
+            "returned_refs": [
+              "entry:task:DEMO-17"
+            ]
+          },
+          "candidate": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                0.44625,
+                0.384916,
+                0.373916,
+                0.368208,
+                0.367916,
+                0.354,
+                0.361708,
+                0.47375,
+                0.358542,
+                0.362166,
+                0.384833,
+                0.359292,
+                0.356333,
+                0.352,
+                0.36025,
+                0.406333,
+                0.3565,
+                0.354375,
+                0.358041,
+                0.356375
+              ],
+              "p50_ms": 0.360979,
+              "p95_ms": 0.44625,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 1,
+              "fts_shortlisted": 1,
+              "entries_scanned": 1,
+              "entities_scanned": 0,
+              "entries_scored": 1,
+              "entries_prefiltered": 0,
+              "expected_entry_probes": 0,
+              "direct_rejected": {},
+              "direct_candidates": 1,
+              "graph_seeds": 1,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 1,
+              "selected": 1,
+              "returned": 1,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "выкатили",
+                "прод",
+                "сейчас"
+              ],
+              "jira_keys": [
+                "demo-17"
+              ],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8,
+              "current_status_requested": true,
+              "jira_mode": "required_whole_key"
+            },
+            "response_sha256": "6af6195aa55b9251e855b4a102daf5604d68658018a89f44dd8a7c8f5965c10d",
+            "output_chars": 1358,
+            "returned_refs": [
+              "entry:task:DEMO-17"
+            ]
+          }
+        },
+        {
+          "id": "unicode-folded-alias",
+          "normal_response_equal": true,
+          "baseline": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                53.213875,
+                51.47875,
+                51.490458,
+                51.425042,
+                50.877333,
+                51.218,
+                51.421833,
+                50.752375,
+                51.771166,
+                51.094208,
+                51.280125,
+                57.42475,
+                57.961708,
+                188.766,
+                58.091167,
+                58.319875,
+                53.75425,
+                52.344541,
+                53.329334,
+                51.234083
+              ],
+              "p50_ms": 51.630812,
+              "p95_ms": 58.319875,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 0,
+              "fts_shortlisted": 0,
+              "entries_scanned": 7998,
+              "entities_scanned": 1000,
+              "entries_scored": 1,
+              "entries_prefiltered": 7997,
+              "expected_entry_probes": 0,
+              "direct_rejected": {
+                "routing_prefilter": 7997,
+                "weak_lexical": 1000
+              },
+              "direct_candidates": 1,
+              "graph_seeds": 1,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 1,
+              "selected": 1,
+              "returned": 1,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "strasse",
+                "ωе"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8
+            },
+            "response_sha256": "c7329e1e1283220d48a88b6be57dd4f51496bd5eb55d4eee4d82ce7276c0342c",
+            "output_chars": 1515,
+            "returned_refs": [
+              "entry:unicode-target"
+            ]
+          },
+          "candidate": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                0.31625,
+                0.293209,
+                0.288333,
+                0.295292,
+                0.287416,
+                0.286709,
+                0.316458,
+                0.297792,
+                0.281166,
+                0.287084,
+                0.281042,
+                0.2855,
+                0.282125,
+                0.293791,
+                0.287458,
+                0.283,
+                0.281125,
+                0.283,
+                0.280291,
+                0.285125
+              ],
+              "p50_ms": 0.2868965,
+              "p95_ms": 0.31625,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 0,
+              "fts_shortlisted": 0,
+              "entries_scanned": 1,
+              "entities_scanned": 0,
+              "entries_scored": 1,
+              "entries_prefiltered": 0,
+              "expected_entry_probes": 0,
+              "direct_rejected": {},
+              "direct_candidates": 1,
+              "graph_seeds": 1,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 1,
+              "selected": 1,
+              "returned": 1,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "strasse",
+                "ωе"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8
+            },
+            "response_sha256": "c7329e1e1283220d48a88b6be57dd4f51496bd5eb55d4eee4d82ce7276c0342c",
+            "output_chars": 1515,
+            "returned_refs": [
+              "entry:unicode-target"
+            ]
+          }
+        },
+        {
+          "id": "alias-phrase",
+          "normal_response_equal": true,
+          "baseline": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                82.444417,
+                81.305834,
+                80.95625,
+                81.008125,
+                80.582666,
+                83.746834,
+                82.996292,
+                84.114208,
+                211.8785,
+                92.716375,
+                86.204625,
+                82.63625,
+                80.538917,
+                80.825167,
+                80.33025,
+                78.225083,
+                77.959958,
+                78.630333,
+                80.956542,
+                82.289417
+              ],
+              "p50_ms": 81.1569795,
+              "p95_ms": 92.716375,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 161,
+              "fts_shortlisted": 160,
+              "entries_scanned": 7998,
+              "entities_scanned": 1000,
+              "entries_scored": 160,
+              "entries_prefiltered": 7838,
+              "expected_entry_probes": 0,
+              "direct_rejected": {
+                "routing_prefilter": 7838,
+                "weak_lexical": 2
+              },
+              "direct_candidates": 1158,
+              "graph_seeds": 3,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 1158,
+              "selected": 8,
+              "returned": 8,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "flux",
+                "canal",
+                "failed"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8,
+              "fts_candidate_limit": 160,
+              "fts_candidates_truncated": true,
+              "graph_links_per_seed": 100,
+              "graph_candidates_truncated": false
+            },
+            "response_sha256": "5b8a73b9b65cdc32221c5fc5fd2d356a21afcdf7df60a8d3f4b281d6005544e0",
+            "output_chars": 8718,
+            "returned_refs": [
+              "entry:phrase-target",
+              "entry:unicode-target",
+              "entry:background-00002",
+              "entry:background-00003",
+              "entry:background-00004",
+              "entry:background-00005",
+              "entry:background-00006",
+              "entry:background-00007"
+            ]
+          },
+          "candidate": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                58.53975,
+                57.830667,
+                148.365834,
+                110.076583,
+                65.641542,
+                71.310458,
+                60.24925,
+                59.456417,
+                59.502958,
+                69.477666,
+                64.494375,
+                58.835334,
+                57.661542,
+                58.456333,
+                60.003292,
+                57.3075,
+                58.203292,
+                58.4845,
+                58.633166,
+                58.353584
+              ],
+              "p50_ms": 59.1458755,
+              "p95_ms": 110.076583,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 161,
+              "fts_shortlisted": 160,
+              "entries_scanned": 160,
+              "entities_scanned": 998,
+              "entries_scored": 160,
+              "entries_prefiltered": 0,
+              "expected_entry_probes": 0,
+              "direct_rejected": {},
+              "direct_candidates": 1158,
+              "graph_seeds": 3,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 1158,
+              "selected": 8,
+              "returned": 8,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "flux",
+                "canal",
+                "failed"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8,
+              "fts_candidate_limit": 160,
+              "fts_candidates_truncated": true,
+              "graph_links_per_seed": 100,
+              "graph_candidates_truncated": false
+            },
+            "response_sha256": "5b8a73b9b65cdc32221c5fc5fd2d356a21afcdf7df60a8d3f4b281d6005544e0",
+            "output_chars": 8718,
+            "returned_refs": [
+              "entry:phrase-target",
+              "entry:unicode-target",
+              "entry:background-00002",
+              "entry:background-00003",
+              "entry:background-00004",
+              "entry:background-00005",
+              "entry:background-00006",
+              "entry:background-00007"
+            ]
+          }
+        },
+        {
+          "id": "exact-entity",
+          "normal_response_equal": true,
+          "baseline": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                41.895792,
+                41.443917,
+                130.094,
+                62.84125,
+                58.1525,
+                47.248709,
+                46.474291,
+                44.095625,
+                43.673125,
+                44.635667,
+                44.436917,
+                42.517583,
+                41.607291,
+                40.962125,
+                42.218917,
+                42.757709,
+                44.15175,
+                41.837958,
+                42.230041,
+                41.916291
+              ],
+              "p50_ms": 43.215417,
+              "p95_ms": 62.84125,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 0,
+              "fts_shortlisted": 0,
+              "entries_scanned": 7998,
+              "entities_scanned": 1000,
+              "entries_scored": 0,
+              "entries_prefiltered": 7998,
+              "expected_entry_probes": 0,
+              "direct_rejected": {
+                "routing_prefilter": 7998,
+                "weak_lexical": 999
+              },
+              "direct_candidates": 1,
+              "graph_seeds": 1,
+              "graph_links_fetched": 1,
+              "graph_links_examined": 1,
+              "graph_rejected": {
+                "node_unavailable": 1
+              },
+              "graph_candidates": 0,
+              "candidates": 1,
+              "selected": 1,
+              "returned": 1,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "entity:concept:queue"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8
+            },
+            "response_sha256": "0871af02d9be73ba2c467899641d97a4c1d2d80ed39dd4aea615b70a9feb3c08",
+            "output_chars": 1082,
+            "returned_refs": [
+              "entity:concept:queue"
+            ]
+          },
+          "candidate": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                0.274542,
+                0.274666,
+                0.255166,
+                0.253875,
+                0.2455,
+                0.263792,
+                0.246709,
+                0.251625,
+                0.245,
+                0.245792,
+                0.243708,
+                0.247,
+                0.272375,
+                0.277333,
+                0.25975,
+                0.26425,
+                0.262083,
+                0.261,
+                0.250959,
+                0.243917
+              ],
+              "p50_ms": 0.25452050000000004,
+              "p95_ms": 0.274666,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 0,
+              "fts_shortlisted": 0,
+              "entries_scanned": 0,
+              "entities_scanned": 1,
+              "entries_scored": 0,
+              "entries_prefiltered": 0,
+              "expected_entry_probes": 0,
+              "direct_rejected": {},
+              "direct_candidates": 1,
+              "graph_seeds": 1,
+              "graph_links_fetched": 1,
+              "graph_links_examined": 1,
+              "graph_rejected": {
+                "node_unavailable": 1
+              },
+              "graph_candidates": 0,
+              "candidates": 1,
+              "selected": 1,
+              "returned": 1,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "entity:concept:queue"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8
+            },
+            "response_sha256": "0871af02d9be73ba2c467899641d97a4c1d2d80ed39dd4aea615b70a9feb3c08",
+            "output_chars": 1082,
+            "returned_refs": [
+              "entity:concept:queue"
+            ]
+          }
+        },
+        {
+          "id": "hypothesis-excluded",
+          "normal_response_equal": true,
+          "baseline": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                42.160084,
+                41.899667,
+                46.606667,
+                44.749917,
+                46.041416,
+                43.36275,
+                43.360458,
+                45.672,
+                124.825708,
+                71.236959,
+                46.308875,
+                47.353041,
+                47.29075,
+                42.135917,
+                44.34825,
+                41.96575,
+                42.075792,
+                44.030209,
+                41.391875,
+                41.285875
+              ],
+              "p50_ms": 44.189229499999996,
+              "p95_ms": 71.236959,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 0,
+              "fts_shortlisted": 0,
+              "entries_scanned": 7998,
+              "entities_scanned": 1000,
+              "entries_scored": 0,
+              "entries_prefiltered": 7998,
+              "expected_entry_probes": 0,
+              "direct_rejected": {
+                "routing_prefilter": 7998,
+                "weak_lexical": 1000
+              },
+              "direct_candidates": 0,
+              "graph_seeds": 0,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 0,
+              "selected": 0,
+              "returned": 0,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "hiddenprobe"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8,
+              "abstention_reason": "no_meaningful_lexical_anchor"
+            },
+            "response_sha256": "7e35e05716b6deb994b88f0e6c12e41b3fa753daff009439ee94a440e4ec2d63",
+            "output_chars": 585,
+            "returned_refs": []
+          },
+          "candidate": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                0.223375,
+                0.194041,
+                0.190875,
+                0.190416,
+                0.185667,
+                0.19175,
+                0.185417,
+                0.196709,
+                0.18175,
+                0.178959,
+                0.176792,
+                0.177708,
+                0.181917,
+                0.187,
+                0.35525,
+                0.229291,
+                0.199334,
+                0.191291,
+                0.191042,
+                0.186125
+              ],
+              "p50_ms": 0.1906455,
+              "p95_ms": 0.229291,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 0,
+              "fts_shortlisted": 0,
+              "entries_scanned": 0,
+              "entities_scanned": 0,
+              "entries_scored": 0,
+              "entries_prefiltered": 0,
+              "expected_entry_probes": 0,
+              "direct_rejected": {},
+              "direct_candidates": 0,
+              "graph_seeds": 0,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 0,
+              "selected": 0,
+              "returned": 0,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "hiddenprobe"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8,
+              "abstention_reason": "no_meaningful_lexical_anchor"
+            },
+            "response_sha256": "7e35e05716b6deb994b88f0e6c12e41b3fa753daff009439ee94a440e4ec2d63",
+            "output_chars": 585,
+            "returned_refs": []
+          }
+        },
+        {
+          "id": "hypothesis-included",
+          "normal_response_equal": true,
+          "baseline": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                44.984875,
+                44.677917,
+                44.876,
+                44.3165,
+                44.748125,
+                43.990208,
+                44.628375,
+                49.242916,
+                52.75075,
+                47.857625,
+                50.226459,
+                47.42375,
+                118.678875,
+                85.202708,
+                52.042875,
+                50.494917,
+                47.908875,
+                46.403584,
+                47.720042,
+                44.9995
+              ],
+              "p50_ms": 47.571895999999995,
+              "p95_ms": 85.202708,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 1,
+              "fts_shortlisted": 1,
+              "entries_scanned": 8999,
+              "entities_scanned": 1000,
+              "entries_scored": 1,
+              "entries_prefiltered": 8998,
+              "expected_entry_probes": 0,
+              "direct_rejected": {
+                "routing_prefilter": 8998,
+                "weak_lexical": 1000
+              },
+              "direct_candidates": 1,
+              "graph_seeds": 1,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 1,
+              "selected": 1,
+              "returned": 1,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "hiddenprobe"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed",
+                "hypothesis"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8
+            },
+            "response_sha256": "e5f8c3cae96e95c97563da845f78dd40cac89104d82885aaac9533e09b9da070",
+            "output_chars": 1563,
+            "returned_refs": [
+              "entry:hypothesis-target"
+            ]
+          },
+          "candidate": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                0.31425,
+                0.281625,
+                0.26475,
+                0.269709,
+                0.263333,
+                0.267542,
+                0.271,
+                0.266917,
+                0.270459,
+                0.2645,
+                0.26075,
+                0.260208,
+                0.263333,
+                0.259625,
+                0.259833,
+                0.261542,
+                0.328083,
+                0.40125,
+                0.269583,
+                0.273542
+              ],
+              "p50_ms": 0.2672295,
+              "p95_ms": 0.328083,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 1,
+              "fts_shortlisted": 1,
+              "entries_scanned": 1,
+              "entities_scanned": 0,
+              "entries_scored": 1,
+              "entries_prefiltered": 0,
+              "expected_entry_probes": 0,
+              "direct_rejected": {},
+              "direct_candidates": 1,
+              "graph_seeds": 1,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 1,
+              "selected": 1,
+              "returned": 1,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "hiddenprobe"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed",
+                "hypothesis"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8
+            },
+            "response_sha256": "e5f8c3cae96e95c97563da845f78dd40cac89104d82885aaac9533e09b9da070",
+            "output_chars": 1563,
+            "returned_refs": [
+              "entry:hypothesis-target"
+            ]
+          }
+        },
+        {
+          "id": "superseded-included",
+          "normal_response_equal": true,
+          "baseline": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                44.930833,
+                43.813667,
+                45.568042,
+                44.312875,
+                45.566667,
+                44.105125,
+                44.803208,
+                45.224667,
+                45.409834,
+                45.463042,
+                48.490125,
+                47.289333,
+                49.711417,
+                47.004667,
+                48.334209,
+                49.541208,
+                129.551375,
+                74.965,
+                53.274916,
+                50.022458
+              ],
+              "p50_ms": 46.2863545,
+              "p95_ms": 74.965,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 1,
+              "fts_shortlisted": 1,
+              "entries_scanned": 8999,
+              "entities_scanned": 1000,
+              "entries_scored": 1,
+              "entries_prefiltered": 8998,
+              "expected_entry_probes": 0,
+              "direct_rejected": {
+                "routing_prefilter": 8998,
+                "weak_lexical": 1000
+              },
+              "direct_candidates": 1,
+              "graph_seeds": 1,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 1,
+              "selected": 1,
+              "returned": 1,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "oldprobe"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed",
+                "superseded"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8
+            },
+            "response_sha256": "bdbe704a2800df8535c8aaf128beffb38284af1e9c7cb43849a834e583fcb529",
+            "output_chars": 1554,
+            "returned_refs": [
+              "entry:superseded-target"
+            ]
+          },
+          "candidate": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                0.321834,
+                0.295875,
+                0.289292,
+                0.284042,
+                0.276917,
+                0.291167,
+                0.305792,
+                0.29975,
+                0.28275,
+                0.278,
+                0.280417,
+                0.276958,
+                0.277334,
+                0.276709,
+                0.292667,
+                0.288667,
+                0.300042,
+                0.286375,
+                0.2855,
+                0.271375
+              ],
+              "p50_ms": 0.28593749999999996,
+              "p95_ms": 0.305792,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 1,
+              "fts_shortlisted": 1,
+              "entries_scanned": 1,
+              "entities_scanned": 0,
+              "entries_scored": 1,
+              "entries_prefiltered": 0,
+              "expected_entry_probes": 0,
+              "direct_rejected": {},
+              "direct_candidates": 1,
+              "graph_seeds": 1,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 1,
+              "selected": 1,
+              "returned": 1,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "oldprobe"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed",
+                "superseded"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8
+            },
+            "response_sha256": "bdbe704a2800df8535c8aaf128beffb38284af1e9c7cb43849a834e583fcb529",
+            "output_chars": 1554,
+            "returned_refs": [
+              "entry:superseded-target"
+            ]
+          }
+        },
+        {
+          "id": "broad-background",
+          "normal_response_equal": true,
+          "baseline": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                64.213334,
+                62.522667,
+                59.43625,
+                60.77575,
+                60.234542,
+                60.976833,
+                61.361625,
+                62.277625,
+                61.677375,
+                60.310458,
+                59.88125,
+                59.95925,
+                60.065708,
+                60.376916,
+                63.190542,
+                133.268583,
+                82.801458,
+                74.015167,
+                66.136333,
+                62.2605
+              ],
+              "p50_ms": 61.519499999999994,
+              "p95_ms": 82.801458,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 161,
+              "fts_shortlisted": 160,
+              "entries_scanned": 7998,
+              "entities_scanned": 1000,
+              "entries_scored": 160,
+              "entries_prefiltered": 7838,
+              "expected_entry_probes": 0,
+              "direct_rejected": {
+                "routing_prefilter": 7838,
+                "weak_lexical": 2
+              },
+              "direct_candidates": 1158,
+              "graph_seeds": 3,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 1158,
+              "selected": 8,
+              "returned": 8,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "receipt",
+                "transport"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8,
+              "fts_candidate_limit": 160,
+              "fts_candidates_truncated": true,
+              "graph_links_per_seed": 100,
+              "graph_candidates_truncated": false
+            },
+            "response_sha256": "c8d4f755667b198317a2dd6efd4a124ef920c8df3bd9fbf9390eab3b02a14c05",
+            "output_chars": 9160,
+            "returned_refs": [
+              "entry:background-00004",
+              "entry:background-00008",
+              "entry:background-00012",
+              "entry:background-00016",
+              "entry:background-00024",
+              "entry:background-00028",
+              "entry:background-00032",
+              "entry:background-00036"
+            ]
+          },
+          "candidate": {
+            "quality_misses": [],
+            "latency": {
+              "samples_ms": [
+                144.740375,
+                48.222625,
+                46.956375,
+                43.343834,
+                45.333291,
+                40.559333,
+                38.696416,
+                39.134333,
+                36.207041,
+                35.954667,
+                37.07225,
+                36.293292,
+                36.267334,
+                38.9315,
+                37.455334,
+                39.607833,
+                39.063583,
+                36.4965,
+                36.02525,
+                39.376958
+              ],
+              "p50_ms": 38.9975415,
+              "p95_ms": 48.222625,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "trace_counts": {
+              "fts_rows_fetched": 161,
+              "fts_shortlisted": 160,
+              "entries_scanned": 160,
+              "entities_scanned": 998,
+              "entries_scored": 160,
+              "entries_prefiltered": 0,
+              "expected_entry_probes": 0,
+              "direct_rejected": {},
+              "direct_candidates": 1158,
+              "graph_seeds": 3,
+              "graph_links_fetched": 0,
+              "graph_links_examined": 0,
+              "graph_rejected": {},
+              "graph_candidates": 0,
+              "candidates": 1158,
+              "selected": 8,
+              "returned": 8,
+              "budget_omitted": 0
+            },
+            "trace_selection": {
+              "method": "weighted_lexical_then_explicit_1hop",
+              "search_backend": "fts5",
+              "terms": [
+                "receipt",
+                "transport"
+              ],
+              "jira_keys": [],
+              "knowledge_states": [
+                "confirmed"
+              ],
+              "project_mode": "boost",
+              "graph_depth": 1,
+              "result_limit": 8,
+              "fts_candidate_limit": 160,
+              "fts_candidates_truncated": true,
+              "graph_links_per_seed": 100,
+              "graph_candidates_truncated": false
+            },
+            "response_sha256": "c8d4f755667b198317a2dd6efd4a124ef920c8df3bd9fbf9390eab3b02a14c05",
+            "output_chars": 9160,
+            "returned_refs": [
+              "entry:background-00004",
+              "entry:background-00008",
+              "entry:background-00012",
+              "entry:background-00016",
+              "entry:background-00024",
+              "entry:background-00028",
+              "entry:background-00032",
+              "entry:background-00036"
+            ]
+          }
+        }
+      ],
+      "fresh_cli": {
+        "ticket-exact": {
+          "baseline": {
+            "samples_ms": [
+              355.286625,
+              304.750666,
+              436.37925,
+              317.463916,
+              429.602041,
+              308.709,
+              400.311917,
+              304.954125,
+              313.162625,
+              310.588875,
+              307.968875,
+              307.054125,
+              329.957417,
+              308.795958,
+              306.7725,
+              327.484959,
+              312.245,
+              365.285459,
+              305.678709,
+              458.339333,
+              315.92625,
+              444.961875,
+              314.950625,
+              408.98675,
+              341.767958,
+              306.445,
+              432.398792,
+              308.590666,
+              466.98475,
+              316.877208
+            ],
+            "p50_ms": 316.401729,
+            "p95_ms": 458.339333,
+            "p95_method": "nearest rank; small samples do not establish stable tail latency"
+          },
+          "candidate": {
+            "samples_ms": [
+              250.703666,
+              238.627208,
+              258.9275,
+              240.113583,
+              252.137917,
+              238.323458,
+              290.122584,
+              256.288584,
+              384.100333,
+              242.467625,
+              389.369125,
+              256.791667,
+              322.194416,
+              298.433834,
+              237.667667,
+              347.947708,
+              244.362583,
+              315.683375,
+              251.019542,
+              246.369541,
+              246.277875,
+              237.9895,
+              238.532875,
+              250.878792,
+              248.796417,
+              237.290833,
+              241.904208,
+              236.691625,
+              259.978333,
+              246.385834
+            ],
+            "p50_ms": 249.7500415,
+            "p95_ms": 384.100333,
+            "p95_method": "nearest rank; small samples do not establish stable tail latency"
+          }
+        },
+        "unicode-folded-alias": {
+          "baseline": {
+            "samples_ms": [
+              420.952875,
+              289.966542,
+              294.542042,
+              288.498,
+              292.395708,
+              293.543334,
+              301.318333,
+              310.869292,
+              290.156708,
+              335.869417,
+              291.435916,
+              418.657125,
+              299.418667,
+              291.530417,
+              441.350667,
+              290.465875,
+              411.990125,
+              287.249416,
+              290.848625,
+              301.656875,
+              294.638917,
+              297.873375,
+              294.666875,
+              307.229,
+              287.830667,
+              433.12375,
+              300.260959,
+              426.944958,
+              311.878709,
+              308.859833
+            ],
+            "p50_ms": 298.646021,
+            "p95_ms": 433.12375,
+            "p95_method": "nearest rank; small samples do not establish stable tail latency"
+          },
+          "candidate": {
+            "samples_ms": [
+              265.571833,
+              237.309708,
+              365.270542,
+              253.306208,
+              308.835,
+              303.369916,
+              237.365,
+              404.778709,
+              240.242875,
+              337.092083,
+              237.37775,
+              240.872583,
+              243.217333,
+              243.402084,
+              244.290333,
+              258.316291,
+              268.574833,
+              238.188208,
+              370.713292,
+              244.544375,
+              257.520209,
+              342.35,
+              238.890625,
+              378.984834,
+              239.713083,
+              248.798083,
+              256.226375,
+              238.426667,
+              241.555542,
+              237.320666
+            ],
+            "p50_ms": 246.67122899999998,
+            "p95_ms": 378.984834,
+            "p95_method": "nearest rank; small samples do not establish stable tail latency"
+          }
+        },
+        "broad-background": {
+          "baseline": {
+            "samples_ms": [
+              433.738917,
+              321.749,
+              434.055541,
+              324.637542,
+              422.277417,
+              300.858791,
+              405.957916,
+              313.448209,
+              430.210416,
+              300.113125,
+              412.886375,
+              320.509917,
+              389.652291,
+              296.329333,
+              297.182917,
+              309.879125,
+              354.37,
+              303.657375,
+              304.7175,
+              307.933625,
+              297.477792,
+              296.507708,
+              299.094583,
+              299.343917,
+              301.374666,
+              306.454583,
+              298.328083,
+              295.503334,
+              294.756833,
+              297.97475
+            ],
+            "p50_ms": 305.58604149999996,
+            "p95_ms": 433.738917,
+            "p95_method": "nearest rank; small samples do not establish stable tail latency"
+          },
+          "candidate": {
+            "samples_ms": [
+              280.534333,
+              277.784333,
+              286.770041,
+              276.588542,
+              278.251375,
+              282.037709,
+              296.778583,
+              275.116625,
+              309.306584,
+              277.574625,
+              304.298209,
+              282.793709,
+              339.521666,
+              279.123667,
+              440.467833,
+              290.41125,
+              368.535584,
+              289.360916,
+              410.239167,
+              292.585625,
+              434.773709,
+              282.166667,
+              430.092209,
+              299.335625,
+              501.678833,
+              309.114542,
+              432.324959,
+              298.459042,
+              412.364125,
+              300.825458
+            ],
+            "p50_ms": 297.6188125,
+            "p95_ms": 440.467833,
+            "p95_method": "nearest rank; small samples do not establish stable tail latency"
+          }
+        }
+      },
+      "fresh_cli_read_only": {
+        "baseline": {
+          "logical_unchanged": true,
+          "physical_unchanged": true
+        },
+        "candidate": {
+          "logical_unchanged": true,
+          "physical_unchanged": true
+        }
+      },
+      "write_cost": {
+        "baseline": {
+          "latency": {
+            "metadata": {
+              "samples_ms": [
+                2.132166,
+                0.259125,
+                0.192958,
+                0.202292,
+                0.2855,
+                0.197417,
+                0.178833,
+                0.19975,
+                0.191833,
+                0.179333,
+                0.18525,
+                0.196167,
+                0.212,
+                0.202875,
+                0.178917,
+                0.332875,
+                0.183,
+                0.198208,
+                0.189667,
+                0.182375
+              ],
+              "p50_ms": 0.19679200000000002,
+              "p95_ms": 0.332875,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "text": {
+              "samples_ms": [
+                0.183375,
+                0.188625,
+                0.176125,
+                0.184083,
+                0.172125,
+                0.178792,
+                0.180958,
+                0.191208,
+                0.172583,
+                0.19425,
+                0.177083,
+                0.309333,
+                0.174583,
+                0.190959,
+                0.181,
+                0.184375,
+                0.171541,
+                0.174041,
+                0.167375,
+                0.18975
+              ],
+              "p50_ms": 0.180979,
+              "p95_ms": 0.19425,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            }
+          },
+          "before": {
+            "main": {
+              "bytes": 27668480,
+              "sha256": "eb4c84fdb0ba97c1b9e475ef705ddb2e62f770b867dbc6d2dfb3d5dab6c7de92"
+            }
+          },
+          "active_wal": {
+            "main": {
+              "bytes": 27668480,
+              "sha256": "eb4c84fdb0ba97c1b9e475ef705ddb2e62f770b867dbc6d2dfb3d5dab6c7de92"
+            },
+            "wal": {
+              "bytes": 3390792,
+              "sha256": "9a4355859db6c67d790bb939317e48f0fab90702f2bab32e6f7ea5f8720183d7"
+            }
+          },
+          "after_close": {
+            "main": {
+              "bytes": 27774976,
+              "sha256": "f281172fb451b3183d121670c70ad5095993e9f674331c0b6a51b18b29b124b7"
+            }
+          },
+          "current_semantic_sha256": "583421be52ded386f0af81cf4f72c0d2160422fa42152635ba41ff52cb9630e9",
+          "updates_per_kind": 20
+        },
+        "candidate": {
+          "latency": {
+            "metadata": {
+              "samples_ms": [
+                4.088708,
+                0.423459,
+                0.335792,
+                0.314958,
+                0.328292,
+                0.334,
+                0.296958,
+                0.303209,
+                0.295208,
+                0.304,
+                0.295417,
+                0.299125,
+                0.313708,
+                0.299959,
+                0.287417,
+                0.4615,
+                0.282917,
+                0.304792,
+                0.305458,
+                0.272291
+              ],
+              "p50_ms": 0.304396,
+              "p95_ms": 0.4615,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            },
+            "text": {
+              "samples_ms": [
+                0.284875,
+                0.28475,
+                0.29225,
+                0.295708,
+                0.283375,
+                0.281625,
+                0.280625,
+                0.294,
+                0.270125,
+                0.288833,
+                0.271042,
+                0.419583,
+                0.277334,
+                0.299875,
+                3.566708,
+                1.238541,
+                0.345541,
+                0.317208,
+                0.29175,
+                0.306959
+              ],
+              "p50_ms": 0.29200000000000004,
+              "p95_ms": 1.238541,
+              "p95_method": "nearest rank; small samples do not establish stable tail latency"
+            }
+          },
+          "before": {
+            "main": {
+              "bytes": 38055936,
+              "sha256": "d5f6496b9ccb5d41173aa0a770db9c24a90c8a21a6591536fdf90d67476985c2"
+            }
+          },
+          "active_wal": {
+            "main": {
+              "bytes": 38150144,
+              "sha256": "74689ae483646460f5330fc81a78f2f96b1d20aedbd581a9e9d23c6a9fedb1d4"
+            },
+            "wal": {
+              "bytes": 556232,
+              "sha256": "bac27577799ea1db6b8b21770bce0b32a68e9c19d6932bf20df10205bbd8fe49"
+            }
+          },
+          "after_close": {
+            "main": {
+              "bytes": 38162432,
+              "sha256": "fb284a79672d98bd3603de2ee2814b4faf12c27014fb1bd03cf8633721e7d497"
+            }
+          },
+          "current_semantic_sha256": "583421be52ded386f0af81cf4f72c0d2160422fa42152635ba41ff52cb9630e9",
+          "updates_per_kind": 20
+        }
+      },
+      "writes_same_current_semantics": true
+    }
+  ],
+  "legacy": [],
+  "filters": [
+    {
+      "crowded": false,
+      "entries": 24,
+      "required_refs": [
+        "entry:filter-021",
+        "entry:filter-022",
+        "entry:filter-023"
+      ],
+      "baseline_overfetch_chars": 27956,
+      "baseline_returned_required_refs": [
+        "entry:filter-021",
+        "entry:filter-022",
+        "entry:filter-023"
+      ],
+      "baseline_candidates": 24,
+      "read_only": {
+        "baseline": {
+          "logical_unchanged": true,
+          "physical_unchanged": true
+        },
+        "candidate": {
+          "logical_unchanged": true,
+          "physical_unchanged": true
+        }
+      },
+      "cases": [
+        {
+          "id": "project-and-kind",
+          "quality_misses": [],
+          "latency": {
+            "samples_ms": [
+              0.423375,
+              0.397,
+              0.387292,
+              0.380833,
+              0.398292,
+              0.540667,
+              0.38275,
+              0.388625,
+              0.383833,
+              0.376833,
+              0.374875,
+              0.378584,
+              0.37975,
+              0.393,
+              0.376542,
+              0.373125,
+              0.369291,
+              0.374583,
+              0.375084,
+              0.386666
+            ],
+            "p50_ms": 0.38179149999999995,
+            "p95_ms": 0.423375,
+            "p95_method": "nearest rank; small samples do not establish stable tail latency"
+          },
+          "returned_refs": [
+            "entry:filter-021",
+            "entry:filter-022",
+            "entry:filter-023"
+          ],
+          "baseline_overfetch_same_required_refs_and_sources": true,
+          "output_chars": 3768,
+          "trace_counts": {
+            "fts_rows_fetched": 3,
+            "fts_shortlisted": 3,
+            "entries_scanned": 3,
+            "entities_scanned": 0,
+            "entries_scored": 3,
+            "entries_prefiltered": 0,
+            "expected_entry_probes": 0,
+            "direct_rejected": {},
+            "direct_candidates": 3,
+            "graph_seeds": 3,
+            "graph_links_fetched": 0,
+            "graph_links_examined": 0,
+            "graph_rejected": {},
+            "graph_candidates": 0,
+            "candidates": 3,
+            "selected": 3,
+            "returned": 3,
+            "budget_omitted": 0
+          }
+        },
+        {
+          "id": "nested-or-not",
+          "quality_misses": [],
+          "latency": {
+            "samples_ms": [
+              0.448458,
+              0.415875,
+              0.410583,
+              0.411,
+              0.416667,
+              0.431166,
+              0.422083,
+              0.411334,
+              0.40975,
+              0.399917,
+              0.406667,
+              0.408834,
+              0.409167,
+              0.410042,
+              0.42025,
+              0.40625,
+              0.408083,
+              0.407625,
+              0.418,
+              0.449625
+            ],
+            "p50_ms": 0.4107915,
+            "p95_ms": 0.448458,
+            "p95_method": "nearest rank; small samples do not establish stable tail latency"
+          },
+          "returned_refs": [
+            "entry:filter-021",
+            "entry:filter-022",
+            "entry:filter-023"
+          ],
+          "baseline_overfetch_same_required_refs_and_sources": true,
+          "output_chars": 3768,
+          "trace_counts": {
+            "fts_rows_fetched": 3,
+            "fts_shortlisted": 3,
+            "entries_scanned": 3,
+            "entities_scanned": 0,
+            "entries_scored": 3,
+            "entries_prefiltered": 0,
+            "expected_entry_probes": 0,
+            "direct_rejected": {},
+            "direct_candidates": 3,
+            "graph_seeds": 3,
+            "graph_links_fetched": 0,
+            "graph_links_examined": 0,
+            "graph_rejected": {},
+            "graph_candidates": 0,
+            "candidates": 3,
+            "selected": 3,
+            "returned": 3,
+            "budget_omitted": 0
+          }
+        },
+        {
+          "id": "tag-date",
+          "quality_misses": [],
+          "latency": {
+            "samples_ms": [
+              0.552333,
+              0.5565,
+              0.520875,
+              0.7305,
+              0.539375,
+              0.526375,
+              0.502625,
+              0.494917,
+              0.500833,
+              0.526042,
+              0.505458,
+              0.5095,
+              0.502333,
+              0.59225,
+              0.49475,
+              0.506833,
+              0.497417,
+              0.492959,
+              0.504083,
+              0.511292
+            ],
+            "p50_ms": 0.5081665,
+            "p95_ms": 0.59225,
+            "p95_method": "nearest rank; small samples do not establish stable tail latency"
+          },
+          "returned_refs": [
+            "entry:filter-021",
+            "entry:filter-022",
+            "entry:filter-023"
+          ],
+          "baseline_overfetch_same_required_refs_and_sources": true,
+          "output_chars": 3768,
+          "trace_counts": {
+            "fts_rows_fetched": 3,
+            "fts_shortlisted": 3,
+            "entries_scanned": 3,
+            "entities_scanned": 0,
+            "entries_scored": 3,
+            "entries_prefiltered": 0,
+            "expected_entry_probes": 0,
+            "direct_rejected": {},
+            "direct_candidates": 3,
+            "graph_seeds": 3,
+            "graph_links_fetched": 0,
+            "graph_links_examined": 0,
+            "graph_rejected": {},
+            "graph_candidates": 0,
+            "candidates": 3,
+            "selected": 3,
+            "returned": 3,
+            "budget_omitted": 0
+          }
+        },
+        {
+          "id": "in-and-null",
+          "quality_misses": [],
+          "latency": {
+            "samples_ms": [
+              0.480417,
+              0.474334,
+              0.42175,
+              0.524375,
+              0.424458,
+              0.405166,
+              0.400291,
+              0.4335,
+              0.39925,
+              0.398583,
+              0.399875,
+              0.404958,
+              0.410667,
+              0.441125,
+              0.433209,
+              0.425583,
+              0.422417,
+              0.407708,
+              0.426584,
+              0.408125
+            ],
+            "p50_ms": 0.4220835,
+            "p95_ms": 0.480417,
+            "p95_method": "nearest rank; small samples do not establish stable tail latency"
+          },
+          "returned_refs": [
+            "entry:filter-021",
+            "entry:filter-022",
+            "entry:filter-023"
+          ],
+          "baseline_overfetch_same_required_refs_and_sources": true,
+          "output_chars": 3768,
+          "trace_counts": {
+            "fts_rows_fetched": 3,
+            "fts_shortlisted": 3,
+            "entries_scanned": 3,
+            "entities_scanned": 0,
+            "entries_scored": 3,
+            "entries_prefiltered": 0,
+            "expected_entry_probes": 0,
+            "direct_rejected": {},
+            "direct_candidates": 3,
+            "graph_seeds": 3,
+            "graph_links_fetched": 0,
+            "graph_links_examined": 0,
+            "graph_rejected": {},
+            "graph_candidates": 0,
+            "candidates": 3,
+            "selected": 3,
+            "returned": 3,
+            "budget_omitted": 0
+          }
+        }
+      ]
+    },
+    {
+      "crowded": true,
+      "entries": 360,
+      "required_refs": [
+        "entry:filter-357",
+        "entry:filter-358",
+        "entry:filter-359"
+      ],
+      "baseline_overfetch_chars": 99643,
+      "baseline_returned_required_refs": [],
+      "baseline_candidates": 160,
+      "read_only": {
+        "baseline": {
+          "logical_unchanged": true,
+          "physical_unchanged": true
+        },
+        "candidate": {
+          "logical_unchanged": true,
+          "physical_unchanged": true
+        }
+      },
+      "cases": [
+        {
+          "id": "project-and-kind",
+          "quality_misses": [],
+          "latency": {
+            "samples_ms": [
+              0.614625,
+              0.485125,
+              0.47425,
+              0.470667,
+              0.464875,
+              0.456208,
+              0.46325,
+              0.456541,
+              0.468083,
+              0.525042,
+              0.453625,
+              0.462417,
+              0.446958,
+              0.47625,
+              0.649625,
+              0.656208,
+              0.542208,
+              0.478625,
+              0.486459,
+              0.4635
+            ],
+            "p50_ms": 0.4724585,
+            "p95_ms": 0.649625,
+            "p95_method": "nearest rank; small samples do not establish stable tail latency"
+          },
+          "returned_refs": [
+            "entry:filter-357",
+            "entry:filter-358",
+            "entry:filter-359"
+          ],
+          "baseline_overfetch_same_required_refs_and_sources": false,
+          "output_chars": 3768,
+          "trace_counts": {
+            "fts_rows_fetched": 3,
+            "fts_shortlisted": 3,
+            "entries_scanned": 3,
+            "entities_scanned": 0,
+            "entries_scored": 3,
+            "entries_prefiltered": 0,
+            "expected_entry_probes": 0,
+            "direct_rejected": {},
+            "direct_candidates": 3,
+            "graph_seeds": 3,
+            "graph_links_fetched": 0,
+            "graph_links_examined": 0,
+            "graph_rejected": {},
+            "graph_candidates": 0,
+            "candidates": 3,
+            "selected": 3,
+            "returned": 3,
+            "budget_omitted": 0
+          }
+        },
+        {
+          "id": "nested-or-not",
+          "quality_misses": [],
+          "latency": {
+            "samples_ms": [
+              0.61725,
+              0.581125,
+              0.735166,
+              0.867417,
+              0.562833,
+              0.570167,
+              0.711916,
+              0.678417,
+              0.743666,
+              0.608334,
+              0.703208,
+              0.55825,
+              0.516792,
+              0.52725,
+              0.620375,
+              0.9315,
+              0.540041,
+              0.526375,
+              0.515,
+              0.503
+            ],
+            "p50_ms": 0.5947295,
+            "p95_ms": 0.867417,
+            "p95_method": "nearest rank; small samples do not establish stable tail latency"
+          },
+          "returned_refs": [
+            "entry:filter-357",
+            "entry:filter-358",
+            "entry:filter-359"
+          ],
+          "baseline_overfetch_same_required_refs_and_sources": false,
+          "output_chars": 3768,
+          "trace_counts": {
+            "fts_rows_fetched": 3,
+            "fts_shortlisted": 3,
+            "entries_scanned": 3,
+            "entities_scanned": 0,
+            "entries_scored": 3,
+            "entries_prefiltered": 0,
+            "expected_entry_probes": 0,
+            "direct_rejected": {},
+            "direct_candidates": 3,
+            "graph_seeds": 3,
+            "graph_links_fetched": 0,
+            "graph_links_examined": 0,
+            "graph_rejected": {},
+            "graph_candidates": 0,
+            "candidates": 3,
+            "selected": 3,
+            "returned": 3,
+            "budget_omitted": 0
+          }
+        },
+        {
+          "id": "tag-date",
+          "quality_misses": [],
+          "latency": {
+            "samples_ms": [
+              1.072833,
+              1.134916,
+              2.285917,
+              0.958667,
+              0.687541,
+              0.631375,
+              0.609708,
+              0.608792,
+              0.578958,
+              0.576833,
+              0.566542,
+              0.559458,
+              0.579167,
+              0.565584,
+              0.548916,
+              0.555584,
+              0.569959,
+              0.565791,
+              0.54125,
+              0.649458
+            ],
+            "p50_ms": 0.5790625,
+            "p95_ms": 1.134916,
+            "p95_method": "nearest rank; small samples do not establish stable tail latency"
+          },
+          "returned_refs": [
+            "entry:filter-357",
+            "entry:filter-358",
+            "entry:filter-359"
+          ],
+          "baseline_overfetch_same_required_refs_and_sources": false,
+          "output_chars": 3768,
+          "trace_counts": {
+            "fts_rows_fetched": 3,
+            "fts_shortlisted": 3,
+            "entries_scanned": 3,
+            "entities_scanned": 0,
+            "entries_scored": 3,
+            "entries_prefiltered": 0,
+            "expected_entry_probes": 0,
+            "direct_rejected": {},
+            "direct_candidates": 3,
+            "graph_seeds": 3,
+            "graph_links_fetched": 0,
+            "graph_links_examined": 0,
+            "graph_rejected": {},
+            "graph_candidates": 0,
+            "candidates": 3,
+            "selected": 3,
+            "returned": 3,
+            "budget_omitted": 0
+          }
+        },
+        {
+          "id": "in-and-null",
+          "quality_misses": [],
+          "latency": {
+            "samples_ms": [
+              0.528958,
+              0.486292,
+              0.482459,
+              0.48825,
+              0.461917,
+              0.456,
+              0.443459,
+              0.446458,
+              0.441458,
+              0.443958,
+              0.449833,
+              0.452375,
+              0.463083,
+              0.60675,
+              0.509375,
+              0.469167,
+              0.469084,
+              0.469833,
+              0.456584,
+              0.45225
+            ],
+            "p50_ms": 0.4625,
+            "p95_ms": 0.528958,
+            "p95_method": "nearest rank; small samples do not establish stable tail latency"
+          },
+          "returned_refs": [
+            "entry:filter-357",
+            "entry:filter-358",
+            "entry:filter-359"
+          ],
+          "baseline_overfetch_same_required_refs_and_sources": false,
+          "output_chars": 3768,
+          "trace_counts": {
+            "fts_rows_fetched": 3,
+            "fts_shortlisted": 3,
+            "entries_scanned": 3,
+            "entities_scanned": 0,
+            "entries_scored": 3,
+            "entries_prefiltered": 0,
+            "expected_entry_probes": 0,
+            "direct_rejected": {},
+            "direct_candidates": 3,
+            "graph_seeds": 3,
+            "graph_links_fetched": 0,
+            "graph_links_examined": 0,
+            "graph_rejected": {},
+            "graph_candidates": 0,
+            "candidates": 3,
+            "selected": 3,
+            "returned": 3,
+            "budget_omitted": 0
+          }
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Synthetic acceptance and tool contracts, not blind agent quality or production accuracy.",
+    "Unfiltered normal JSON must remain exactly equal; expected tokens do not decrease.",
+    "Engine timing excludes process startup; fresh CLI timing shares OS caches and is not a cold-cache test.",
+    "Filter workflow uses fixed required refs; compact filtered output and broad overfetch have different selection scope.",
+    "Token totals sum independent tool responses; no billed context, reasoning, framing or caching is modeled.",
+    "Legacy target misses are quality observations, not silently waived or fixed by faster execution.",
+    "Index build and write costs are real tradeoffs; latency is never a CI pass threshold."
+  ],
+  "filter_workflow": {
+    "endpoint": "search",
+    "project": "atlas",
+    "limit": 200,
+    "baseline_full_records": 18,
+    "candidate_full_records": 3,
+    "required_refs": [
+      "entry:filter-021",
+      "entry:filter-022",
+      "entry:filter-023"
+    ],
+    "required_full_records_equal": true,
+    "baseline_chars": 17109,
+    "candidate_chars": 2799,
+    "selection": "fixed required refs; baseline client-filtered after full-record overfetch; existing strict --project used in both arms"
+  },
+  "tokens": {
+    "version": "0.14.0",
+    "method": "sum independent response encodings",
+    "counts": {
+      "o200k_base": {
+        "unfiltered-10000-baseline": 8438,
+        "unfiltered-10000-candidate": 8438,
+        "workflow_baseline_overfetch": 3760,
+        "workflow_candidate_filter": 625
+      },
+      "cl100k_base": {
+        "unfiltered-10000-baseline": 8373,
+        "unfiltered-10000-candidate": 8373,
+        "workflow_baseline_overfetch": 3773,
+        "workflow_candidate_filter": 623
+      }
+    }
+  },
+  "summary": {
+    "normal_pairs": 14,
+    "normal_parity_failures": 0,
+    "quality_misses": {
+      "baseline": 0,
+      "candidate": 0
+    },
+    "scale_quality_misses": {
+      "baseline": 0,
+      "candidate": 0
+    },
+    "legacy_quality_misses": {
+      "baseline": 0,
+      "candidate": 0
+    },
+    "workflow_mismatch": false,
+    "filter_read_mutations": 0,
+    "fresh_cli_mutations": 0,
+    "filter_quality_misses": 0,
+    "read_mutations": 0,
+    "build_mutations": 0,
+    "write_semantics_mismatch": 0
+  }
+}
