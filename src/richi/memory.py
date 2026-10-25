@@ -630,6 +630,9 @@ def parser():
         command.add_argument("--include-superseded", action="store_true")
     commands.add_parser("backup").add_argument("--output")
     commands.add_parser("check")
+    from . import retrieval_tools, storage
+    retrieval_tools.add_commands(commands, sys.modules[__name__])
+    storage.add_commands(commands, sys.modules[__name__])
     recall_cmd = commands.add_parser("recall", help="Bounded question retrieval with explicit graph evidence")
     recall_cmd.add_argument("query")
     recall_cmd.add_argument("--project")
@@ -744,10 +747,14 @@ def run(args):
     adding_project = args.command == "project" and args.action == "add"
     scanning = args.command == "project" and args.action == "scan"
     applying_scan = scanning and args.apply
+    storage_apply = (args.command == "storage" and args.action == "optimize"
+                     and args.apply)
     project_path = getattr(args, "project_path", None)
+    if storage_apply and project_path is not None:
+        raise MemoryError("Storage optimization affects the whole workspace; omit --project-path")
     if project_path is not None and (args.command in {"init", "migrate", "backup"} or adding_project or scanning):
         raise MemoryError("--project-path is for existing project operations; omit it for initialization, registration or a workspace backup")
-    writing = args.command in {"init", "migrate"} or getattr(args, "action", None) in {"put", "upsert"} or source_attach or adding_project or applying_scan
+    writing = args.command in {"init", "migrate"} or getattr(args, "action", None) in {"put", "upsert"} or source_attach or adding_project or applying_scan or storage_apply
     conn = connect(database, create=args.command == "init", readonly=not writing)
     try:
         if args.command == "init":
@@ -759,6 +766,14 @@ def run(args):
             return graph.migrate(conn, database, sys.modules[__name__])
         if args.command == "backup":
             return backup(conn, database, args.output)
+        if args.command == "storage":
+            from . import storage
+            if project_path is not None:
+                from .projects import ensure_project_context
+                with transaction(conn, write=False):
+                    ensure_project_context(conn, project_path)
+            args.storage_workspace = settings.workspace
+            return storage.run(conn, args, sys.modules[__name__], database)
         writing = getattr(args, "action", None) in {"put", "upsert"}
         items = payload(args.json) if writing else None
         with transaction(conn, write=writing or source_attach or adding_project or applying_scan):
@@ -815,6 +830,9 @@ def run(args):
             if args.command == "recall":
                 from . import recall
                 return recall.recall(conn, args, sys.modules[__name__])
+            if args.command in {"discover", "fetch"}:
+                from . import retrieval_tools
+                return retrieval_tools.run(conn, args, sys.modules[__name__])
             if args.command == "punisher":
                 from . import punisher
                 return punisher.punisher(conn, args, sys.modules[__name__])

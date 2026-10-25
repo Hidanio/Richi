@@ -96,6 +96,7 @@ richi status --projects --limit 50
 | Создать базу, зарегистрировать проект, сделать backup | [CLI](../skills/project-memory/references/CLI.md) |
 | Создать или полностью обновить запись, сохранить task-карточку | [Запись и защита от конфликтов](../skills/project-memory/references/ENTRY_WRITE.md) |
 | Найти прошлую работу и разобрать ограничения выдачи | [Recall](../skills/project-memory/references/RECALL.md) |
+| Выбрать кандидатов и пакетно прочитать полные записи | [Discover и fetch](../skills/project-memory/references/RETRIEVAL_TOOLS.md) |
 | Собрать контекст вопроса и изменения кода | [Brief](../skills/project-memory/references/BRIEF.md) |
 | Связать знания с версиями кода, открыть историю и diff | [Git-источники](../skills/project-memory/references/GIT.md) |
 | Захватить проверенные байты из checkout/worktree и прикрепить источник | [Capture и attach](../skills/project-memory/references/GIT_CAPTURE.md) |
@@ -108,6 +109,7 @@ richi status --projects --limit 50
 | Оценить дубли и необходимость объединения без изменений | [Ограниченный аудит](../skills/project-memory/references/MEMORY_AUDIT.md) |
 | Вручную объединить знания и разобрать кандидатов punisher | [Обслуживание](../skills/project-memory/references/MAINTENANCE.md) |
 | Проверить изменение поиска по воспроизводимым примерам | [Оценка качества](../skills/project-memory/references/EVALUATION.md) |
+| Измерить рост хранения и обслужить поисковый индекс | [Storage](STORAGE.md) |
 
 Примеры содержат вымышленные проекты `service-example`, `service-consumer`,
 задачу `ABC-123` и ссылки `example.com`. Заменяйте их проверенными данными
