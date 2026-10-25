@@ -71,6 +71,9 @@ Two candidate startup paths use identical progressive/metadata data operations.
 `candidate_catalog` first lists the relevant capability group and describes the
 selected commands, then loads the same semantic guides. Optional discovery
 overhead is therefore visible rather than forced into every native-tool use.
+The catalog group is predetermined: a model that first needs the top-level
+`capabilities list` group menu incurs an additional call and context not measured
+in this catalog variant.
 Independent guide reads share a decision round. A separate direct filtered-search
 variant handles the precisely scoped evidence task using the same full-search
 limit/output as the baseline and charges the CLI search section plus the filter

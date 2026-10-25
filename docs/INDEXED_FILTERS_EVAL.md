@@ -1,5 +1,7 @@
 # Indexed routing and composite-filter evaluation
 
+The original v1 results below are preserved. See [Final audited v2](#final-audited-v2-2026-10-25) for the current implementation and the [workflow evaluation](AGENT_WORKFLOW_EVAL.md) for command/context costs.
+
 This benchmark compares two **normally installed fixed packages** against the
 same disposable synthetic SQLite contents. It does not read a personal workspace,
 switch development settings, update installed skills or accept a user database.
@@ -243,3 +245,72 @@ broad-query CLI improvement. Selective queries improve p50 by 21.1% for Jira and
 17.4% for the Unicode alias in this follow-up. These are observations on this
 fixture and host, not production guarantees. Both runs remain visible; no further
 measurement was used to select a more favorable result.
+
+## Final audited v2: 2026-10-25
+
+The [final fixed-package report](../evals/results/indexed-filters-v2-2026-10-25.json) compares main `b8a2a9a` with runtime commit `df60cb8e7ae7acf1b623aa36ceb9cb780f7499e6`. It uses the same 119 response pairs and strict-filter fixtures, 20 engine repeats, and **30 fresh CLI repeats per arm for every size/query**. No test suite or other benchmark ran concurrently. Python/SQLite versions are unchanged; the installed candidate assets matched the reviewed source. Earlier v1 measurements above remain historical observations, not results for this runtime.
+
+All **119 ordinary responses match exactly**; all main/filter oracles and canonical/physical read, build and write invariants pass. The same **7/77 historical crowded lexical misses remain in each arm**. Local verification passed 696 unittest tests (one Linux-only systemd-parser test skipped on macOS) and the required recall evaluation passed 7/7. The separate [agent-workflow evaluation](AGENT_WORKFLOW_EVAL.md) preserves all 21 workflow outcomes and required full sources; it does not run a model.
+
+Warm engine p50, milliseconds:
+
+| Entries + entities | Exact Jira | Unicode alias | Broad lexical |
+| --- | ---: | ---: | ---: |
+| 100 + 10 | 0.805 → 0.262 | 0.649 → 0.273 | 3.588 → 2.811 |
+| 1000 + 100 | 6.626 → 0.290 | 5.091 → 0.291 | 11.752 → 8.174 |
+| 10000 + 1000 | 70.063 → 0.289 | 54.836 → 0.296 | 62.475 → 40.437 |
+
+Fresh CLI at 10,000 entries, milliseconds:
+
+| Query | p50 baseline → candidate | p95 baseline → candidate |
+| --- | ---: | ---: |
+| ticket-exact | 330.0 → 263.7 | 527.8 → 395.9 |
+| unicode-folded-alias | 314.1 → 249.3 | 451.2 → 372.5 |
+| broad-background | 301.4 → 354.8 | 312.7 → 478.5 |
+
+Exact Jira and alias CLI p50 improve about 20% in this run. **Broad CLI p50 regresses 17.7%**, despite the faster warm engine. The 100- and 1,000-entry broad CLI cases also regress about 4.2% and 3.0%. No universal CLI or tail-latency improvement is claimed. The large broad candidate samples alternate mostly between roughly 290 and 430 ms; this variation is retained, not averaged away or replaced by a favorable rerun. A separate bounded CPU/wall-time diagnostic investigates it without changing these measurements.
+
+Freshly built database allocation is **27,668,480 → 32,526,336 bytes (+17.6%)**. The added 4,857,856 bytes are **53.2% smaller** than v1’s 10,387,456-byte addition. See the [per-object layout analysis](INDEX_LAYOUT_EVAL.md). Explicitly upgrading an existing v1 index can leave freed pages inside the file; these figures do not imply automatic file shrinkage. Full build CLI took 618.4 ms in one observation.
+
+At 10,000 entries, normal metadata/text update p50 is **0.191/0.181 → 0.268/0.264 ms** (20 writes per kind). These entry summary edits do not change routing keys; source/metadata-only edits avoid rebuilding keys, but checking index state still has overhead. Entity text-write costs and production tail latency are not established by this sample.
+
+Unfiltered output tokens remain identical. The earlier same-endpoint full-search filter example still returns all required records with **3,760 → 625 o200k** response tokens. The broader [workflow report](AGENT_WORKFLOW_EVAL.md) also charges command arguments and loaded instructions and compares working Python postprocessing; its incremental savings are smaller, about 10–25%, while first-use context can increase. Neither report measures reasoning tokens or billing.
+
+To reproduce this final configuration, use the command above with `--cli-repeats 30` and a new output file. The CLI-latency diagnostic, if run, is separate from this quality/performance report.
+
+### Bounded diagnostic of CLI variability
+
+The [separate diagnostic](../evals/results/cli-latency-diagnostic-2026-10-25.json)
+uses a fixed plan: 16 normal CLI invocations per arm, then eight fresh direct
+runtime invocations per arm, on the same synthetic 10,000-entry/1,000-entity
+corpus. All 48 serialized responses agree; canonical and main/WAL read
+fingerprints remain unchanged. No adaptive repeats followed this diagnostic.
+The [public harness](../evals/diagnose_cli_latency.py) records monotonic starts,
+wall time and `RUSAGE_CHILDREN` CPU deltas for each waited child, including exec.
+
+In this diagnostic, normal CLI p50 is baseline **359.61 ms** versus candidate
+**289.63 ms**; median child CPU is **320.81 versus 284.31 ms**. Some baseline
+calls take about 454–456 ms wall time with 322–327 ms child CPU: roughly
+129–132 ms outside child CPU. A direct candidate call also has a substantial
+wall/CPU gap. Pauses therefore occur in both arms. The exact cause remains
+unresolved; wall-minus-child-CPU also includes parent transport overhead.
+
+The deliberately different direct-runtime path bypasses the launcher. Its
+phase p50s (baseline → candidate, milliseconds) are import **38.44 → 37.29**,
+parser **20.35 → 24.17**, execution **95.16 → 75.55**, and rendering about
+**0.05** in both. This supports a small parser cost from added commands and a
+faster execution phase; it does not establish a candidate-only 140 ms defect.
+The unchanged launcher fingerprints package assets and execs a second Python,
+but those phases were not instrumented here, so attributing residual time to
+them remains an inference.
+
+These observations explain why CLI latency needs caution. They **do not replace
+the original broad-query regression or establish a stable production speedup**.
+Reproduce independently, with no simultaneous benchmark/test load:
+
+```sh
+python3 evals/diagnose_cli_latency.py \
+  --baseline-python /path/to/baseline/bin/python \
+  --candidate-python /path/to/candidate/bin/python \
+  --output /path/to/new-diagnostic.json
+```
