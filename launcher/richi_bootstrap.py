@@ -10,6 +10,7 @@ from pathlib import Path
 import sys
 
 BOOTSTRAP_PROTOCOL = 1
+AGENT_SETUP_PROTOCOL = 1
 OWNER_FILE = ".richi-installation.json"
 LEASE_ENV = "RICHI_INSTALLATION_LEASE_FD"
 ROOT_ENV = "RICHI_INSTALLATION_ROOT"
@@ -172,6 +173,9 @@ def select(ctx, previous=False):
         if generation is None:
             raise InstallationError("No previous Richi release is available for rollback")
         record = state["generations"][generation]
+        if previous and (root / "agent-setup.json").exists():
+            if not (Path(record["site"]) / "richi_launcher" / "agent_setup.py").is_file():
+                raise InstallationError("Previous release cannot maintain the installed agent skill; repair with a setup-capable release")
         lease = Path(state["seed_bootstrap"]) if generation == "seed" else root / "leases" / (generation + ".lock")
         descriptor = _lease(lease)
         if not (Path(record["site"]) / "richi_launcher" / "cli.py").is_file():

@@ -304,8 +304,19 @@ def _collect(ctx, state):
 
 
 def _activate(ctx, state, action):
+    from . import agent_setup, setup_files
     with _locked(ctx, state=True):
-        _atomic_json(Path(ctx["root"]) / "state.json", state)
+        setup_files.recover(ctx)
+        operations = agent_setup.activation_operations(ctx, state)
+        transaction = setup_files.begin(ctx, operations, generation=state["current"]) if operations else None
+        try:
+            _atomic_json(Path(ctx["root"]) / "state.json", state)
+        except BaseException:
+            if transaction is not None:
+                setup_files.recover(ctx)
+            raise
+        if transaction is not None:
+            setup_files.finish(ctx, transaction)
         collection = _collect(ctx, state)
         _atomic_json(Path(ctx["root"]) / "state.json", state)
         return dict(_summary(ctx, state), status=action, cleanup=collection)
@@ -314,6 +325,10 @@ def _activate(ctx, state, action):
 def _candidate_referenced(ctx, generation):
     """A directory fsync can fail after replace has already activated a release."""
     path = Path(ctx["root"]) / "state.json"
+    # An unresolved file transaction may still reference this generation's
+    # skill. Keep it available until recovery can reconcile concurrent edits.
+    if (Path(ctx["root"]) / "setup-pending.json").exists():
+        return True
     try:
         state = json.loads(path.read_text(encoding="utf-8"))
         return generation in state["generations"]
@@ -341,6 +356,9 @@ def apply_release(release, *, expected_generation=None, blocking=True,
         ctx = _context()
         _validate_layout(ctx)
         with _locked(ctx, blocking=blocking):
+            from . import setup_files
+            with _locked(ctx, state=True):
+                setup_files.recover(ctx)
             state = _state(ctx)
             if expected_generation is not None and state["current"] != expected_generation:
                 return dict(_summary(ctx, state), status="superseded")
@@ -414,6 +432,9 @@ def rollback():
         ctx = _context()
         _validate_layout(ctx)
         with _locked(ctx):
+            from . import setup_files
+            with _locked(ctx, state=True):
+                setup_files.recover(ctx)
             state = _state(ctx)
             if state["previous"] is None:
                 raise ConfigError("No previous Richi release is available for rollback")
@@ -439,6 +460,8 @@ def cleanup():
         with _locked(ctx):
             state = _state(ctx)
             with _locked(ctx, state=True):
+                from . import setup_files
+                setup_files.recover(ctx)
                 collection = _collect(ctx, state)
                 if (Path(ctx["root"]) / "state.json").exists():
                     _atomic_json(Path(ctx["root"]) / "state.json", state)

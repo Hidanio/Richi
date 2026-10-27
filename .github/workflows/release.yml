@@ -28,12 +28,21 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: python scripts/release_manifest.py dist/*.whl --tag "$RELEASE_TAG"
+      - name: Build the standalone installer from the release wheel
+        run: |
+          python scripts/build_installer.py dist/*.whl
+          cp install.sh dist/install.sh
+          sh -n dist/install.sh
+          python -I dist/richi-installer.pyz --help
       - uses: actions/upload-artifact@v4
         with:
           name: stable-release
           path: |
             dist/*.whl
             dist/richi-release.json
+            dist/richi-installer.pyz
+            dist/richi-installer.pyz.sha256
+            dist/install.sh
           if-no-files-found: error
           retention-days: 7
 
@@ -76,6 +85,9 @@ jobs:
       - run: python -m unittest discover -s tests -v
       - run: python evals/evaluate_recall.py
       - run: python -I -m richi --version
+      - name: Test the exact installer artifact offline
+        run: |
+          python tests/installer_release_smoke.py dist
 
   publish:
     needs: [build, test]
@@ -96,5 +108,6 @@ jobs:
         run: |
           test "$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)" = "$TESTED_SHA"
           gh release create "$RELEASE_TAG" dist/*.whl dist/richi-release.json \
+            dist/richi-installer.pyz dist/richi-installer.pyz.sha256 dist/install.sh \
             --verify-tag --draft --title "Richi $RELEASE_TAG" --generate-notes
           gh release edit "$RELEASE_TAG" --draft=false --verify-tag

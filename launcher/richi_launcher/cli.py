@@ -211,6 +211,17 @@ def main(argv=None):
         # Presentation is not a storage selector and must never affect binding
         # checks, recovery commands, or the selected runtime's configuration.
         compact_json = selectors.pop("compact_json", False)
+        root = os.environ.get("RICHI_INSTALLATION_ROOT")
+        readonly_setup = command == "setup" and ("--status" in tail or "--dry-run" in tail)
+        if root and os.path.isfile(os.path.join(root, "setup-pending.json")) and not readonly_setup:
+            from .agent_setup import recover_pending
+            recover_pending()
+        if command == "setup":
+            from .agent_setup import command as setup_command
+            selectors.pop("chat_id", None)
+            if selectors:
+                raise ConfigError("Setup connects this installation to the local agent; omit workspace and storage selectors")
+            return _emit(setup_command(tail), compact_json=compact_json)
         if command == "update":
             from .update import command as update_command
             # Package updates are installation-wide and never select/read a

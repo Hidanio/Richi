@@ -1,5 +1,10 @@
 # Команды Richi
 
+Global Codex integration: `richi setup --dry-run`, `richi setup --yes`,
+`richi setup --status`. Setup is installation-wide, needs no chat binding,
+rejects workspace/storage selectors and preserves existing instructions.
+See [SETUP.md](SETUP.md) for installation, adoption flags and recovery.
+
 После установки используйте `richi` из любой рабочей папки. Команда
 `richi config show` показывает выбранные настройки и runtime. Глобальные параметры базы
 и конфигурации ставятся перед подкомандой:

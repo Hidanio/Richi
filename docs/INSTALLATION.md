@@ -225,11 +225,13 @@ Python- и SQL-файлов исходников. Изменение SQL-фай�
 
 ## Подключение агента
 
-Скопируйте всю папку `skills/project-memory` в каталог skills своего агента.
-Для Codex это обычно `${CODEX_HOME:-$HOME/.codex}/skills/project-memory`.
-Если skill уже установлен, сначала сохраните его отдельную копию и проверьте,
-нет ли в нём локальных дополнений. Все ссылки внутри переносимого skill
-ведут в его собственную папку `references/`.
+For Codex, use the [one-command installer](SETUP.md), or run `richi setup --yes`
+from a supported dedicated installation. It installs the complete skill in
+`~/.agents/skills/project-memory` and preserves existing global instructions.
+`richi setup --dry-run` previews conflicts; `--replace-skill` explicitly backs
+up an existing skill before adoption. The managed skill follows release updates
+and rollback. For other agents, copy the complete `skills/project-memory`
+directory, including its `references/` files, to the agent's skill directory.
 
 Убедитесь, что процесс агента видит исполняемый файл `richi` и выбранную
 конфигурацию. Сначала вызовите `richi chat current` и `richi workspace list`.
