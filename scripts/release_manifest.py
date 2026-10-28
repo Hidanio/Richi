@@ -34,7 +34,11 @@ def build_manifest(wheel, source_root=ROOT, tag=None):
     if source_version != version:
         raise ConfigError("pyproject.toml and richi.__version__ disagree")
     if tag is not None and tag != "v" + version:
-        raise ConfigError("Release tag does not match the package version")
+        raise ConfigError(
+            "Release tag %s does not match package version %s (expected v%s). "
+            "Commit matching versions in pyproject.toml and src/richi/__init__.py "
+            "before tagging that commit; use a new version for published corrections."
+            % (tag, version, version))
     size = wheel.stat().st_size
     if not 0 < size <= MAX_WHEEL_SIZE:
         raise ConfigError("Release wheel exceeds the allowed size")

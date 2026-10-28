@@ -15,6 +15,14 @@ from richi import memory
 
 
 class PackageCliTests(unittest.TestCase):
+    def test_installed_metadata_matches_runtime_version(self):
+        result = subprocess.run(
+            [sys.executable, "-I", "-c",
+             "import importlib.metadata, richi; "
+             "assert importlib.metadata.version('richi') == richi.__version__"],
+            env=self.env, cwd=self.root, capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="richi-package-")
         self.addCleanup(temporary.cleanup)

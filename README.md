@@ -53,6 +53,7 @@ workspace data. Enable background checks explicitly with
 `richi update auto status`. This only records release availability. Automatic
 installation is off by default; add `--install` to `auto enable` to authorize it
 separately. See [updates](docs/UPDATES.md) and [releasing](docs/RELEASING.md).
+For a first trial with colleagues, use the [installation and two-chat test](docs/TESTING.md).
 
 For development, set the source checkout and enable the shared dev mode:
 

@@ -320,7 +320,7 @@ class ReleaseTests(unittest.TestCase):
         expected = manifest(data)
         self.assertEqual(builder.build_manifest(path, source, "v1.2.3"), expected)
         self.assertEqual(builder.build_manifest(path, source), expected)
-        with self.assertRaises(ConfigError):
+        with self.assertRaisesRegex(ConfigError, r"v1\.2\.4.*1\.2\.3.*expected v1\.2\.3"):
             builder.build_manifest(path, source, "v1.2.4")
         (source / "src/richi/__init__.py").write_text('__version__ = "1.2.4"\n')
         with self.assertRaises(ConfigError):

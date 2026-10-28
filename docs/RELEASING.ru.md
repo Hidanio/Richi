@@ -19,6 +19,30 @@ wheel, manifest и установщиком, а затем он публикуе
 публикацией. Опубликованные версии нельзя заменять: исправления получают новую
 версию и тег.
 
+Не публикуйте пустой релиз кнопкой **New release** в GitHub, пока выполняется
+workflow: обновлятор увидит его до появления manifest и wheel, а финальный шаг
+`gh release create` рассчитывает сам создать релиз. Отправляйте только тег;
+публикацию проверенных артефактов выполняет workflow.
+Тег `v1.0.0` был опубликован из кода с версией `0.1.0`, поэтому проверка упала.
+Исправленная версия — `1.0.1`, с новым тегом на коммите исправления версии.
+Старые теги сохраняются. После слияния исправления и обновления `main` проверьте
+сборку и отправьте только нужный тег:
+
+```sh
+git switch main
+git pull --ff-only origin main
+python -m build --wheel --outdir dist_release
+python scripts/release_manifest.py dist_release/richi-1.0.1-py3-none-any.whl --tag v1.0.1 --output dist_release/richi-release.json
+git tag v1.0.1
+git push origin refs/tags/v1.0.1
+```
+
+Выполняйте команды тега только после успешных сборки и проверки. Дождитесь
+успеха всех заданий релиза, включая публикацию, затем запустите
+`richi update check`. На совместимой старой установке ожидаются версия `1.0.1`
+и `can_apply: true`. Если задание релиза упало, изучите его лог, прежде чем
+передавать ссылку установщика коллегам.
+
 По умолчанию workflow использует `contents: read`. Только финальное задание
 публикации получает `contents: write` через встроенный `GH_TOKEN`; оно не
 выполняет код checkout. Последовательность создания draft и публикации следует
@@ -28,8 +52,8 @@ wheel, manifest и установщиком, а затем он публикуе
 
 ```sh
 python -m build --wheel
-python scripts/release_manifest.py dist/richi-0.1.0-py3-none-any.whl --tag v0.1.0
-python scripts/build_installer.py dist/richi-0.1.0-py3-none-any.whl
+python scripts/release_manifest.py dist/richi-1.0.1-py3-none-any.whl --tag v1.0.1
+python scripts/build_installer.py dist/richi-1.0.1-py3-none-any.whl
 python tests/installer_release_smoke.py dist
 ```
 
@@ -41,13 +65,13 @@ python tests/installer_release_smoke.py dist
 ```json
 {
   "format_version": 1,
-  "version": "0.1.0",
+  "version": "1.0.1",
   "updater_protocol": 1,
   "python_min": [3, 9],
   "database_schemas": [1, 2],
   "map_schema": 2,
   "wheel": {
-    "filename": "richi-0.1.0-py3-none-any.whl",
+    "filename": "richi-1.0.1-py3-none-any.whl",
     "sha256": "<64 lowercase hexadecimal digits>",
     "size": 123456
   }

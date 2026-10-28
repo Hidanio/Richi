@@ -13,7 +13,8 @@ class BuildWithSkill(build_py):
         target = Path(self.build_lib) / "richi_launcher" / "agent_skill"
         if target.exists():
             shutil.rmtree(target)
-        shutil.copytree(source, target, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        shutil.copytree(source, target,
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store"))
 
 
 setup(cmdclass={"build_py": BuildWithSkill})

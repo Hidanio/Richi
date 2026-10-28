@@ -17,6 +17,29 @@ attached, then publish it. A failed upload leaves a draft, which is invisible
 to the updater; inspect or remove that draft before retrying publication.
 Published versions must not be replaced: corrections get a new version and tag.
 
+Do not publish an empty release with GitHub's **New release** button while the
+workflow is running: the updater can see it before the manifest and wheel exist,
+and the final `gh release create` step expects to create the release itself.
+Push only the tag and let the workflow publish the tested artifacts.
+The `v1.0.0` tag was published from code reporting `0.1.0`; its validation failed.
+The corrected version is `1.0.1`, with a new tag on the version-fix commit.
+Keep the old tags intact. After merging the fix and pulling `main`, verify and
+push only the intended tag:
+
+```sh
+git switch main
+git pull --ff-only origin main
+python -m build --wheel --outdir dist_release
+python scripts/release_manifest.py dist_release/richi-1.0.1-py3-none-any.whl --tag v1.0.1 --output dist_release/richi-release.json
+git tag v1.0.1
+git push origin refs/tags/v1.0.1
+```
+
+Run the tag commands only after the build and validation succeed. Wait for all
+release jobs, including publication, to succeed, then run `richi update check`.
+Expect version `1.0.1` and `can_apply: true` on a compatible older installation.
+If any release job fails, inspect its logs before sharing the installer URL.
+
 The workflow uses `contents: read` by default. Only the final publication job
 receives `contents: write`, through its built-in `GH_TOKEN`; it does not run
 checkout code. The draft and publish sequence follows the [GitHub CLI release
@@ -26,8 +49,8 @@ For local preparation without publishing:
 
 ```sh
 python -m build --wheel
-python scripts/release_manifest.py dist/richi-0.1.0-py3-none-any.whl --tag v0.1.0
-python scripts/build_installer.py dist/richi-0.1.0-py3-none-any.whl
+python scripts/release_manifest.py dist/richi-1.0.1-py3-none-any.whl --tag v1.0.1
+python scripts/build_installer.py dist/richi-1.0.1-py3-none-any.whl
 python tests/installer_release_smoke.py dist
 ```
 
@@ -39,13 +62,13 @@ public compatibility metadata plus the wheel's filename, SHA256 and byte size:
 ```json
 {
   "format_version": 1,
-  "version": "0.1.0",
+  "version": "1.0.1",
   "updater_protocol": 1,
   "python_min": [3, 9],
   "database_schemas": [1, 2],
   "map_schema": 2,
   "wheel": {
-    "filename": "richi-0.1.0-py3-none-any.whl",
+    "filename": "richi-1.0.1-py3-none-any.whl",
     "sha256": "<64 lowercase hexadecimal digits>",
     "size": 123456
   }
