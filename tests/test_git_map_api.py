@@ -248,6 +248,13 @@ class GitMapAPITests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("entry:task:one", {item["id"] for item in exported["nodes"]})
 
+    def test_graph_spawn_failure_returns_service_error_and_releases_export_lock(self):
+        with patch.object(serve.subprocess, "Popen", side_effect=OSError("Synthetic spawn failure")):
+            status, payload, _ = self.request("/api/graph")
+        self.assertEqual(status, 503)
+        self.assertIn("Synthetic spawn failure", payload["error"])
+        self.assertEqual(self.request("/api/graph")[0], 200)
+
     def test_concurrent_navigation_replies_busy_without_blocking_health(self):
         started, release = threading.Event(), threading.Event()
         path = "/api/git?" + urlencode(self.options())

@@ -6,7 +6,7 @@ content-addressed local artifacts preserve explicitly captured working-tree byte
 import copy
 import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import re
 import stat
 
@@ -381,13 +381,10 @@ def navigate(conn, args, api, database):
 
 
 def related(conn, args, api, database):
-    path = args.path
-    if (not isinstance(path, str) or not path or len(path) > 4096 or path.startswith("/")
-            or "\\" in path or any(ord(char) < 32 or ord(char) == 127 for char in path)
-            or not PurePosixPath(path).parts or ".." in PurePosixPath(path).parts
-            or any(part.casefold() == ".git" for part in PurePosixPath(path).parts)
-            or str(PurePosixPath(path)) != path):
-        raise api.MemoryError("--path must be a normalized repository-relative file path")
+    try:
+        path = git_evidence._path(args.path)
+    except git_evidence.GitEvidenceError as exc:
+        raise api.MemoryError("--path must be a normalized repository-relative file path") from exc
     commit = getattr(args, "commit", None)
     if commit is not None and not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", commit):
         raise api.MemoryError("--commit must be a full lowercase Git commit SHA")

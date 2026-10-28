@@ -423,6 +423,8 @@ def _target(identity, anchor, target, worktree):
     if worktree:
         committed = _blob_bytes(root, oid) if oid else None
         metadata["dirty"] = data != committed
+        if _resolve(root, "HEAD") != commit:
+            raise GitEvidenceError("HEAD changed during the working-tree comparison; retry")
     return metadata, data
 
 

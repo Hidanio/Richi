@@ -187,11 +187,11 @@ def select(ctx, previous=False):
 
 
 def _rollback_requested(argv):
-    # The launcher accepts a chat identity for all commands, but updates never
-    # consult the chat registry. Preserve that spelling for emergency recovery.
+    # Recognize the non-storage global options accepted by installation updates
+    # without importing the potentially broken current launcher's argument parser.
     position = 0
     while position < len(argv):
-        if argv[position].startswith("--chat="):
+        if argv[position] == "--compact-json" or argv[position].startswith("--chat="):
             position += 1
         elif argv[position] == "--chat" and position + 1 < len(argv):
             position += 2

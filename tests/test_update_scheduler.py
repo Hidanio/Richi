@@ -316,6 +316,55 @@ class SchedulerTests(unittest.TestCase):
         self.assertTrue(all(command[1:3] == ["--user", "show"] for command in self.calls))
         self.assertTrue(all(path.exists() for path in scheduler._plan(self.ctx)["files"]))
 
+    def test_linux_missing_timer_still_checks_service_before_any_mutation(self):
+        self.linux()
+        plan = scheduler._plan(self.ctx)
+        service = plan["directory"] / (plan["label"] + ".service")
+        scheduler._write(service, plan["files"][service])
+        before = set(self.home.rglob("*"))
+        for foreign_path, drop_ins in (("/foreign/service.service", ""), (None, "/foreign/override.conf")):
+            with self.subTest(foreign_path=foreign_path, drop_ins=drop_ins):
+                self.service_fragment = foreign_path
+                self.drop_ins["service"] = drop_ins
+                self.calls.clear()
+                for operation in (scheduler.install, scheduler.remove):
+                    with self.assertRaisesRegex(ConfigError, "unowned|drop-in"):
+                        operation(self.ctx)
+                self.assertTrue(self.calls)
+                self.assertTrue(all(command[1:3] == ["--user", "show"] for command in self.calls))
+                self.assertEqual(set(self.home.rglob("*")), before)
+
+    def test_linux_remove_stops_owned_service_even_when_timer_file_is_missing(self):
+        self.linux()
+        scheduler.install(self.ctx)
+        plan = scheduler._plan(self.ctx)
+        (plan["directory"] / (plan["label"] + ".timer")).unlink()
+        self.calls.clear()
+        self.assertEqual(scheduler.remove(self.ctx)["status"], "removed")
+        self.assertTrue(any(command[1:3] == ["--user", "stop"] for command in self.calls))
+        self.assertFalse(any(path.exists() for path in plan["files"]))
+
+    def test_linux_loaded_service_without_files_is_not_started_or_stopped(self):
+        self.linux()
+        plan = scheduler._plan(self.ctx)
+
+        def manager(command, **kwargs):
+            self.calls.append(command)
+            if command[2] != "show":
+                raise AssertionError("Unowned service must not be controlled")
+            if command[3].endswith(".timer"):
+                output = "LoadState=not-found\n"
+            else:
+                output = ("LoadState=loaded\nFragmentPath=" +
+                          str(plan["directory"] / (plan["label"] + ".service")) + "\nDropInPaths=\n")
+            return subprocess.CompletedProcess(command, 0, output, "")
+
+        with patch.object(scheduler.subprocess, "run", side_effect=manager):
+            for operation in (scheduler.install, scheduler.remove):
+                with self.assertRaisesRegex(ConfigError, "without its owned file"):
+                    operation(self.ctx)
+        self.assertFalse(plan["directory"].exists())
+
     def test_already_active_linux_timer_does_not_reload_or_restart(self):
         self.linux()
         scheduler.install(self.ctx)

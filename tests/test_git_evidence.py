@@ -77,6 +77,30 @@ class GitEvidenceTests(unittest.TestCase):
         self.assertEqual(evidence.check(source, self.repo, artifact_dir=self.artifacts)["status"], "unchanged")
         self.assertEqual(evidence.check(source, self.repo, worktree=True, artifact_dir=self.artifacts)["status"], "changed")
 
+    def test_worktree_comparison_rejects_head_changes_during_file_read(self):
+        source = self.capture()
+        self.file.write_bytes(b"answer = 2\n")
+        second = self.commit("Second version")
+        read_file = evidence._file_bytes
+
+        def switch_head_after_read(root, path):
+            data = read_file(root, path)
+            self.git("checkout", "-q", self.first)
+            return data
+
+        for action in ("check", "diff"):
+            with self.subTest(action=action):
+                self.git("checkout", "-q", second)
+                with patch.object(evidence, "_file_bytes", side_effect=switch_head_after_read):
+                    if action == "check":
+                        result = evidence.check(source, self.repo, worktree=True)
+                        self.assertEqual(result["status"], "unavailable")
+                        self.assertIn("HEAD changed", result["reason"])
+                        self.assertNotIn("target", result)
+                    else:
+                        with self.assertRaisesRegex(evidence.GitEvidenceError, "HEAD changed"):
+                            evidence.diff(source, self.repo, worktree=True)
+
     def test_untracked_worktree_has_no_baseline_blob_and_remains_viewable(self):
         (self.repo / "new.py").write_bytes(b"new implementation\n")
         source = self.capture(path="new.py", worktree=True)

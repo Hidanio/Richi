@@ -129,28 +129,32 @@ def _query(plan):
                          "--property=UnitFileState", "--property=FragmentPath",
                          "--property=DropInPaths"], checked=False)
     values = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
-    if values.get("LoadState") == "not-found":
-        return {"registered": False, "active": False, "enabled": False}
-    if result.returncode or values.get("LoadState") != "loaded":
-        raise ConfigError("Cannot inspect systemd user timer: " + (result.stderr or result.stdout).strip()[:1000])
-    expected = str(plan["directory"] / (plan["label"] + ".timer"))
-    if values.get("FragmentPath") != expected:
-        raise ConfigError("Refusing scheduler unit loaded from an unowned path")
-    if values.get("DropInPaths") != "":
-        raise ConfigError("Refusing scheduler timer with unverified drop-in configuration")
+    timer_missing = values.get("LoadState") == "not-found"
+    if not timer_missing:
+        if result.returncode or values.get("LoadState") != "loaded":
+            raise ConfigError("Cannot inspect systemd user timer: " + (result.stderr or result.stdout).strip()[:1000])
+        expected = str(plan["directory"] / (plan["label"] + ".timer"))
+        if values.get("FragmentPath") != expected:
+            raise ConfigError("Refusing scheduler unit loaded from an unowned path")
+        if values.get("DropInPaths") != "":
+            raise ConfigError("Refusing scheduler timer with unverified drop-in configuration")
     # A timer can target a separately overridden service. Validate both units
     # before enable/disable or stop can affect a process.
     service = _run(plan, ["--user", "show", plan["label"] + ".service", "--no-pager",
                           "--property=LoadState", "--property=FragmentPath",
                           "--property=DropInPaths"], checked=False)
     service_values = dict(line.split("=", 1) for line in service.stdout.splitlines() if "=" in line)
+    if timer_missing and service_values.get("LoadState") == "not-found":
+        return {"registered": False, "active": False, "enabled": False, "service_registered": False}
     if (service.returncode or service_values.get("LoadState") != "loaded"
             or service_values.get("FragmentPath") != str(plan["directory"] / (plan["label"] + ".service"))):
         raise ConfigError("Refusing scheduler service loaded from an unowned or unknown path")
     if service_values.get("DropInPaths") != "":
         raise ConfigError("Refusing scheduler service with unverified drop-in configuration")
+    if timer_missing:
+        return {"registered": False, "active": False, "enabled": False, "service_registered": True}
     return {"registered": True, "active": values.get("ActiveState") == "active",
-            "enabled": values.get("UnitFileState") == "enabled"}
+            "enabled": values.get("UnitFileState") == "enabled", "service_registered": True}
 
 
 def status(ctx):
@@ -202,6 +206,8 @@ def install(ctx):
     present = _inventory(plan)
     before = _query(plan)
     complete = len(present) == len(plan["files"])
+    if before.get("service_registered") and plan["directory"] / (plan["label"] + ".service") not in present:
+        raise ConfigError("Refusing registered scheduler service without its owned file")
     if before["registered"] and not complete:
         raise ConfigError("Refusing registered scheduler without complete owned files")
     if complete and before["active"] and before["enabled"]:
@@ -261,6 +267,10 @@ def remove(ctx):
         if len(present) != len(plan["files"]):
             raise ConfigError("Refusing to stop scheduler without complete owned files")
         _stop(plan)
+    elif before.get("service_registered"):
+        if plan["directory"] / (plan["label"] + ".service") not in present:
+            raise ConfigError("Refusing to stop scheduler service without its owned file")
+        _run(plan, ["--user", "stop", plan["label"] + ".service"])
     for path in present:
         _inventory(plan)
         path.unlink()

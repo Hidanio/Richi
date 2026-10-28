@@ -412,7 +412,11 @@ def run():
         if version == current["version"] and checksum == current.get("wheel_sha256"):
             return _finish(ctx, pending, "up_to_date", version=version)
         if not config["auto_install"]:
-            return _finish(ctx, pending, "release_available" if version == current["version"] else "update_available",
+            assessment = installation.assess_release(release["manifest"], current)
+            if not assessment["can_apply"]:
+                return _finish(ctx, pending, assessment["status"], version=version,
+                               error=assessment["message"])
+            return _finish(ctx, pending, assessment["status"],
                            version=version, action="richi update apply --version " + version)
         with _lock(ctx):
             state = _state(ctx)

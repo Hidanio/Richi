@@ -79,14 +79,13 @@ def _state(ctx):
     return bootstrap.read_state(ctx) if (Path(ctx["root"]) / "state.json").exists() else _seed_state(ctx)
 
 
-def _atomic_json(path, value):
+def _atomic_write(path, content):
     temporary = None
     try:
         fd, temporary = tempfile.mkstemp(prefix="." + path.name + ".", dir=str(path.parent))
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             os.fchmod(stream.fileno(), 0o600)
-            json.dump(value, stream, sort_keys=True, indent=2)
-            stream.write("\n")
+            stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
@@ -99,6 +98,10 @@ def _atomic_json(path, value):
     finally:
         if temporary is not None:
             Path(temporary).unlink(missing_ok=True)
+
+
+def _atomic_json(path, value):
+    _atomic_write(path, json.dumps(value, sort_keys=True, indent=2) + "\n")
 
 
 def _owner(ctx, generation):
@@ -176,6 +179,30 @@ def _compatible(manifest):
         raise ConfigError("Release schema compatibility does not match updater protocol 1; no database was changed")
 
 
+def assess_release(manifest, current):
+    """Classify a fetched release before suggesting or applying an update."""
+    from .releases import version_tuple
+    try:
+        _compatible(manifest)
+        candidate = version_tuple(manifest.get("version"))
+        installed = version_tuple(current["version"]) if current.get("version") is not None else None
+    except ConfigError as exc:
+        return {"status": "incompatible_release", "can_apply": False, "message": str(exc)}
+    if installed is not None and candidate < installed:
+        return {"status": "older_release", "can_apply": False,
+                "message": "Updates cannot downgrade; use richi update rollback for the previous release"}
+    if candidate == installed:
+        checksum = current.get("wheel_sha256")
+        if checksum is None:
+            return {"status": "release_available", "can_apply": True,
+                    "message": "This installation has no verified wheel identity for this release"}
+        if checksum == manifest["wheel"]["sha256"]:
+            return {"status": "up_to_date", "can_apply": False, "message": "up to date"}
+        return {"status": "release_changed", "can_apply": False,
+                "message": "The published wheel differs from the verified installed release of the same version; publish a new version instead"}
+    return {"status": "update_available", "can_apply": True, "message": "update available"}
+
+
 _CHECK = r'''
 import json, pathlib, sysconfig
 import richi, richi_bootstrap
@@ -237,17 +264,26 @@ def _remove_seed(ctx, state, record):
     anchor = Path(state["seed_bootstrap"])
     if anchor.parent != site or site.resolve() != site or not site.is_relative_to(prefix):
         raise ConfigError("Refusing to prune seed code with inconsistent ownership")
-    # The original Python, console entry point, bootstrap and distribution
-    # metadata are permanent. A tiny namespace stub preserves `python -m richi`.
+    # Keep `python -m richi` usable even if pruning is interrupted. Install its
+    # permanent trampoline before removing any runtime code and never remove
+    # that file or its package directory during collection.
     for name in ("richi", "richi_launcher"):
         package = site / name
         if package.is_symlink():
             raise ConfigError("Refusing to prune linked seed code")
-        if package.exists():
-            shutil.rmtree(package)
     package = site / "richi"
-    package.mkdir()
-    (package / "__main__.py").write_text("from richi_bootstrap import main\nraise SystemExit(main())\n", encoding="utf-8")
+    package.mkdir(exist_ok=True)
+    _atomic_write(package / "__main__.py", "from richi_bootstrap import main\nraise SystemExit(main())\n")
+    for path in package.iterdir():
+        if path.name == "__main__.py":
+            continue
+        if path.is_dir() and not path.is_symlink():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+    launcher = site / "richi_launcher"
+    if launcher.exists():
+        shutil.rmtree(launcher)
 
 
 def _collect(ctx, state):
@@ -365,15 +401,15 @@ def apply_release(release, *, expected_generation=None, blocking=True,
             if before_apply is not None and not before_apply():
                 return dict(_summary(ctx, state), status="cancelled")
             current = state["generations"][state["current"]]
-            if current["version"] == manifest["version"] and current.get("wheel_sha256") == manifest["wheel"]["sha256"]:
+            assessment = assess_release(manifest, current)
+            if assessment["status"] == "up_to_date":
                 with _locked(ctx, state=True):
                     collection = _collect(ctx, state)
                     if (Path(ctx["root"]) / "state.json").exists():
                         _atomic_json(Path(ctx["root"]) / "state.json", state)
                     return dict(_summary(ctx, state), status="already_current", cleanup=collection)
-            if state["generations"][state["current"]]["version"] != "interrupted":
-                if releases.version_tuple(manifest["version"]) < releases.version_tuple(state["generations"][state["current"]]["version"]):
-                    raise ConfigError("Updates cannot downgrade; use richi update rollback for the previous release")
+            if not assessment["can_apply"]:
+                raise ConfigError(assessment["message"])
             original_marker = Path(ctx["original_prefix"]) / bootstrap.OWNER_FILE
             if original_marker.exists():
                 _verify_owner(ctx, "seed", Path(ctx["original_prefix"]))

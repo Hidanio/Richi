@@ -91,10 +91,37 @@ def fit_response(response, maximum):
     def cards():
         return value.get("results", []) + ([value["entry"]] if value.get("entry") else [])
 
+    def prune_connections():
+        # Graph-only recall cards must keep their seed and an intact witness.
+        # This also prevents dangling edges after a budget removes a card.
+        results = value.get("results", [])
+        retained = {item["ref"] for item in results}
+        seeds = {item["ref"] for item in results if any(
+            not reason.startswith("graph:") for reason in item.get("match_reasons", []))}
+        edges = [edge for edge in value.get("edges", [])
+                 if edge["from_ref"] in retained and edge["to_ref"] in retained]
+        for item in list(results):
+            reasons = item.get("match_reasons", [])
+            if not reasons or not all(reason.startswith("graph:") for reason in reasons):
+                continue
+            if not any((edge["from_ref"] == item["ref"] and edge["to_ref"] in seeds) or
+                       (edge["to_ref"] == item["ref"] and edge["from_ref"] in seeds)
+                       for edge in edges):
+                results.remove(item)
+        if "edges" in value:
+            retained = {item["ref"] for item in results}
+            value["edges"] = [edge for edge in edges
+                              if edge["from_ref"] in retained and edge["to_ref"] in retained]
+
     def measure():
+        prune_connections()
         value["budget"]["omitted_results"] = original_omitted + original_results - len(value.get("results", []))
         value["budget"]["omitted_edges"] = original_edges - len(value.get("edges", []))
-        value["truncated"] = bool(value["truncated"] or any(c.get("is_excerpt") or c.get("sources_omitted") or c.get("title_truncated") or c.get("project_ids_omitted") for c in cards()))
+        value["truncated"] = bool(value["truncated"] or value.get("query_is_excerpt") or
+                                  value["budget"]["omitted_results"] or value["budget"]["omitted_edges"] or
+                                  any(c.get("is_excerpt") or c.get("sources_omitted") or c.get("title_truncated") or c.get("project_ids_omitted") for c in cards()) or
+                                  any(edge.get("description_is_excerpt") or edge.get("sources_omitted")
+                                      for edge in value.get("edges", [])))
         if value.get("ambiguity"):
             ambiguity = value["ambiguity"]
             ambiguity["omitted_candidates"] = ambiguity["concept_count"] - len(ambiguity["candidates"])
@@ -130,7 +157,7 @@ def fit_response(response, maximum):
     # alternatives can be omitted explicitly without choosing a single meaning.
     while len(value.get("ambiguity", {}).get("candidates", [])) > 2 and measure() > maximum:
         value["ambiguity"]["candidates"].pop()
-    while value.get("edges") and measure() > maximum:
+    while measure() > maximum and value.get("edges"):
         value["edges"].pop()
     while len(value.get("results", [])) > 1 and measure() > maximum:
         value["results"].pop()

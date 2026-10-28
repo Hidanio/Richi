@@ -201,45 +201,54 @@ class _Projects:
         return self.identities[path]
 
     def check(self, path, repository, expected=None):
-        candidates = []
-        scoped = []
-        checkout = Path(repository["repo_path"]) if repository else None
-        for row in self.rows:
-            registered = self.paths[row["id"]]
-            if registered is None:
-                continue
-            if (checkout and checkout in registered.parents
-                    and (registered == path or registered in path.parents)):
-                # A folder project owns its descendants only inside this
-                # checkout. The nearest Git root excludes outer folders when
-                # the selected path enters a nested independent repository.
-                scoped.append((row, "exact_path" if registered == path else "directory", len(registered.parts)))
-                continue
-            if registered == path or repository and str(registered) == repository["repo_path"]:
-                candidates.append((row, "exact_path", len(registered.parts)))
-            elif repository:
-                identity = self.identity(registered)
-                if identity and identity["git_common_dir"] == repository["git_common_dir"]:
-                    candidates.append((row, "git_common_dir", len(registered.parts)))
-            elif registered in path.parents and self.identity(registered) is None:
-                candidates.append((row, "directory", len(registered.parts)))
-        if scoped:
-            candidates = scoped
-        if (not repository or scoped) and candidates:
-            longest = max(item[2] for item in candidates)
-            candidates = [item for item in candidates if item[2] == longest]
-        result = {"path": str(path), "status": "unregistered", "project": None,
-                  "match": None, "repository": repository,
-                  "candidates": [item[0] for item in candidates], "errors": []}
-        if len(candidates) > 1:
-            result["status"] = "ambiguous"
-        elif candidates:
-            result.update(status="matched", project=candidates[0][0], match=candidates[0][1])
-        if expected is not None:
-            result["expected_project_id"] = expected
-            if result["status"] == "matched" and result["project"]["id"] != expected:
-                result["status"] = "mismatch"
-        return result
+        return match_project(self.rows, self.paths, self.identity, path, repository, expected)
+
+
+def match_project(rows, paths, identity, path, repository, expected=None):
+    """Match registered rows using a caller-owned path and identity cache.
+
+    Discovery and status have different inspection budgets and diagnostics;
+    both share these membership rules without impersonating each other.
+    """
+    candidates = []
+    scoped = []
+    checkout = Path(repository["repo_path"]) if repository else None
+    for row in rows:
+        registered = paths[row["id"]]
+        if registered is None:
+            continue
+        if (checkout and checkout in registered.parents
+                and (registered == path or registered in path.parents)):
+            # A folder project owns its descendants only inside this
+            # checkout. The nearest Git root excludes outer folders when
+            # the selected path enters a nested independent repository.
+            scoped.append((row, "exact_path" if registered == path else "directory", len(registered.parts)))
+            continue
+        if registered == path or repository and str(registered) == repository["repo_path"]:
+            candidates.append((row, "exact_path", len(registered.parts)))
+        elif repository:
+            registered_identity = identity(registered)
+            if registered_identity and registered_identity["git_common_dir"] == repository["git_common_dir"]:
+                candidates.append((row, "git_common_dir", len(registered.parts)))
+        elif registered in path.parents and identity(registered) is None:
+            candidates.append((row, "directory", len(registered.parts)))
+    if scoped:
+        candidates = scoped
+    if (not repository or scoped) and candidates:
+        longest = max(item[2] for item in candidates)
+        candidates = [item for item in candidates if item[2] == longest]
+    result = {"path": str(path), "status": "unregistered", "project": None,
+              "match": None, "repository": repository,
+              "candidates": [item[0] for item in candidates], "errors": []}
+    if len(candidates) > 1:
+        result["status"] = "ambiguous"
+    elif candidates:
+        result.update(status="matched", project=candidates[0][0], match=candidates[0][1])
+    if expected is not None:
+        result["expected_project_id"] = expected
+        if result["status"] == "matched" and result["project"]["id"] != expected:
+            result["status"] = "mismatch"
+    return result
 
 
 def project_check(conn, path, project_id=None):

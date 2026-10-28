@@ -274,7 +274,7 @@ def depth(value):
     return result
 
 
-def add_commands(commands, api):
+def add_commands(commands, limit):
     commands.add_parser("migrate")
     for name in ("entity", "edge"):
         group = commands.add_parser(name).add_subparsers(dest="action", required=True)
@@ -288,7 +288,7 @@ def add_commands(commands, api):
     neighbors = graph.add_parser("neighbors")
     neighbors.add_argument("ref")
     neighbors.add_argument("--depth", type=depth, default=1)
-    neighbors.add_argument("--limit", type=api.limit, default=200)
+    neighbors.add_argument("--limit", type=limit, default=200)
     neighbors.add_argument("--view", choices=("full", "compact"), default="full")
     from . import compact
     neighbors.add_argument("--max-chars", type=compact.max_chars,

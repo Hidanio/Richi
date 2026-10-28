@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import signal
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -31,8 +32,19 @@ class MapConfigTests(unittest.TestCase):
             with socket.socket() as reservation:
                 reservation.bind(("127.0.0.1", 0))
                 port = reservation.getsockname()[1]
+            connect = sqlite3.connect
+            schema_connections = []
+
+            def track_schema_connection(*args, **kwargs):
+                connection = connect(*args, **kwargs)
+                schema_connections.append(connection)
+                self.addCleanup(connection.close)
+                return connection
 
             def check_health(server):
+                self.assertEqual(len(schema_connections), 1)
+                with self.assertRaises(sqlite3.ProgrammingError):
+                    schema_connections[0].execute("PRAGMA user_version")
                 worker = threading.Thread(target=server.handle_request, daemon=True)
                 server.timeout = 5
                 worker.start()
@@ -51,6 +63,7 @@ class MapConfigTests(unittest.TestCase):
                 self.assertFalse(worker.is_alive())
 
             with mock.patch("socket.getfqdn", side_effect=AssertionError("DNS must not delay startup")), \
+                    mock.patch.object(serve.sqlite3, "connect", side_effect=track_schema_connection), \
                     mock.patch("richi.serve.ThreadingHTTPServer.serve_forever", autospec=True,
                                side_effect=check_health) as running, redirect_stdout(io.StringIO()):
                 self.assertEqual(serve.main(["--db", str(database), "--config", str(config),

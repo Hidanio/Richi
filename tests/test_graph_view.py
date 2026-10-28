@@ -77,7 +77,7 @@ class GraphViewTests(unittest.TestCase):
     @staticmethod
     def parser():
         parser = memory.Parser()
-        graph.add_commands(parser.add_subparsers(dest="command", required=True), memory)
+        graph.add_commands(parser.add_subparsers(dest="command", required=True), memory.limit)
         return parser
 
     def assert_connected(self, value):
