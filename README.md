@@ -32,24 +32,16 @@ SQLite-хранилище, Git-навигацию, локальную карту
 пока не входит в эту поставку.
 
 ```sh
-git clone https://github.com/Hidanio/Richi.git
-cd Richi
-python3 -m venv "$HOME/.local/share/richi/venv"
-"$HOME/.local/share/richi/venv/bin/python" -m pip install --upgrade pip
-"$HOME/.local/share/richi/venv/bin/python" -m pip install .
-mkdir -p "$HOME/.local/bin"
-ln -s "$HOME/.local/share/richi/venv/bin/richi" "$HOME/.local/bin/richi"
-export PATH="$HOME/.local/bin:$PATH"
-richi config show
-richi init
-richi recall 'почему выбрали локальный кеш'
-richi map
+curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh | sh -s -- --yes
 ```
 
-Команда `richi` доступна из любой папки; для новых терминалов добавьте
-`~/.local/bin` в PATH своей оболочки. Обычный режим использует установленную
-копию пакета: изменения и переключение веток в checkout на неё не влияют.
-Окружение и данные находятся отдельно от Git-репозитория.
+The installer becomes available after the first stable release containing it.
+It installs Richi, connects Project Memory to all local chats in your Codex
+profile, preserves existing instructions and updates the skill with Richi.
+Open a new chat to choose its workspace, and a new terminal for the command.
+Prerequisites include curl and Python with venv, ensurepip and sqlite3.
+See [one-command setup](docs/SETUP.md) for preview, existing skills, recovery and
+offline installation, or [manual installation](docs/INSTALLATION.md) for source builds.
 
 Стабильные релизы: `richi update check`, `richi update apply`,
 `richi update rollback`. Обновление сохраняет предыдущую версию, настройки dev
@@ -133,11 +125,12 @@ richi use
 - [Рост базы и обслуживание индексов](docs/STORAGE.md): учёт текущих записей,
   истории и файлов; предварительный план и резервная копия перед оптимизацией.
 
-Копируйте папку `skills/project-memory` целиком в каталог skills своего агента:
-внутри находятся все необходимые справочники. Настройте для агента доступ к
-установленной команде `richi` и той же конфигурации, что используется в терминале.
-Сам по себе skill не даёт разрешение на запись: закрепите желаемый режим в
-инструкциях проекта. Пример — в [руководстве установки](docs/INSTALLATION.md#подключение-агента).
+For Codex, the installer performs global integration; use `richi setup --status`
+to inspect it or `richi setup --yes` to connect a supported existing installation.
+For other agents, copy the entire `skills/project-memory` directory and configure
+access to the installed CLI. Scope memory authorization in agent/project
+instructions. See [setup](docs/SETUP.md) and the
+[agent integration example](docs/INSTALLATION.md#подключение-агента).
 
 База, резервные копии, локальные Git-снимки и конфигурация принадлежат пользователю
 и не входят в репозиторий. Публичные тесты используют синтетические данные;

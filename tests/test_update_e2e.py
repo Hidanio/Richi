@@ -94,6 +94,7 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
                                      + "\nRequires-Python: >=3.9\n\n").encode()
         files[info + "WHEEL"] = b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n\n"
         files[info + "entry_points.txt"] = b"[console_scripts]\nrichi = richi_bootstrap:main\n"
+        files[info + "licenses/LICENSE.md"] = (Path(__file__).resolve().parents[1] / "LICENSE.md").read_bytes()
         record = io.StringIO(newline="")
         writer = csv.writer(record, lineterminator="\n")
         for name, data in sorted(files.items()):

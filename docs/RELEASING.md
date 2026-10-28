@@ -9,7 +9,7 @@ To prepare a release, update both `[project].version` in `pyproject.toml` and
 the matching `vX.Y.Z` tag. Pushing a tag starts `.github/workflows/release.yml`.
 The workflow builds one wheel and tests that artifact on Python 3.9 and 3.12,
 on Linux and macOS, including the public recall evaluation. Only after every
-matrix job passes does it create a GitHub draft with the wheel and manifest
+matrix job passes does it create a GitHub draft with the wheel, manifest and installer
 attached, then publish it. A failed upload leaves a draft, which is invisible
 to the updater; inspect or remove that draft before retrying publication.
 Published versions must not be replaced: corrections get a new version and tag.
@@ -24,6 +24,8 @@ For local preparation without publishing:
 ```sh
 python -m build --wheel
 python scripts/release_manifest.py dist/richi-0.1.0-py3-none-any.whl --tag v0.1.0
+python scripts/build_installer.py dist/richi-0.1.0-py3-none-any.whl
+python tests/installer_release_smoke.py dist
 ```
 
 `scripts/release_manifest.py` checks the wheel's filename, package metadata,
@@ -55,3 +57,10 @@ Downloads start at fixed repository URLs and follow redirects only to GitHub's
 release asset hosts. No manifest field can select a download host or command.
 SHA256 detects corruption; publisher authenticity relies on GitHub HTTPS and
 control of the official repository. Protect release tags and repository access.
+
+The wheel bundles the entire canonical `skills/project-memory/` directory.
+`build_installer.py` creates a deterministic stdlib-only `richi-installer.pyz`
+from that wheel, with a SHA256 sidecar. The workflow publishes those files and
+`install.sh` alongside the wheel and manifest. Each release test job installs
+the exact archive and wheel into a synthetic home without accessing personal
+data. The public one-command URL works only after this release is published.

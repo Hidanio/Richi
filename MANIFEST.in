@@ -1,0 +1,4 @@
+graft skills/project-memory
+global-exclude __pycache__ *.py[cod]
+include install.sh
+include scripts/build_installer.py

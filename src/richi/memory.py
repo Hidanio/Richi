@@ -562,6 +562,12 @@ def parser():
     from . import __version__
     cli.add_argument("--version", action="version", version="Richi " + __version__)
     commands = cli.add_subparsers(dest="command", required=True)
+    setup = commands.add_parser("setup", help="Connect this installation to all local Codex chats")
+    setup_mode = setup.add_mutually_exclusive_group()
+    for option in ("yes", "dry-run", "status"):
+        setup_mode.add_argument("--" + option, action="store_true")
+    setup.add_argument("--replace-skill", action="store_true")
+    setup.add_argument("--no-path", action="store_true")
     update = commands.add_parser("update", help="Check, apply or roll back an installed release")
     updates = update.add_subparsers(dest="action", required=True)
     for action in ("check", "apply"):
@@ -761,7 +767,7 @@ def run(args):
     from richi_launcher.config import resolve_settings
     settings = resolve_settings(db=args.db, config_file=getattr(args, "config", None),
                                 workspace=getattr(args, "workspace", None))
-    if args.command in {"config", "workspace", "use", "chat", "status", "update"}:
+    if args.command in {"config", "workspace", "use", "chat", "status", "update", "setup"}:
         raise MemoryError("Use the installed richi " + args.command + " command")
     database = settings.database
     new_file = not database.exists()
