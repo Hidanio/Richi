@@ -81,7 +81,9 @@ class UpdateCliRoutingTests(unittest.TestCase):
     def release(version="0.2.0", checksum="a" * 64):
         return {"version": version, "tag": "v" + version,
                 "html_url": "https://github.com/Hidanio/Richi/releases/tag/v" + version,
-                "manifest": {"wheel": {"sha256": checksum}}}
+                "manifest": {"format_version": 1, "version": version, "updater_protocol": 1,
+                             "python_min": [3, 9], "database_schemas": [1, 2], "map_schema": 2,
+                             "wheel": {"sha256": checksum}}}
 
     def test_check_works_without_chat_binding_or_working_workspace_and_dev(self):
         self.fetch.return_value = None
@@ -106,6 +108,25 @@ class UpdateCliRoutingTests(unittest.TestCase):
                 report = self.command("update", "check")
                 self.assertEqual(report["status"], expected)
                 self.assertEqual(report["can_apply"], can_apply)
+        self.apply.assert_not_called()
+
+    def test_check_does_not_offer_incompatible_or_replaced_releases(self):
+        for field, value in (("python_min", [99, 0]), ("database_schemas", [2, 3]),
+                             ("updater_protocol", 2)):
+            with self.subTest(field=field):
+                release = self.release()
+                release["manifest"][field] = value
+                self.fetch.return_value = release
+                report = self.command("update", "check")
+                self.assertEqual(report["status"], "incompatible_release")
+                self.assertFalse(report["can_apply"])
+                self.assertTrue(report["message"])
+        self.local["current"] = {"version": "0.1.0", "wheel_sha256": "b" * 64}
+        self.fetch.return_value = self.release("0.1.0", "a" * 64)
+        report = self.command("update", "check")
+        self.assertEqual(report["status"], "release_changed")
+        self.assertFalse(report["can_apply"])
+        self.assertIn("differs from the verified", report["message"])
         self.apply.assert_not_called()
 
     def test_explicit_mutations_route_globally_without_workspace_resolution(self):

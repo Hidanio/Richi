@@ -1,5 +1,7 @@
 # Workspaces, repository membership and runtime
 
+English | [Русский](WORKSPACES.ru.md)
+
 Read this when selecting/changing a workspace, resolving membership or runtime errors, registering repositories, or working with linked worktrees. The entrypoint retains the access rules needed for every task.
 
 ## Runtime and storage

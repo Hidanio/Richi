@@ -1,4 +1,7 @@
+<a id="применение-обслуживания-памяти"></a>
 # Apply memory maintenance
+
+English | [Русский](MAINTENANCE.ru.md)
 
 Use only for authorized cleanup mutations in the selected workspace/scope.
 Start with [MEMORY_AUDIT.md](MEMORY_AUDIT.md) to select candidates and decide
@@ -6,155 +9,159 @@ which records actually represent the same knowledge. An audit-only request
 stops there. Preserve sources, distinctions, history and searchable knowledge;
 no physical deletion is part of this workflow.
 
-## Обоснованное объединение
+<a id="обоснованное-объединение"></a>
+## Justified consolidation
 
-Перед первой правкой живой памяти сделай `richi backup` в привязанном workspace
-без `--project-path`, сохрани возвращённый путь. Сам аудит не требует backup.
-Для проверенной группы можно сохранить `sources snapshot --ref REF --output NEW.json`
-(повтори `--ref` для остальных карточек). Перед применением плана выполни
-`sources check --manifest NEW.json`: это обнаружит правки карточек, изменения
-состава связей и дрейф локальных файлов. Manifest фиксирует прочитанные версии,
-но не заменяет CAS и не блокирует последующие параллельные записи.
-Составь локальный план `старые refs → канонический ref`: что совпадает,
-что переносится, почему это одна область/версия, что требуется связям.
-План нужен для проверки результата и восстановления, а не как обязательная
-остановка на согласование. Спорные группы не объединяй.
+Before the first change to live memory, run `richi backup` in the bound workspace
+without `--project-path` and retain the returned path. The audit itself needs no
+backup. For a reviewed group, you can save
+`sources snapshot --ref REF --output NEW.json` (repeat `--ref` for other cards).
+Before applying the plan, run `sources check --manifest NEW.json`: it detects
+card changes, changes to the set of links and local-file drift. A manifest
+records the versions read, but does not replace CAS or block later concurrent
+writes. Prepare a local `old refs → canonical ref` plan: what matches, what
+moves, why this is the same scope/version, and what the links require. The plan
+supports result verification and recovery; it is not a mandatory approval stop.
+Do not consolidate disputed groups.
 
-1. Прочитай полные текущие payloads и `updated_at`. Подготовь каноническую
-   запись, сохранив источники с labels/dates, смысловые синонимы, проектные
-   привязки, измерения, оговорки и полезные прежние попытки в доступном тексте.
-   История сама по себе недостаточна: обычный поиск её не читает.
-2. Сохрани каноническую карточку с `expected_updated_at`, проверь через `get`.
-   Для нового ID используй `expected_updated_at: null`. Конфликт означает
-   новое параллельное знание: перечитай и пересобери группу, не затирай его.
-3. Прочитай все входящие/исходящие связи кандидатов с нужными state-флагами.
-   `neighbors` ограничен: проверь усечение; при необходимости используй
-   сохранённый полный каталог/снимок для списка связей. Производные membership
-   меняются через `entry.project_ids`, их не нужно дублировать.
-4. Обоснованные отношения канонического узла сохрани/уточни с источниками
-   и тем же смыслом направления и состояния. Не переноси автоматически
-   причинность и область `used_in` между разными контекстами. Новые связи
-   не должны образовывать бессмысленные self-loops. Рёбра с разными
-   основаниями/состояниями не являются дублями только из-за одинаковых концов.
-5. Запиши подтверждённую связь `supersedes` от канонического узла к дублю;
-   источником основания может быть сохранённый отчёт сравнения с исходными
-   refs/версиями и их источниками. Она описывает замену, но не делает redirect.
-6. Только после проверки сохранения содержания и нужных связей отметь дубль
-   `superseded`, сохранив его текст и источники. Добавь в его summary явную
-   ссылку на канонический ref; исходную историю не переписывай. Уместные старые
-   названия добавь канонической карточке как aliases, не смешивая смыслы.
+1. Read the full current payloads and `updated_at`. Prepare the canonical record,
+   preserving sources with labels/dates, semantic synonyms, project memberships,
+   measurements, qualifications and useful earlier attempts in searchable text.
+   History alone is insufficient: ordinary search does not read it.
+2. Save the canonical card with `expected_updated_at`, then verify it with `get`.
+   For a new ID, use `expected_updated_at: null`. A conflict means new concurrent
+   knowledge: reread and reconstruct the group instead of overwriting it.
+3. Read all incoming/outgoing candidate links with the required state flags.
+   `neighbors` is bounded: check truncation; if needed, use a saved complete
+   catalog/snapshot to enumerate links. Derived memberships change through
+   `entry.project_ids`; do not duplicate them.
+4. Save or refine justified relationships of the canonical node with sources
+   and the same direction and state semantics. Do not automatically transfer
+   causality or `used_in` scope between contexts. New links must not create
+   meaningless self-loops. Edges with different evidence/states are not
+   duplicates merely because their endpoints match.
+5. Record a confirmed `supersedes` edge from the canonical node to the duplicate.
+   A saved comparison report with original refs/versions and their sources can
+   provide the evidence. The edge describes replacement but creates no redirect.
+6. Only after verifying content and required-link preservation, mark the
+   duplicate `superseded`, retaining its text and sources. Add an explicit
+   canonical ref to its summary; do not rewrite its original history. Add
+   appropriate old names as aliases of the canonical card without conflating meanings.
 
-Важно: сейчас автоматических redirects нет. `get OLD_ID` прочтёт старую карточку,
-а обычный `recall OLD_ID` может не показать её после superseded. Связь с
-устаревшим endpoint тоже скрыта обычным графом. Проверь исходные запросы и
-входящие ссылки; сохраняй значимые стабильные ID активными, если перенос
-ломает работу. Не скрывай такой разрыв обещанием «история сохранена».
+There are currently no automatic redirects. `get OLD_ID` reads the old card,
+while ordinary `recall OLD_ID` may stop returning it after supersession. An edge
+to a superseded endpoint is also hidden from the ordinary graph. Check original
+queries and incoming references; keep important stable IDs active if moving
+breaks workflows. Do not conceal that breakage with a claim that history remains.
 
-Пакет `entry put`, `entity put` или `edge put` атомарен внутри своей команды;
-несколько команд не являются одной транзакцией. При сбое оставь старое знание
-активным, если замена ещё не готова, и сообщи выполненные шаги. Параллельные
-записи других задач не откатывай восстановлением старого backup поверх всей БД.
-Для точечного возврата читай историю и применяй полные payloads через CLI с CAS.
+A batch in `entry put`, `entity put` or `edge put` is atomic within its own
+command; multiple commands are not one transaction. On failure, leave the old
+knowledge active if the replacement is incomplete and report completed steps.
+Do not undo other tasks' concurrent writes by restoring an old backup over the
+whole database. For a targeted reversal, read history and apply full payloads
+through the CLI with CAS.
 
-## Разделение текущей задачи и подробностей
+<a id="разделение-текущей-задачи-и-подробностей"></a>
+## Separating current task state from details
 
-Этот порядок применяется к будущей явно запрошенной уборке выбранных карточек.
-Диагностика и разработка правил не разрешают массово переписывать живую память.
-Для проверки самого порядка используй отдельную синтетическую базу.
-Новой команды split/compact, автоматического разбиения или LLM-суммаризации нет.
+This procedure applies to future explicitly requested cleanup of selected cards.
+Diagnostics and rule development do not authorize bulk rewriting of live memory.
+Use a separate synthetic database to test the procedure itself. There is no new
+split/compact command, automatic splitting or LLM summarization.
 
-Основной `task:KEY` остаётся текущим связным описанием: решение и область,
-причина выбора, существенные условия/исключения, проверенные факты и точное
-состояние реализации, неизвестное и следующий шаг. В нём остаются действующие
-ограничения и точные refs подробных карточек. Ориентир 1000–3000 символов
-не является лимитом API. Не дроби ясную карточку ради длины; заголовки
-и порядок абзацев необязательны и runtime их не разбирает. Отдельный пилот
-Templates этим порядком не меняется; старые summary не требуют переформатирования.
+The main `task:KEY` remains a coherent current description: decision and scope,
+reason for the choice, material conditions/exceptions, verified facts and exact
+implementation state, unknowns and next step. It retains active constraints and
+exact refs to detailed cards. The 1000–3000-character guide is not an API limit.
+Do not fragment a clear card merely because of its length; headings and paragraph
+order are optional and the runtime does not parse them. The separate Templates
+pilot is unchanged by this procedure; old summaries need no reformatting.
 
-1. Проверь выбранный workspace, проект и путь по [SKILL.md](../SKILL.md).
-   Прочитай полный payload родителя и нужные входящие/исходящие связи с
-   подходящими state-флагами, проверь покрытие и сохрани `updated_at`.
-   Перед изменением живой памяти выполни `richi backup`, как описано выше.
-   Для выбранной группы при необходимости используй `sources snapshot/check`;
-   manifest не заменяет CAS.
-2. Составь карту `утверждение / условие / число / причина отказа → поле или
-   стабильный ID → источник`. Включи исключения, неизвестное, даты наблюдений,
-   область применимости и различие implemented/merged/released. Заранее
-   зафиксируй запросы по Jira/ID, уникальной причине отказа, детали расследования,
-   действующему ограничению, историческому замеру и гипотезе, флаги и разумный
-   `limit`. Так потеря знания не скрывается изменением ожиданий после переноса.
-3. Создай или проверь подробные записи со стабильными ID. Новый ID записывай с
-   `expected_updated_at: null`; это ожидание отсутствия, а не разрешение заменить
-   чужую карточку. `investigation` содержит вопрос, вывод, границы и источники;
-   `experiment` — условия, метод, результат и ограничения; `decision` — выбор
-   или отказ, основание, применимость и альтернативы. Выноси самостоятельный
-   полезный фрагмент, а не каждую строку. Не копируй всю простыню в несколько
-   новых summary. Каждая запись самодостаточна, с реальными `project_ids`,
-   источниками и собственными knowledge/work states. Если она относится к
-   Jira-задаче, сохрани её фактический `jira_key`; не изобретай aliases или теги
-   ради exact-key выдачи. Прочитай сохранённые записи полностью.
-4. Создай или проверь стабильные, обоснованные рёбра `part_of` от подробной
-   записи к задаче с источником и объяснением. Для нового ребра также используй
-   `expected_updated_at: null`. `supports`/`informs` допустимы при подтверждении
-   такого смысла. Не добавляй обратные рёбра для навигации и не дублируй
-   membership из `project_ids`. До сокращения родителя проверь связи и поиск
-   по исходным уникальным подробностям; гипотезы ищи с явным флагом.
-5. Только последней замени summary родителя с **исходным** `expected_updated_at`.
-   Сохрани его ID, Jira, memberships, значимые aliases, все исторические
-   источники и действующие ограничения. Чистка provenance не входит в этот
-   перенос. Устаревшее текущее состояние замени, а полезные прежние результаты
-   оставь в текущих подробных записях. История родителя дополнительно сохранит
-   прежний полный текст, но обычный поиск её не индексирует.
-6. При CAS-конфликте перечитай родителя и согласуй новую информацию; не повторяй
-   устаревший payload поверх параллельной правки. При частичном сбое до последнего
-   шага исходный текст остаётся у родителя. Зафиксируй созданные ID, версии и
-   завершённые шаги, затем продолжай с них. На повторе прочитай существующие
-   объекты, проверь ожидаемое содержание и переиспользуй их без лишних записей,
-   рёбер или ревизий. Для требуемой правки существующего объекта используй его
-   актуальный `expected_updated_at`; случайное совпадение ID не разрешает замену.
-   Не восстанавливай весь store из backup поверх чужих изменений.
-7. Прочитай полный результат и историю родителя, полные дочерние записи и связи.
-   Сверь карту сохранения смысла и источников. Точная команда `entry get task:KEY`
-   должна читать прежний ID; общий Jira-запрос при заранее выбранном `limit`
-   должен включать задачу, но не обязан ставить её первой. Проверь поиск причин
-   отказа и уникальных деталей, состояния, исторические даты и memberships.
-   Измерь длину основной карточки и объём необходимых чтений для выбранного
-   сценария; не называй это доказательством экономии времени/токенов или
-   улучшения качества решений модели.
+1. Verify the selected workspace, project and path using [SKILL.md](../SKILL.md).
+   Read the parent's full payload and required incoming/outgoing links with
+   appropriate state flags, check coverage and retain `updated_at`. Before
+   changing live memory, run `richi backup` as described above. For the selected
+   group, use `sources snapshot/check` if needed; a manifest does not replace CAS.
+2. Create a map of `claim / condition / number / rejection reason → field or
+   stable ID → source`. Include exceptions, unknowns, observation dates, scope
+   and the implemented/merged/released distinction. Record queries in advance
+   for Jira/ID, a unique rejection reason, investigation detail, active constraint,
+   historical measurement and hypothesis, with flags and a reasonable `limit`.
+   This prevents changed expectations after the move from hiding lost knowledge.
+3. Create or verify detailed records with stable IDs. Write a new ID with
+   `expected_updated_at: null`: this expects absence and does not authorize
+   replacing someone else's card. An `investigation` contains the question,
+   conclusion, boundaries and sources; an `experiment` contains conditions,
+   method, result and limitations; a `decision` contains the choice or rejection,
+   rationale, applicability and alternatives. Extract independently useful
+   material, not every line. Do not copy the whole long text into several new
+   summaries. Each record is self-contained, with actual `project_ids`, sources
+   and its own knowledge/work states. If it belongs to a Jira task, retain its
+   actual `jira_key`; do not invent aliases or tags to force exact-key retrieval.
+   Read the saved records in full.
+4. Create or verify stable, justified `part_of` edges from detailed records to
+   the task, with a source and explanation. Also use `expected_updated_at: null`
+   for a new edge. `supports`/`informs` are appropriate when their meaning is
+   supported. Do not add reverse edges for navigation or duplicate memberships
+   from `project_ids`. Before shortening the parent, verify links and retrieval
+   through original unique details; search hypotheses with an explicit flag.
+5. Replace the parent's summary only as the final write, using its **original**
+   `expected_updated_at`. Preserve its ID, Jira, memberships, important aliases,
+   all historical sources and active constraints. Provenance cleanup is outside
+   this move. Replace outdated current state while retaining useful earlier
+   results in current detailed records. Parent history also keeps the previous
+   full text, but ordinary search does not index it.
+6. On a CAS conflict, reread the parent and reconcile new information; do not
+   retry a stale payload over a concurrent edit. With a partial failure before
+   the last step, the original text remains in the parent. Record created IDs,
+   versions and completed steps, then continue from them. On retry, read existing
+   objects, check expected content and reuse them without extra records, edges
+   or revisions. For a required edit of an existing object, use its current
+   `expected_updated_at`; an accidental ID collision does not authorize replacement.
+   Do not restore the entire store from backup over other people's changes.
+7. Read the complete result and parent history, full child records and links.
+   Compare the meaning-and-source preservation map. The exact command
+   `entry get task:KEY` must still read the same ID; a general Jira query at the
+   predetermined `limit` must include the task but need not rank it first.
+   Check retrieval of rejection reasons and unique details, states, historical
+   dates and memberships. Measure the main card's length and necessary read
+   volume for the selected scenario; do not call this proof of time/token savings
+   or better model decisions.
 
-Наблюдаемый неуспешный эксперимент может остаться `confirmed` в своих условиях;
-отвергнутое решение не становится автоматически `superseded`. Непроверенная
-альтернатива остаётся `hypothesis`, исторический замер — историческим.
-Перенос и редактирование текста сами по себе не обновляют `verified_at`.
-Последовательность entry/edge put не атомарна: готовность детей и связей
-проверяется перед записью родителя, а не обеспечивается общей транзакцией.
+An observed unsuccessful experiment can remain `confirmed` under its conditions;
+a rejected decision does not automatically become `superseded`. An unverified
+alternative remains `hypothesis`, and a historical measurement stays historical.
+Moving or editing text does not itself advance `verified_at`. A sequence of
+entry/edge put commands is not atomic: children and links are checked before
+writing the parent, rather than protected by a shared transaction.
 
-`entry read`, `recall` и `brief` ограничивают объём: даже короткая актуальная
-карточка может быть усечена. Проверяй excerpt/truncated, пропуски, `read_more`
-и бюджет. Выбор предложений не гарантирует сохранение всех оговорок. Например,
-выдержка «кеш включён» не позволяет принять решение об отключении проверки,
-если условие «только для идемпотентных чтений» осталось вне выдачи. Перед
-действием, зависящим от условий, прочитай соответствующие полные `get`.
+`entry read`, `recall` and `brief` bound output: even a short current card can be
+truncated. Check excerpt/truncated, omissions, `read_more` and budget. Sentence
+selection does not guarantee every qualification survives. For example, an
+excerpt saying “the cache is enabled” cannot justify disabling a check when the
+condition “only for idempotent reads” was omitted. Before a condition-dependent
+action, read the relevant complete `get` results.
 
-## Проверка и отчёт
+<a id="проверка-и-отчёт"></a>
+## Verification and report
 
-- `check` и полное чтение изменённых карточек/связей.
-- Повтор исходных запросов по теме/синониму/Jira: нужное знание доступно,
-  источники и ограничения сохранены, разные значения остаются различимыми.
-- Исторические карточки доступны через `get` и соответствующие state-флаги.
-- Если менялся код поиска, используй [EVALUATION.md](EVALUATION.md).
-  Для обычной уборки достаточно проверок затронутых случаев; не меняй ожидания
-  старых тестов, чтобы скрыть потерю знания.
-- Отчёт: область и покрытие, backup, группы до/после, правки связей, проверенные
-  запросы, оставленные спорные случаи и остаток работы. Количество карточек
-  само по себе не доказывает улучшение. Если подходящих изменений нет, так и скажи.
+- Run `check` and read changed cards/links in full.
+- Repeat original topic/synonym/Jira queries: required knowledge remains
+  accessible, sources and limitations survive, and distinct meanings remain distinct.
+- Historical cards remain readable through `get` and the appropriate state flags.
+- If search code changed, use [EVALUATION.md](EVALUATION.md). Ordinary cleanup
+  needs checks of affected cases; do not change old test expectations to hide
+  lost knowledge.
+- Report scope and coverage, backup, groups before/after, link edits, queries
+  checked, disputed cases left untouched and remaining work. Card count alone
+  does not establish improvement. If no suitable changes exist, say so.
 
-При содержательных изменениях сохрани одну сводку обслуживания со ссылкой на
-отчёт и затронутые refs. Не создавай запись на каждую проверенную карточку
-и отдельный «успешный запуск», если ничего полезного не изменилось.
+For substantive changes, save one maintenance summary linking the report and
+affected refs. Do not create a record for every checked card or a separate
+“successful run” when nothing useful changed.
 
-Этот режим сохраняет данные логически: подтверждённые дубли уходят из обычной
-выдачи, но остаются читаемыми с историей. CLI не предоставляет физического
-удаления. Не обходи его прямым SQL, не удаляй историю, исходники, вложения,
-backup или WAL/SHM. Не запускай VACUUM, миграции или перестройку индексов ради
-ритуальной «оптимизации» без отдельной технической причины.
+This workflow preserves data logically: confirmed duplicates leave ordinary
+results but remain readable with history. The CLI provides no physical deletion.
+Do not bypass it with direct SQL, delete history, sources, attachments, backups
+or WAL/SHM, or run VACUUM, migrations or index rebuilds as ritual “optimization”
+without a separate technical reason.

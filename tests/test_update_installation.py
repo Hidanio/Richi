@@ -187,7 +187,9 @@ class InstallationTests(unittest.TestCase):
         first = self.apply("0.1.0")
         self.assertEqual(first["status"], "updated")
         self.assertEqual(first["previous"]["generation"], "seed")
-        second = self.apply("0.1.0")
+        with patch("richi_launcher.releases.download_wheel") as download:
+            second = self.apply("0.1.0")
+            download.assert_not_called()
         self.assertEqual(second["status"], "already_current")
         self.assertEqual(second["current"], first["current"])
 
@@ -222,6 +224,36 @@ class InstallationTests(unittest.TestCase):
         self.assertEqual(result["previous"], first["current"])
         again = installation.rollback()
         self.assertEqual(again["current"], first["current"])
+
+    def test_verified_same_version_cannot_be_replaced_by_different_wheel(self):
+        first = self.apply("0.2.0")
+        before = (self.root / "state.json").read_bytes()
+        changed = self.release("0.2.0")
+        changed["manifest"]["wheel"]["sha256"] = "f" * 64
+        with patch("richi_launcher.releases.download_wheel") as download:
+            with self.assertRaisesRegex(ConfigError, "differs from the verified"):
+                installation.apply_release(changed)
+            download.assert_not_called()
+        self.assertEqual((self.root / "state.json").read_bytes(), before)
+        self.assertEqual(self.state()["current"], first["current"]["generation"])
+
+    def test_interrupted_seed_pruning_preserves_permanent_module_entry(self):
+        self.apply("0.2.0")
+        remove = installation.shutil.rmtree
+        def interrupted(path, *args, **kwargs):
+            if Path(path) == self.site / "richi_launcher":
+                raise OSError("simulated interrupted seed cleanup")
+            return remove(path, *args, **kwargs)
+        with patch.object(installation.shutil, "rmtree", side_effect=interrupted):
+            result = self.apply("0.3.0")
+        self.assertTrue(result["cleanup"]["failures"])
+        self.assertEqual(result["current"]["version"], "0.3.0")
+        module = self.site / "richi" / "__main__.py"
+        self.assertEqual(module.read_text(), "from richi_bootstrap import main\nraise SystemExit(main())\n")
+        with patch.object(installation, "_validate_layout"):
+            retried = installation.cleanup()
+        self.assertEqual(retried["cleanup"]["failures"], [])
+        self.assertEqual(list((self.site / "richi").iterdir()), [module])
 
     def test_seed_retired_only_after_lease_ends_and_bootstrap_is_preserved(self):
         _, generation, descriptor = bootstrap.select(self.ctx)

@@ -1,7 +1,11 @@
-# Контекст инженерной задачи
+<a id="контекст-инженерной-задачи"></a>
 
-`brief` собирает один ограниченный JSON из запроса, при необходимости выбранного
-изменения кода и сохранённых связей. Это явная операция чтения общей памяти.
+# Engineering task context
+
+English | [Русский](BRIEF.ru.md)
+
+`brief` assembles one bounded JSON response from a query, an optional selected
+code change and stored relationships. This is an explicit read of shared memory.
 
 ```sh
 richi brief 'почему выбрали этот timeout' \
@@ -20,150 +24,156 @@ richi brief 'какой опыт учесть перед изменением к
   --check-sources --check-limit 12
 ```
 
-`--base` включает Git-подбор и требует `--project` — ID зарегистрированного
-репозитория. `--check-sources` независимо включает проверку сохранённых файлов
-выбранных карточек. Без обоих флагов Git не вызывается; обычный brief сохраняет
-прежнее поведение.
+`--base` enables Git selection and requires `--project`, the ID of a registered
+repository. `--check-sources` independently enables checks of stored files
+for selected cards. Without either flag, Git is not invoked; ordinary brief retains
+its previous behavior.
 
-`--target`, `--worktree` и `--repo` допустимы с `--base` или `--check-sources`.
-Без `--base` явное указание любого из этих параметров требует `--project`.
-`--target` и `--worktree` взаимоисключающие. `--repo` выбирает связанный worktree
-зарегистрированного репозитория по правилам [GIT.md](GIT.md).
-Сравниваются точные endpoints; автоматического merge-base нет. Для подбора
-по diff рабочего дерева действуют ограничения [IMPACT.md](IMPACT.md), включая
-отказ при внешних clean/process-фильтрах. SQLite читается одной транзакцией;
-рабочая копия Git остаётся изменяемой во время чтения.
+`--target`, `--worktree` and `--repo` are allowed with `--base` or `--check-sources`.
+Without `--base`, explicitly supplying any of these parameters requires `--project`.
+`--target` and `--worktree` are mutually exclusive. `--repo` selects a linked worktree
+of the registered repository according to [GIT.md](GIT.md).
+Exact endpoints are compared; there is no automatic merge-base. Working-tree diff
+selection follows the restrictions in [IMPACT.md](IMPACT.md), including
+rejection of external clean/process filters. SQLite is read in one transaction;
+the Git working copy remains mutable during the read.
 
-## Откуда берутся карточки
+<a id="откуда-берутся-карточки"></a>
 
-1. Запрос использует существующий `recall`: те же лексические правила, защита
-   точного Jira ID, учёт неоднозначных понятий и один переход по явной связи.
-   Проект повышает релевантность, а не изолирует знания других сервисов.
-2. Указанный diff использует `sources impact`. Совпадения определяются источниками
-   изменённых файлов, включая поддержанные старые ссылки `git:FULL_SHA[:path]`.
-3. От первых трёх прямых entry/entity-совпадений по diff проверяется один переход
-   по явным связям с источниками. Карточки связей `edge:` не становятся узлами
-   обхода. Членство в проекте не расширяется во все его записи. Соседи, найденные
-   только по графу, не запускают следующий переход.
+## Where cards come from
 
-Каналы запроса и diff независимы: например, эксперимент без Jira ID может попасть
-через сохранённую связь с задачей, найденной по файлам diff. Это не ослабляет
-Jira-фильтр обычного recall. Тип и направление связи остаются видимыми; переход
-не доказывает причинного влияния или применимости опыта к новому коду.
+1. The query uses existing `recall`: the same lexical rules, exact Jira ID
+   protection, handling of ambiguous concepts and one hop along an explicit relationship.
+   The project raises relevance rather than isolating knowledge from other services.
+2. The specified diff uses `sources impact`. Matches are determined by sources
+   for changed files, including supported legacy `git:FULL_SHA[:path]` links.
+3. The first three direct entry/entity matches from the diff are checked for one hop
+   along explicit sourced relationships. Relationship cards with `edge:` refs do not become
+   traversal nodes. Project membership does not expand into all its records. Neighbors
+   found only through the graph do not initiate another hop.
 
-По умолчанию оба канала и связи используют только `confirmed`. Для исторического
-или нерешённого материала явно добавьте `--include-superseded` или
-`--include-hypotheses`. Эти состояния сохраняются в ответе. `work_state` также
-передаётся без повышения: merged не означает released.
+The query and diff channels are independent: for example, an experiment without a Jira ID
+may enter through a stored relationship with a task found by diff files. This does not weaken
+the Jira filter of ordinary recall. Relationship type and direction remain visible; a hop
+does not prove causal impact or applicability of past experience to new code.
 
-## Как читать результат
+By default, both channels and relationships use only `confirmed`. For historical
+or unresolved material, explicitly add `--include-superseded` or
+`--include-hypotheses`. These states are preserved in the response. `work_state` is also
+passed through without promotion: merged does not mean released.
 
-- `results` объединены по устойчивому `ref`. `selected_by` показывает `query`,
-  `code_change` или `explicit_relation`; дополнительные причины — в
-  `query_match_reasons` и `code_match_reasons`.
-- `matches` содержит точный индекс в исходном массиве sources, SHA и совпавшие
-  пути. `connections` сохраняет ref ребра, направление, описание, источники и
-  `anchor_ref`. Связанный результат удерживается вместе с хотя бы одной
-  карточкой, от которой получен; для полного ребра есть отдельный `read_more`.
-- `summary_excerpt` — дословные выдержки. `is_excerpt` и счётчики пропусков
-  обязательны к прочтению. Полную карточку открывайте через `read_more` перед
-  выводом или применением процедуры. Усечённые ответы нельзя записывать обратно.
-- `comparison` фиксирует полные SHA выбранных endpoints подбора по diff.
-  Сам подбор не сравнивает байты каждого источника с целью. Для такой проверки
-  добавьте `--check-sources` либо используйте
-  `sources git-check --ref REF --source N` для конкретного свидетельства.
-- `coverage` разделяет полноту поиска, проверку источников diff и ограничение
-  связанных кандидатов. `coverage_complete` относится к этим ограниченным
-  механизмам, а не к полноте всех знаний или зависимостей системы.
+<a id="как-читать-результат"></a>
 
-Сначала защищаются точные совпадения запроса, затем чередуются каналы запроса
-и файлов. До двух мест могут получить связанные карточки; они не вытесняют
-точные ID. Значения рангов разных механизмов не складываются. Без diff сохраняется
-отбор обычного recall до применения общего бюджета.
+## Reading the result
 
-Лимит результатов — 1–50, бюджет — 4000–100000 символов всего JSON с завершающим
-переводом строки. По умолчанию 8 карточек и 16000 символов. Сначала сокращаются
-выдержки и вторичные свидетельства, затем целиком убираются карточки и связи,
-оставшиеся без исходной карточки. Полные refs, SHA и источники не обрезаются.
-Очень большой обязательный заголовок ответа может потребовать большего бюджета.
+- `results` are deduplicated by stable `ref`. `selected_by` shows `query`,
+  `code_change` or `explicit_relation`; additional reasons appear in
+  `query_match_reasons` and `code_match_reasons`.
+- `matches` contains the exact index in the original sources array, SHA and matching
+  paths. `connections` preserves the edge ref, direction, description, sources and
+  `anchor_ref`. A related result is retained together with at least one
+  card from which it was obtained; the full edge has a separate `read_more`.
+- `summary_excerpt` contains verbatim excerpts. Read `is_excerpt` and omission
+  counters. Open the full card through `read_more` before drawing a conclusion
+  or applying a procedure. Truncated responses must not be written back.
+- `comparison` records the full SHAs of selected diff endpoints.
+  Selection itself does not compare each source's bytes with the target. For that check,
+  add `--check-sources` or use
+  `sources git-check --ref REF --source N` for a specific piece of evidence.
+- `coverage` separates search completeness, diff-source inspection and the limit
+  on related candidates. `coverage_complete` refers to these bounded
+  mechanisms, not completeness of all system knowledge or dependencies.
 
-`candidate_count` — число уникальных карточек, дошедших до сборки; кандидаты
-вне внутренних shortlist отдельно отражены в `coverage`. `selection_omitted`
-показывает отсеянное лимитом карточек, `budget.omitted_results` — последующее
-сокращение из-за объёма. `no_match` становится true только при отсутствии
-совпадений и полном заявленном покрытии. Пустой ответ при пропусках не означает,
-что нужного опыта не существует.
+Exact query matches are protected first, then query and file channels alternate.
+Up to two slots may go to related cards; they do not displace
+exact IDs. Ranks from different mechanisms are not added together. Without a diff,
+ordinary recall selection is preserved until the shared budget is applied.
 
-## Проверка источников выбранных карточек
+The result limit is 1–50, and the budget is 4000–100000 characters for the entire JSON,
+including the final newline. Defaults are 8 cards and 16000 characters. Excerpts
+and secondary evidence are shortened first, then whole cards and relationships
+left without their anchor card are removed. Full refs, SHAs and sources are not truncated.
+An unusually large mandatory response header may require a larger budget.
 
-`--check-sources` сравнивает сохранённые байты Git-источников с выбранной целью.
-Сначала обычный brief выбирает карточки и укладывает контекст в бюджет; затем
-проверка читает полные массивы `sources` только этих карточек. Усечение источников
-в выдержке не меняет их индексы и не ограничивает проверку этой выдержкой.
-Другие узлы и источники связей, которые показаны лишь внутри `connections`,
-не становятся дополнительным набором проверок.
+`candidate_count` is the number of unique cards reaching assembly; candidates
+outside internal shortlists are separately reflected in `coverage`. `selection_omitted`
+shows omissions caused by the card limit; `budget.omitted_results` shows subsequent
+reductions due to size. `no_match` becomes true only when there are no
+matches and all declared coverage is complete. An empty response with omissions does not mean
+that relevant experience does not exist.
 
-`--check-limit` задаёт число попыток Git-проверки: по умолчанию 12, допустимо
-1–50. Явно указать его можно только с `--check-sources`. Недоступный репозиторий
-или некорректный якорь расходуют попытку; обычные URL, ссылки только на коммит
-без пути и источники вне выбранного репозитория её не расходуют. Это ограниченная
-проверка выбранного контекста, а не обход всей базы.
+<a id="проверка-источников-выбранных-карточек"></a>
 
-С `--project ID` проверяются источники этого репозитория. Карточки соседних
-проектов по-прежнему могут попасть через recall, где проект лишь повышает
-релевантность; их источники другого репозитория отмечаются как непроверенные.
-Без `--project` и явных параметров цели каждый найденный репозиторий сравнивается
-со своим локальным HEAD. При совместном `--base ... --check-sources` используется
-уже разрешённый SHA цели diff. Ветки и HEAD разрешаются в точные SHA для
-проверок; сетевое обновление не выполняется.
+## Checking sources of selected cards
 
-Поддерживаются структурированные `source.git` и старые файловые ссылки
-`git:FULL_SHA:path`. Для старой ссылки репозиторий должен однозначно определяться
-в сохранённом scope карточки; текущий `--project` не создаёт ей новый scope.
-Если старая ссылка содержит `sha256`, он должен совпадать с файлом сохранённого
-коммита; несовпадение даёт `unavailable`. Отсутствие исторического хеша отдельно
-обозначается в результате.
-Ссылка `git:FULL_SHA` без пути остаётся непроверенной: сначала выберите файл через
-`sources commit`, затем выполните отдельный `sources git-check --ref REF
---source N --path FILE`. Проверка не привязывает новые якоря к записи.
+`--check-sources` compares stored Git-source bytes with the selected target.
+First, ordinary brief selects cards and fits context into the budget; then
+checking reads the full `sources` arrays of only those cards. Source truncation
+in an excerpt does not change their indices or restrict checking to that excerpt.
+Other nodes and relationship sources shown only inside `connections`
+do not become an additional set of checks.
 
-`source_checks` в каждой карточке содержит счётчики источников, проверок и
-пропусков, `not_checked_reasons`, массив `results` и `results_omitted`.
-Результаты используют `unchanged`, `changed`, `deleted` или `unavailable`;
-число непроверенных Git-источников сгруппировано по причинам в
-`not_checked_reasons`. Обычные источники учитываются отдельно в
-`non_git_source_count` и не считаются проверкой Git. В `results` индекс
-`source_index` считается с 1 в полном исходном массиве, включая обычные URL.
-`record_updated_at` связывает индексы с прочитанной версией карточки.
-`read_more` карточки открывает полную запись, а `read_more` результата повторяет
-проверку конкретного источника. После изменения карточки следует перечитать
-запись и сверить индекс перед отдельной проверкой.
+`--check-limit` specifies the number of Git-check attempts: the default is 12, and the allowed range is
+1–50. It can be explicitly supplied only with `--check-sources`. An unavailable repository
+or invalid anchor consumes an attempt; ordinary URLs, commit-only links
+without a path and sources outside the selected repository do not. This is a bounded
+check of selected context, not a scan of the whole database.
 
-`source_check_coverage` отдельно описывает покрытие проверки байтов.
-Её `complete` не становится true при недоступном источнике, непроверенном
-Git-источнике или опущенных результатах. Это не замена `coverage` подбора знаний:
-пустой поиск и неполная проверка источников означают разные вещи.
-`resolved_targets` содержит полный SHA и режим сравнения каждого прочитанного
-репозитория; `counts` разделяет результаты по статусам.
+With `--project ID`, sources from that repository are checked. Cards from neighboring
+projects may still enter through recall, where the project only raises
+relevance; their sources from other repositories are marked unchecked.
+Without `--project` or explicit target parameters, each identified repository is compared
+with its own local HEAD. Combining `--base ... --check-sources` uses
+the already resolved SHA of the diff target. Branches and HEAD are resolved to exact SHAs
+for checking; no network refresh is performed.
 
-Проверки имеют общий лимит времени 20 секунд на Git-операции и прежний общий
-JSON-бюджет brief. Причины остановки по лимиту и времени отражаются в покрытии.
-При упаковке сначала убираются детали проверок; `results_omitted` показывает
-пропущенные результаты, даже если они учтены в числе выполненных проверок.
-Тесный бюджет не превращает пропуск в успешную проверку.
+Structured `source.git` and legacy file links
+`git:FULL_SHA:path` are supported. For a legacy link, the repository must be unambiguously determined
+from the card's stored scope; the current `--project` does not create new scope for it.
+If a legacy link contains `sha256`, it must match the file at the stored
+commit; a mismatch yields `unavailable`. A missing historical hash is separately
+reported in the result.
+A `git:FULL_SHA` link without a path remains unchecked: first select a file through
+`sources commit`, then run a separate `sources git-check --ref REF
+--source N --path FILE`. Checking does not attach new anchors to the record.
 
-`--worktree` читает реальные байты рабочей копии. Смена HEAD к концу проверки
-даёт `unavailable`; совпавший HEAD не гарантирует неизменность файлов во время
-чтения. Это не атомарный снимок всего рабочего дерева. Для сохранённого
-незакоммиченного источника исходной стороной остаётся его захваченный снимок.
+`source_checks` in each card contains source, check and omission
+counts, `not_checked_reasons`, a `results` array and `results_omitted`.
+Results use `unchanged`, `changed`, `deleted` or `unavailable`;
+the number of unchecked Git sources is grouped by reason in
+`not_checked_reasons`. Ordinary sources are counted separately in
+`non_git_source_count` and do not count as Git checks. In `results`,
+`source_index` is one-based within the full original array, including ordinary URLs.
+`record_updated_at` binds the indices to the card version that was read.
+The card's `read_more` opens the full record, while a result's `read_more` repeats
+the check of a specific source. After the card changes, reread
+the record and verify the index before a separate check.
 
-`changed`, `deleted`, недоступные и непроверенные Git-источники добавляют причину
-`needs_recheck` в ответе. `unchanged` не снимает существующие причины перепроверки.
-Изменившиеся байты — повод пересмотреть применимость вывода; неизменившиеся
-не доказывают истинность знания, состояние зависимостей или релиза. Проверка
-не повышает `verified_at`, `knowledge_state` и `work_state` и не заменяет
-содержательное чтение источника.
+`source_check_coverage` separately describes byte-check coverage.
+Its `complete` does not become true when a source is unavailable, a Git source
+is unchecked or results are omitted. It does not replace knowledge-selection `coverage`:
+an empty search and incomplete source checking mean different things.
+`resolved_targets` contains the full SHA and comparison mode for each repository
+read; `counts` separates results by status.
 
-Команда не пишет память, не обновляет `verified_at`, не запускает модели,
-процедуры, fetch или чтение внешних URL. Она объединяет доступные свидетельства;
-смысловую оценку их применимости выполняет агент в текущей задаче.
+Checks share a 20-second time limit for Git operations and the existing overall
+brief JSON budget. Limit and timeout stopping reasons are reflected in coverage.
+During packing, check details are removed first; `results_omitted` shows
+omitted results even if they count toward completed checks.
+A tight budget does not turn an omission into a successful check.
+
+`--worktree` reads actual working-copy bytes. A change of HEAD by the end of checking
+yields `unavailable`; an unchanged HEAD does not guarantee that files stayed unchanged during
+the read. This is not an atomic snapshot of the entire working tree. For a stored
+uncommitted source, its captured snapshot remains the original side.
+
+`changed`, `deleted`, unavailable and unchecked Git sources add a
+`needs_recheck` reason to the response. `unchanged` does not clear existing recheck reasons.
+Changed bytes are a reason to revisit a conclusion's applicability; unchanged bytes
+do not prove knowledge truth, dependency state or release status. Checking
+does not promote `verified_at`, `knowledge_state` or `work_state` and does not replace
+substantive reading of a source.
+
+The command does not write memory, update `verified_at`, run models,
+procedures, fetch or external URL reads. It combines available evidence;
+the agent assesses semantic applicability within the current task.

@@ -2,6 +2,7 @@
 """Read-only loopback viewer for project memory. Python standard library only."""
 
 import argparse
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -35,6 +36,8 @@ GIT_QUERY_LIMIT = 8192
 GIT_OPERATION_TIMEOUT = 25
 GIT_WORKER_TIMEOUT = 30
 GIT_WORKER_OUTPUT_LIMIT = 450000
+GRAPH_WORKER_TIMEOUT = 20
+GRAPH_WORKER_OUTPUT_LIMIT = 32 * 1024 * 1024
 
 
 class LoopbackHTTPServer(ThreadingHTTPServer):
@@ -160,48 +163,83 @@ def _git_worker():
     sys.stdout.write(json.dumps({"status": status, "payload": payload}, ensure_ascii=False))
 
 
-def _run_git_request(database, options, runtime=None, config_file=None, workspace=None, config_required=False):
-    """Bound worker time and pipes; HTTP threads never retain unbounded Git output."""
-    request = json.dumps({"database": str(database), "options": options}).encode("utf-8")
-    process = subprocess.Popen(runtime_command(runtime or current_runtime(), [], action="git_worker"),
-        cwd=str(BASE), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        start_new_session=True, pass_fds=lease_fds(), env=worker_environment(config_file, workspace, config_required))
+def _read_worker_output(process, *, label, timeout, maximum, request=None):
+    """Drain both pipes within one budget and always reap the owned worker."""
     selector = selectors.DefaultSelector()
-    output, size = [], 0
-    deadline = time.monotonic() + GIT_WORKER_TIMEOUT
+    output, size = {"stdout": [], "stderr": []}, 0
+    deadline = time.monotonic() + timeout
     try:
-        process.stdin.write(request)
-        process.stdin.close()
-        selector.register(process.stdout, selectors.EVENT_READ, True)
-        selector.register(process.stderr, selectors.EVENT_READ, False)
+        if request is not None:
+            process.stdin.write(request)
+            process.stdin.close()
+        selector.register(process.stdout, selectors.EVENT_READ, "stdout")
+        selector.register(process.stderr, selectors.EVENT_READ, "stderr")
         while selector.get_map():
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise TimeoutError("Git navigation timed out")
+                raise TimeoutError(label + " timed out")
             for key, _ in selector.select(min(remaining, 0.2)):
                 chunk = os.read(key.fileobj.fileno(), 65536)
                 if not chunk:
                     selector.unregister(key.fileobj)
                     continue
                 size += len(chunk)
-                if size > GIT_WORKER_OUTPUT_LIMIT:
-                    raise ValueError("Git navigation output exceeded the size limit")
-                if key.data:
-                    output.append(chunk)
+                if size > maximum:
+                    raise ValueError(label + " output exceeded the size limit")
+                output[key.data].append(chunk)
         process.wait(timeout=max(0.01, deadline - time.monotonic()))
-        if process.returncode:
-            raise ValueError("Git navigation worker failed")
-        result = json.loads(b"".join(output))
-        return result["status"], result["payload"]
-    except (OSError, ValueError, KeyError, TimeoutError, subprocess.TimeoutExpired) as exc:
-        return 503, {"error": str(exc)[:1000], "code": "timeout" if isinstance(exc, (TimeoutError, subprocess.TimeoutExpired)) else "git_unavailable"}
+        return process.returncode, b"".join(output["stdout"]), b"".join(output["stderr"])
     finally:
         if process.poll() is None:
             process.kill()
         process.wait()
         selector.close()
+        if process.stdin is not None:
+            try:
+                process.stdin.close()
+            except OSError:
+                pass
         process.stdout.close()
         process.stderr.close()
+
+
+def _run_git_request(database, options, runtime=None, config_file=None, workspace=None, config_required=False):
+    """Bound worker time and pipes; HTTP threads never retain unbounded Git output."""
+    request = json.dumps({"database": str(database), "options": options}).encode("utf-8")
+    process = subprocess.Popen(runtime_command(runtime or current_runtime(), [], action="git_worker"),
+        cwd=str(BASE), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        start_new_session=True, pass_fds=lease_fds(), env=worker_environment(config_file, workspace, config_required))
+    try:
+        status, output, _error = _read_worker_output(process, label="Git navigation",
+            timeout=GIT_WORKER_TIMEOUT, maximum=GIT_WORKER_OUTPUT_LIMIT, request=request)
+        if status:
+            raise ValueError("Git navigation worker failed")
+        result = json.loads(output)
+        return result["status"], result["payload"]
+    except (OSError, ValueError, KeyError, TimeoutError, subprocess.TimeoutExpired) as exc:
+        return 503, {"error": str(exc)[:1000], "code": "timeout" if isinstance(exc, (TimeoutError, subprocess.TimeoutExpired)) else "git_unavailable"}
+
+
+def _run_graph_request(database, flags, runtime, config_file=None, workspace=None, config_required=False):
+    """Node limits do not bound full card payloads; cap bytes before buffering them."""
+    try:
+        process = subprocess.Popen(
+            runtime_command(runtime, [*config_arguments(config_file, config_required),
+                                      "--db", str(database), "graph", "export", *flags]),
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            pass_fds=lease_fds(), env=worker_environment(config_file, workspace, config_required))
+        status, output, error = _read_worker_output(process, label="Graph export",
+            timeout=GRAPH_WORKER_TIMEOUT, maximum=GRAPH_WORKER_OUTPUT_LIMIT)
+        if status:
+            try:
+                return 503, json.loads(error.decode("utf-8"))
+            except (ValueError, UnicodeError):
+                return 503, {"error": "Graph export failed; run richi check"}
+        return 200, output
+    except (TimeoutError, subprocess.TimeoutExpired):
+        return 503, {"error": "Graph export timed out"}
+    except (OSError, ValueError) as exc:
+        return 503, {"error": str(exc)[:1000]}
 
 
 def compatible_health(health, database, runtime=None, config_file=None):
@@ -301,21 +339,8 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
             if not export_lock.acquire(blocking=False):
                 return self.send_data(503, {"error": "Export in progress; try Refresh again"})
             try:
-                result = subprocess.run(
-                    runtime_command(runtime, [*config_arguments(config_file, config_required),
-                                               "--db", str(database), "graph", "export", *flags]),
-                    capture_output=True, timeout=20, pass_fds=lease_fds(),
-                    env=worker_environment(config_file, workspace, config_required),
-                )
-                if result.returncode:
-                    try:
-                        reason = json.loads(result.stderr.decode("utf-8"))
-                    except (ValueError, UnicodeError):
-                        reason = {"error": "Graph export failed; run richi check"}
-                    return self.send_data(503, reason)
-                return self.send_data(200, result.stdout)
-            except subprocess.TimeoutExpired:
-                return self.send_data(503, {"error": "Graph export timed out"})
+                status, payload = _run_graph_request(database, flags, runtime, config_file, workspace, config_required)
+                return self.send_data(status, payload)
             finally:
                 export_lock.release()
 
@@ -436,7 +461,7 @@ def _main(argv=None):
         parser.error("Database does not exist: " + str(database))
     if not 1 <= args.port <= 65535:
         parser.error("Port must be 1–65535")
-    with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True) as conn:
+    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as conn:
         if conn.execute("PRAGMA user_version").fetchone()[0] != 2:
             parser.error("The map requires schema 2; run richi backup and richi migrate")
     runtime = current_runtime()

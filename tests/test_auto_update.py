@@ -39,8 +39,10 @@ class AutoUpdateTests(unittest.TestCase):
         return {"supported": True, "root": str(self.root), "current": dict(self.current)}
 
     def release(self, version="0.2.0", checksum="a" * 64):
-        return {"version": version, "manifest": {"version": version,
-                "wheel": {"sha256": checksum}}}
+        return {"version": version, "manifest": {"format_version": 1, "version": version,
+                "updater_protocol": 1, "python_min": [3, 9], "database_schemas": [1, 2], "map_schema": 2,
+                "wheel": {"filename": "richi-" + version + "-py3-none-any.whl", "size": 1,
+                          "sha256": checksum}}}
 
     def apply(self, release, *, expected_generation, blocking, before_apply, activation_guard, require_auto):
         self.assertFalse(blocking)
@@ -113,6 +115,39 @@ class AutoUpdateTests(unittest.TestCase):
         result = auto_update.run()
         self.assertEqual(result["status"], "release_available")
         self.assertEqual(result["action"], "richi update apply --version 0.1.0")
+        installation.apply_release.assert_not_called()
+
+    def test_check_only_does_not_recommend_incompatible_release(self):
+        auto_update.enable()
+        for changes in ({"python_min": [99, 0]}, {"database_schemas": [2, 3], "map_schema": 3}):
+            with self.subTest(changes=changes):
+                release = self.release()
+                release["manifest"].update(changes)
+                releases.fetch_release.return_value = release
+                with patch.object(releases, "download_wheel") as download:
+                    result = auto_update.run()
+                self.assertEqual(result["status"], "incompatible_release")
+                self.assertIn("error", result)
+                self.assertNotIn("action", result)
+                self.assertNotIn("action", self.state()["last_outcome"])
+                self.assertIsNone(self.state()["in_progress"])
+                self.assertIsNone(self.state()["quarantine"])
+                self.assertEqual(self.state()["failure_count"], 0)
+                download.assert_not_called()
+                self.due()
+        installation.apply_release.assert_not_called()
+
+    def test_check_only_rejects_changed_wheel_for_verified_current_version(self):
+        self.current["wheel_sha256"] = "b" * 64
+        auto_update.enable()
+        releases.fetch_release.return_value = self.release("0.1.0")
+        with patch.object(releases, "download_wheel") as download:
+            result = auto_update.run()
+        self.assertEqual(result["status"], "release_changed")
+        self.assertNotIn("action", result)
+        self.assertIn("error", result)
+        self.assertEqual(self.current["wheel_sha256"], "b" * 64)
+        download.assert_not_called()
         installation.apply_release.assert_not_called()
 
     def legacy_policy(self):

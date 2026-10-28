@@ -707,7 +707,18 @@ def _recall(conn, args, api, *, bounded=True):
     # Reserve at most two places for connected evidence; keep exact/lexical hits first.
     graph_only = rank(item for node_ref, item in graph_by_ref.items() if node_ref not in {x["ref"] for x in direct[:args.limit]})
     protected = sum(any(reason in {"exact_id", "exact_jira_key", "exact_alias", "exact_concept_alias"} for reason in item["reasons"]) for item in direct[:args.limit])
-    additions = graph_only[:min(2, max(0, args.limit - max(1, protected)))]
+    # A related card is useful only together with its lexical seed and the
+    # connecting evidence. Reserving a slot must not evict that same seed.
+    additions = []
+    for count in range(min(2, max(0, args.limit - max(1, protected))), 0, -1):
+        seeds = {item["ref"] for item in direct[:args.limit - count]}
+        eligible = [item for item in graph_only if any(
+            (edge["from_ref"] == item["ref"] and edge["to_ref"] in seeds) or
+            (edge["to_ref"] == item["ref"] and edge["from_ref"] in seeds)
+            for edge in edges_by_id.values())]
+        if len(eligible) >= count:
+            additions = eligible[:count]
+            break
     chosen = direct[:max(0, args.limit - len(additions))] + additions
     if trace:
         trace.selection(direct, graph_by_ref, chosen, fts_truncated, graph_truncated)
@@ -732,6 +743,7 @@ def _recall(conn, args, api, *, bounded=True):
         "query": query[:500], "query_is_excerpt": len(query) > 500, "project": project, "results": results,
         "edges": [edge for edge in edges_by_id.values() if edge["from_ref"] in selected and edge["to_ref"] in selected],
         "no_match": not bool(results), "candidate_count": len(set(direct_by_ref) | set(graph_by_ref)),
+        "truncated": fts_truncated or graph_truncated,
         "selection": {"method": "weighted_lexical_then_explicit_1hop",
                       "search_backend": backend, "terms": [term[:64] for term in terms[:16]], "jira_keys": keys[:20],
                       "knowledge_states": states, "project_mode": "boost", "graph_depth": 1,

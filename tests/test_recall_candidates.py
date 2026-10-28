@@ -207,6 +207,16 @@ class RecallCandidateTests(unittest.TestCase):
     def refs(value):
         return [item["ref"] for item in value["results"]]
 
+    def test_shortlist_cap_marks_the_response_incomplete_even_when_all_candidates_fit(self):
+        self.entry("first", title="boundedneedle")
+        self.entry("second", title="boundedneedle")
+        with patch.object(recall, "CANDIDATE_LIMIT", 1):
+            value = recall.recall(self.conn, self.arguments("boundedneedle"), memory)
+        self.assertEqual(value["candidate_count"], 1)
+        self.assertEqual(len(value["results"]), 1)
+        self.assertTrue(value["selection"]["fts_candidates_truncated"])
+        self.assertTrue(value["truncated"])
+
     def shortlist(self, query):
         terms, keys = recall.terms_for(query)
         expressions = ['"' + word.replace('"', '""') + '"*' for word in terms]

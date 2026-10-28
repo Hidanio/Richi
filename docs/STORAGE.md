@@ -1,4 +1,7 @@
+<a id="рост-хранилища-и-обслуживание-индексов"></a>
 # Storage growth and index maintenance
+
+English | [Русский](STORAGE.ru.md)
 
 The [synthetic retrieval/storage experiment](RETRIEVAL_STORAGE_EVAL.md) includes
 measured revision growth and verifies that maintenance preserves canonical data.
@@ -22,6 +25,7 @@ schema version, record IDs, rowids, history and idempotency events stay unchange
 SQLite may update its own planner statistics. No speed or disk-size improvement is
 promised: an already healthy index may have nothing to optimize.
 
+<a id="отчёт-о-размере"></a>
 ## Size report
 
 `storage stats` opens a read transaction. It reports:
@@ -84,6 +88,7 @@ compare like-for-like scope/coverage before estimating growth per day. Reading
 statistics does not checkpoint, run integrity checks, hash evidence, repair
 indexes, alter knowledge or create backups.
 
+<a id="явная-оптимизация"></a>
 ## Explicit optimize
 
 The plan names two possible operations:
@@ -121,6 +126,7 @@ SQLite backups do not include `artifacts/git/` or repository objects needed to
 reopen historical code evidence. Keep those with any complete restoration plan.
 Do not manually remove active `-wal` or `-shm` files.
 
+<a id="как-возникает-рост"></a>
 ## How growth happens
 
 Each changed entry/entity/edge retains its full previous and new JSON payloads in
@@ -139,6 +145,7 @@ distinct captured versions remain separate.
 Before automatic retention, measure these sources independently. Never infer
 that old, long, rarely returned or superseded knowledge can be deleted safely.
 
+<a id="следующие-изменения-для-оценки"></a>
 ## Next changes to evaluate
 
 The first potential write optimization is skipping FTS reindexing when indexed
@@ -170,6 +177,7 @@ current/history/FTS/WAL/file growth, write/read latency and recall correctness,
 including concurrent readers. Fresh-process timing is not necessarily a cold
 filesystem-cache measurement. Public fixtures must contain no personal knowledge.
 
+<a id="справочники-sqlite"></a>
 ## SQLite references
 
 - [PRAGMA optimize and analysis limits](https://www.sqlite.org/pragma.html#pragma_optimize)

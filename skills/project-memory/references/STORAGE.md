@@ -1,5 +1,7 @@
 # Storage size and explicit index maintenance
 
+English | [Русский](STORAGE.ru.md)
+
 Use for requested storage diagnosis or maintenance, not before ordinary searches.
 Workspace selection follows [SKILL.md](../SKILL.md). These operations cover the
 selected workspace database, even when a project path validates membership.

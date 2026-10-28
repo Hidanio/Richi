@@ -1,7 +1,10 @@
-# Обновления из GitHub Releases
+<a id="обновления-из-github-releases"></a>
+# Updates from GitHub Releases
 
-Richi устанавливается в отдельное окружение Python. После первоначальной
-установки опубликованные стабильные версии можно получать командами:
+English | [Русский](UPDATES.ru.md)
+
+Richi is installed in a dedicated Python environment. After the initial
+installation, obtain published stable versions with:
 
 ```sh
 richi update check
@@ -9,117 +12,127 @@ richi update apply
 richi update rollback
 ```
 
-`check` только проверяет официальный репозиторий `Hidanio/Richi` и показывает
-текущую/предыдущую установленную версию. `apply` скачивает последний стабильный
-релиз. Для конкретного релиза используйте `--version X.Y.Z` у `check` или `apply`.
-Draft и prerelease не устанавливаются. Если релизов ещё нет, результат —
-`no_release`; наличие кода в основной ветке не означает наличие релиза.
-Сетевые ошибки не меняют установленный код.
+`check` only queries the official `Hidanio/Richi` repository and shows the current
+and previous installed versions. `apply` downloads the latest stable release.
+To select a specific release, use `--version X.Y.Z` with `check` or `apply`.
+Drafts and prereleases are not installed. When no releases exist, the result is
+`no_release`; code being present on the main branch does not mean a release exists.
+Network failures do not change the installed code.
 
-Обновляется **установка целиком**, для всех использующих её workspace.
-Команды обновления не принимают `-w`, `--config`, `--db` и `--project-path`,
-не читают базы и не требуют выбора workspace в новом чате.
-Существующие привязки чатов, настройки `dev`, пути исходников, SQLite и
-Git-снимки остаются прежними. При включённом dev команды памяти продолжают
-использовать исходники, а `dev false` выбирает установленный релиз.
-Сломанный dev не блокирует проверку и установку релиза.
+Updates affect the **entire installation**, across every workspace using it.
+Update commands do not accept `-w`, `--config`, `--db` or `--project-path`, do not
+read databases, and do not require workspace selection in a new chat. Existing
+chat bindings, `dev` settings, source paths, SQLite and captured Git bytes remain
+unchanged. With dev enabled, memory commands keep using source code; `dev false`
+selects the installed release. Broken dev sources do not block release checks
+or installation.
 
-## Установка и откат
+<a id="установка-и-откат"></a>
+## Installation and rollback
 
-Обновлятор проверяет версию, протокол запуска, поддерживаемые схемы, размер
-и SHA256 wheel, затем создаёт отдельное окружение для кандидата. Установка
-использует только проверенный wheel, без загрузки зависимостей из PyPI.
-Импорты и версия кандидата проверяются отдельным процессом до переключения.
-После успешной проверки указатель текущей версии меняется атомарно.
-Неудачный кандидат удаляется; текущая версия остаётся на месте.
+The updater checks the version, launcher protocol, supported schemas, wheel size
+and SHA256, then creates a separate environment for the candidate. Installation
+uses only the verified wheel, without downloading dependencies from PyPI. A
+separate process checks candidate imports and version before activation. After
+successful checks, the current-version pointer changes atomically. A failed
+candidate is removed; the current version stays in place.
 
-`rollback` переключает на предыдущую версию без сети. После отката версии
-меняются местами, так что повторный откат возвращает прежнюю текущую версию.
-Downgrade через `apply` запрещён: для этого есть явный откат. Установка из
-checkout не имеет подтверждённой идентичности опубликованного wheel, поэтому
-релиз с таким же номером можно установить один раз; совпадение номера само по
-себе не доказывает совпадение сборки.
+`rollback` switches to the previous version without network access. It swaps the
+two versions, so another rollback restores the version that was current before
+the first rollback. `apply` cannot downgrade; use explicit rollback for that.
+An installation from a checkout has no verified published-wheel identity, so a
+release with the same version number can be installed once. A matching version
+number alone does not prove identical builds.
 
-Обновление не выполняет миграцию базы. Первый протокол требует совместимости
-со схемами 1 и 2 и схемой карты 2. Изменение этого контракта потребует отдельного
-механизма обновления с резервированием и проверкой данных. Несовместимый
-протокол обновлятора отклоняется до установки.
+`check` returns `incompatible_release` and `can_apply: false` if a release is
+incompatible with the current Python or schemas. An unknown protocol is rejected
+when reading the manifest. If the wheel for an already verified installed release
+is replaced by another file with the same version number, the result is
+`release_changed` and installation is rejected. A corrected build needs a new
+version. Background checks without automatic installation report these reasons
+as well and do not suggest an installation command for a blocked release.
 
-## Сколько версий хранится
+Updating does not migrate a database. Protocol 1 requires compatibility with
+schemas 1 and 2 and map schema 2. Changing this contract requires a separate
+update mechanism with backups and data verification. An incompatible updater
+protocol is rejected before installation.
 
-Постоянно хранятся текущая и одна предыдущая версия. Во время установки
-временно существует кандидат. У каждой работающей команды, карты и её
-дочерних процессов есть блокировка используемой версии: очистка не удаляет
-код, которым они ещё пользуются. Такая отложенная версия может временно
-увеличить число каталогов. После завершения процессов очистка выполняется
-при следующем обновлении, откате или явно:
+<a id="сколько-версий-хранится"></a>
+## Version retention
+
+The current version and one previous version are retained. A candidate exists
+temporarily during installation. Every running command, map and child process
+holds a lease on its version; cleanup does not delete code still in use. A
+retired but leased version may temporarily increase the number of directories.
+After those processes finish, cleanup runs on the next update, rollback or
+explicit invocation:
 
 ```sh
 richi update cleanup
 ```
 
-Результат показывает удалённые и отложенные версии и ошибки очистки.
-`check` ничего не удаляет. Исходное окружение сохраняет Python и небольшой
-постоянный модуль запуска; после вытеснения исходной версии её полный код
-также удаляется. Это инфраструктура запуска, а не третья полная версия Richi.
+The result lists removed and deferred versions and cleanup errors. `check` does
+not delete anything. The original environment retains Python and a small
+permanent bootstrap module; once the original version is retired, its full code
+is removed too. This is launch infrastructure, not a third complete Richi version.
 
-Состояние хранится в платформенном каталоге Richi, в `installations/`, отдельно
-для каждого исходного окружения Python. Пути отображаются в `update check`.
-Настройки конкретного workspace не определяют расположение установленного кода.
-Не перемещайте вручную управляемые окружения и не редактируйте указатели версий.
+State lives under `installations/` in Richi's platform data directory, separately
+for each original Python environment. `update check` shows the paths. Workspace
+settings do not determine installed code locations. Do not manually move managed
+environments or edit version pointers.
 
-## Работающая карта и первоначальный переход
+<a id="работающая-карта-и-первоначальный-переход"></a>
+## Running maps and the initial transition
 
-Новые вызовы CLI получают новую версию сразу. Уже запущенная карта продолжает
-использовать свою версию до перезапуска, включая дочерние операции и dev-reload.
-После обновления перезапустите её процесс и выполните `richi map`.
-Для карты в текущем терминале: `Ctrl+C`, затем повторный запуск.
-Для фоновой карты завершите принадлежащий Richi процесс, PID которого указан
-в `/api/health`, затем запустите `richi map` заново. Обновлятор не завершает
-чужие или неизвестные процессы.
+New CLI invocations use the new version immediately. A running map keeps its
+version until restarted, including child operations and dev reloads. After an
+update, restart its process and run `richi map`. For a foreground map, press
+`Ctrl+C` and start it again. For a background map, stop the Richi-owned process
+whose PID is reported by `/api/health`, then run `richi map` again. The updater
+does not terminate unrelated or unknown processes.
 
-При переходе со старой установки без этого обновлятора один раз установите
-новый wheel в исходное выделенное окружение Python и перезапустите все старые
-процессы Richi. Они ещё не умеют удерживать блокировки версии. После этого
-обычные обновления выполняются через CLI. В управляемой установке используйте
-`update apply`, а не переустановку пакета через pip поверх исходного окружения.
+To transition from an older installation without this updater, install the new
+wheel once in the original dedicated Python environment and restart all old
+Richi processes. They do not yet hold version leases. Subsequent updates use the
+CLI. In a managed installation, use `update apply` instead of installing over
+the original environment with pip.
 
-Обновлятор отказывается менять системный Python, editable-установку и окружение
-с посторонними пакетами. Для такого случая создайте отдельное окружение по
-[инструкции установки](INSTALLATION.md). Проверить наличие релизов можно и без
-поддержки управляемой установки.
+The updater refuses to modify system Python, editable installations and
+environments containing unrelated packages. Create a dedicated environment using
+the [installation guide](INSTALLATION.md). Release checks remain available even
+when managed installation is unsupported.
 
-Порядок публикации описан в [RELEASING.md](RELEASING.md).
+The publication procedure is described in [RELEASING.md](RELEASING.md).
 
-## Фоновая проверка и выбор установки
+<a id="фоновая-проверка-и-выбор-установки"></a>
+## Background checks and installation choice
 
-Фоновая проверка и автоустановка изначально выключены. Чтобы только проверять
-релизы по расписанию, зарегистрируйте задание пользователя в macOS LaunchAgent
-или Linux systemd --user:
+Background checks and automatic installation are initially disabled. To check
+releases on a schedule without installing, register a user task through a macOS
+LaunchAgent or Linux systemd --user:
 
 ```sh
 richi update auto enable --interval 6h
 richi update auto status
 ```
 
-Такой режим получает сведения о релизе, но не скачивает wheel и не меняет
-установленную версию. Доступный релиз и команду его установки можно увидеть в
-`auto status`. Пользователь сам решает, когда выполнить `richi update apply`
-или `richi update apply --version X.Y.Z`. Системные уведомления и кнопка установки
-в карте пока не реализованы.
+This mode retrieves release information without downloading the wheel or changing
+the installed version. `auto status` shows an available release and its installation
+command. The user decides when to run `richi update apply` or
+`richi update apply --version X.Y.Z`. System notifications and an install button
+in the map are not implemented yet.
 
-Автоустановка — отдельная опция, **выключенная по умолчанию**. Включайте её,
-только если хотите устанавливать подходящие релизы без отдельного подтверждения
-каждой версии:
+Automatic installation is a separate option, **disabled by default**. Enable it
+only if you want compatible releases installed without confirming each version:
 
 ```sh
 richi update auto enable --interval 6h --install
 ```
 
-Без флага `--install` команда `enable` всегда выбирает только проверку, даже
-если автоустановка была включена раньше. Старые настройки без явного поля
-`auto_install: true` также разрешают только проверку. `auto status` показывает
-отдельно `enabled` (расписание) и `auto_install` (разрешение установки).
+Without `--install`, `enable` always selects checking only, even if automatic
+installation was previously enabled. Older settings without an explicit
+`auto_install: true` also permit checking only. `auto status` reports `enabled`
+(the schedule) and `auto_install` (permission to install) separately.
 
 ```sh
 # Выключить автоустановку, оставить проверку:
@@ -128,52 +141,54 @@ richi update auto enable --interval 6h
 richi update auto disable
 ```
 
-Интервал по умолчанию — 6 часов, допустимы целые минуты, часы и дни от `15m`
-до `7d`. Системное задание просыпается каждые 15 минут; Python проверяет срок
-следующей попытки и завершает вызов, если ещё рано. `enable` сбрасывает срок
-и разрешает ближайшую проверку. Выключенный или спящий компьютер проверять
-релизы не может: проверки продолжатся после возвращения пользовательского
-сеанса. Постоянный процесс, Codex, LLM и токены для этого не нужны.
+The default interval is 6 hours. Whole minutes, hours and days from `15m` through
+`7d` are accepted. The system task wakes every 15 minutes; Python checks the next
+attempt's due time and exits if it is too early. `enable` resets that time and
+allows the next check. A powered-off or sleeping computer cannot check releases;
+checks resume when the user's session returns. No persistent process, Codex,
+LLM or tokens are required.
 
-Для одной попытки по тем же правилам срока и выбранного режима:
+To make one attempt under the same due-time and selected-mode rules:
 
 ```sh
 richi update auto run
 ```
 
-Команда не обходит отключение и не требует выбора workspace. Расписание
-запускает постоянный Python исходной установки с очищенным окружением.
-SQLite, настройки workspace и dev-исходники фоновый режим не меняет.
+This command does not bypass a disabled policy or require workspace selection.
+The schedule starts the original installation's permanent Python with a cleaned
+environment. Background mode does not change SQLite, workspace settings or dev
+sources.
 
-При временной сетевой ошибке повтор назначается через 15 минут, затем 30 минут
-и далее с удвоением до выбранного интервала. Отсутствие опубликованных релизов —
-штатный результат `no_release`.
+A transient network failure schedules a retry after 15 minutes, then 30 minutes,
+doubling up to the chosen interval. No published releases is a normal `no_release`
+result.
 
-## Защита при включённой автоустановке
+<a id="защита-при-включённой-автоустановке"></a>
+## Safeguards for automatic installation
 
-Режим `--install` использует тот же проверенный wheel и атомарную установку,
-что `update apply`. Открытую карту нужно перезапустить вручную, чтобы обновить
-установленный runtime. Непрошедший проверку кандидат блокируется до более новой
-версии или явного повторного включения. Одновременные попытки сериализуются;
-ручная операция имеет приоритет перед ожидающей фоновой установкой.
+`--install` uses the same verified wheel and atomic installation as `update apply`.
+Restart an open map manually to update its installed runtime. A candidate that
+fails verification is blocked until a newer version or an explicit re-enable.
+Concurrent attempts are serialized; a manual operation has priority over a
+waiting background installation.
 
-`disable` сначала сохраняет отключение и снимает разрешение автоустановки,
-затем удаляет системное задание. Если загрузка уже началась, финальная проверка
-отменит переключение и удалит кандидата. Завершившееся до отключения обновление
-остаётся установленным. Если удаление задания ОС не удалось, политика всё равно
-остаётся отключённой; ошибка команды объяснит, что нужно исправить.
+`disable` first persists the disabled policy and revokes permission to install,
+then removes the system task. If a download has started, the final guard cancels
+activation and removes the candidate. An update that completed before disabling
+remains installed. If removing the OS task fails, the policy stays disabled and
+the command's error explains what needs repair.
 
-Ручной откат приостанавливает автоустановку, чтобы она не вернула отменённую
-версию. Неожиданное изменение текущего поколения установки, включая ручное
-применение другой версии или откат через старый запускатель, тоже вызывает
-паузу автоустановки. Повторное `enable --install` подтверждает текущее состояние
-и возобновляет её. Обычный `enable` возвращает к проверке без установки.
-Проверки без автоустановки продолжают работать после ручного изменения версии.
+Manual rollback pauses automatic installation so it cannot immediately reinstall
+the reverted version. An unexpected change of the current installation generation,
+including a manual update or rollback through an older launcher, also pauses
+automatic installation. Repeating `enable --install` confirms the current state
+and resumes it. Plain `enable` returns to checking without installation. Checks
+without automatic installation continue after manual version changes.
 
-`status` показывает реальную регистрацию задания ОС, срок следующей попытки,
-последний результат, причину паузы и последние 20 событий. Состояние, политика и
-журнал находятся рядом с метаданными установки в `installations/`; вывод фонового
-процесса не накапливается в неограниченном файле. Для macOS нужен пользовательский
-GUI-сеанс launchd, для Linux — работающий systemd user manager. Если такой
-планировщик недоступен, включение завершается понятной ошибкой; явные команды
-`update check` и `update apply` по-прежнему доступны.
+`status` reports actual OS task registration, the next due time, last outcome,
+pause reason and last 20 events. State, policy and journal files live beside the
+installation metadata in `installations/`; background process output does not
+accumulate in an unbounded log. macOS requires a user GUI launchd session; Linux
+requires a running systemd user manager. If such a scheduler is unavailable,
+enabling returns an actionable error; explicit `update check` and `update apply`
+remain available.

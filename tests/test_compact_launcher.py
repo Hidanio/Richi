@@ -10,6 +10,7 @@ import unittest
 from unittest import mock
 
 from richi import memory
+import richi_bootstrap
 from richi_launcher import cli
 from richi_launcher.runtime import bootstrap_command
 
@@ -99,6 +100,22 @@ class CompactLauncherTests(unittest.TestCase):
         self.assertEqual(rejected, "")
         self.assertIn("not a workspace", json.loads(error)["error"])
         update.assert_called_once_with(["check"])
+
+    def test_emergency_rollback_accepts_non_storage_global_options(self):
+        for prefix in ([], ["--compact-json"], ["--chat", "synthetic"],
+                       ["--chat=synthetic", "--compact-json"],
+                       ["--compact-json", "--chat", "synthetic", "--compact-json"]):
+            with self.subTest(prefix=prefix):
+                self.assertTrue(richi_bootstrap._rollback_requested(prefix + ["update", "rollback"]))
+        for arguments in (["--db", "synthetic.db", "update", "rollback"],
+                          ["-wdefault", "update", "rollback"],
+                          ["--project-path", "/synthetic", "update", "rollback"],
+                          ["--compact-json=false", "update", "rollback"],
+                          ["update", "rollback", "--help"],
+                          ["update", "rollback", "--compact-json"],
+                          ["--chat", "--compact-json", "update", "rollback", "extra"]):
+            with self.subTest(arguments=arguments):
+                self.assertFalse(richi_bootstrap._rollback_requested(arguments))
 
     def test_chat_help_keeps_fixed_runtime_and_text_output(self):
         selected = object()

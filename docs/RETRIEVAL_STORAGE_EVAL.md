@@ -1,5 +1,7 @@
 # Retrieval and storage experiment, 2026-10-23
 
+English | [Русский](RETRIEVAL_STORAGE_EVAL.ru.md)
+
 The new tools reduce returned context and repeated process starts while preserving
 whole records on demand. They do not change recall ranking or remove its current
 candidate scans. Index maintenance preserves all historical knowledge; it does

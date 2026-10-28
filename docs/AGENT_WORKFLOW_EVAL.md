@@ -1,5 +1,7 @@
 # Agent workflow payload and context evaluation
 
+English | [Русский](AGENT_WORKFLOW_EVAL.ru.md)
+
 This evaluation measures prerecorded local tool workflows against synthetic data.
 It does not run a language model, judge generated answers or measure reasoning,
 production accuracy, billing, cache effectiveness or a complete real conversation.

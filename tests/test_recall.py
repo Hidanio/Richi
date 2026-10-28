@@ -207,6 +207,54 @@ class RecallTests(unittest.TestCase):
         self.put("edge", self.edge("left-right", "entry:left", "entry:right"))
         self.assertEqual(self.ids(self.recall("reversehopneedle")), {"left", "right"})
 
+    def test_related_result_cannot_displace_its_own_seed(self):
+        self.put("entry", [self.entry(identity, title="routingneedle")
+                           for identity in ("a", "b", "c")]
+                 + [self.entry("neighbor")])
+        self.put("edge", self.edge("third-seed", "entry:c", "entry:neighbor"))
+        value = self.recall("routingneedle", "--limit", "2")
+        self.assertEqual(self.ids(value), {"a", "b"})
+        self.assertEqual(value["edges"], [])
+
+    def test_budget_keeps_related_cards_and_connection_evidence_together(self):
+        self.put("entry", [self.entry("seed", aliases=["atomicwitnessneedle"]),
+                           self.entry("neighbor")])
+        self.put("edge", self.edge("witness", "entry:seed", "entry:neighbor",
+                                    kind="domain:informs",
+                                    sources=[{"reference": "https://example.test/" + "x" * 1300}]))
+        for maximum in (2000, 3000, 4000, 6000):
+            with self.subTest(maximum=maximum):
+                value = self.recall("atomicwitnessneedle", "--max-chars", str(maximum))
+                refs = {card["ref"] for card in value["results"]}
+                self.assertFalse(value["no_match"])
+                for edge in value["edges"]:
+                    self.assertIn(edge["from_ref"], refs)
+                    self.assertIn(edge["to_ref"], refs)
+                if "entry:neighbor" in refs:
+                    self.assertIn("entry:seed", refs)
+                    self.assertTrue(value["edges"])
+                    self.assertTrue(value["edges"][0]["sources"])
+
+    def test_related_selection_uses_endpoints_with_colons_in_edge_kind(self):
+        self.put("entry", [self.entry("seed", aliases=["colonkindneedle"]),
+                           self.entry("neighbor")])
+        self.put("edge", self.edge("witness", "entry:seed", "entry:neighbor",
+                                    kind="domain:informs"))
+        value = self.recall("colonkindneedle", "--limit", "2")
+        self.assertEqual(self.ids(value), {"seed", "neighbor"})
+        self.assertEqual(len(value["edges"]), 1)
+        self.assertEqual(value["edges"][0]["kind"], "domain:informs")
+
+    def test_edge_excerpt_marks_whole_response_truncated(self):
+        self.put("entry", [self.entry("seed", aliases=["edgeexcerptneedle"]),
+                           self.entry("neighbor")])
+        self.put("edge", self.edge("excerpt", "entry:seed", "entry:neighbor",
+                                    description="Detailed evidence. " * 40))
+        value = self.recall("edgeexcerptneedle", "--max-chars", "16000")
+        self.assertEqual(len(value["results"]), 2)
+        self.assertTrue(value["edges"][0]["description_is_excerpt"])
+        self.assertTrue(value["truncated"])
+
     def test_entities_are_searchable_and_keep_native_id_and_qualified_ref(self):
         entity = self.entity("concept:ablation", title="Контрольное отключение", aliases=["абляционныйанализ"])
         self.put("entity", entity)

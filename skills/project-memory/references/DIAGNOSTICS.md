@@ -1,68 +1,74 @@
-# Диагностика поиска, знаний и источников
+<a id="диагностика-поиска-знаний-и-источников"></a>
+# Search, knowledge and source diagnostics
 
-Все команды запускаются явно, работают локально и не вызывают модели или сеть.
-SQLite остаётся каноническим хранилищем. Схема 2 не меняется; для записи знаний
-продолжают использоваться `entry/entity/edge put` с историей и CAS.
-Команды чтения открывают базу через `mode=ro` и `query_only=ON`.
+English | [Русский](DIAGNOSTICS.ru.md)
 
-Примеры ниже используют установленную команду `richi`. ID демонстрационные;
-реальные проекты можно получить через `project list`.
+All commands run explicitly, operate locally and call neither models nor the
+network. SQLite remains the canonical store. Schema 2 is unchanged; knowledge
+writes still use `entry/entity/edge put` with history and CAS. Read commands open
+the database with `mode=ro` and `query_only=ON`.
 
-## Почему запись не найдена
+The examples below use the installed `richi` command. IDs are illustrative;
+use `project list` to obtain real projects.
 
-Порядок проверки известного пропуска и семантика `--expect`/`--explain`:
-[RECALL_DEBUG.md](RECALL_DEBUG.md). Ниже — дополнительные счётчики реализации.
+<a id="почему-запись-не-найдена"></a>
+## Why a record was not found
 
-### Счётчики предварительного отбора entries
+The procedure for investigating a known miss and the semantics of
+`--expect`/`--explain` are in [RECALL_DEBUG.md](RECALL_DEBUG.md). Additional
+implementation counters are described below.
 
-При наличии FTS полный payload читается по первичному ключу для записи из
-FTS shortlist или совпадения ID/Jira/alias-правил. После явного
-`search-index build` поиск маршрутов использует индекс и читает только
-метаданные отобранных записей (`id`, `jira_key`, `aliases`). Без индекса остаётся
-линейный обход; без FTS — полный lexical fallback. Индекс также сужает
-лексических кандидатов entities. Необновлённые старым runtime и слишком большие
-для индекса записи проверяются резервным путём. Нормализация и scoring прежние.
-Составной `--where` применяется до FTS shortlist, к прямым и графовым результатам.
-Команды и семантика: [FILTERS.md](FILTERS.md).
+<a id="счётчики-предварительного-отбора-entries"></a>
+### Entry preselection counters
 
-В полной `explain.counts` различаются:
+With FTS available, a full payload is read by primary key for a record in the
+FTS shortlist or a match under ID/Jira/alias rules. After an explicit
+`search-index build`, route lookup uses the index and reads only the selected
+records' metadata (`id`, `jira_key`, `aliases`). Without the index, a linear scan
+remains; without FTS, a full lexical fallback applies. The index also narrows
+lexical entity candidates. Records not refreshed by an older runtime and records
+too large for the index use a fallback path. Normalization and scoring are
+unchanged. A composed `--where` applies before the FTS shortlist, to direct and
+graph results. Commands and semantics: [FILTERS.md](FILTERS.md).
 
-| Поле | Что считается |
+The full `explain.counts` distinguishes:
+
+| Field | What it counts |
 |---|---|
-| `entries_scanned` | Реально посещённые entries после фильтров и доступного индексного отбора: метаданные при FTS, полные записи без FTS |
-| `entities_scanned` | Полные entities, переданные лексической оценке после фильтров и доступного индексного отбора |
-| `entries_scored` | Полные записи, обработанные lexical scoring прямого поиска, включая отклонённые последующими guards |
-| `entries_prefiltered` | Entries, исключённые предварительным отбором, включая исключённую ожидаемую запись |
-| `expected_entry_probes` | Отдельные полные чтения и lexical-проверки исключённой entry из `--expect`; максимум одно |
+| `entries_scanned` | Entries actually visited after filters and available index selection: metadata with FTS, full records without FTS |
+| `entities_scanned` | Full entities passed to lexical scoring after filters and available index selection |
+| `entries_scored` | Full records processed by direct-search lexical scoring, including those rejected by later guards |
+| `entries_prefiltered` | Entries excluded by preselection, including an excluded expected record |
+| `expected_entry_probes` | Separate full reads and lexical checks of an excluded entry named by `--expect`; at most one |
 
-`entries_scored + entries_prefiltered = entries_scanned`. Диагностическая
-проверка ожидаемой записи не входит в `entries_scored`: она уже учтена среди
-`entries_prefiltered`. Это не число результатов, физических чтений SQLite
-или всех SQL-строк: графовое дополнение, проверка состояния ожидаемого узла
-и работа FTS имеют отдельные пути чтения. Меньшее `entries_scored` не означает,
-что исчез O(N) или что число физических чтений стало постоянным.
+`entries_scored + entries_prefiltered = entries_scanned`. The diagnostic probe
+of the expected record is not included in `entries_scored`: it is already counted
+among `entries_prefiltered`. These are not counts of results, physical SQLite
+reads or all SQL rows: graph expansion, expected-node state checks and FTS have
+separate read paths. A lower `entries_scored` does not mean O(N) work disappeared
+or physical reads became constant.
 
-Для посещённых, но исключённых маршрутизацией записей `direct_rejected`
-содержит `routing_prefilter`: их полный lexical guard не выполнялся.
-Записи, которые индекс вообще не посещал, не добавляются в счётчики исключений.
-Если исключённая entry явно задана через `--expect`, одно дополнительное
-чтение по ID позволяет показать фактически проверенный `weak_lexical`,
-`subject_guard`, `short_subject_guard`, `jira_guard` либо `fts_not_shortlisted`
-относительно уже выполненного FTS shortlist. Такая проверка не добавляет
-запись в кандидаты и не меняет ранжирование; возможное попадание через граф
-показывается отдельно. Для отсутствующей или отфильтрованной по состоянию
-цели дополнительной полной проверки нет. `filtered_where` отмечает ожидаемую
-запись, исключённую строгим составным фильтром.
+For visited records excluded by routing, `direct_rejected` contains
+`routing_prefilter`: their full lexical guard did not run. Records the index
+never visited are not added to rejection counters. If an excluded entry is
+explicitly named with `--expect`, one additional read by ID reports the actually
+tested `weak_lexical`, `subject_guard`, `short_subject_guard`, `jira_guard` or
+`fts_not_shortlisted` relative to the FTS shortlist already produced. This probe
+does not add the record to candidates or change ranking; possible inclusion
+through the graph is reported separately. Missing or state-filtered targets do
+not receive an additional full probe. `filtered_where` marks an expected record
+excluded by the strict composed filter.
 
-Новые диагностические поля расходуют общий `--max-chars`. При тесном бюджете
-они могут быть опущены с `details_omitted_for_budget`, либо может измениться
-число показанных карточек. Отсутствующий счётчик не означает ноль. Сравнивайте
-обычную выдачу отдельно от `--explain`/`--expect`; сохранение её поведения
-не обещает побайтно прежний диагностический JSON при том же бюджете.
+New diagnostic fields consume the shared `--max-chars` budget. With a tight
+budget, they may be omitted with `details_omitted_for_budget`, or the number of
+shown cards may change. An absent counter does not mean zero. Compare ordinary
+results separately from `--explain`/`--expect`; preserving their behavior does
+not promise byte-identical diagnostic JSON at the same budget.
 
-## Кандидаты для ручного обслуживания
+<a id="кандидаты-для-ручного-обслуживания"></a>
+## Candidates for manual maintenance
 
-Команда диагностики — `punisher`.
+The diagnostic command is `punisher`.
 
 ```sh
 richi punisher --project service-example --limit 20 --max-chars 16000
@@ -71,53 +77,55 @@ richi --project-path /actual/checkout punisher --project service-example \
 richi punisher --stale-days 180 --as-of 2026-10-01
 ```
 
-`health` содержит состояние SQLite и счётчики, `findings` — короткие кандидаты
-для просмотра. Проверяются отсутствие источников/дат, давность проверки,
-изолированные сущности, точные повторы текста, общие aliases и длина summary. Гипотеза,
-одинаковый alias или старая дата сами по себе не означают ошибку. Даже точный
-повтор текста может относиться к разным задачам или контрактам.
+`health` contains SQLite status and counters; `findings` contains short candidates
+for review. Checks cover missing sources/dates, verification age, isolated
+entities, exact duplicate text, shared aliases and summary length. A hypothesis,
+shared alias or old date alone does not imply an error. Even identical text can
+refer to different tasks or contracts.
 
-`--project` задаёт строгую область: memberships записей и прямые подтверждённые
-`used_in` с источниками от entity к проекту. Это отличается от повышения
-приоритета в recall и связной компоненты `graph export --project`.
-Проверка целостности SQLite относится ко всей базе, а смысловые кандидаты —
-к выбранной области. `--as-of` фиксирует дату для воспроизводимого отчёта.
+`--project` defines a strict scope: entry memberships and direct confirmed
+`used_in` edges with sources from an entity to the project. This differs from
+recall priority boosting and the connected component of `graph export --project`.
+SQLite integrity checks cover the whole database; semantic candidates cover the
+selected scope. `--as-of` fixes the date for a reproducible report.
 
-Проверяйте `coverage`, `truncated` и `budget`: ограниченный отчёт не доказывает
-отсутствие остальных кандидатов. `candidate_count` и `finding_counts` учитывают
-все находки внутри фактически проверенной области до ограничения выдачи;
-`budget.omitted_findings` учитывает находки, не попавшие в вывод из-за `--limit`
-или `--max-chars`. При сокращении самих счётчиков есть `finding_counts_omitted`.
-Текущее число кандидатов не расширяет scan caps: до 5000 записей на таблицу
-и 10000 явных рёбер. Неполное сканирование отмечено в `coverage.complete`;
-это отдельное ограничение от числа показанных findings. Сортировка стабильна:
-уровень (`error`, `review`, `info`), код, refs. Ради бюджета finding
-может быть опущен целиком; идентификаторы не обрезаются.
+Check `coverage`, `truncated` and `budget`: a bounded report does not prove that
+other candidates are absent. `candidate_count` and `finding_counts` count all
+findings within the scope actually examined before output limits;
+`budget.omitted_findings` counts findings excluded by `--limit` or `--max-chars`.
+If the counters themselves are shortened, `finding_counts_omitted` is present.
+The current candidate count does not expand scan caps: up to 5000 records per
+table and 10000 explicit edges. Incomplete scanning is marked in
+`coverage.complete`, separately from the number of findings shown. Ordering is
+stable: level (`error`, `review`, `info`), code, refs. A finding may be omitted
+entirely to fit the budget; identifiers are never shortened.
 
-Punisher ничего не объединяет, не удаляет, не изменяет записи, историю,
-связи, состояния, даты проверки, FTS или schema version. Он поддерживает
-схемы 1 и 2, не читает entry_history, файлы источников, Git или сеть.
-Данные другого workspace не используются. Решения по кандидатам — в [MEMORY_AUDIT.md](MEMORY_AUDIT.md);
-процедура изменений — в [MAINTENANCE.md](MAINTENANCE.md).
+Punisher does not merge, delete or change records, history, links, states,
+verification dates, FTS or the schema version. It supports schemas 1 and 2 and
+does not read entry_history, source files, Git or the network. No data from
+another workspace is used. Candidate decisions are covered in
+[MEMORY_AUDIT.md](MEMORY_AUDIT.md); the change procedure is in
+[MAINTENANCE.md](MAINTENANCE.md).
 
-### Длинная summary
+<a id="длинная-summary"></a>
+### Long summaries
 
-`--summary-warn-chars` — целое число от 1 до 1000000 включительно,
-по умолчанию 6000. Неверное значение отклоняется; внутренний Python API
-также отклоняет `bool`. Это начальный настраиваемый ориентир удобства чтения,
-не измеренная граница качества и не лимит записи.
+`--summary-warn-chars` is an integer from 1 through 1000000 inclusive, default
+6000. Invalid values are rejected; the internal Python API also rejects `bool`.
+This is an initial configurable readability guide, not a measured quality
+boundary or a write limit.
 
-Проверяются только summary уже выбранных entries и scoped entities. Длина —
-`len(summary)` сохранённой Unicode-строки без нормализации или `strip`;
-это символы Python, не байты, токены или визуальные графемы. При длине,
-равной порогу, finding отсутствует; при строго большей длине появляется
-ровно один `long_summary` на запись. Для `confirmed` уровень `review`, для
-`hypothesis` и `superseded` — `info`. Ни одно значение не означает ошибку
-данных или необходимость удалить/разделить запись. Оно не меняет `health`:
-состояние целостности SQLite и кандидаты для редакторской проверки различаются.
+Only summaries of entries and scoped entities already selected are checked.
+Length is `len(summary)` of the stored Unicode string, without normalization or
+`strip`: Python characters, not bytes, tokens or visual graphemes. At exactly the
+threshold there is no finding; strictly above it, exactly one `long_summary`
+appears per record. Its level is `review` for `confirmed`, and `info` for
+`hypothesis` and `superseded`. Neither value establishes a data error or a need
+to delete/split the record. It does not change `health`: SQLite integrity status
+and editorial-review candidates are distinct.
 
-Применённый порог всегда возвращается в metadata отчёта как
-`summary_warn_chars`. Пример одного finding для демонстрационной задачи:
+The applied threshold is always returned in report metadata as
+`summary_warn_chars`. Example finding for an illustrative task:
 
 ```json
 {
@@ -135,18 +143,19 @@ Punisher ничего не объединяет, не удаляет, не из�
 }
 ```
 
-Для entity `read_arguments` равен `["entity", "get", "<полный ID>"]`.
-Если ID начинается с дефиса, перед ним добавляется отдельный аргумент `--`,
-чтобы CLI прочитал его как ID, а не опцию; сам ID сохраняется без изменений.
-Это точные аргументы после `richi`, а не shell-строка: не склеивайте
-неэкранированный ID в исполняемую команду. Сам длинный summary в finding
-не включается. У показанного finding сохраняются все обязательные details,
-даже при малом бюджете; если он не помещается целиком, увеличивается
-`omitted_findings`. Отсутствие `long_summary` в усечённом отчёте не доказывает,
-что длинных карточек нет. Сначала прочитайте полный `get`, затем решите,
-полезно ли отделить текущее состояние от подробностей.
+For an entity, `read_arguments` is `["entity", "get", "<полный ID>"]`.
+If the ID starts with a hyphen, a separate `--` argument is inserted before it
+so the CLI reads it as an ID rather than an option; the ID itself is unchanged.
+These are exact arguments after `richi`, not a shell string: do not concatenate
+an unescaped ID into an executable command. The long summary itself is not
+included in the finding. A shown finding retains all required details even
+under a small budget; if it cannot fit in full, `omitted_findings` increases.
+The absence of `long_summary` from a truncated report does not prove there are
+no long cards. Read the full `get` first, then decide whether separating current
+state from detail would help.
 
-## Снимок проверяемой группы и повторная проверка
+<a id="снимок-проверяемой-группы-и-повторная-проверка"></a>
+## Snapshotting a review group and checking it again
 
 ```sh
 richi sources snapshot \
@@ -160,54 +169,54 @@ richi sources check --manifest work/pooling-review-01.json \
   --max-chars 16000
 ```
 
-Снимок создаёт отдельный JSON manifest, не изменяя знания. Он фиксирует полное
-содержание выбранных карточек, их проектные привязки, состав и ревизии
-инцидентных явных рёбер, источники карточек/рёбер и хеши доступных локальных
-файлов. Все состояния знаний учитываются. Проектный scope строгий; соседние
-карточки не включаются автоматически через связанность графа.
+A snapshot creates a separate JSON manifest without changing knowledge. It
+records the complete selected cards, their project memberships, the set and
+revisions of incident explicit edges, card/edge sources and hashes of accessible
+local files. All knowledge states are included. Project scope is strict;
+neighboring cards are not included automatically through graph connectivity.
 
-Повторная проверка обнаруживает изменение карточки, появление/исчезновение
-карточек в выбранном проекте, изменения связей и дрейф локальных файлов.
-Появление нового ребра определяется даже при неизменном `updated_at` узла.
-Это важно при подготовке плана объединения в базе, которую пополняют другие задачи.
+A subsequent check detects card changes, cards entering/leaving the selected
+project, link changes and local-file drift. A new edge is detected even when
+the node's `updated_at` is unchanged. This matters when preparing a merge plan
+in a database receiving writes from other tasks.
 
-Снимок не является backup: он не содержит все данные для восстановления.
-Он также не является блокировкой. Перед записью всё ещё нужны полное чтение
-актуальной карточки и `expected_updated_at`. Изменения после проверки возможны;
-несколько команд записи не становятся общей транзакцией благодаря manifest.
+A snapshot is not a backup: it lacks the complete data needed for restoration.
+It is not a lock either. Writing still requires reading the full current card
+and using `expected_updated_at`. Changes can occur after the check; a manifest
+does not make several write commands one transaction.
 
-Существующий manifest никогда не перезаписывается. Для новой базы сравнения
-нужен новый путь. Подробности неподдерживаемых/недоступных источников и
-ограничений указываются в JSON. URL не загружаются; ссылки на Jira, commit и
-разговоры остаются указателями, которые при необходимости проверяет агент.
-Обычные локальные файлы читаются с ограничениями по размеру и суммарному объёму;
-устройства, FIFO и другие специальные файлы не хешируются.
+An existing manifest is never overwritten. A new comparison baseline requires
+a new path. Unsupported/unavailable sources and limitations are detailed in
+JSON. URLs are not fetched; Jira, commit and conversation links remain pointers
+for the agent to check when needed. Regular local files are read with per-file
+and aggregate size limits; devices, FIFOs and other special files are not hashed.
 
-Лимиты по умолчанию: 200 выбранных узлов, 1000 инцидентных рёбер и 1000 уникальных
-ссылок; файл до 8 MiB, суммарно до 64 MiB за запуск, manifest до 4 MiB.
-Превышение размера выбранного графа требует более узкой группы; пропуски
-файлов отражаются как недоступность. `sources check` выдаёт общий `status`,
-`has_changes`, счётчики и покрытие даже при сокращении подробностей по бюджету.
-`unsupported` означает, что оставшиеся URL не проверялись, а не что они сломаны.
-В этой версии отслеживаются рёбра `graph_edges`; старые связи сервисов из
-таблицы `relations` отдельно не снимаются, что явно указано в `coverage`.
-Manifest привязан к пути базы и отказывается сравниваться с другой базой.
+Default limits: 200 selected nodes, 1000 incident edges and 1000 unique
+references; 8 MiB per file, 64 MiB total per run, 4 MiB per manifest. Exceeding
+the selected graph limit requires a narrower group; skipped files are reported
+as unavailable. `sources check` returns overall `status`, `has_changes`, counts
+and coverage even when details are reduced for the budget. `unsupported` means
+the remaining URLs were not checked, not that they are broken. This version
+tracks `graph_edges`; legacy service relationships in `relations` are not
+snapshotted separately, as explicitly stated in `coverage`. A manifest is bound
+to its database path and refuses comparison against a different database.
 
-Неизменный SHA-256 означает совпадение байтов с manifest. Он не подтверждает
-содержание утверждения, актуальное состояние сервиса или production-релиз.
-Недоступный источник означает пробел проверки, а не автоматическое опровержение
-исторического знания. Никакая из этих команд не продвигает `verified_at`.
+An unchanged SHA-256 means the bytes match the manifest. It does not confirm
+the claim, current service state or a production release. An unavailable source
+means a verification gap, not an automatic refutation of historical knowledge.
+None of these commands advances `verified_at`.
 
-Для Git-источников manifest также сохраняет объект `source.git`, но сравнение
-локального файла по `reference` остаётся сравнением текущих байтов. Сохранённый
-коммит или снимок рабочей копии проверяется отдельной командой
-`sources git-check`. Навигация по коду и обратный поиск описаны в [GIT.md](GIT.md).
-Punisher проверяет структуру Git-метаданных и выдаёт подсказку проверки для
-соответствующей карточки, не читая репозиторий автоматически.
+For Git sources, the manifest also preserves `source.git`, but comparing a local
+file through `reference` still compares current bytes. A saved commit or
+working-tree snapshot is checked separately with `sources git-check`. Code
+navigation and reverse lookup are described in [GIT.md](GIT.md). Punisher checks
+Git metadata structure and supplies a verification hint for the corresponding
+card without reading the repository automatically.
 
-## Точные источники в записях
+<a id="точные-источники-в-записях"></a>
+## Precise sources in records
 
-У `sources` для entries, entities и рёбер появились необязательные поля:
+`sources` for entries, entities and edges support these optional fields:
 
 ```json
 {
@@ -221,15 +230,16 @@ Punisher проверяет структуру Git-метаданных и вы�
 }
 ```
 
-Значения в угловых скобках — placeholders; не копируйте их как доказательства.
-`revision` и `locator` — непустые строки до 1024 символов без управляющих
-символов. `sha256` — 64 шестнадцатеричных символа, нормализуемых к нижнему
-регистру; это хеш всего файла, не строки или выдержки. Заполнять поля нужно
-по фактически проверенным источникам. Они сохраняются в исходном JSON и истории;
-модуль не исполняет locator и не делает checkout указанной ревизии.
+Values in angle brackets are placeholders; do not copy them as evidence.
+`revision` and `locator` are nonempty strings of up to 1024 characters without
+control characters. `sha256` is 64 hexadecimal characters, normalized to
+lowercase: a hash of the entire file, not a line or excerpt. Populate these
+fields from sources actually checked. They are preserved in the original JSON
+and history; the module does not execute a locator or check out the given revision.
 
-Прежние записи без новых полей остаются валидными. Миграция схемы не нужна.
+Older records without the new fields remain valid. No schema migration is needed.
 
+<a id="контекст-workspace-и-пути-проектов"></a>
 ## Workspace context and project paths
 
 Use `richi status` for chat/CLI selection, workspace storage, runtime and cwd membership.

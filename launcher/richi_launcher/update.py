@@ -53,20 +53,10 @@ def command(argv):
     if args.action == "apply":
         return installation.apply_release(release)
     current = local.get("current") or {}
-    version = current.get("version")
     candidate = release["version"]
-    try:
-        comparison = releases.version_tuple(candidate) > releases.version_tuple(version)
-        older = releases.version_tuple(candidate) < releases.version_tuple(version)
-    except ConfigError:
-        comparison, older = True, False
-    verified_same = (candidate == version and current.get("wheel_sha256") ==
-                     release["manifest"]["wheel"]["sha256"])
-    state = ("up_to_date" if verified_same else "older_release" if older else
-             "update_available" if comparison else "release_available")
-    return {"status": state, "installation": local,
+    assessment = installation.assess_release(release["manifest"], current)
+    return {"status": assessment["status"], "installation": local,
             "release": {"version": candidate, "tag": release["tag"], "url": release["html_url"]},
-            "can_apply": bool(local.get("supported")) and not older and not verified_same,
+            "can_apply": bool(local.get("supported")) and assessment["can_apply"],
             "scope": "All release-mode workspaces using this installation; dev settings and data stay unchanged",
-            "message": ("This installation has no verified wheel identity for this release"
-                        if state == "release_available" else state.replace("_", " "))}
+            "message": assessment["message"]}

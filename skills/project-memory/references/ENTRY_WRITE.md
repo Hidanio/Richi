@@ -1,5 +1,7 @@
 # Create or update an entry
 
+English | [Русский](ENTRY_WRITE.ru.md)
+
 Use this procedure for `entry put`, including a draft that will not be submitted.
 Workspace selection, repository membership and write authorization follow
 [SKILL.md](../SKILL.md). A draft-only request does not authorize a write.

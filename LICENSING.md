@@ -1,61 +1,67 @@
-# Использование Richi
+# Using Richi
 
-Правообладатель: **Richardas Kuchinskas**.
-Контакт для согласования: [hidanjkezor@gmail.com](mailto:hidanjkezor@gmail.com).
+English | [Русский](LICENSING.ru.md)
 
-Основной документ — [Richi Personal Use and Organization Agreement License,
-версия 1.0](LICENSE.md). Эта страница поясняет условия и не расширяет разрешения,
-предоставленные полным английским текстом лицензии.
+Copyright holder: **Richardas Kuchinskas**.
+Contact for permission: [hidanjkezor@gmail.com](mailto:hidanjkezor@gmail.com).
 
-## Примеры
+The governing document is the [Richi Personal Use and Organization Agreement
+License, version 1.0](LICENSE.md). This page explains the terms and does not
+expand the permissions granted by the full English license text.
 
-| Сценарий | Условия |
+<a id="примеры"></a>
+## Examples
+
+| Scenario | Terms |
 | --- | --- |
-| Самостоятельное обучение, личные эксперименты и некоммерческий хобби-проект | Бесплатно в пределах Personal Noncommercial Use |
-| Личное использование человеком, который также работает в компании | Бесплатно, если оно действительно независимо от работы и интересов организации |
-| Внутренний инструмент компании или работа над её проектом | Предварительное письменное соглашение |
-| Работа сотрудника или подрядчика в интересах компании | Предварительное письменное соглашение, даже на личном компьютере |
-| Работа для клиента, платные услуги, развитие коммерческого продукта или бизнеса ИП | Предварительное письменное соглашение |
-| Оценка, бенчмарк, proof of concept или пилот для организации | Предварительное письменное соглашение; автоматического пробного периода нет |
-| Использование НКО, учебным заведением или государственным учреждением | Предварительное письменное соглашение |
-| Чтение публичной документации или изучение опубликованного кода | Разрешено, включая представителей организаций |
-| Распространение исходников, изменённых копий или размещение сервиса для других | Отдельное разрешение, кроме независимо существующих прав |
+| Independent learning, personal experiments and a noncommercial hobby project | Free within Personal Noncommercial Use |
+| Personal use by someone who also works for a company | Free if genuinely independent of the organization's work and interests |
+| An internal company tool or work on a company project | Prior written agreement |
+| An employee or contractor working for a company | Prior written agreement, even on a personal computer |
+| Client work, paid services, commercial product development or a sole proprietor's business | Prior written agreement |
+| An organizational evaluation, benchmark, proof of concept or pilot | Prior written agreement; no automatic trial period |
+| Use by a nonprofit, educational institution or government body | Prior written agreement |
+| Reading public documentation or studying published code | Permitted, including for organizational representatives |
+| Distributing source, modified copies or hosting a service for others | Separate permission, except for independently existing rights |
 
-Все примеры учитывают исключения раздела 6 лицензии: применимое право,
-ранее выданные разрешения, условия сторонних компонентов и права, предоставленные
-хостинг-платформой. В частности, собственная лицензия не отменяет права,
-предоставляемые через [GitHub Terms of Service](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service#d-user-generated-content).
+All examples are subject to the exceptions in section 6 of the license:
+applicable law, prior permissions, third-party terms and rights granted by the
+hosting platform. In particular, the custom license does not override rights
+granted through the [GitHub Terms of Service](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service#d-user-generated-content).
 
-Отсутствие выручки, небольшой размер компании, внутренний характер использования
-или запуск дома сами по себе не делают использование личным некоммерческим.
+No revenue, a small company size, internal use or running the software at home
+does not by itself make the use personal and noncommercial.
 
-## Как получить разрешение
+<a id="как-получить-разрешение"></a>
+## Requesting permission
 
-Напишите на [hidanjkezor@gmail.com](mailto:hidanjkezor@gmail.com) с темой
-**Richi — запрос на использование**. Укажите:
+Email [hidanjkezor@gmail.com](mailto:hidanjkezor@gmail.com) with the subject
+**Richi — permission request**. Include:
 
-1. Название организации или описание своей коммерческой деятельности.
-2. Для чего предполагается использовать Richi.
-3. Кто будет пользоваться системой: сотрудники, подрядчики, клиенты.
-4. Где она будет размещена и планируются ли интеграции или изменения кода.
-5. Нужен ли пилот и на какой срок.
+1. The organization's name or a description of your commercial activity.
+2. The intended use of Richi.
+3. Who will use it: employees, contractors or clients.
+4. Where it will run and whether integrations or code changes are planned.
+5. Whether you need a pilot and for how long.
 
-Условия могут быть бесплатными или платными. Разрешение должно явно определять
-получателя, разрешённое использование и применимые условия. Оно не распространяется
-автоматически на аффилированные компании и подрядчиков.
+Terms may be free or paid. Permission must explicitly identify the recipient,
+permitted use and applicable terms. It does not automatically extend to
+associated companies or contractors.
 
-Сам запрос, отсутствие ответа, доступ к репозиторию или платёж без согласованной
-лицензии не заменяют письменное разрешение.
+A request, lack of a reply, repository access or payment without an agreed
+license does not replace written permission.
 
-## Данные и результаты работы
+<a id="данные-и-результаты-работы"></a>
+## Data and work products
 
-Richi не получает автоматически права на вашу память, записи, исходный код,
-запросы или результаты работы. Их права и условия определяются соответствующими
-правообладателями. Если результат содержит части Richi или стороннего материала,
-права на эти части продолжают действовать.
+Richi does not automatically obtain rights to your memory, records, source code,
+queries or work products. Their rights and terms are determined by their
+respective rights holders. If an output contains parts of Richi or third-party
+material, the rights to those parts continue to apply.
 
-## Сторонний код и прежние версии
+<a id="сторонний-код-и-прежние-версии"></a>
+## Third-party code and earlier versions
 
-Сторонние компоненты сохраняют свои лицензии. Ранее предоставленные права
-также сохраняются на применимых к ним условиях; смена текста лицензии для
-будущих версий не отменяет их задним числом.
+Third-party components retain their own licenses. Previously granted rights
+also remain subject to their applicable terms; changing the license text for
+future versions does not revoke them retroactively.

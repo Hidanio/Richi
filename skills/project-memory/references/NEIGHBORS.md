@@ -1,5 +1,7 @@
 # Read links around a known record
 
+English | [Русский](NEIGHBORS.ru.md)
+
 ```sh
 richi --compact-json --project-path /work/example graph neighbors \
   entry:task:EXAMPLE-42 --depth 1 --limit 30 --view compact --max-chars 12000

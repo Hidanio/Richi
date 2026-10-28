@@ -259,7 +259,10 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             broken_cli.write_text("raise RuntimeError('synthetic broken current launcher')\n", encoding="utf-8")
             broken = self.console("--workspace", "default", "--version", ok=False)
             self.assertIn("synthetic broken current launcher", broken.stderr)
-            rollback = self.console_json("update", "rollback")
+            recovered = self.console("--compact-json", "--chat=wheel-lifecycle", "update", "rollback")
+            rollback = json.loads(recovered.stdout)
+            self.assertEqual(recovered.stdout, json.dumps(rollback, ensure_ascii=False,
+                                                         separators=(",", ":")) + "\n")
             self.assertEqual(rollback["status"], "rolled_back")
             self.assertEqual(rollback["current"]["version"], "0.3.0")
             self.assert_public_version("0.3.0")

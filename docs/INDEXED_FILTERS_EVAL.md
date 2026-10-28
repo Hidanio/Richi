@@ -1,5 +1,7 @@
 # Indexed routing and composite-filter evaluation
 
+English | [Русский](INDEXED_FILTERS_EVAL.ru.md)
+
 The original v1 results below are preserved. See [Final audited v2](#final-audited-v2-2026-10-25) for the current implementation and the [workflow evaluation](AGENT_WORKFLOW_EVAL.md) for command/context costs.
 
 This benchmark compares two **normally installed fixed packages** against the

@@ -1,5 +1,7 @@
 # Discover routes, then fetch whole records
 
+English | [Русский](RETRIEVAL_TOOLS.ru.md)
+
 Use this two-step path when the relevant refs still need selection. For a small
 entry set already defined by a lexical query and strict predicates, `search QUERY
 --where EXPR` can return full matches in one call; see [FILTERS.md](FILTERS.md).

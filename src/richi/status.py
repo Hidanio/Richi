@@ -147,7 +147,7 @@ class _Registry:
                     raise ValueError(inspected.get("error", "Cannot inspect nearest Git repository"))
                 repository = inspected["repository"]
                 break
-        result = projects._Projects.check(self, path, repository, expected)
+        result = projects.match_project(self.rows, self.paths, self.identity, path, repository, expected)
         result["project"] = _public(result["project"])
         result["candidates"] = [_public(row) for row in result["candidates"]]
         return result

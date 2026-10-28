@@ -1,8 +1,12 @@
 # Public synthetic evaluations
 
+English | [Русский](README.ru.md)
+
 ## Recall acceptance cases
 
-Run from the repository after installing Richi (or setting `PYTHONPATH=src`):
+Run from the repository with the Python interpreter of a disposable virtual
+environment where the current checkout has been installed normally.
+`PYTHONPATH=src` alone does not supply the launcher and package metadata:
 
 ```sh
 python evals/evaluate_recall.py

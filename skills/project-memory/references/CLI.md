@@ -1,20 +1,26 @@
-# Локальная память проектов
+<a id="локальная-память-проектов"></a>
 
-SQLite хранит карту проектов, связи и рабочий опыт: задачи, исследования, попытки, решения, факты и инструкции. Jira ID необязателен. Записи помогают ответить «делали ли мы когда-то X», найти результат и понять причину решения.
+# Local project memory
 
-Энциклопедия хранит определения проектных терминов как узлы `concept` в той же
-базе. Один термин может иметь несколько значений по контекстам и версиям;
-общие синонимы не объединяют карточки. Каталог, правила наполнения и смысловые
-варианты описаны в [ENCYCLOPEDIA.md](ENCYCLOPEDIA.md).
+English | [Русский](CLI.ru.md)
 
-База хранится отдельно от исходного кода; её фактический путь показывает `richi config show`. Нужен Python 3.9 или новее со стандартным модулем `sqlite3`; runtime использует стандартную библиотеку и не требует облачного сервиса. Интерактивная карта использует необязательный локальный HTTP-сервер на `127.0.0.1`. Вызовы выполняются явно: фонового чтения разговоров, Jira, репозиториев и обновления знаний нет. Источник в записи означает происхождение сведений; наличие ссылки само по себе не доказывает утверждение.
+SQLite stores the project map, relationships and working experience: tasks, research, attempts, decisions, facts and instructions. A Jira ID is optional. Records help answer “have we ever done X,” find the outcome and understand why a decision was made.
 
-## Быстрый старт
+The encyclopedia stores definitions of project terms as `concept` nodes in the same
+database. One term may have several meanings across contexts and versions;
+shared synonyms do not merge cards. The catalog, authoring rules and semantic
+variants are described in [ENCYCLOPEDIA.md](ENCYCLOPEDIA.md).
 
-После установки Richi команды доступны из любой рабочей папки. Примеры `init`
-и прямого `--db` ниже относятся к обычному терминалу: в чате сначала требуется
-выбор workspace и его привязка по [SKILL.md](../SKILL.md). Прямые storage/config
-overrides не обходят эту привязку.
+The database is stored separately from source code; `richi config show` reports its actual path. Python 3.9 or newer with the standard `sqlite3` module is required; the runtime uses the standard library and requires no cloud service. The interactive map uses an optional local HTTP server on `127.0.0.1`. Calls are explicit: there is no background reading of conversations, Jira or repositories, or updating of knowledge. A source in a record indicates provenance; the existence of a link alone does not prove a claim.
+
+<a id="быстрый-старт"></a>
+
+## Quick start
+
+After installing Richi, commands are available from any working directory. The `init`
+and direct `--db` examples below apply to an ordinary terminal: in a chat, workspace
+selection and binding according to [SKILL.md](../SKILL.md) are required first. Direct storage/config
+overrides do not bypass that binding.
 
 ```sh
 richi init
@@ -29,74 +35,78 @@ richi punisher --limit 20 --max-chars 16000
 richi punisher --project service-example --summary-warn-chars 6000
 ```
 
-Для другой базы укажите `--db` **перед** командой:
+For another database, put `--db` **before** the command:
 
 ```sh
 richi --db '/путь с пробелами/память.sqlite3' init
 ```
 
-Все результаты — JSON в stdout; ошибки — JSON в stderr с ненулевым кодом завершения. `--help` выводит обычный текст. Для `put/upsert` параметр `--json` принимает UTF-8 файл либо `-` для stdin. Такой импорт принимает один объект или массив до 1000 объектов и выполняется атомарно: ошибка в одном объекте отменяет весь пакет. Дубли ID внутри пакета запрещены; максимальный размер входа — 10 миллионов символов. Git-команды `sources --json` принимают файл одного источника, без stdin.
+All results are JSON on stdout; errors are JSON on stderr with a nonzero exit code. `--help` prints plain text. For `put/upsert`, `--json` accepts a UTF-8 file or `-` for stdin. An import accepts one object or an array of up to 1000 objects and runs atomically: an error in one object rolls back the entire batch. Duplicate IDs within a batch are forbidden; the maximum input size is 10 million characters. Git `sources --json` commands accept a single-source file, without stdin.
 
-### Компактный JSON для ИИ и скриптов
+<a id="компактный-json-для-ии-и-скриптов"></a>
 
-Глобальный `--compact-json` ставится **до команды**:
+### Compact JSON for AI and scripts
+
+The global `--compact-json` flag goes **before the command**:
 
 ```sh
 richi --compact-json --project-path /work/example recall 'причина решения' --project service-example
 richi --compact-json --project-path /work/example entry get task:ABC-123
 ```
 
-Он убирает отступы и разделительные пробелы успешного JSON в stdout.
-По умолчанию остаётся прежний формат с отступами; строки внутри значений
-не сжимаются и поля не переименовываются. Ошибки в stderr, help/version,
-файлы `--output` и HTTP/карта не меняют формат; `--compact-json map` отклоняется.
-Для bounded-команд размер и fitting считаются тем же renderer, что выводит
-ответ: `budget.output_chars` включает завершающий перевод строки.
-При одинаковом `--max-chars` в компактный ответ может войти больше карточек
-или источников; поэтому равенство полного ограниченного ответа и фиксированный
-процент экономии токенов не обещаются. Это форматирование, не новый режим поиска
-и не гарантия полноты excerpt.
+It removes indentation and separator spaces from successful JSON on stdout.
+The existing indented format remains the default; strings within values
+are not compressed and fields are not renamed. Errors on stderr, help/version,
+`--output` files and HTTP/map retain their format; `--compact-json map` is rejected.
+For bounded commands, size and fitting use the same renderer that emits
+the response: `budget.output_chars` includes the final newline.
+At the same `--max-chars`, a compact response may fit more cards
+or sources; therefore identical full bounded responses and a fixed
+percentage of token savings are not promised. This is formatting, not a new retrieval mode
+or a guarantee of excerpt completeness.
 
-Нужен launcher, установленный с поддержкой флага, даже при `dev=true`.
-Если старый launcher сообщает именно о неизвестном `--compact-json`, повторите
-команду без этого флага с теми же workspace/project selectors. Не меняйте runtime,
-конфигурацию или привязку ради форматирования. Подробности — в
-[WORKSPACES.md](WORKSPACES.md).
+A launcher installed with flag support is required, even with `dev=true`.
+If an older launcher specifically reports an unknown `--compact-json`, repeat
+the command without that flag using the same workspace/project selectors. Do not change runtime,
+configuration or binding for formatting. See
+[WORKSPACES.md](WORKSPACES.md) for details.
 
-Известный ID читайте сразу через `entry get`, `entity get` или `edge get`, если
-нужна полная текущая запись. Предварительные recall и entry read не обязательны:
-короткая полная запись может быть меньше bounded-обёртки. `--history` добавляйте
-для хронологии. При неизвестном ID сначала найдите запись и следуйте `read_more`.
+Read a known ID directly through `entry get`, `entity get` or `edge get` when
+a full current record is needed. Prior recall and entry read calls are not required:
+a short full record may be smaller than a bounded wrapper. Add `--history`
+for chronology. For an unknown ID, first find the record and follow `read_more`.
 
-Команды чтения открывают SQLite в режиме `mode=ro` с `query_only=ON`.
-`punisher` отбирает кандидатов для ручного обслуживания, `recall --explain --expect REF`
-объясняет пропуски, `sources snapshot/check` отслеживает изменения выбранных
-карточек, связей и локальных файлов. Примеры и ограничения — в
-[DIAGNOSTICS.md](DIAGNOSTICS.md). Эти операции не обновляют знания и не вызывают модели.
-`punisher --summary-warn-chars N` принимает целое 1–1000000 (по умолчанию 6000).
-`long_summary` означает, что `len` сохранённой Unicode-summary строго больше N;
-порог не является лимитом записи. Уровень — `review` для confirmed, `info`
-для hypothesis/superseded. Finding содержит длину, порог, kind, state и точные
-`read_arguments` для полного чтения; длина не доказывает устаревание или плохое
-качество. Проверяйте `summary_warn_chars`, coverage и пропуски в отчёте;
-его `health` по-прежнему описывает целостность базы отдельно от кандидатов.
+Read commands open SQLite in `mode=ro` with `query_only=ON`.
+`punisher` selects candidates for manual maintenance, `recall --explain --expect REF`
+explains misses, and `sources snapshot/check` tracks changes in selected
+cards, relationships and local files. Examples and limits are in
+[DIAGNOSTICS.md](DIAGNOSTICS.md). These operations do not update knowledge or invoke models.
+`punisher --summary-warn-chars N` accepts an integer from 1–1000000 (default 6000).
+`long_summary` means that the `len` of the stored Unicode summary is strictly greater than N;
+the threshold is not a write limit. Severity is `review` for confirmed and `info`
+for hypothesis/superseded. A finding includes length, threshold, kind, state and exact
+`read_arguments` for a full read; length does not prove staleness or poor
+quality. Check `summary_warn_chars`, coverage and omissions in the report;
+its `health` still describes database integrity separately from candidates.
 
-Для связи знаний с версиями кода доступны `sources capture/attach`,
-`sources git-check`, `sources show/history/diff` и обратный поиск `sources related`.
-Сохраняются полный SHA, путь и хеш байтов; незакоммиченный код получает отдельный
-снимок. История читается без checkout и сети. Примеры — в [GIT.md](GIT.md).
+To connect knowledge with code versions, use `sources capture/attach`,
+`sources git-check`, `sources show/history/diff` and reverse lookup through `sources related`.
+The full SHA, path and byte hash are stored; uncommitted code gets a separate
+snapshot. History is read without checkout or network access. Examples are in [GIT.md](GIT.md).
 
-`brief QUERY` собирает контекст задачи из recall; с `--project ID --base BASE`
-добавляет знания по изменённым файлам и один переход по сохранённым связям.
-Результаты объединяются без повторов в общем бюджете, сохраняя состояния,
-источники и причины отбора. Необязательный `--check-sources` сравнивает байты
-Git-источников выбранных карточек с целью: по умолчанию до 12 попыток проверки,
-с отдельным покрытием и причинами пропусков. Без `--base` и `--check-sources`
-Git не вызывается. Примеры и ограничения — в [BRIEF.md](BRIEF.md).
+`brief QUERY` assembles task context from recall; with `--project ID --base BASE`,
+it adds knowledge for changed files and one hop along stored relationships.
+Results are deduplicated within a shared budget, preserving states,
+sources and selection reasons. Optional `--check-sources` compares the bytes
+of Git sources from selected cards with the target: up to 12 attempts by default,
+with separate coverage and omission reasons. Without `--base` and `--check-sources`,
+Git is not invoked. Examples and limits are in [BRIEF.md](BRIEF.md).
 
-## Проекты
+<a id="проекты"></a>
 
-`project upsert` создаёт либо полностью обновляет проект. `id` — стабильное имя, обычно имя каталога репозитория. Обязательны `id`, `name`; остальные поля допускают отсутствие.
+## Projects
+
+`project upsert` creates or fully updates a project. `id` is a stable name, usually the repository directory name. `id` and `name` are required; other fields may be absent.
 
 ```sh
 richi project upsert --json - <<'JSON'
@@ -117,15 +127,19 @@ richi project upsert --json - <<'JSON'
 JSON
 ```
 
-В этих примерах имена и пути демонстрационные; они не являются знаниями о реальных проектах. Объект проекта содержит `id`, `name`, `repo_path`, `description`, `source`, `verified_at`. `project list` возвращает `{"projects": [...]}`.
+The names and paths in these examples are illustrative; they are not knowledge about real projects. A project object contains `id`, `name`, `repo_path`, `description`, `source`, `verified_at`. `project list` returns `{"projects": [...]}`.
 
-## Опыт, задачи и решения
+<a id="опыт-задачи-и-решения"></a>
 
-Создание, полная замена payload, CAS, история, event_id и актуальные task-карточки
-описаны в [ENTRY_WRITE.md](ENTRY_WRITE.md). Для обычной правки достаточно этого
-справочника; остальные разделы CLI относятся к отдельным операциям.
+## Experience, tasks and decisions
 
-## Связи проектов
+Creation, full payload replacement, CAS, history, event_id and current task cards
+are described in [ENTRY_WRITE.md](ENTRY_WRITE.md). That reference is sufficient for an ordinary edit;
+other CLI sections cover separate operations.
+
+<a id="связи-проектов"></a>
+
+## Project relationships
 
 ```sh
 richi relation put --json - <<'JSON'
@@ -140,20 +154,22 @@ richi relation put --json - <<'JSON'
 JSON
 ```
 
-Обязательны `id`, `from_project`, `to_project`, `kind`. Оба проекта должны существовать и отличаться. `kind` — свободная непустая строка, например `calls_api`, `publishes_to`, `shares_storage`, `business_dependency`. Дополнительные поля: `description`, `source` (строка), `knowledge_state`, `verified_at`. Для `confirmed` нужен `source`. Обновление по ID полностью заменяет поля. История изменений ведётся для entries, а проекты и связи хранят только текущее состояние.
+`id`, `from_project`, `to_project` and `kind` are required. Both projects must exist and differ. `kind` is a free-form nonempty string, for example `calls_api`, `publishes_to`, `shares_storage`, `business_dependency`. Optional fields are `description`, `source` (a string), `knowledge_state`, `verified_at`. `confirmed` requires `source`. Updating by ID fully replaces the fields. Change history is maintained for entries; projects and relationships store only current state.
 
-## Поиск и контекст
+<a id="поиск-и-контекст"></a>
 
-Для задачи об изменении кода доступен подбор знаний по файлам:
-`sources impact --project PROJECT_ID --base BASE --target HEAD` либо
+## Search and context
+
+For a code-change task, file-based knowledge selection is available:
+`sources impact --project PROJECT_ID --base BASE --target HEAD` or
 `sources impact --project PROJECT_ID --base HEAD --worktree`.
-Команда сопоставляет изменённые пути с источниками записей и возвращает
-компактные выдержки, основания совпадений, состояния знаний и покрытие.
-Она использует структурированные Git-якоря и безопасно разрешённые старые
-Git-ссылки; не делает выводов о смысловом влиянии изменения.
-Пилот и ограничения описаны в [IMPACT.md](IMPACT.md).
+The command matches changed paths against record sources and returns
+compact excerpts, match reasons, knowledge states and coverage.
+It uses structured Git anchors and safely resolved legacy
+Git links; it does not infer the semantic impact of a change.
+The pilot and limits are described in [IMPACT.md](IMPACT.md).
 
-Для первого поиска агентом предпочтителен `recall "вопрос" --project PROJECT_ID --limit 8 --max-chars 16000`: точные ID, взвешенный текстовый поиск, поиск entities и один переход по явным связям с ограниченным размером JSON. Проект повышает приоритет, не исключая соседние сервисы. Полные записи и история дочитываются по необходимости. Формат, бюджет, актуальность и проверки описаны в [RECALL.md](RECALL.md). Команды ниже сохраняют прежнюю полную выдачу и правила фильтрации.
+For an agent's initial search, prefer `recall "вопрос" --project PROJECT_ID --limit 8 --max-chars 16000`: exact IDs, weighted text retrieval, entity retrieval and one hop along explicit relationships with a bounded JSON size. The project raises priority without excluding neighboring services. Read full records and history as needed. Format, budget, currency and checks are described in [RECALL.md](RECALL.md). The commands below retain the previous full output and filtering rules.
 
 ```sh
 richi search 'кеширование запросов' --limit 20
@@ -162,24 +178,26 @@ richi search 'старое решение' --include-superseded
 richi context --project service-example --limit 30
 ```
 
-Поиск охватывает ID, заголовок, summary, Jira key, теги и aliases. Слова запроса считаются литералами, пользовательский синтаксис FTS/SQL не исполняется. Достаточно совпадения одного слова по префиксу; результаты сортируются по FTS5 BM25, затем по свежести. Кавычки, скобки и пунктуация безопасно разбираются на слова; запрос без слов возвращает пустой список. Длина запроса ограничена 2000 символами и 64 словами. Лимит результатов — 1–200, по умолчанию 20. Общие слова в длинном вопросе могут дать лишние результаты: полезно искать короткими понятиями и несколькими формулировками.
+Search covers ID, title, summary, Jira key, tags and aliases. Query words are treated as literals; user-supplied FTS/SQL syntax is not executed. One prefix word match is sufficient; results sort by FTS5 BM25, then recency. Quotes, parentheses and punctuation are safely split into words; a query without words returns an empty list. Query length is limited to 2000 characters and 64 words. The result limit is 1–200, default 20. Common words in a long question may produce irrelevant results: short concepts and several formulations are useful.
 
-Это лексический поиск, не поиск по embeddings. Нет автоматических русских словоформ, перевода, синонимов или понимания перефразирования. Добавляйте в `aliases` альтернативные формулировки и русские/английские термины; при поиске прошлой работы пробуйте несколько запросов. Отсутствие результата означает только отсутствие найденной записи, а не доказательство того, что работа никогда не выполнялась.
+This is lexical retrieval, not embedding search. There are no automatic Russian inflections, translation, synonyms or paraphrase understanding. Add alternative formulations and Russian/English terms to `aliases`; try several queries when looking for past work. No result means only that no record was found, not proof that the work never happened.
 
-Если SQLite при создании базы не поддерживает FTS5, автоматически используется `scan`: поиск подстрок с Unicode casefold, совпадение любого слова, сортировка по дате. Этот вариант медленнее на большой базе и даёт несколько другие совпадения. `init`, `check` и `search` показывают `search_backend`; `search` дополнительно возвращает `match_mode`. Индекс FTS5 автоматически обновляется триггерами вместе с записью. Уже созданную FTS5-базу нужно открывать Python/SQLite с FTS5; индекс самопроизвольно не удаляется при смене среды.
+If SQLite lacks FTS5 when a database is created, `scan` is used automatically: Unicode-casefold substring search, any-word matching and date sorting. This is slower on a large database and yields somewhat different matches. `init`, `check` and `search` report `search_backend`; `search` also returns `match_mode`. Triggers update the FTS5 index together with writes. An existing FTS5 database must be opened using Python/SQLite with FTS5; the index is not automatically removed when the environment changes.
 
-`context` включает выбранный проект, непосредственные связи **обоих направлений**, описания соседних проектов и ограниченный список записей. Сначала идут записи самого проекта, затем соседей, внутри этих групп — недавно обновлённые. Возвращаются `project`, `relations`, `related_projects`, `entries`, `limit`, `selection`. Глубже одного перехода контекст не обходится. `superseded` записи и связи скрыты по умолчанию; `--include-superseded` возвращает их. Глобальные заметки без привязки к проекту доступны через `search`, но не добавляются во все проектные контексты.
+`context` includes the selected project, direct relationships in **both directions**, descriptions of neighboring projects and a bounded record list. Records from the project come first, followed by neighbors; within those groups, recently updated records come first. It returns `project`, `relations`, `related_projects`, `entries`, `limit`, `selection`. Context does not traverse beyond one hop. `superseded` records and relationships are hidden by default; `--include-superseded` includes them. Global notes without project membership are available through `search` but are not added to every project context.
 
-## Надёжность и резервные копии
+<a id="надёжность-и-резервные-копии"></a>
 
-Для ручной уборки дублей и объединения знаний попросите `project-memory`
-провести обслуживание в отдельной задаче. Режим не запускается по расписанию
-или при каждом поиске. Процедура, сохранение источников/истории и проверка
-связей описаны в [MAINTENANCE.md](MAINTENANCE.md).
+## Reliability and backups
 
-Используются WAL, ожидание блокировки до 10 секунд, внешние ключи и явные транзакции. Конкурирующие процессы сериализуют запись; для защиты карточки от потери параллельных изменений передавайте `expected_updated_at` из последнего чтения. Без этого поля новый payload заменяет предыдущий. Автоматического объединения конфликтов нет.
+For manual deduplication and knowledge consolidation, ask `project-memory`
+to perform maintenance in a separate task. This mode does not run on a schedule
+or on every search. The procedure, preservation of sources/history and relationship
+checks are described in [MAINTENANCE.md](MAINTENANCE.md).
 
-`check` проверяет версию схемы, SQLite integrity и внешние ключи. Новые базы создаются со схемой 2. Старые команды совместимы со схемой 1; граф требует явной миграции `backup`, затем `migrate`. Неизвестные версии отклоняются. Повторный `init` не сбрасывает данные; схема 1 требует `migrate`, неизвестная непустая база не переинициализируется. Исходные SQL-таблицы: `projects`, `entries`, `entry_projects`, `relations`, `entry_history`, `entry_events`, `metadata` и, при наличии поддержки, `entries_fts`. Схема 2 добавляет `entities`, `graph_nodes`, `graph_edges`, истории новых объектов и представление `graph_links`, сохраняя исходные записи и FTS.
+WAL, a lock wait of up to 10 seconds, foreign keys and explicit transactions are used. Competing processes serialize writes; to protect a card from losing concurrent changes, pass `expected_updated_at` from the latest read. Without that field, the new payload replaces the previous one. There is no automatic conflict merging.
+
+`check` verifies schema version, SQLite integrity and foreign keys. New databases use schema 2. Older commands are compatible with schema 1; the graph requires an explicit migration: `backup`, then `migrate`. Unknown versions are rejected. Repeated `init` does not reset data; schema 1 requires `migrate`, and an unknown nonempty database is not reinitialized. Original SQL tables are `projects`, `entries`, `entry_projects`, `relations`, `entry_history`, `entry_events`, `metadata` and, where supported, `entries_fts`. Schema 2 adds `entities`, `graph_nodes`, `graph_edges`, histories for new objects and the `graph_links` view, preserving original records and FTS.
 
 ```sh
 richi backup
@@ -187,20 +205,22 @@ richi backup --output '/путь с пробелами/memory-backup.sqlite3'
 richi --db '/путь с пробелами/memory-backup.sqlite3' check
 ```
 
-Без `--output` копия сохраняется в `backups/` с UTC-временем в имени. Используется SQLite backup API, поэтому копия включает закоммиченные данные из WAL и проходит проверку integrity. Существующий файл не перезаписывается. Для восстановления сначала остановите процессы, использующие исходную базу; наиболее простой безопасный вариант — работать с проверенной копией через `--db`. Не копируйте только активный `memory.sqlite3`, игнорируя `-wal` и `-shm`.
+Without `--output`, a backup is saved in `backups/` with a UTC timestamp in its name. The SQLite backup API includes committed data from WAL and validates integrity. Existing files are not overwritten. To restore, first stop processes using the original database; the simplest safe option is to use the verified copy through `--db`. Do not copy only an active `memory.sqlite3` while ignoring `-wal` and `-shm`.
 
-Git-источники дополнительно используют объекты локальных репозиториев и снимки
-`artifacts/git/` рядом с базой. SQLite backup не включает эти файлы; сохраните их
-отдельно для полного переноса исторических байтов. Подробнее — [GIT.md](GIT.md).
+Git sources additionally use local repository objects and snapshots
+in `artifacts/git/` alongside the database. SQLite backup does not include these files; preserve them
+separately for a complete transfer of historical bytes. See [GIT.md](GIT.md).
 
-База и копии — обычные локальные файлы без шифрования. Храните необходимые рабочие резюме и ссылки, избегайте секретов и ненужных персональных данных. Не добавляйте базу, WAL/SHM и резервные копии в Git; исходный код и инструкции можно версионировать отдельно.
+The database and backups are ordinary unencrypted local files. Store necessary work summaries and links; avoid secrets and unnecessary personal data. Do not commit the database, WAL/SHM or backups to Git; source code and instructions can be versioned separately.
 
-## Интерактивная карта
+<a id="интерактивная-карта"></a>
 
-Команда `richi map` запускает карту в фоне и открывает браузер. Повторный
-запуск использует совместимый сервер той же базы. По умолчанию используется
-порт 8765; при занятости запускатель ищет доступный порт. Настройки базы и порта
-показывает `richi config show`. Журнал запуска хранится в `runtime/` рядом с базой.
+## Interactive map
+
+`richi map` starts the map in the background and opens the browser. Repeated
+launches reuse a compatible server for the same database. The default
+port is 8765; if occupied, the launcher looks for an available port. Database and port settings
+are shown by `richi config show`. Startup logs are stored in `runtime/` alongside the database.
 
 ```sh
 richi map
@@ -210,22 +230,22 @@ richi map serve --open
 richi --db /path/to/memory.sqlite3 map serve --port 8766 --open
 ```
 
-Сервер доступен только через `127.0.0.1`. В режиме `map serve` Ctrl+C
-останавливает процесс. Richi не устанавливает ярлык на рабочем столе автоматически.
-Существующий локальный ярлык можно сохранить через переходный адаптер.
+The server is accessible only through `127.0.0.1`. In `map serve` mode, Ctrl+C
+stops the process. Richi does not install a desktop shortcut automatically.
+An existing local shortcut can be retained through the transitional adapter.
 
-Начальный вид показывает проекты. Поиск на карте находит заголовки, описания, теги и aliases загруженных объектов; выбор объекта раскрывает его окружение на 1–3 шага. Узлы перетаскиваются, масштаб и положение меняются мышью. Карточка узла показывает полное резюме, состояние работы, дату проверки и источники. Карточка связи — направление, смысл, происхождение и доказательства. Гипотезы и устаревшие знания включаются отдельно. Принадлежность записи проекту автоматически берётся из `project_ids`; она не доказывает влияние на поведение сервиса.
+The initial view shows projects. Map search finds titles, descriptions, tags and aliases of loaded objects; selecting an object reveals its neighborhood within 1–3 hops. Nodes can be dragged, and the mouse changes zoom and position. A node card shows the full summary, work state, verification date and sources. An edge card shows direction, meaning, provenance and evidence. Hypotheses and superseded knowledge are enabled separately. Record membership in a project comes automatically from `project_ids`; it does not prove an effect on service behavior.
 
-Кнопка обновления перечитывает базу, включая записи других задач. Автоматического опроса и редактирования через карту нет: новые знания и связи записываются через CLI и skill. Сервер отдаёт карту, данные графа и сохранённые Git-источники через ограниченные API; принимает чтение только с loopback и не использует внешние библиотеки, аналитику или CDN. Внешние источники открываются только по нажатию ссылки; путь локального документа можно скопировать.
+The refresh button rereads the database, including records from other tasks. There is no automatic polling or editing through the map: new knowledge and relationships are written through the CLI and skill. The server serves the map, graph data and stored Git sources through bounded APIs; it accepts reads only from loopback and uses no external libraries, analytics or CDN. External sources open only when a link is clicked; a local document path can be copied.
 
-У Git-источников есть кнопки **Код**, **История**, **Diff** и **Проверить**.
-Они работают и для прежних ссылок `git:<полный SHA>:<путь>`; у ссылок на целый
-коммит есть **Файлы коммита** с выбором изменённого файла. Репозиторий и коммит
-проверяются локально при открытии, исходная запись не переписывается.
-Просмотр читает сохранённый источник через ограниченный API, а сравнение — выбранную
-локальную версию или рабочую копию. Произвольного доступа к файлам через URL нет.
-При изменении карточки другой задачей карта просит сначала обновить данные.
-Подробнее — [GIT.md](GIT.md). После обновления сервера выполните `richi map` заново:
-запускатель выберет версию с поддержкой Git-просмотра.
+Git sources have **Code**, **History**, **Diff** and **Check** buttons.
+They also work for legacy `git:<full SHA>:<path>` links; whole-commit
+links have **Commit files** for selecting a changed file. The repository and commit
+are checked locally when opened; the original record is not rewritten.
+The viewer reads the stored source through a bounded API, while comparison reads the selected
+local version or working copy. URLs do not provide arbitrary file access.
+If another task changes a card, the map asks to refresh data first.
+See [GIT.md](GIT.md). After updating the server, run `richi map` again:
+the launcher will choose a version supporting Git viewing.
 
-Для больших графов экспорт ограничен 2000 узлами и 10000 связями; карта сообщает об усечении. Поиск на карте действует внутри загруженного снимка. Полнотекстовый `richi search` по записям работает отдельно и не ограничивается снимком карты. Общий граф хранится в SQLite; отдельный графовый сервер пока не нужен. Форматы новых сущностей, связей и команд описаны в [GRAPH.md](GRAPH.md).
+For large graphs, export is limited to 2000 nodes and 10000 edges; the map reports truncation. Map search operates within the loaded snapshot. Full-text `richi search` over records operates separately and is not restricted to the map snapshot. The shared graph is stored in SQLite; a separate graph server is not yet needed. Formats for new entities, relationships and commands are described in [GRAPH.md](GRAPH.md).

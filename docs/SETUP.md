@@ -1,4 +1,7 @@
+<a id="установка-одной-командой"></a>
 # One-command installation
+
+English | [Русский](SETUP.ru.md)
 
 For **macOS/Linux with Python 3.9+, curl, sqlite3, venv and ensurepip**:
 
@@ -23,6 +26,7 @@ asks which workspace to use and binds that choice. It initializes an empty
 workspace only after selection. Installation never reads, creates, migrates or
 merges knowledge databases, or imports old chats.
 
+<a id="область-действия-и-существующие-настройки"></a>
 ## Scope and existing settings
 
 Setup covers local Codex chats for this OS user and Codex profile, including
@@ -47,6 +51,7 @@ Existing bytes are preserved. For another shell or an already managed PATH, use
 `--no-path` and configure `~/.local/bin` yourself. Desktop agents can use the
 stable absolute command included in the instruction block.
 
+<a id="проверка-повторный-запуск-и-принятие-существующих-skills"></a>
 ## Inspect, repeat and adopt existing skills
 
 To inspect the script before execution:
@@ -96,6 +101,7 @@ a new empty `--prefix`; keep the old environment and reconcile its command symli
 before connecting the replacement. Workspace data is independent of environments.
 Never use `pip install -U` on a managed installation with staged releases.
 
+<a id="обновления-откат-и-разработка"></a>
 ## Updates, rollback and development
 
 ```sh
@@ -119,6 +125,7 @@ the managed **global skill follows the installed release**. For skill developmen
 retain a separately managed source symlink instead of adopting it with
 `--replace-skill`. Setup never edits the source checkout.
 
+<a id="офлайн-установка"></a>
 ## Offline installation
 
 Download `richi-installer.pyz`, its checksum, `richi-release.json` and the wheel
@@ -135,6 +142,7 @@ pins the wheel version, not the bootstrap download. The release workflow tests
 the exact wheel and installer on Python 3.9/3.12, macOS/Linux before publishing;
 see [RELEASING.md](RELEASING.md).
 
+<a id="резервные-копии-восстановление-и-удаление"></a>
 ## Backups, recovery and removal
 
 `richi setup --status` is read-only and reports managed paths and pending recovery.

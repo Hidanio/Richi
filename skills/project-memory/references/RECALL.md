@@ -1,17 +1,23 @@
-# Компактное чтение и recall
+<a id="компактное-чтение-и-recall"></a>
 
-Известный пропуск диагностируйте по [RECALL_DEBUG.md](RECALL_DEBUG.md).
-Составные строгие фильтры `--where` и явное построение индекса:
+# Compact reading and recall
+
+English | [Русский](RECALL.ru.md)
+
+Diagnose a known miss using [RECALL_DEBUG.md](RECALL_DEBUG.md).
+For composed strict `--where` filters and explicit index building, see
 [FILTERS.md](FILTERS.md).
 
-Если после поиска нужно читать несколько записей целиком, используйте
-[`discover` и `fetch`](RETRIEVAL_TOOLS.md): сначала короткие карточки для выбора,
-затем полные выбранные записи за один вызов. Это отдельный режим представления,
-а не новая модель ранжирования; discovery не заменяет доказательства.
+If several records need to be read in full after searching, use
+[`discover` and `fetch`](RETRIEVAL_TOOLS.md): first small cards for selection,
+then complete selected records in one call. This is a separate presentation mode,
+not a new ranking model; discovery does not replace evidence.
 
-Новые команды читают один согласованный снимок базы, не меняют знания и не обращаются к сети. Миграция схемы не требуется. Python 3.9+, стандартная библиотека.
+The new commands read one consistent database snapshot, do not change knowledge and do not access the network. No schema migration is required. Python 3.9+, standard library.
 
-## Команды
+<a id="команды"></a>
+
+## Commands
 
 ```sh
 richi recall 'Почему выбрали локальный кеш?' --project service-example
@@ -21,66 +27,81 @@ richi entry get task:ABC-123
 richi entry get task:ABC-123 --history
 ```
 
-`recall` принимает вопрос или технические ключевые слова. `--limit` — от 1 до 200, по умолчанию 8; `--max-chars` — от 2000 до 100000, по умолчанию 16000. Считаются символы **всего JSON в stdout**, включая отступы и завершающий перевод строки; это не токены и не число байтов UTF-8. Запрос ограничен 2000 символами.
+`recall` accepts a question or technical keywords. `--limit` is 1–200, default 8; `--max-chars` is 2000–100000, default 16000. Characters in **the entire JSON on stdout** are counted, including indentation and the final newline; these are not tokens or UTF-8 bytes. The query is limited to 2000 characters.
 
-`entry read` даёт компактную текущую карточку; бюджет по умолчанию — 6000 символов. `entry get` возвращает полную текущую запись **без истории**. `entry get --history` возвращает и все прежние ревизии. Для `entity get` и `edge get` история тоже включается явно через `--history`. Изменилось только чтение: исторические данные сохранены. Старые `search` и `context` остаются доступны с прежней полной выдачей; предпочтительный первый вход для агента теперь `recall`.
+`entry read` returns a compact current card; the default budget is 6000 characters. `entry get` returns the full current record **without history**. `entry get --history` also returns all previous revisions. For `entity get` and `edge get`, history is likewise explicitly enabled through `--history`. Only reading has changed: historical data is preserved. Older `search` and `context` remain available with their previous full output; `recall` is now the preferred first entry point for an agent.
 
-Перед записью изменений нужно прочесть полный `get`, сохранить исходные источники и поля, передать `expected_updated_at`. Нельзя использовать компактную карточку как payload обновления: это лишь представление части записи.
+Before writing changes, read full `get`, preserve original sources and fields, and pass `expected_updated_at`. A compact card must not be used as an update payload: it represents only part of a record.
 
-## Как отбирается контекст
+<a id="как-отбирается-контекст"></a>
 
-1. Точный ID, Jira key и aliases получают высокий приоритет. Номер задачи не распадается на общий токен `REC` и число.
-2. Текстовый поиск использует FTS5 с весами ID, заголовка, Jira, aliases и тегов. Дополнительная лексическая оценка объясняет совпавшие термины. Без FTS5 работает Unicode scan. Есть небольшой список общих слов русского и английского вопросов.
-3. `--project` повышает приоритет записей проекта, сохраняя возможность найти опыт соседнего сервиса. Это **не жёсткий фильтр**. Для жёсткого фильтра entries остаётся `search --project`.
-4. От трёх лучших результатов допускается один переход по явным связям с источниками. До двух мест в выдаче могут занять связанные записи. Автоматические связи `belongs_to_project` не разворачиваются во все записи проекта. Точные совпадения защищены от вытеснения графом.
-5. Entities ищутся по ID, заголовку, summary, aliases и тегам. Содержание не дублируется в entries ради индекса. Явно построенный индекс сужает лексических кандидатов; без него сохраняется scan.
+## How context is selected
 
-По умолчанию доступны только `confirmed`. `--include-hypotheses` и `--include-superseded` включают соответствующие состояния отдельно. Отфильтрованный endpoint не попадает в выдачу через связь. На схеме 1 recall работает без новых сущностей и графа.
+1. Exact IDs, Jira keys and aliases receive high priority. A task number is not split into a general `REC` token and a number.
+2. Text retrieval uses FTS5 with weights for ID, title, Jira, aliases and tags. Additional lexical scoring explains matching terms. Without FTS5, Unicode scan is used. There is a small list of common Russian and English question words.
+3. `--project` raises priority for project records while preserving the ability to find experience from neighboring services. It is **not a strict filter**. `search --project` remains available for strict entry filtering.
+4. One hop along explicit sourced relationships is allowed from the top three results. Up to two result slots may go to related records. Automatic `belongs_to_project` relationships do not expand into all project records. Exact matches are protected from displacement by the graph.
+5. Entities are searched by ID, title, summary, aliases and tags. Content is not duplicated into entries for indexing. An explicitly built index narrows lexical candidates; without it, scan remains available.
 
-## Что означает выдача
+Only `confirmed` is available by default. `--include-hypotheses` and `--include-superseded` enable their respective states separately. A filtered endpoint cannot enter results through a relationship. On schema 1, recall works without new entities or the graph.
 
-`results` содержит исходный `id`, полный `ref` (`entry:...` или `entity:...`), тип, заголовок, фрагмент текста, состояния, дату проверки, несколько источников, `match_reasons` и `read_more`. В `read_more` команда и ID разделены структурно: `{"command":"entry get","id":"task:ABC-123"}`. При запуске из shell ID нужно корректно экранировать.
+<a id="что-означает-выдача"></a>
 
-`summary_excerpt` состоит из законченных предложений исходного текста. При ограниченном бюджете приоритет получают начало, предложения с оговорками и заключение. Это эвристическая выдержка, а не автоматически написанный новый вывод. `[…]` обозначает пропуск. Если предложение само длиннее бюджета, оно может быть целиком опущено.
+## What the output means
 
-`is_excerpt` и `excerpt_note` предупреждают, что важные условия могут отсутствовать. **Перед техническим выводом прочтите полную релевантную запись.** `sources_omitted` показывает число источников вне карточки; оставшиеся ссылки и их даты не обрезаются. `source_count` относится ко всей записи. `edges` содержит доступные основания графовых дополнений.
+`results` contains the original `id`, full `ref` (`entry:...` or `entity:...`), type, title, text excerpt, states, verification date, several sources, `match_reasons` and `read_more`. In `read_more`, command and ID are structurally separated: `{"command":"entry get","id":"task:ABC-123"}`. When launching from a shell, quote the ID correctly.
 
-`budget` сообщает фактический размер, лимит и количество опущенных результатов/связей. При тесном бюджете сначала сокращается выдержка и число источников до одного, затем связи и число карточек. Если даже целый источник с минимальной карточкой не помещается, карточка опускается с командой дочитывания. `no_match=false` при пустом `results` в таком случае означает: совпадение найдено, но не поместилось.
+`summary_excerpt` consists of complete sentences from the original text. Under a limited budget, the beginning, sentences with caveats and the conclusion receive priority. This is a heuristic excerpt, not an automatically written new conclusion. `[…]` marks an omission. If a sentence itself exceeds the budget, it may be omitted entirely.
 
-`candidate_count` — число отобранных кандидатов, а не общий размер базы. `no_match=true` означает отсутствие найденной записи, а не доказательство того, что работы никогда не было. `retrieval_score` ранжирует совпадения; это не вероятность истинности или confidence ответа.
+`is_excerpt` and `excerpt_note` warn that important conditions may be missing. **Before making a technical conclusion, read the full relevant record.** `sources_omitted` reports the number of sources outside the card; remaining links and their dates are not truncated. `source_count` refers to the whole record. `edges` contains available evidence for graph additions.
 
-## Понятия и неоднозначные термины
+A card selected only through the graph is retained together with a direct match
+and the connecting edge. If the budget cannot preserve this group, the neighboring
+card is omitted. `truncated` also accounts for query and edge shortening and
+reaching internal retrieval limits.
 
-Для определения используйте `recall 'Что такое Y?' --project PROJECT_ID`.
-Короткие буквенные aliases ищутся точно среди понятий; буква внутри другого
-слова не является совпадением. Одноимённые понятия остаются отдельными карточками.
-Их `project_ids` и приоритет проекта берутся только из прямых подтверждённых
-рёбер `used_in` с источником, направленных от понятия к проекту.
+`budget` reports actual size, the limit and omitted result/edge counts. Under a tight budget, the excerpt is shortened and source count reduced to one first, then edges and card count. If even a whole source with a minimal card cannot fit, the card is omitted with a further-read command. In that case, `no_match=false` with empty `results` means a match was found but did not fit.
 
-Если alias соответствует нескольким доступным понятиям, ответ включает
-`ambiguity`: `detected`, `matched_aliases`, `concept_count`, `candidates` и
-`omitted_candidates`. Варианты показывают ссылки, названия, области и состояния.
-Признак неоднозначности сохраняется даже при `--limit 1`; бюджет может уменьшить
-список вариантов, но не превращает оставшийся вариант в единственный смысл.
-Проект повышает релевантность, не разрешая неоднозначность автоматически.
-Отсутствие `ambiguity` не доказывает, что неизвестных базе значений нет.
+`candidate_count` is the number of selected candidates, not the total database size. `no_match=true` means no record was found, not proof that the work never happened. `retrieval_score` ranks matches; it is not a truth probability or answer confidence.
 
-Правила разделения синонимов, контекстов, версий и устаревших определений —
-в [ENCYCLOPEDIA.md](ENCYCLOPEDIA.md).
+<a id="понятия-и-неоднозначные-термины"></a>
 
-## Актуальность и ограничения
+## Concepts and ambiguous terms
 
-`needs_recheck` с `recheck_reasons` отмечает вопрос о текущем состоянии или отсутствие даты проверки. Определение текущего состояния эвристическое; отсутствие флага не доказывает свежесть. `verified_at` не заменяет дату замера, merge или релиза. Проверку текущего состояния выполняет агент в исходной системе; recall сам не читает трекер задач, хостинг репозиториев и production.
+For a definition, use `recall 'Что такое Y?' --project PROJECT_ID`.
+Short letter aliases are matched exactly among concepts; a letter inside another
+word is not a match. Concepts sharing a name remain separate cards.
+Their `project_ids` and project priority come only from direct confirmed
+sourced `used_in` edges directed from the concept to the project.
 
-Система использует текст и уже сохранённые связи. Embeddings, автоматические синонимы и полноценная русская морфология не добавлены. При пропуске попробуйте другую формулировку или технический термин. Не следует автоматически считать возраст знания доказательством его устаревания.
+If an alias matches several available concepts, the response includes
+`ambiguity`: `detected`, `matched_aliases`, `concept_count`, `candidates` and
+`omitted_candidates`. Alternatives show refs, titles, scopes and states.
+The ambiguity flag survives even with `--limit 1`; the budget may shorten
+the alternative list but does not turn the remaining alternative into the only meaning.
+The project raises relevance without resolving ambiguity automatically.
+Absence of `ambiguity` does not prove that meanings unknown to the database do not exist.
 
-FTS shortlist ограничен 160 кандидатами, чтение связей — 100 на исходный узел. Соответствующие ограничения и признаки усечения находятся в `selection`. После явного `search-index build` точные маршруты и лексические кандидаты entities отбираются через индекс. Без индекса или для непроиндексированных записей сохраняется scan. Составной фильтр применяется до shortlist и к графовым дополнениям; ограничение вывода не является ограничением всего внутреннего чтения.
+Rules for separating synonyms, contexts, versions and superseded definitions are
+in [ENCYCLOPEDIA.md](ENCYCLOPEDIA.md).
 
-## Проверка качества
+<a id="актуальность-и-ограничения"></a>
 
-Публичные тесты используют синтетические записи и временные базы. Частные
-снимки, реальные рабочие вопросы и ожидания по ним не входят в поставку.
-Протокол воспроизводимых сравнений и работы с обнаруженными пропусками описан
-в [EVALUATION.md](EVALUATION.md).
+## Currency and limits
 
-Это проверка поиска и формата контекста. Она не подтверждает истинность каждой записи и актуальный статус релизов. Вопросы из набора не зашиты в алгоритм.
+`needs_recheck` with `recheck_reasons` marks a current-state question or missing verification date. Current-state detection is heuristic; absence of the flag does not prove freshness. `verified_at` does not replace a measurement, merge or release date. The agent checks current state in the source system; recall itself does not read issue trackers, repository hosting or production.
+
+The system uses text and already stored relationships. Embeddings, automatic synonyms and full Russian morphology have not been added. For a miss, try another formulation or technical term. Knowledge age should not automatically be treated as proof of staleness.
+
+The FTS shortlist is limited to 160 candidates, and edge reads to 100 per anchor node. Relevant limits and truncation indicators are in `selection`. After explicit `search-index build`, exact routes and entity lexical candidates are selected through the index. Without the index or for unindexed records, scan is retained. A composed filter is applied before the shortlist and to graph additions; output limits do not bound all internal reading.
+
+<a id="проверка-качества"></a>
+
+## Quality checks
+
+Public tests use synthetic records and temporary databases. Private
+snapshots, real work questions and their expected outcomes are not distributed.
+The protocol for reproducible comparisons and handling discovered misses is described
+in [EVALUATION.md](EVALUATION.md).
+
+This checks retrieval and context format. It does not confirm the truth of every record or current release status. Dataset questions are not hardcoded into the algorithm.
