@@ -1,13 +1,19 @@
-# Знания для изменённых файлов
+<a id="знания-для-изменённых-файлов"></a>
 
-`sources impact` собирает ограниченный контекст по прямым привязкам источников
-к изменённым путям. Это поиск ранее записанного опыта для выбранного изменения.
-Попадание карточки означает связь её источника с файлом, а не доказательство
-того, что изменение влияет на все выводы карточки или поведение соседних сервисов.
+# Knowledge for changed files
 
-## Запуск
+English | [Русский](IMPACT.ru.md)
 
-Через установленную команду `richi`:
+`sources impact` assembles bounded context from direct source bindings
+to changed paths. It retrieves previously recorded experience for a selected change.
+A matching card means its source is linked to a file, not proof
+that the change affects all conclusions in the card or behavior of neighboring services.
+
+<a id="запуск"></a>
+
+## Running
+
+Use the installed `richi` command:
 
 ```sh
 richi sources impact --project service-example \
@@ -17,79 +23,83 @@ richi sources impact --project service-example \
   --base HEAD --worktree --limit 12 --max-chars 16000
 ```
 
-`--base` обязателен. В режиме коммитов сравниваются именно два заданных дерева:
-команда не выбирает merge base и не подразумевает историю всей ветки.
-Обе ревизии разрешаются в полные SHA до поиска. Если нужно сравнить ветку
-с точкой её ответвления, сначала явно определите подходящий базовый коммит.
+`--base` is required. Commit mode compares exactly the two specified trees:
+the command does not choose a merge base or imply the history of the entire branch.
+Both revisions are resolved to full SHAs before retrieval. To compare a branch
+with its branching point, first explicitly identify the appropriate base commit.
 
-`--worktree` сравнивает базовую версию с текущими файлами, включая изменения
-в индексе и вне индекса, а также неигнорируемые untracked-файлы. Рабочая копия
-может изменяться во время чтения; отчёт не является её атомарным снимком.
-`--repo` допускает зарегистрированный checkout или связанный с ним worktree.
-Git работает локально: без fetch, checkout и изменения индекса.
+`--worktree` compares the base version with current files, including staged
+and unstaged changes and non-ignored untracked files. The working copy
+may change during reading; the report is not an atomic snapshot of it.
+`--repo` accepts the registered checkout or a linked worktree.
+Git runs locally: without fetch, checkout or index changes.
 
-В пилоте режим рабочей копии отказывается от Git-репозиториев с настроенными
-внешними `clean`/`process`-фильтрами: обычный `git diff` способен запустить их
-даже при отключённых external diff и textconv. Команда не отключает настройки
-пользователя. Для такого репозитория доступно сравнение двух коммитов.
+In the pilot, working-copy mode rejects Git repositories with configured
+external `clean`/`process` filters: ordinary `git diff` can execute them
+even with external diff and textconv disabled. The command does not disable user
+settings. Comparing two commits remains available for such a repository.
 
-## Что попадает в контекст
+<a id="что-попадает-в-контекст"></a>
 
-- Структурированные `source.git`: точное совпадение ID репозитория и пути.
-- Старые `git:FULL_SHA:path`: путь сопоставляется с изменениями, а репозиторий
-  проверяется по точному коммиту и явно связанным проектам карточки.
-- Старые `git:FULL_SHA`: берутся пути, действительно изменённые этим коммитом.
-  Для merge используется первый родитель. Наличие коммита где-либо в карточке
-  не делает все файлы этой версии источниками знания.
-- Переименование представляется удалением старого пути и добавлением нового.
-  Это сохраняет поиск обоих путей без утверждения об их смысловой тождественности.
+## What enters the context
 
-В пилоте учитываются entries, entities и явные edges. Состояния confirmed,
-hypothesis и superseded показываются явно: прежняя версия или гипотеза может
-помочь понять историю, но не становится действующим подтверждённым контрактом.
-Карточки объединяются по ref, а конкретные источники и пути остаются в основаниях
-совпадения. Текстовые выдержки берутся из сохранённого текста; они не заменяют
-полную карточку. Перед выводом прочитайте её через указанную команду `read_more`.
+- Structured `source.git`: exact match of repository ID and path.
+- Legacy `git:FULL_SHA:path`: the path is matched against changes, and the repository
+  is checked using the exact commit and projects explicitly linked to the card.
+- Legacy `git:FULL_SHA`: paths actually changed by this commit are used.
+  For a merge, the first parent is used. A commit appearing somewhere in a card
+  does not make every file in that version a knowledge source.
+- A rename is represented as deletion of the old path and addition of the new one.
+  This preserves retrieval for both paths without claiming semantic identity.
 
-Сначала показываются подтверждённые записи. Внутри состояния приоритет выше у
-прямой привязки к файлу, затем учитывается совпадение версии источника с выбранной
-целью или базой. Основание видно в `match_reasons`; порядок не является оценкой
-истинности или смыслового влияния. При тесном бюджете сначала сокращаются
-подробности диагностики и выдержки, затем дополнительные источники и самые
-слабые по этим признакам карточки. Пропуски остаются в счётчиках.
+The pilot includes entries, entities and explicit edges. States confirmed,
+hypothesis and superseded are shown explicitly: an older version or hypothesis may
+help explain history but does not become a current confirmed contract.
+Cards are deduplicated by ref, while specific sources and paths remain in match
+reasons. Text excerpts come from stored text; they do not replace
+the full card. Before drawing a conclusion, read it through the indicated `read_more` command.
 
-Пилот не расширяет результаты по графу автоматически. При необходимости
-прочитайте `graph neighbors REF --depth 1` для выбранной карточки. Общие теги,
-названия файлов в другом репозитории и текстовые упоминания в summary не
-создают прямую связь с изменением.
+Confirmed records appear first. Within a state, direct file
+bindings have higher priority, followed by a source-version match with the selected
+target or base. The reason appears in `match_reasons`; ordering is not an assessment
+of truth or semantic impact. Under a tight budget, diagnostic
+details and excerpts are shortened first, then additional sources and cards
+with the weakest signals. Omissions remain visible in counters.
 
-## Покрытие и дальнейшая проверка
+The pilot does not expand results through the graph automatically. If needed,
+read `graph neighbors REF --depth 1` for a selected card. Shared tags,
+file names in another repository and textual mentions in summary do not
+create a direct relationship with the change.
 
-Отчёт содержит разрешённые версии, изменённые пути, найденные карточки,
-основания совпадений, ограничения и пропуски. Проверяйте coverage, budget и
-truncated. Отсутствие совпадений при неполном покрытии не доказывает отсутствия
-знаний. Даже полный поиск показывает только связи, уже выраженные источниками;
-для более широкого вопроса остаётся `recall`.
+<a id="покрытие-и-дальнейшая-проверка"></a>
 
-Размер выдачи ограничивает весь JSON. Большой список изменений, недоступный
-или неоднозначный репозиторий и исчерпанный бюджет должны оставаться видимыми
-ограничениями. Не переносите усечённые карточки обратно в базу.
+## Coverage and further checks
 
-Ориентир времени поиска — 30 секунд с проверками между операциями; это не
-строгий предел длительности процесса. У отдельных вызовов Git собственный
-таймаут. Неполные SHA и старые ссылки без явной области репозитория остаются
-неразрешёнными и учитываются в покрытии.
+The report contains resolved versions, changed paths, matching cards,
+match reasons, limits and omissions. Check coverage, budget and
+truncated. No matches under incomplete coverage do not prove absence
+of knowledge. Even complete retrieval shows only relationships already expressed by sources;
+`recall` remains available for a broader question.
 
-Подбор контекста не проверяет истинность выводов, актуальность зависимостей
-или релиз и не перечитывает байты каждой сохранённой версии файла. Для выбранного
-источника отдельно доступны `sources show/history/diff`
-и `sources git-check --ref REF --source N`. Для старой ссылки только на коммит
-сначала выполните `sources commit --ref REF --source N`, затем выберите
-`--path` из списка изменённых доступных файлов. Проверка не обновляет источники,
-`verified_at`, `knowledge_state` или `work_state`.
+The output-size limit covers the entire JSON. A large change list, an unavailable
+or ambiguous repository and an exhausted budget must remain visible
+limitations. Do not write truncated cards back to the database.
 
-Все запуски явные. Обычный recall и punisher не запускают эту команду и не
-сканируют репозитории в фоне. Сравнение полезности выполняется на фиксированном
-наборе изменений: ожидаемые refs, ложные совпадения, полнота и объём контекста,
-число вызовов и время локальных команд. Это не измерение экономии токенов или
-качества всех будущих решений агента.
+The target retrieval time is 30 seconds, checked between operations; this is not
+a hard process-duration limit. Individual Git calls have their own
+timeouts. Incomplete SHAs and legacy links without explicit repository scope remain
+unresolved and are counted in coverage.
+
+Context selection does not verify the truth of conclusions, current dependency state
+or release status, and does not reread the bytes of every stored file version. For a selected
+source, separate `sources show/history/diff`
+and `sources git-check --ref REF --source N` operations are available. For a legacy commit-only link,
+first run `sources commit --ref REF --source N`, then select
+`--path` from the list of available changed files. Checking does not update sources,
+`verified_at`, `knowledge_state` or `work_state`.
+
+All runs are explicit. Ordinary recall and punisher do not run this command or
+scan repositories in the background. Usefulness comparisons use a fixed
+set of changes: expected refs, false matches, completeness and context volume,
+call count and local command duration. This does not measure token savings or
+the quality of all future agent decisions.

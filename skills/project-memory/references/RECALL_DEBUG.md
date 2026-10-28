@@ -1,5 +1,7 @@
 # Diagnose a missing known record
 
+English | [Русский](RECALL_DEBUG.ru.md)
+
 Use the same bound workspace, project/path, query, state flags, result limit and
 reasonable output budget as the failing search. A different successful query is
 a control, not proof that the original query works. If the exact ID is known,
@@ -34,3 +36,9 @@ For `entries_scanned`, `entries_scored`, routing prefilter and FTS internals,
 read only [DIAGNOSTICS.md](DIAGNOSTICS.md#счётчики-предварительного-отбора-entries).
 Fewer scored payloads alone do not prove constant-time retrieval or better recall.
 For a regression/quality evaluation use [EVALUATION.md](EVALUATION.md).
+
+Known FTS limitation: query normalization maps Cyrillic `ё` to `е`, but the
+current index stores the original spelling. A title containing `берёза` can be
+missed by both `береза` and `берёза` in recall. An exact ID lookup remains
+available. Preserve this as a retrieval failure; do not rewrite the record,
+invent aliases or rebuild a live index merely to hide the mismatch.

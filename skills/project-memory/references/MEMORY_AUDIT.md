@@ -1,5 +1,7 @@
 # Audit selected memory without changing it
 
+English | [Русский](MEMORY_AUDIT.ru.md)
+
 Use for an explicit cleanup, consolidation or audit request. Stay within the
 requested project/topic/records; ordinary project work does not call for a
 whole-store review. An audit-only request authorizes reading and recommendations,

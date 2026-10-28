@@ -1,10 +1,14 @@
-# Установка и конфигурация
+<a id="установка-и-конфигурация"></a>
+# Installation and configuration
 
-## Обычная установка
+English | [Русский](INSTALLATION.ru.md)
 
-Нужны macOS или Linux и Python 3.9+ с модулем `sqlite3`. Для Git-источников нужен
-Git в PATH. Runtime использует стандартную библиотеку Python. Поддержка Windows
-в этой поставке не заявлена.
+<a id="обычная-установка"></a>
+## Standard installation
+
+Richi requires macOS or Linux and Python 3.9+ with the `sqlite3` module. Git must
+be in PATH for Git sources. The runtime uses the Python standard library.
+Windows support is not claimed for this release.
 
 ```sh
 git clone https://github.com/Hidanio/Richi.git
@@ -18,27 +22,27 @@ export PATH="$HOME/.local/bin:$PATH"
 richi config show
 ```
 
-Команда устанавливает фиксированную копию пакета в отдельное окружение Python.
-Обычный режим работает из этой копии: правки, удаление или переключение веток
-исходного checkout не меняют установленную версию. Установка не требует Codex.
-Обновление pip обеспечивает поддержку современной упаковки `pyproject.toml`,
-в том числе в новых окружениях старых поставок Python.
+These commands install a fixed package copy in a dedicated Python environment.
+Normal mode runs that copy: editing, removing or switching branches in the source
+checkout does not change the installed version. Installation does not require Codex.
+Upgrading pip provides support for modern `pyproject.toml` packaging, including
+fresh environments created by older Python distributions.
 
-`ln -s` выше создаёт новую команду: если `~/.local/bin/richi` уже существует,
-проверьте его назначение и замените только прежнюю ссылку Richi. Для новых
-терминалов добавьте `~/.local/bin` в PATH своей оболочки. Активация окружения после
-этого не нужна. Если агент не наследует PATH оболочки, настройте этот каталог
-или укажите полный путь к команде в локальных инструкциях. Личный путь не нужно
-включать в переносимый skill.
+The `ln -s` command above creates a new command. If `~/.local/bin/richi` already
+exists, inspect its target and replace only the previous Richi symlink. Add
+`~/.local/bin` to your shell's PATH for new terminals. You do not need to activate
+the environment afterward. If an agent does not inherit the shell's PATH,
+configure that directory or use the command's absolute path in local instructions.
+Do not put a personal path into the portable skill.
 
-Для запуска через модуль используйте Python установленного окружения и
-изолированный режим, исключающий влияние текущей папки и `PYTHONPATH`:
+For module invocation, use the installed environment's Python in isolated mode
+to exclude the current directory and `PYTHONPATH`:
 
 ```sh
 "$HOME/.local/share/richi/venv/bin/python" -I -m richi config show
 ```
 
-Для обновлений из опубликованных стабильных GitHub Releases используйте:
+For updates from published stable GitHub Releases, use:
 
 ```sh
 richi update check
@@ -56,15 +60,16 @@ richi update auto enable --interval 6h
 richi update auto disable
 ```
 
-Сохраняются текущая и предыдущая версии; работающие процессы удерживают свой
-код до завершения. После обновления перезапустите карту. Dev-настройки и базы
-workspace остаются прежними. Подробнее о проверках, очистке и первоначальном
-переходе со старой установки — в [UPDATES.md](UPDATES.md).
+The current and previous versions are retained; running processes keep their
+code until they finish. Restart the map after an update. Workspace dev settings
+and databases remain unchanged. See [UPDATES.md](UPDATES.md) for checks, cleanup
+and the initial transition from an older installation.
 
-## Режим разработки
+<a id="режим-разработки"></a>
+## Development mode
 
-Установка остаётся обычной. Для работы непосредственно с исходниками выберите
-корень checkout, содержащий `src/richi/`, и включите dev в конфигурации:
+Keep a normal installation. To work directly from source, select the checkout
+root containing `src/richi/` and enable dev in the configuration:
 
 ```sh
 richi config set development.source /path/to/Richi
@@ -73,7 +78,7 @@ richi config show
 richi map
 ```
 
-JSON-настройки этого режима:
+The equivalent JSON settings are:
 
 ```json
 {
@@ -82,62 +87,64 @@ JSON-настройки этого режима:
 }
 ```
 
-По умолчанию `dev` равен `false`. Настройка действует на все команды, агентов
-и карту, использующих этот конфиг выбранного workspace. Каждый вызов CLI в dev использует текущие
-исходники; правки и переключение веток checkout сразу влияют на дальнейшую
-работу. Карта автоматически перезагружает сервер при изменении Python- и
-SQL-файлов. Для изменений интерфейса обновите страницу браузера.
+`dev` defaults to `false`. This setting applies to every command, agent and map
+using this configuration in the selected workspace. Each CLI invocation in dev
+uses the current source; edits and branch switches immediately affect subsequent
+work. The map automatically reloads its server when Python or SQL files change.
+Refresh the browser page to load interface changes.
 
 ```sh
 richi config set dev false
 richi config show
 ```
 
-Эта команда возвращает установленную версию. База, Git-снимки, история и остальные
-настройки остаются прежними; два режима не создают две копии знаний. Команды
-`config show` и `config set dev false` обслуживает установленный запускатель,
-поэтому они доступны и при удалённых или неработающих dev-исходниках.
-Новые CLI-вызовы при сломанном dev сообщают ошибку и не переключаются молча
-на установленную версию.
+This command returns to the installed version. The database, captured Git bytes,
+history and other settings remain unchanged; the two modes do not create two
+copies of knowledge. The installed launcher handles `config show` and
+`config set dev false`, so they remain available when dev sources are missing
+or broken. New CLI invocations report broken dev sources instead of silently
+falling back to the installed version.
 
-Обычные изменения в `src/richi/` не требуют переустановки. Изменения установленного
-запускателя в `launcher/` требуют пересборки и установки пакета.
-Для разработки самого запускателя используйте отдельное тестовое окружение;
-управляемую релизную установку обновляйте через `richi update apply`. Dev использует тот же Python и установленные зависимости; сейчас runtime
-использует стандартную библиотеку, а при добавлении зависимостей их нужно
-установить в это окружение.
+Ordinary edits under `src/richi/` do not require reinstallation. Changes to the
+installed launcher under `launcher/` require rebuilding and installing the package.
+Use a separate test environment to develop the launcher itself; update a managed
+release installation through `richi update apply`. Dev uses the same Python and
+installed dependencies. The runtime currently uses the standard library; any
+future dependencies must be installed in that environment.
 
-Команда `config set` меняет настройки и не открывает базу. Совместимость схемы
-проверяют выполняемая CLI-операция и карта перед заменой runtime; автоматических
-миграций нет. Для экспериментов со схемой используйте отдельную копию базы
-и связанного каталога `artifacts/git/`.
+`config set` changes settings without opening the database. The invoked CLI
+operation and the map check schema compatibility before replacing the runtime;
+there are no automatic migrations. For schema experiments, use a separate copy
+of the database and its associated `artifacts/git/` directory.
 
 ## Workspaces
 
-Для независимых наборов связанных проектов используйте
-[рабочие области](WORKSPACES.md). `richi use NAME` быстро меняет область по
-умолчанию, `richi use` открывает меню, а `richi -w NAME ...` закрепляет область
-для конкретной команды. Текущая база остаётся в `default`; новые области
-получают отдельные базы и каталоги Git-снимков. Dev-настройки принадлежат
-выбранной области и копируются при её создании.
+Use [workspaces](WORKSPACES.md) for independent sets of related projects.
+`richi use NAME` changes the default workspace, `richi use` opens a menu, and
+`richi -w NAME ...` pins the workspace for one command. The existing database
+remains in `default`; new workspaces receive separate databases and captured Git
+artifact directories. Dev settings belong to the selected workspace and are
+copied when a workspace is created.
 
-Настройки текущего CLI служат предложением для нового чата. После ответа
-пользователя агент сохраняет выбор через `richi chat bind --current` или
-`richi chat bind NAME`. Чат продолжает использовать свою область после
-переключения CLI. ID Codex определяется автоматически; другие клиенты передают
-устойчивый `RICHI_CHAT_ID` либо `--chat ID`. Подробности — в [руководстве](WORKSPACES.md).
+The current CLI settings are a suggestion for a new chat. After the user's
+answer, the agent saves the choice with `richi chat bind --current` or
+`richi chat bind NAME`. The chat keeps its workspace after the CLI selection
+changes. Codex IDs are detected automatically; other clients provide a stable
+`RICHI_CHAT_ID` or `--chat ID`. See the [workspace guide](WORKSPACES.md).
 
-## Выбор хранилища
+<a id="выбор-хранилища"></a>
+## Selecting storage
 
-Приведённые ниже прямые настройки базы предназначены для обычного терминала.
-Обнаруженный чат использует зарегистрированную область и отклоняет прямые
-переопределения `--config`, `--db`, `RICHI_CONFIG`, `RICHI_DB`, `RICHI_DATA_DIR`.
+The direct database settings below are intended for a normal terminal. A detected
+chat uses a registered workspace and rejects direct overrides through `--config`,
+`--db`, `RICHI_CONFIG`, `RICHI_DB` and `RICHI_DATA_DIR`.
 
-`richi config show` показывает итоговые настройки и выбранный runtime; само
-чтение настроек не создаёт базу. Для новой установки выполните `richi init`, затем `richi check`.
-Для существующей базы укажите её путь и выполните `check` до записи данных.
+`richi config show` displays the resolved settings and selected runtime; reading
+settings does not create a database. For a new installation, run `richi init`,
+then `richi check`. For an existing database, set its path and run `check` before
+writing data.
 
-Настройки можно передать JSON-файлом:
+Settings can be supplied in a JSON file:
 
 ```json
 {
@@ -149,22 +156,22 @@ richi config show
 }
 ```
 
-Это синтетические абсолютные пути. При подключении существующей памяти
-`database` должен указывать на фактическую базу. Если поле `database` задано,
-связанные Git-снимки, runtime и резервные копии остаются рядом с этой базой.
-`data_dir` определяет размещение базы по умолчанию, когда отдельный путь базы
-не задан. Конфигурация не перемещает файлы.
+These absolute paths are synthetic. To connect existing memory, `database` must
+point to the actual database. When `database` is specified, associated Git
+artifacts, runtime files and backups remain beside that database. `data_dir`
+determines the default database location when a separate database path is not
+specified. Configuration does not move files.
 
 ```sh
 richi --config /path/to/config.json config show
 richi --config /path/to/config.json check
 ```
 
-Параметры выбираются по приоритету: явный аргумент CLI, переменная окружения,
-JSON-конфигурация, платформенное значение по умолчанию. Для каталога данных
-используйте `RICHI_DATA_DIR`, для базы — `RICHI_DB`, для порта — `RICHI_PORT`.
-`RICHI_CONFIG` выбирает JSON-файл; `--config PATH` имеет приоритет над ним.
-`--db PATH` ставится перед подкомандой; `--port` применяется к командам карты.
+Settings use this precedence: explicit CLI argument, environment variable, JSON
+configuration, platform default. Use `RICHI_DATA_DIR` for the data directory,
+`RICHI_DB` for the database and `RICHI_PORT` for the port. `RICHI_CONFIG` selects
+a JSON file; `--config PATH` takes precedence over it. Place `--db PATH` before
+the subcommand; `--port` applies to map commands.
 
 ```sh
 export RICHI_CONFIG=/path/to/config.json
@@ -174,28 +181,30 @@ richi project list
 richi --db /path/to/another.sqlite3 check
 ```
 
-Платформенные значения по умолчанию:
+Platform defaults:
 
-| Система | Конфигурация | Каталог данных |
+| System | Configuration | Data directory |
 |---|---|---|
 | macOS | `~/Library/Application Support/Richi/config.json` | `~/Library/Application Support/Richi/` |
 | Linux | `${XDG_CONFIG_HOME:-~/.config}/richi/config.json` | `${XDG_DATA_HOME:-~/.local/share}/richi/` |
 
-При отсутствии явного `database` файл называется `memory.sqlite3` внутри
-выбранного каталога данных. Относительные пути внутри JSON разрешаются от
-каталога этого JSON-файла; относительные пути CLI и переменных окружения — от
-текущей рабочей папки. Для общей памяти из разных папок удобнее абсолютные пути.
-Знак `~` в путях поддерживается. Явно выбранный несуществующий или некорректный
-конфиг приводит к ошибке, а не к незаметному выбору другой базы.
+Without an explicit `database`, the file is named `memory.sqlite3` inside the
+selected data directory. Relative JSON paths are resolved against that JSON
+file's directory; relative CLI and environment paths are resolved against the
+current working directory. Absolute paths are convenient for shared memory
+accessed from different directories. Paths support `~`. An explicitly selected
+missing or invalid configuration produces an error instead of silently choosing
+another database.
 
-По умолчанию Richi выбирает пользовательский каталог данных операционной
-системы, отдельно от checkout. Проверяйте фактические пути через `config show`,
-особенно когда терминал, IDE и агент имеют разные переменные окружения.
-SQLite, `artifacts/git/`, `backups/` и `runtime/` остаются локальными.
-Не помещайте их в Git. Изменение пути конфигурации не копирует данные и не
-обновляет зарегистрированные пути проектов автоматически.
+By default, Richi uses the operating system's user data directory, separate from
+the checkout. Check actual paths with `config show`, especially when a terminal,
+IDE and agent have different environment variables. SQLite, `artifacts/git/`,
+`backups/` and `runtime/` remain local. Do not put them in Git. Changing the
+configuration path does not copy data or automatically update registered
+project paths.
 
-## Карта
+<a id="карта"></a>
+## Map
 
 ```sh
 richi map
@@ -204,26 +213,27 @@ richi map serve --open
 richi map serve --port 8766 --open
 ```
 
-Обе команды следуют общему параметру `dev` в конфигурации; отдельный флаг режима
-у карты не нужен. `richi map` запускает или переиспользует сервер выбранной базы
-и открывает браузер. Карта доступна только на loopback, показывает граф,
-определения, источники и Git-навигацию. Запись знаний выполняется через CLI.
-Карта не импортирует разговоры и не выполняет процедуры из записей.
+Both commands follow the shared `dev` configuration setting; the map needs no
+separate mode flag. `richi map` starts or reuses the selected database's server
+and opens a browser. The map is available only on loopback and displays the
+graph, definitions, sources and Git navigation. Write knowledge through the CLI.
+The map does not import conversations or execute procedures stored in records.
 
-Работающая карта замечает переключение `dev` и после проверки нового runtime
-переходит на него с сохранением PID и URL. В dev она также отслеживает изменения
-Python- и SQL-файлов исходников. Изменение SQL-файла не применяет миграцию базы.
-Для загрузки изменённого интерфейса обновите страницу браузера.
+A running map notices `dev` switches and, after checking the new runtime, switches
+to it while preserving its PID and URL. In dev it also watches Python and SQL
+source files. Changing an SQL file does not migrate the database. Refresh the
+browser page to load an updated interface.
 
-Если проверка новых исходников обнаружила ошибку синтаксиса, импорта или
-совместимости схемы, карта сохраняет предыдущий работающий процесс и пишет
-диагностику. Дочерние операции графа и Git читают исходники заново, поэтому
-при повреждённом dev могут временно не работать и в сохранившемся сервере.
-Исправьте исходники или отключите dev; CLI-команды управления конфигурацией
-остаются доступны. При фоновом запуске лог находится в
-`runtime/map-server.log` рядом с выбранной базой; при `map serve` — в терминале.
+If new sources fail syntax, import or schema compatibility checks, the map keeps
+the previous running process and records diagnostics. Child graph and Git
+operations read sources again, so broken dev sources can temporarily break those
+operations even in the retained server. Fix the source or disable dev;
+configuration management commands remain available. For a background map, the
+log is `runtime/map-server.log` beside the selected database; for `map serve`,
+it is in the terminal.
 
-## Подключение агента
+<a id="подключение-агента"></a>
+## Agent integration
 
 For Codex, use the [one-command installer](SETUP.md), or run `richi setup --yes`
 from a supported dedicated installation. It installs the complete skill in
@@ -233,15 +243,15 @@ up an existing skill before adoption. The managed skill follows release updates
 and rollback. For other agents, copy the complete `skills/project-memory`
 directory, including its `references/` files, to the agent's skill directory.
 
-Убедитесь, что процесс агента видит исполняемый файл `richi` и выбранную
-конфигурацию. Сначала вызовите `richi chat current` и `richi workspace list`.
-Если чат ещё не привязан, спросите пользователя: текущая область CLI или другая
-для этого чата; сохраните ответ через `chat bind --current` либо `chat bind NAME`.
-Затем проверьте `richi config show` и `richi check`: режим,
-исходники и база должны совпадать с ожидаемыми.
-Настройка в терминале не гарантирует те же переменные в IDE или desktop-приложении.
+Make sure the agent process can find the `richi` executable and the selected
+configuration. First run `richi chat current` and `richi workspace list`. If the
+chat is unbound, ask the user whether to use the current CLI workspace or another
+one for this chat; save the answer with `chat bind --current` or `chat bind NAME`.
+Then check `richi config show` and `richi check`: the mode, source and database
+must match expectations. Terminal configuration does not guarantee the same
+environment in an IDE or desktop application.
 
-Пример инструкции проекта для явно разрешённых локальных обновлений:
+Example project instructions that explicitly authorize local updates:
 
 ```markdown
 At the start of a new chat, inspect `richi chat current` and `richi workspace list`.
@@ -261,7 +271,8 @@ Code, task trackers, and pull requests remain authoritative for current state.
 This authorization does not permit external messages or unrelated changes.
 ```
 
-Эта инструкция — образец выбора режима владельцем проекта. Сам skill не
-предполагает разрешения записывать произвольные базы или менять внешние системы.
-MCP не обязателен: агент вызывает установленный CLI через инструменты запуска
-процессов. Для переключения workspace есть CLI-меню `richi use`; отдельный MCP можно добавить позднее.
+This is an example of a project owner choosing a mode of operation. The skill
+itself does not imply permission to write arbitrary databases or change external
+systems. MCP is optional: the agent invokes the installed CLI through process
+execution tools. The CLI provides the `richi use` workspace menu; a separate MCP
+integration can be added later.

@@ -1,13 +1,16 @@
-# Команды Richi
+<a id="команды-richi"></a>
+# Richi commands
+
+English | [Русский](CLI.ru.md)
 
 Global Codex integration: `richi setup --dry-run`, `richi setup --yes`,
 `richi setup --status`. Setup is installation-wide, needs no chat binding,
 rejects workspace/storage selectors and preserves existing instructions.
 See [SETUP.md](SETUP.md) for installation, adoption flags and recovery.
 
-После установки используйте `richi` из любой рабочей папки. Команда
-`richi config show` показывает выбранные настройки и runtime. Глобальные параметры базы
-и конфигурации ставятся перед подкомандой:
+After installation, use `richi` from any working directory. `richi config show`
+displays selected settings and runtime. Global database and configuration options
+precede the subcommand:
 
 ```sh
 richi --db /path/to/memory.sqlite3 recall 'локальный кеш'
@@ -16,14 +19,14 @@ richi --help
 richi sources --help
 ```
 
-Для агента можно добавить глобальный `--compact-json` перед подкомандой:
-`richi --compact-json recall 'локальный кеш'`. Успешный JSON в stdout выводится
-без отступов; формат по умолчанию сохраняется. Бюджет `--max-chars` считается
-по выбранному формату, поэтому в тесный лимит могут поместиться дополнительные
-данные. Ошибки, help, файлы `--output` и карта не меняются; сочетание с `map`
-отклоняется. Контракт и измерения — в [COMPACT_OUTPUT.md](COMPACT_OUTPUT.md).
+Agents can add global `--compact-json` before the subcommand:
+`richi --compact-json recall 'локальный кеш'`. Successful stdout JSON omits
+indentation; the default format is preserved. `--max-chars` uses the selected
+format, so more data may fit a tight budget. Errors, help, `--output` files and
+the map are unchanged; combining the flag with `map` is rejected. See the
+contract and measurements in [COMPACT_OUTPUT.md](COMPACT_OUTPUT.md).
 
-Режим выбирается в настройках текущего workspace:
+Select the mode in the current workspace's settings:
 
 ```sh
 richi config set development.source /path/to/Richi
@@ -36,16 +39,16 @@ richi map serve --open
 richi config set dev false
 ```
 
-В обычном режиме CLI использует фиксированный установленный пакет. В dev все
-команды используют текущий код выбранного checkout, а карта перезагружает сервер
-после изменения исходников. Работающая карта также подхватывает переключение
-режима после проверки нового runtime. Для изменений интерфейса обновите страницу
-браузера. База и история знаний общие; миграция SQLite автоматически не выполняется.
-Команды `config show` и отключения dev доступны даже при неработающих исходниках.
-Подробности установки, обновления и диагностики — в
-[инструкции](INSTALLATION.md).
+Normally, CLI uses the fixed installed package. In dev, commands use current
+code from the selected checkout, and the map reloads its server after source
+changes. A running map also detects mode switches after validating the new
+runtime. Refresh the browser page for interface changes. The database and
+knowledge history are shared; SQLite is never migrated automatically.
+`config show` and disabling dev remain available even if sources are broken.
+See [installation instructions](INSTALLATION.md) for installation, updates
+and diagnostics.
 
-Рабочая область выбирается перед подкомандой:
+Select a workspace before the subcommand:
 
 ```sh
 richi workspace list
@@ -57,8 +60,8 @@ richi use
 richi -w work recall 'локальный кеш' --project service-example
 ```
 
-`richi use` открывает меню только в обычном терминале. В новом чате агент
-спрашивает область один раз, затем сохраняет выбор:
+`richi use` opens its menu only in an ordinary terminal. In a new chat, the agent
+asks for a workspace once, then saves the selection:
 
 ```sh
 richi chat current
@@ -72,13 +75,13 @@ richi project scan /path/to/repositories
 richi project scan /path/to/repositories --apply
 ```
 
-Варианты `bind` взаимоисключающие: выполните только выбранный пользователем.
-В привязанном чате `-w` может только повторять сохранённую область. Прямые
-`--db`, `--config` и соответствующие переменные хранилища отклоняются.
-Для другого клиента передавайте устойчивый ID через `--chat ID` или `RICHI_CHAT_ID`;
-Codex предоставляет `CODEX_THREAD_ID`. [Workspace и изоляция знаний](WORKSPACES.md).
+The `bind` alternatives are mutually exclusive: run only the user's selection.
+In a bound chat, `-w` may only repeat the stored workspace. Direct `--db`,
+`--config` and corresponding storage environment variables are rejected.
+For another client, pass a stable ID through `--chat ID` or `RICHI_CHAT_ID`;
+Codex supplies `CODEX_THREAD_ID`. See [workspaces and knowledge isolation](WORKSPACES.md).
 
-Единая проверка контекста и путей:
+Unified context and path checks:
 
 ```sh
 richi status
@@ -86,36 +89,36 @@ richi --project-path /path/to/service-example status --project service-example
 richi status --projects --limit 50
 ```
 
-Отчёт только читает метаданные выбранного workspace. Код 0 означает сформированный
-отчёт; проверяйте поле `status` и покрытие `diagnostics.projects`. Непривязанный
-чат получает `selection_required` без доступа к базе. При неисправном runtime
-возвращается `unavailable` с доступными настройками и причиной. Подробности и
-границы проверки — в [руководстве workspaces](WORKSPACES.md#состояние-workspace-и-путей-проектов).
+The report only reads metadata from the selected workspace. Exit code 0 means
+a report was produced; inspect `status` and `diagnostics.projects` coverage.
+An unbound chat receives `selection_required` without database access. A broken
+runtime returns `unavailable` with available settings and a reason. See details
+and limits in the [workspace guide](WORKSPACES.md#состояние-workspace-и-путей-проектов).
 
-Полные справочники находятся в `skills/project-memory/references`. Это единый
-источник документации CLI и установленного skill: папка skill переносится целиком,
-без ссылок на файлы вне неё.
+Complete references live in `skills/project-memory/references`. This is the
+single documentation source for CLI and the installed skill: the entire skill
+directory is portable, without links to files outside it.
 
-| Задача | Справочник |
+| Task | Reference |
 |---|---|
-| Создать базу, зарегистрировать проект, сделать backup | [CLI](../skills/project-memory/references/CLI.md) |
-| Создать или полностью обновить запись, сохранить task-карточку | [Запись и защита от конфликтов](../skills/project-memory/references/ENTRY_WRITE.md) |
-| Найти прошлую работу и разобрать ограничения выдачи | [Recall](../skills/project-memory/references/RECALL.md) |
-| Выбрать кандидатов и пакетно прочитать полные записи | [Discover и fetch](../skills/project-memory/references/RETRIEVAL_TOOLS.md) |
-| Собрать контекст вопроса и изменения кода | [Brief](../skills/project-memory/references/BRIEF.md) |
-| Связать знания с версиями кода, открыть историю и diff | [Git-источники](../skills/project-memory/references/GIT.md) |
-| Захватить проверенные байты из checkout/worktree и прикрепить источник | [Capture и attach](../skills/project-memory/references/GIT_CAPTURE.md) |
-| Найти знания по изменённым файлам | [Impact](../skills/project-memory/references/IMPACT.md) |
-| Создать сущности и связи | [Граф](../skills/project-memory/references/GRAPH.md) |
-| Прочитать соседей известной записи | [Соседи и границы выдачи](../skills/project-memory/references/NEIGHBORS.md) |
-| Описать термины с разными значениями и версиями | [Энциклопедия](../skills/project-memory/references/ENCYCLOPEDIA.md) |
-| Разобрать пропущенный известный результат | [Диагностика recall](../skills/project-memory/references/RECALL_DEBUG.md) |
-| Проверить состояние workspace, кандидатов или группу источников | [Диагностика](../skills/project-memory/references/DIAGNOSTICS.md) |
-| Оценить дубли и необходимость объединения без изменений | [Ограниченный аудит](../skills/project-memory/references/MEMORY_AUDIT.md) |
-| Вручную объединить знания и разобрать кандидатов punisher | [Обслуживание](../skills/project-memory/references/MAINTENANCE.md) |
-| Проверить изменение поиска по воспроизводимым примерам | [Оценка качества](../skills/project-memory/references/EVALUATION.md) |
-| Измерить рост хранения и обслужить поисковый индекс | [Storage](STORAGE.md) |
+| Create a database, register a project, make a backup | [CLI](../skills/project-memory/references/CLI.md) |
+| Create or fully replace a record, save a task card | [Writing and conflict protection](../skills/project-memory/references/ENTRY_WRITE.md) |
+| Find prior work and understand result limits | [Recall](../skills/project-memory/references/RECALL.md) |
+| Select candidates and batch-read full records | [Discover and fetch](../skills/project-memory/references/RETRIEVAL_TOOLS.md) |
+| Assemble question and code-change context | [Brief](../skills/project-memory/references/BRIEF.md) |
+| Link knowledge to code versions, open history and diffs | [Git sources](../skills/project-memory/references/GIT.md) |
+| Capture checked checkout/worktree bytes and attach a source | [Capture and attach](../skills/project-memory/references/GIT_CAPTURE.md) |
+| Find knowledge associated with changed files | [Impact](../skills/project-memory/references/IMPACT.md) |
+| Create entities and edges | [Graph](../skills/project-memory/references/GRAPH.md) |
+| Read neighbors of a known record | [Neighbors and output boundaries](../skills/project-memory/references/NEIGHBORS.md) |
+| Describe terms with different meanings and versions | [Encyclopedia](../skills/project-memory/references/ENCYCLOPEDIA.md) |
+| Investigate a missing known result | [Recall diagnostics](../skills/project-memory/references/RECALL_DEBUG.md) |
+| Check workspace status, candidates or a source group | [Diagnostics](../skills/project-memory/references/DIAGNOSTICS.md) |
+| Assess duplicates and consolidation without changes | [Bounded audit](../skills/project-memory/references/MEMORY_AUDIT.md) |
+| Manually consolidate knowledge and inspect punisher candidates | [Maintenance](../skills/project-memory/references/MAINTENANCE.md) |
+| Validate a retrieval change with reproducible examples | [Evaluation](../skills/project-memory/references/EVALUATION.md) |
+| Measure storage growth and maintain the search index | [Storage](STORAGE.md) |
 
-Примеры содержат вымышленные проекты `service-example`, `service-consumer`,
-задачу `ABC-123` и ссылки `example.com`. Заменяйте их проверенными данными
-своего проекта. Даты, SHA и пути в примерах не являются доказательствами.
+Examples use fictional projects `service-example`, `service-consumer`, task
+`ABC-123` and `example.com` links. Replace them with verified data for your
+project. Example dates, SHAs and paths are not evidence.

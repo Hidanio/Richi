@@ -1,147 +1,159 @@
-# Проверка полезности поиска
+<a id="проверка-полезности-поиска"></a>
 
-Публичная поставка использует синтетические регрессионные тесты и временные базы.
-Частные базы, рабочие вопросы, старые отчёты и ожидаемые ID из реальных проектов
-не входят в репозиторий. Их результаты нельзя выдавать за публично воспроизводимый
-benchmark. Наличие тестов не доказывает качество поиска на любой новой базе.
+# Evaluating retrieval usefulness
 
-## Изменение алгоритма
+English | [Русский](EVALUATION.ru.md)
 
-Сохраните минимальный воспроизводимый пример и зафиксируйте ожидания до правки.
-Сравните релевантные случаи до и после; добавьте близкий отрицательный пример,
-если есть риск ложного совпадения. Не меняйте старый снимок, ожидаемые ответы
-или сохранённый baseline ради улучшения показателя. Для новых знаний или вопросов
-создавайте отдельную версию набора и соответствующий снимок базы.
+The public distribution uses synthetic regression tests and temporary databases.
+Private databases, work questions, old reports and expected IDs from real projects
+are not included in the repository. Their results must not be presented as a publicly reproducible
+benchmark. The existence of tests does not prove retrieval quality on every new database.
 
-Синтетические тесты репозитория запускаются из его корня:
+<a id="изменение-алгоритма"></a>
+
+## Changing the algorithm
+
+Save a minimal reproducible example and record expectations before editing.
+Compare relevant cases before and after; add a nearby negative example
+if false matches are a risk. Do not change an old snapshot, expected answers
+or stored baseline to improve a metric. For new knowledge or questions,
+create a separate dataset version and a corresponding database snapshot.
+
+Run the repository's synthetic tests from its root:
 
 ```sh
 python -m unittest discover -s tests -v
 python evals/evaluate_recall.py
 ```
 
-Для собственного отдельного набора фиксируйте хеш снимка базы и файла вопросов,
-версию кода и настройки команды. Работайте с согласованной read-only копией,
-созданной через SQLite backup API, а не с изменяющейся живой базой. Содержимое
-частных наборов и отчётов храните вне публичного checkout. Самостоятельный
-универсальный benchmark runner в этой поставке не обещается.
+For a separate dataset of your own, record hashes of the database snapshot and question file,
+code version and command settings. Use a consistent read-only copy
+created with the SQLite backup API, rather than a changing live database. Store
+private datasets and reports outside the public checkout. This distribution does not promise
+a standalone universal benchmark runner.
 
-Проверяйте найденные refs и их место в выдаче, пропуски, ложные совпадения,
-источники, состояния и ограничения полного JSON. Для вопроса об актуальном
-состоянии релевантная историческая запись может требовать `needs_recheck`;
-наличие такого флага не устанавливает текущий релиз. Источники в ответе должны
-принадлежать соответствующей записи, а состояние знания не должно изменяться
-из-за ранжирования.
+Check retrieved refs and their positions, misses, false matches,
+sources, states and the limits of the full JSON. For a question about current
+state, a relevant historical record may require `needs_recheck`;
+that flag does not establish the current release. Response sources must
+belong to the corresponding record, and ranking must not change
+knowledge state.
 
-`budget.output_chars`, когда он указан, должен совпадать с фактическим размером
-вывода с завершающим переводом строки. Пустой `results` с `no_match=false`
-допустим при явном бюджетном пропуске: кандидаты были, но не поместились.
-Это отличается от отрицательного примера, ожидающего отсутствие совпадений.
-Не засчитывайте флаг у посторонней карточки как выполнение требования к
-нужной записи.
+`budget.output_chars`, when present, must equal the actual output size
+including the final newline. Empty `results` with `no_match=false`
+are allowed when a budget omission is explicit: candidates existed but did not fit.
+This differs from a negative example that expects no matches.
+Do not count a flag on an unrelated card as satisfying a requirement
+for the intended record.
 
-Заранее выбранные, но увиденные автором алгоритма вопросы — фиксированная
-регрессионная проверка; они больше не являются полностью слепым holdout.
-Публичные отчёты должны обозначать протокол и ограничения. Попадание в top-k,
-объём контекста и время локальных команд не являются измерением сэкономленных
-токенов, истинности знаний или качества всех последующих решений агента.
+Questions selected in advance but seen by the algorithm's author are a fixed
+regression check; they are no longer a fully blind holdout.
+Public reports must state the protocol and limitations. Top-k hits,
+context volume and local command duration do not measure tokens saved,
+knowledge truth or the quality of all subsequent agent decisions.
 
-## Проверка разделения task-карточки
+<a id="проверка-разделения-task-карточки"></a>
 
-Синтетический пример и измерения описаны в
-[CURRENT_CARDS.md](../../../docs/CURRENT_CARDS.md). Fixture находится в
+## Checking task-card splitting
+
+The synthetic example and measurements are described in
+[CURRENT_CARDS.md](../../../docs/CURRENT_CARDS.md). The fixture is in
 [card_maintenance.json](../../../tests/fixtures/card_maintenance.json),
-сценарий проверяется [test_card_maintenance.py](../../../tests/test_card_maintenance.py)
-через существующие CLI/API во временной базе. Это проверка сохранения
-доступности знания, источников и состояний; алгоритмы retrieval и Templates
-в этом этапе не меняются.
+and [test_card_maintenance.py](../../../tests/test_card_maintenance.py) checks the scenario
+through existing CLI/API operations in a temporary database. This checks preservation
+of access to knowledge, sources and states; retrieval algorithms and Templates
+are unchanged in this stage.
 
-До преобразования зафиксируйте запросы, флаги, бюджет и разумный `limit`:
-Jira/ID задачи, уникальная причина отказа, деталь расследования, действующее
-ограничение, исторический замер и непроверенная альтернатива. Составьте карту
-значимых фактов, условий, чисел и неизвестного к новым текущим записям и
-источникам. Полезная деталь после переноса должна находиться в полном текущем
-содержании; одного снимка родителя в истории недостаточно для обычного поиска.
+Before transformation, fix the queries, flags, budget and a reasonable `limit`:
+task Jira/ID, a unique failure reason, an investigation detail, an active
+constraint, a historical measurement and an unverified alternative. Map
+significant facts, conditions, numbers and unknowns to new current records and
+sources. After transfer, useful detail must be present in full current
+content; a parent snapshot in history alone is insufficient for ordinary retrieval.
 
-После переноса отдельно проверьте точный `entry get task:KEY` и наличие задачи
-в общем Jira-запросе при заранее выбранном `limit`, без требования top-1.
-Запросы уникальных деталей должны достигать нужных связанных записей;
-проверяйте их полное содержание, источники, `project_ids`, Jira, исторические
-даты, область, knowledge/work states и направления связей. Гипотеза доступна
-с явным `--include-hypotheses` и не становится confirmed. Неудачный опыт
-сохраняет подтверждённый результат в своих условиях; implemented не
-превращается в merged/released после редакторской правки.
+After transfer, separately check exact `entry get task:KEY` and task presence
+in a general Jira query at the predetermined `limit`, without requiring top-1.
+Unique-detail queries must reach the intended related records;
+check their full content, sources, `project_ids`, Jira, historical
+dates, scope, knowledge/work states and relationship directions. A hypothesis remains available
+with explicit `--include-hypotheses` and does not become confirmed. Failed experience
+preserves a confirmed outcome under its conditions; implemented does not
+become merged/released after an editorial change.
 
-Проверьте прежний текст в истории, повтор сценария без новых дублей/ревизий,
-CAS-конфликт при параллельной правке родителя и продолжение по известным ID
-после сбоя до сокращения родителя. Эти проверки не делают последовательность
-нескольких команд атомарной. Живая память для fixtures и тестов не используется.
+Check the previous text in history, rerunning the scenario without new duplicates/revisions,
+a CAS conflict when the parent is edited concurrently, and continuation using known IDs
+after a failure before shortening the parent. These checks do not make a sequence
+of commands atomic. Live memory is not used for fixtures or tests.
 
-Для `entry read`, `recall` и `brief` проверьте существующие признаки excerpt,
-truncated, omissions и `read_more`. Не вводите ожидание «все оговорки всегда
-есть в excerpt»: этот этап этого не гарантирует. Покажите случай, когда
-условие требует полного `get`, и проверяйте смысл в полной записи. Сравнивайте
-фактическую длину основной summary и объём нужных чтений выбранного сценария;
-это не измерение времени, токенов или качества LLM на реальной памяти.
+For `entry read`, `recall` and `brief`, check existing excerpt,
+truncated, omissions and `read_more` indicators. Do not introduce an expectation that “every caveat is always
+in the excerpt”: this stage does not guarantee that. Show a case where
+a condition requires full `get`, and check meaning in the complete record. Compare
+the actual main-summary length and the volume of necessary reads in the selected scenario;
+this does not measure time, tokens or LLM quality on real memory.
 
-Для `long_summary` отдельно проверяются границы Unicode-длины, новый порог
-и default, severity по состояниям, строгий scope, неизменность данных/истории/
-FTS/графа на схемах 1 и 2, отсутствие source/Git/network I/O и фактический
-размер JSON при тесном бюджете. Пропущенный finding учитывается, а показанный
-сохраняет обязательные details и полный ID. Неполное сканирование не объявляется
-полным покрытием, и кандидаты не меняют integrity health. Контракт — в
+For `long_summary`, separately check Unicode-length boundaries, the new threshold
+and default, severity by state, strict scope, unchanged data/history/
+FTS/graph on schemas 1 and 2, absence of source/Git/network I/O and actual
+JSON size under a tight budget. An omitted finding is counted, while a displayed finding
+retains mandatory details and the full ID. Incomplete scanning is not reported
+as full coverage, and candidates do not change integrity health. The contract is in
 [DIAGNOSTICS.md](DIAGNOSTICS.md).
 
-## Измерение роста памяти
+<a id="измерение-роста-памяти"></a>
 
-Синтетический runner измеряет существующее поведение отдельно от acceptance
-eval. Матрица и параметры — в [evals/README.md](../../../evals/README.md),
-результаты запуска — в [MEMORY_GROWTH.md](../../../docs/MEMORY_GROWTH.md).
+## Measuring memory growth
+
+The synthetic runner measures existing behavior separately from acceptance
+evaluation. The matrix and parameters are in [evals/README.md](../../../evals/README.md),
+and run results are in [MEMORY_GROWTH.md](../../../docs/MEMORY_GROWTH.md).
 
 ```sh
 python evals/evaluate_memory_growth.py --quick --repeats 1
 python evals/evaluate_memory_growth.py --repeats 3 --output /tmp/richi-memory-growth-report.json
 ```
 
-Запросы и ожидаемые полезные refs фиксируются до запуска в fixture; сохраняйте
-реальные misses по каждому запросу, не подгоняя oracle под выдачу. `--quick`
-не заменяет полную матрицу; для каждого отчёта нужен новый `--output` путь.
-Пропуск цели широкого запроса не доказывает неверное ранжирование других
-совпадений. Fixture не содержит entities; их рост здесь не измерен.
+Queries and expected useful refs are fixed in the fixture before a run; preserve
+actual misses for each query without adjusting the oracle to the output. `--quick`
+does not replace the full matrix; each report needs a new `--output` path.
+Missing a broad query's target does not prove incorrect ranking of other
+matches. The fixture contains no entities; their growth is not measured here.
 
-Обычная CLI-выдача определяет найденные refs, позиции, пропуски, объём и время.
-Отдельный `recall --expect` с большим бюджетом объясняет судьбу цели;
-диагностический JSON расходует бюджет и не заменяет обычные результаты.
-Успешное выполнение harness не означает полную полезную выдачу: `quality_misses`
-сохраняются отдельно; `--fail-on-miss` включает их в ненулевой код выхода.
+Ordinary CLI output determines found refs, positions, omissions, volume and time.
+A separate `recall --expect` with a large budget explains the target's outcome;
+diagnostic JSON consumes budget and does not replace ordinary results.
+A successful harness execution does not imply fully useful output: `quality_misses`
+are stored separately; `--fail-on-miss` includes them in a nonzero exit code.
 
-Время CLI включает запуск и stdout, исключает JSON parsing и генерацию корпуса.
-Первый вызов измеряется отдельно от N повторов и не считается холодным;
-p95 при трёх повторах равен максимуму и не оценивает надёжно хвост задержек.
-Время не является абсолютным CI gate.
-Для punisher оно включает глобальную integrity-проверку. Показывайте повторы
-и разброс; эти измерения не доказывают экономию токенов или качество LLM.
+CLI time includes startup and stdout, excluding JSON parsing and corpus generation.
+The first call is measured separately from N repeats and is not considered cold;
+p95 with three repeats equals the maximum and does not reliably estimate the latency tail.
+Time is not an absolute CI gate.
+For punisher, it includes the global integrity check. Show repeats
+and variation; these measurements do not prove token savings or LLM quality.
 
-Сценарии используют disposable stores и отдельную конфигурацию; тестовые
-процессы не наследуют `RICHI_*`/`CODEX_THREAD_ID`. Production memory не читается,
-пользовательские runtime и workspace не переключаются. Изоляция теста не
-разрешает обходить chat binding для живой памяти. Архив/очистка не реализуются.
+Scenarios use disposable stores and separate configuration; test
+processes do not inherit `RICHI_*`/`CODEX_THREAD_ID`. Production memory is not read,
+and user runtimes and workspaces are not switched. Test isolation does not
+authorize bypassing chat binding for live memory. Archiving/cleanup is not implemented.
 
-## Пропуски в повседневной работе
+<a id="пропуски-в-повседневной-работе"></a>
 
-Фиксируйте пробел выборочно, когда он привёл к повторному исследованию или может
-изменить вывод. Разделяйте отсутствие знания, намеренный фильтр состояния/области,
-бюджетный пропуск, неоднозначность термина, недоступный источник и дефект поиска
-существующей релевантной записи.
+## Misses in everyday work
 
-В подходящей `investigation` с тегом `retrieval-gap` сохраните очищенный от
-секретов запрос, проект, флаги, бюджет, наблюдённый результат, ожидаемый ref
-и свидетельство, что релевантное содержание, область и состояние уже были в
-базе на момент поиска. При необходимости используйте историю или снимок.
-Укажите исправление либо оставшуюся неопределённость. Не создавайте запись
-для каждого запроса и не считайте обычное успешное чтение улучшением системы.
+Record a gap selectively when it caused repeated investigation or may
+change a conclusion. Distinguish missing knowledge, an intentional state/scope filter,
+a budget omission, term ambiguity, an unavailable source and a retrieval defect
+for an existing relevant record.
 
-Подтверждённый пропущенный синоним можно добавить правильному scoped-понятию
-и проверить повтором запроса. Это не требует нового benchmark для каждой
-правки данных. Расширение индексации и автоматизации стоит обосновывать
-повторяющимися потребностями и наблюдаемыми результатами.
+In an appropriate `investigation` with the `retrieval-gap` tag, save a sanitized
+query, project, flags, budget, observed result, expected ref
+and evidence that relevant content, scope and state already existed in
+the database at search time. Use history or a snapshot when needed.
+State the correction or remaining uncertainty. Do not create a record
+for every query or count an ordinary successful read as a system improvement.
+
+A confirmed missing synonym may be added to the correct scoped concept
+and checked by rerunning the query. This does not require a new benchmark for every
+data edit. Expansion of indexing and automation should be justified
+by recurring needs and observed results.

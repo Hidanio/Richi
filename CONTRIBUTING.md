@@ -1,5 +1,7 @@
 # Contributing to Richi
 
+English | [Русский](CONTRIBUTING.ru.md)
+
 Ideas, bug reports, and documentation feedback are welcome. Richi uses the
 [Richi Personal Use and Organization Agreement License](LICENSE.md), with
 separate authorization for organizational and commercial use.
@@ -39,14 +41,33 @@ hosting-platform terms, existing licenses, or an applicable separate agreement.
 
 ## Development
 
-Use macOS or Linux with Python 3.9+ and Git. From the repository root:
+Use branch names without a `codex/` prefix and use underscores instead of hyphens,
+for example `audit_fixes_bilingual_docs`.
+
+Use macOS or Linux with Python 3.9+ and Git. Install the current checkout normally
+into a disposable virtual environment. From the repository root:
 
 ```sh
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -e .
-python -m unittest discover -s tests
+richi_test_venv="$(mktemp -d "${TMPDIR:-/tmp}/richi-tests.XXXXXX")"
+python3 -m venv "$richi_test_venv"
+. "$richi_test_venv/bin/activate"
+python -m pip install --upgrade pip
+python -m pip install .
+python -m unittest discover -s tests -v
+python evals/evaluate_recall.py
 ```
+
+After source edits, run `python -m pip install --force-reinstall .` before
+repeating the full test suite and evaluation. Direct Python imports and package
+smoke tests use the installed package; running them against an older installation
+can miss regressions in the checkout. Editable installs are unsupported because
+the launcher requires a fixed package for release mode and recovery.
+
+For everyday CLI development, configure `development.source` and `dev true` as
+described in the [installation guide](docs/INSTALLATION.md). This selects
+`src/richi/` for CLI, agents and the map. It does not redirect direct Python
+imports or load launcher changes from the checkout; changes under `launcher/`
+require reinstalling the package.
 
 Keep test data synthetic. Tests should create temporary databases and repositories;
 do not point a test suite at a live knowledge store. Runtime configuration and
@@ -62,3 +83,8 @@ For retrieval changes, preserve a reproducer and compare relevant cases before
 and after. The [evaluation guidance](skills/project-memory/references/EVALUATION.md)
 distinguishes synthetic regression checks from private task-based evaluations.
 Do not publish a private snapshot or rewrite old expectations to improve a score.
+
+Keep English `*.md` documents and their complete Russian `*.ru.md` translations
+synchronized. Preserve language navigation and cross-links; use the matching
+language for local documentation links. Do not translate commands or API
+identifiers. `LICENSE.md` remains the original license text.

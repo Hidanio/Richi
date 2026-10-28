@@ -1,8 +1,12 @@
-# Компактный JSON и короткий входной skill
+<a id="компактный-json-и-короткий-входной-skill"></a>
+# Compact JSON and a shorter entry skill
 
-`richi --compact-json …` убирает отступы и пробелы между JSON-полями успешного
-ответа. Флаг глобальный: ставится перед командой, рядом с `--project-path` или
-другими допустимыми селекторами. Формат по умолчанию остаётся прежним.
+English | [Русский](COMPACT_OUTPUT.ru.md)
+
+`richi --compact-json …` removes indentation and spaces between JSON fields
+in successful responses. The flag is global: place it before the command,
+alongside `--project-path` or other permitted selectors. The default format
+is unchanged.
 
 ```sh
 richi --compact-json --project-path /work/example recall 'почему выбран кеш' --project example
@@ -10,136 +14,139 @@ richi --compact-json --project-path /work/example entry get task:ABC-123
 richi --compact-json config show
 ```
 
-Компактный JSON сохраняет значения полей, Unicode и завершающий перевод строки.
-Это не сокращение содержания записи, не новый ранжировщик и не изменение схемы
-хранилища. Бюджетные ответы используют один renderer при fitting и печати;
-`budget.output_chars` равен фактической Unicode-длине stdout вместе с newline.
-Символы, UTF-8 bytes и токены различаются.
+Compact JSON preserves field values, Unicode and the final newline. It does not
+shorten record content, introduce a ranker or change the storage schema.
+Budgeted responses use one renderer for fitting and printing;
+`budget.output_chars` equals actual stdout Unicode length including the newline.
+Characters, UTF-8 bytes and tokens are different units.
 
-При достаточном бюджете меняются только представление и `budget.output_chars`.
-При прежнем тесном `--max-chars` могут сохраниться дополнительные предложения,
-источники, карточки или рёбра: такая выдача не обязана содержать меньше токенов.
-Для намеренного ограничения контекста отдельно выбирайте бюджет и проверяйте
-omissions. Пустая выдача из-за бюджета не становится `no_match`.
+With ample budget, only presentation and `budget.output_chars` change. Under the
+same tight `--max-chars`, additional sentences, sources, cards or edges may fit;
+such output need not contain fewer tokens. To deliberately limit context,
+choose the budget separately and inspect omissions. Budget-empty output does
+not become `no_match`.
 
-Флаг действует на успешный JSON stdout команд runtime и launcher, включая
-`config`, `workspace`, `chat`, `status`, `update`. Он не является селектором
-хранилища, не ослабляет chat binding или project guard. Ошибки/stderr, help и
-version сохраняют прежний формат. `--compact-json map` отклоняется до запуска
-карты; HTTP и process logging не меняются. Файлы `--output`, canonical JSON для
-хешей и внутренние ограничения объёма работы сохраняют прежнее представление.
-Литерал после команды или `--` не переинтерпретируется launcher как этот флаг.
+The flag applies to successful runtime and launcher stdout JSON, including
+`config`, `workspace`, `chat`, `status` and `update`. It is not a storage selector
+and does not weaken chat binding or the project guard. Errors/stderr, help and
+version retain their format. `--compact-json map` is rejected before map startup;
+HTTP and process logging are unchanged. `--output` files, canonical hashing JSON
+and internal work limits retain their existing representation. A literal after
+the command or `--` is not reinterpreted by the launcher as this flag.
 
-В runtime режим хранится в `ContextVar` только на время CLI-вызова и сбрасывается
-даже при исключении. API/server по умолчанию продолжают использовать pretty JSON.
-Launcher форматирует свои ответы без импорта выбранного runtime: восстановление
-настроек остаётся доступным при сломанном dev checkout. Для обновления launcher
-нужна переустановка фиксированного пакета; один dev reload недостаточен.
+Runtime mode is held in a `ContextVar` only for the CLI invocation and resets
+even after an exception. APIs/server still default to pretty JSON. The launcher
+formats its responses without importing the selected runtime, so settings
+recovery remains available with a broken dev checkout. Updating the launcher
+requires reinstalling the fixed package; a dev reload alone is insufficient.
 
-## Skill и маршруты к подробностям
+<a id="skill-и-маршруты-к-подробностям"></a>
+## Skill and routes to details
 
-Основной [SKILL.md](../skills/project-memory/SKILL.md) содержит выбор workspace,
-chat/project guards, поиск или прямой get известного ID, неполноту excerpts,
-авторизацию записи, full get/CAS, источники и состояния. Подробности загружаются
-из references по задаче. Установленный skill обновляется копированием всей папки
-`skills/project-memory`, включая все файлы `references/`.
+The main [SKILL.md](../skills/project-memory/SKILL.md) covers workspace selection,
+chat/project guards, search or direct get for a known ID, incomplete excerpts,
+write authorization, full get/CAS, sources and states. References are loaded
+according to the task. Update an installed skill by copying the entire
+`skills/project-memory` directory, including all `references/` files.
 
-Для частых операций предусмотрены отдельные самодостаточные инструкции:
-[запись](../skills/project-memory/references/ENTRY_WRITE.md),
-[диагностика поиска](../skills/project-memory/references/RECALL_DEBUG.md),
-[чтение соседей](../skills/project-memory/references/NEIGHBORS.md),
-[аудит без изменений](../skills/project-memory/references/MEMORY_AUDIT.md) и
+Frequent operations have focused, self-contained instructions:
+[writing](../skills/project-memory/references/ENTRY_WRITE.md),
+[search diagnostics](../skills/project-memory/references/RECALL_DEBUG.md),
+[reading neighbors](../skills/project-memory/references/NEIGHBORS.md),
+[read-only audit](../skills/project-memory/references/MEMORY_AUDIT.md) and
 [capture/attach](../skills/project-memory/references/GIT_CAPTURE.md).
-Соответствующий материал перенесён из широких справочников; их оставшиеся
-разделы нужны для расширенных операций. Известный ID можно читать напрямую
-по core без загрузки справочника записи.
+This material moved from broader guides; their remaining sections cover advanced
+operations. A known ID can be read directly under the core instructions without
+loading the writing guide.
 
-| Прежний раздел | Где сохраняются правила |
+| Previous section | Where rules are preserved |
 | --- | --- |
-| Workspace/runtime/project selection | Обязательные guards в core; процедуры в WORKSPACES |
-| Recall и неполная выдача | Core, RECALL; пропущенный ID — RECALL_DEBUG |
-| Запись результатов и актуальные task-карточки | Core и ENTRY_WRITE; splitting в MAINTENANCE |
-| Обслуживание памяти | MEMORY_AUDIT для решения; MAINTENANCE задаёт backup и порядок изменений |
-| Пропуски поиска и эксперименты | EVALUATION |
-| Источники, снимки, код и diff | GIT_CAPTURE, DIAGNOSTICS, GIT, BRIEF, IMPACT |
-| Граф, понятия и неоднозначность | NEIGHBORS для чтения; GRAPH, ENCYCLOPEDIA для остальных операций |
+| Workspace/runtime/project selection | Required core guards; procedures in WORKSPACES |
+| Recall and incomplete output | Core, RECALL; missing ID in RECALL_DEBUG |
+| Recording results and current task cards | Core and ENTRY_WRITE; splitting in MAINTENANCE |
+| Memory maintenance | MEMORY_AUDIT for decisions; MAINTENANCE for backups and mutation order |
+| Search misses and experiments | EVALUATION |
+| Sources, snapshots, code and diffs | GIT_CAPTURE, DIAGNOSTICS, GIT, BRIEF, IMPACT |
+| Graph, concepts and ambiguity | NEIGHBORS for reads; GRAPH, ENCYCLOPEDIA for other operations |
 
-Если ID уже известен и нужна полная запись, `get` выполняется сразу. `read`
-остаётся опциональным представлением; не нужно сначала оплачивать recall/read
-ради того же get. История запрашивается отдельно. Компактная сериализация не
-снимает требования дочитать условия и исключения и проверить актуальный релиз.
-Для старой установки, не распознающей флаг, skill допускает повтор без него
-с сохранением селекторов; менять runtime только ради форматирования не требуется.
+When an ID is known and the full record is needed, call `get` directly. `read`
+remains optional; do not pay for recall/read before the same get. Request history
+separately. Compact serialization does not remove the need to read conditions
+and exceptions or verify the current release. For old installations that reject
+the flag, the skill permits retrying without it while preserving selectors;
+changing runtime merely for formatting is unnecessary.
 
-## Измерение 22 октября 2026
+<a id="измерение-22-октября-2026"></a>
+## Measurement on October 22, 2026
 
-Baseline: `748fc91e2308d04787d32c15db36e259a7af58f4`. Обе версии установлены
-обычно в отдельных временных venv, Python 3.9.6 / SQLite 3.43.2. Единственный
-синтетический corpus создан baseline через CLI и далее только читается обеими
-версиями. Неизменный `tests/fixtures/card_maintenance.json` содержит 7 вопросов,
-5 текущих записей и 17 атомарных фактов с источниками. Личная память не использовалась.
+Baseline: `748fc91e2308d04787d32c15db36e259a7af58f4`. Both versions were installed
+normally in separate temporary venvs, Python 3.9.6 / SQLite 3.43.2. One synthetic
+corpus was created through baseline CLI and then only read by both versions.
+Unchanged `tests/fixtures/card_maintenance.json` contains 7 questions, 5 current
+records and 17 atomic sourced facts. Personal memory was not used.
 
-[Runner](../evals/evaluate_compact_output.py) снимает 31 сценарий × 3 варианта:
-baseline pretty, candidate pretty, candidate compact. Это 7 recall при бюджетах
-100000/2000, 5 read при тех же бюджетах, 5 full get и 2 explain. Raw stdout,
-точные code/fixture/runner hashes и результаты сохранены в
-[отчёте](../evals/results/compact-output-2026-10-22.json).
+The [runner](../evals/evaluate_compact_output.py) measures 31 scenarios × 3 variants:
+baseline pretty, candidate pretty, candidate compact. These are 7 recall calls
+at budgets 100000/2000, 5 reads at the same budgets, 5 full gets and 2 explains.
+Raw stdout, exact code/fixture/runner hashes and results are in the
+[report](../evals/results/compact-output-2026-10-22.json).
 
-- Pretty stdout совпал с baseline во всех 31 сценариях, без удаления timestamps.
-- Во всех 19 ample/full сценариях parsed JSON совпал, кроме `budget.output_chars`.
-- Все 17 фактов с источниками сохранены в full get. Код и database/WAL неизменны.
-- В 7 из 12 тесных сценариев payload изменился, поскольку стал помещаться лучше.
-- Нарушений проверенных инвариантов: 0.
+- Pretty stdout matched baseline in all 31 scenarios, without removing timestamps.
+- Parsed JSON matched in all 19 ample/full scenarios except `budget.output_chars`.
+- All 17 sourced facts remained in full get. Code and database/WAL were unchanged.
+- Payload changed in 7 of 12 tight scenarios because more content fitted.
+- Violations of checked invariants: 0.
 
-Сумма семи recall с достаточным бюджетом; это фиксированная совокупность
-запросов, а не утверждение, что каждая реальная задача выполняет все семь:
+Sum of seven recall calls with ample budget: a fixed query collection, not a
+claim that every real task runs all seven:
 
-| Формат | o200k_base | cl100k_base |
+| Format | o200k_base | cl100k_base |
 | --- | ---: | ---: |
 | Pretty | 17717 | 20339 |
 | Compact | 13860 | 16362 |
-| Сокращение | 21,8% | 19,6% |
+| Reduction | 21.8% | 19.6% |
 
-При 2000 символах число отсутствующих необходимых фактов по всем вопросам
-снизилось с 19 до 11, но в 6 из 7 вопросов compact-пакет всё ещё неполон.
-Сумма cl100k токенов выросла с 3483 до 3558 из-за дополнительного содержания;
-o200k сократилась с 3434 до 3253. Это демонстрирует компромисс полноты и длины,
-а не регрессию кодирования. Требование читать полные записи сохраняется.
+At 2000 characters, missing required facts across all questions fell from 19 to
+11, but the compact package remained incomplete in 6 of 7 questions. Total
+cl100k tokens rose from 3483 to 3558 due to additional content; o200k fell from
+3434 to 3253. This demonstrates a completeness/length tradeoff rather than an
+encoding regression. Full-record reading remains required.
 
-Skill измерен отдельно для первой версии `1eb690b`, до разделения справочников
-по операциям. Эта историческая таблица не описывает текущую структуру skill.
-References считаются только в указанных маршрутах, каждый файл один раз;
-это не измерение реального поведения клиента:
+The skill was measured separately for initial version `1eb690b`, before splitting
+references by operation. This historical table does not describe today's skill
+structure. References count only in the named routes, each file once; this is
+not a measurement of actual client behavior:
 
-| Загруженные инструкции | До, o200k / cl100k | После, o200k / cl100k |
+| Loaded instructions | Before, o200k / cl100k | After, o200k / cl100k |
 | --- | ---: | ---: |
-| Только SKILL.md | 6638 / 6690 | 1474 / 1475 |
+| SKILL.md only | 6638 / 6690 | 1474 / 1475 |
 | Core + RECALL | 8563 / 9702 | 3399 / 4487 |
-| Core + CLI для записи | 12187 / 14634 | 7702 / 10425 |
+| Core + CLI for writing | 12187 / 14634 | 7702 / 10425 |
 | Core + MAINTENANCE + DIAGNOSTICS | 14418 / 18319 | 9254 / 13104 |
-| То же + CLI + GRAPH для изменений | 22913 / 30411 | 18428 / 26202 |
+| Same + CLI + GRAPH for changes | 22913 / 30411 | 18428 / 26202 |
 
-Сокращение входного файла около 78% не означает такую же экономию всей задачи.
-Некоторые операции требуют дополнительных references. Все их индивидуальные
-размеры сохранены отдельно в отчёте; сумма references не считается постоянной
-нагрузкой каждого вызова. Перенос правил проверяется также по сценариям выбора
-действий, но это не статистическая оценка качества модели.
+An approximately 78% reduction in the entry file does not imply equivalent
+whole-task savings. Some operations need additional references. Individual sizes
+are retained separately in the report; their sum is not treated as permanent
+overhead for every call. Rule relocation is also checked through action-selection
+scenarios, but that is not a statistical assessment of model quality.
 
-Token counts получены optional eval-зависимостью `tiktoken==0.14.0`.
-`o200k_base`/`cl100k_base` — текстовые proxies, не утверждение о токенизаторе
-текущего Codex. Считается stdout или названные skill-файлы; отсутствуют prompts,
-tool framing, повторная передача истории, reasoning/output и cache billing.
-Задержки, деньги, выбор нужной записи моделью и качество итогового ответа не
-измерялись. Exact fact/source audit не заменяет семантическое доказательство.
-Активная concept ambiguity отсутствует в этом corpus и проверяется отдельным
-CLI-тестом. Старые evaluation expectations не изменялись.
+Token counts use optional evaluation dependency `tiktoken==0.14.0`.
+`o200k_base`/`cl100k_base` are text proxies, not claims about the current Codex
+tokenizer. Counts cover stdout or named skill files; they exclude prompts,
+tool framing, replayed history, reasoning/output and cache billing. Latency,
+money, model selection of the right record and final-answer quality were not
+measured. Exact fact/source auditing is not a semantic proof. This corpus has
+no active concept ambiguity; a separate CLI test covers it. Old evaluation
+expectations were unchanged.
 
-## Повторение и проверки
+<a id="повторение-и-проверки"></a>
+## Reproduction and checks
 
-Создайте baseline checkout указанного commit и обычные установки обеих версий
-в disposable venv. В Python, запускающем runner, можно установить tiktoken;
-production-пакет остаётся stdlib-only. Без `--tokenizer-cache` runner проверяет
-длину и поведение без подсчёта токенов. Output должен быть новым файлом.
+Create a baseline checkout at the specified commit and normal installations of
+both versions in disposable venvs. The runner's Python may have tiktoken installed;
+the production package remains stdlib-only. Without `--tokenizer-cache`, the
+runner checks length and behavior without counting tokens. Output must be a new file.
 
 ```sh
 python evals/evaluate_compact_output.py \
@@ -151,97 +158,98 @@ python evals/evaluate_compact_output.py \
   --output /tmp/compact-output-new.json
 ```
 
-Runner проверяет совпадение установленного кода с source hashes, фиксированный
-baseline, unchanged fixture и неизменность кода/skill/БД во время прогона.
-Синтетический subprocess изолирован от пользовательских chat IDs, Richi/Python
-selectors и HOME. Это тестовый механизм, не инструкция обходить chat binding
-при работе с настоящей памятью. Новые timestamps при создании fixture могут
-менять байты/токены; сохранённые stdout позволяют точно пересчитать этот прогон.
+The runner checks installed code against source hashes, the fixed baseline,
+unchanged fixture and code/skill/database immutability during the run. Synthetic
+subprocesses are isolated from user chat IDs, Richi/Python selectors and HOME.
+This is a test mechanism, not permission to bypass chat binding for real memory.
+New fixture-creation timestamps can change bytes/tokens; retained stdout allows
+exact recounting of this run.
 
-Фокусные CLI-тесты покрывают оба формата, тесные бюджеты, ambiguity/no-match,
-полный get/history, источники, Git-команды/файлы, вложенные contexts и сброс после
-ошибки, ранние launcher-команды, release/dev, сломанный dev и flag-like payload.
-Общие проверки: `python -m unittest discover -s tests -v`,
-`python evals/evaluate_recall.py` и штатный валидатор skill.
+Focused CLI tests cover both formats, tight budgets, ambiguity/no-match,
+full get/history, sources, Git commands/files, nested contexts and reset after
+errors, early launcher commands, release/dev, broken dev and flag-like payloads.
+General checks: `python -m unittest discover -s tests -v`,
+`python evals/evaluate_recall.py` and the standard skill validator.
 
-Итог проверки 22 октября: 586 тестов прошли, 1 Linux-only тест пропущен на macOS.
-Первый общий запуск получил 29 ошибок открытия loopback-порта из-за sandbox;
-ровно эти 29 тестов повторно выполнены с разрешением на локальный сервер и прошли.
-Это совокупный результат двух запусков, а не один полностью зелёный запуск.
-Приёмочные сценарии: 7/7, база не изменена. Валидатор skill и Markdown-ссылки
-прошли проверку. Финальное независимое ревью кода не выявило блокеров.
+October 22 validation: 586 tests passed, 1 Linux-only test skipped on macOS.
+The first full run had 29 sandbox errors opening loopback ports; exactly those
+29 tests were rerun with local-server permission and passed. This is the combined
+result of two runs, not a single fully green run. Acceptance cases: 7/7, database
+unchanged. Skill validation and Markdown links passed. Final independent code
+review found no blockers.
 
-Короткий skill дополнительно проверен отдельным агентом без старого skill,
-реализации и предыдущих выводов. Он прочитал новый core и нужные references,
-затем предложил действия для семи синтетических ситуаций. Реальные команды
-Richi и изменения памяти в этой проверке не выполнялись.
+A separate agent additionally checked the shortened skill without the old skill,
+implementation or previous conclusions. It read the new core and required
+references, then proposed actions for seven synthetic situations. It ran no real
+Richi commands and changed no memory in this check.
 
-| Ситуация | Проверенное решение |
+| Situation | Checked decision |
 | --- | --- |
-| Новый непривязанный чат, единственный workspace | Запросить выбор до доступа к памяти; независимая работа с кодом возможна |
-| Чат привязан к alpha, глобально выбран beta | Работать в alpha без повторного выбора и без поиска в beta |
-| Известный task ID, неполный excerpt и старый implemented | Прямой full get; проверить актуальные источники и развёртывание перед выводом |
-| Обновление записи после CAS-конфликта | Перечитать полную запись и согласовать изменения, затем повторить с новым CAS |
-| Объединение записей с общим alias, но разными экспериментами | Сохранить различия; backup перед обоснованными изменениями, не поглощать неудачу |
-| Сохранение исторического неудачного опыта с недоступным отчётом | Различить дату события и проверки; не выдумывать источники, свежесть или выпуск |
-| Известный fact ID и старый CLI без compact-флага | Повторить get без флага с прежними selectors; не менять workspace/runtime |
+| New unbound chat, only one workspace | Ask for selection before memory access; independent code work may continue |
+| Chat bound to alpha, global selection beta | Work in alpha without choosing again or searching beta |
+| Known task ID, incomplete excerpt and old implemented state | Direct full get; verify current sources and deployment before concluding |
+| Updating after a CAS conflict | Reread the full record, reconcile changes, retry with fresh CAS |
+| Consolidating records with a shared alias but different experiments | Preserve differences; back up before justified changes; do not absorb the failure |
+| Preserving a historical failure with an unavailable report | Distinguish event and verification dates; invent no sources, freshness or release |
+| Known fact ID and old CLI without compact support | Retry get without the flag and with the same selectors; do not switch workspace/runtime |
 
-По этим семи ответам потери обязательных правил не обнаружены. Это качественный
-просмотр предлагаемых действий одного агента, не повторяемый статистический
-benchmark и не проверка фактического выполнения команд или числа tool calls.
-Версии core/references зафиксированы hashes в отчёте измерений.
+No loss of mandatory rules was found in these seven answers. This is a qualitative
+review of one agent's proposed actions, not a repeatable statistical benchmark
+or validation of actual command execution or tool-call counts. Core/reference
+versions are anchored by hashes in the measurement report.
 
-## Инструкции по операциям: проверка всей работы
+<a id="инструкции-по-операциям-проверка-всей-работы"></a>
+## Operation guides: evaluating the whole workflow
 
-В первом частном A/B сравнение длинного и короткого основного skill не показало
-устойчивой экономии полного чтения: −2,6% o200k и +0,6% cl100k. Агенты дочитывали
-большие справочники. Поэтому следующая правка выделяет ENTRY_WRITE, GIT_CAPTURE,
-MEMORY_AUDIT, NEIGHBORS и RECALL_DEBUG. Материал перенесён, сжат и изложен на
-английском, как core; влияние этих изменений по отдельности не измерялось.
+The first private A/B comparison of long and short core skills showed no stable
+saving in complete reading: −2.6% o200k and +0.6% cl100k. Agents loaded large
+reference guides. The next change therefore extracts ENTRY_WRITE, GIT_CAPTURE,
+MEMORY_AUDIT, NEIGHBORS and RECALL_DEBUG. Material was moved, condensed and written
+in English like the core; those individual effects were not measured separately.
 
-Повторное сравнение использует baseline `1eb690b` — уже короткий skill, до
-разделения справочников. По два свежих сеанса каждой версии, шесть одинаковых
-вопросов в прямом и обратном порядке; ранее полученный контекст можно использовать
-внутри сеанса. Runtime `1eb690b`, компактный JSON, снимок выбранной памяти и
-первичные документы одинаковы. Критерий до запуска: не менее 10% сокращения по
-обоим токенизаторам, выигрыш в каждой паре, отсутствие существенных регрессий,
-точные черновики обновления и неизменные данные.
+The repeated comparison uses baseline `1eb690b`, already a short skill but before
+reference splitting. Two fresh sessions per version receive six identical
+questions in forward and reverse order; context can be reused within a session.
+Runtime `1eb690b`, compact JSON, selected-memory snapshot and primary documents
+are identical. Predetermined acceptance: at least 10% reduction with both
+tokenizers, a win in each pair, no material regressions, exact update drafts and
+unchanged data.
 
-| Весь возвращённый инструментами текст, два сеанса | До | После | Сокращение |
+| All tool-returned text, two sessions | Before | After | Reduction |
 | --- | ---: | ---: | ---: |
-| o200k_base | 76939 | 56870 | 26,1% |
-| cl100k_base | 103920 | 69172 | 33,4% |
-| Число операций чтения/CLI | 40 | 40 | 0% |
+| o200k_base | 76939 | 56870 | 26.1% |
+| cl100k_base | 103920 | 69172 | 33.4% |
+| Read/CLI operations | 40 | 40 | 0% |
 
-По отдельным повторам o200k сокращён на 25,3% и 26,9%; cl100k — на 33,0% и
-33,9%. Все четыре полных черновика сохранили поля и точный CAS. Независимая
-проверка новой версии: 12/12 основных ответов прошли. В старой версии один
-ответ содержит небольшую неточность про `sources related` и `--repo`.
-Проверяющий не видел соответствия версий или метрик; названия справочников,
-процитированные в самих ответах, оставались видны, поэтому маскировка не абсолютна.
+Individual repeats reduced o200k by 25.3% and 26.9%, cl100k by 33.0% and 33.9%.
+All four full drafts preserved fields and exact CAS. Independent validation of
+the new version passed 12/12 main answers. One old-version answer had a minor
+inaccuracy about `sources related` and `--repo`. The reviewer did not know the
+version mapping or metrics; guide names quoted in answers remained visible,
+so masking was incomplete.
 
-Отдельная новая задача о двух связях графа была скрыта от автора правки до
-фиксации исходников. В свежих сеансах обе версии ответили корректно; объём
-сократился на 30,1% / 31,1%. Этот результат не добавлялся к основной сумме.
-При этом один ответ графа новой версии всё ещё содержит 242850 символов:
-лимит числа узлов не ограничивает объём полных карточек. Компактное представление
-графа с отдельным бюджетом остаётся кандидатом для следующего изменения.
+A separate new task about two graph edges was hidden from the change author
+until sources were frozen. Both versions answered correctly in fresh sessions;
+volume fell 30.1% / 31.1%. This result was not added to the main total. However,
+one new-version graph response still contained 242850 characters: a node-count
+limit does not bound full-card volume. A compact graph representation with its
+own budget remained a candidate for the next change.
 
-[Обобщённые показатели и хеши skill](../evals/results/skill-operations-2026-10-22.json)
-не содержат частных вопросов, карточек или снимка базы. Полный отчёт и raw traces
-сохранены локально вне репозитория. Это частная проверка известной выборки,
-а не публично воспроизводимый benchmark: одна модель, два повтора и одна новая
-задача не доказывают общее качество или статистическую значимость.
+[Aggregate metrics and skill hashes](../evals/results/skill-operations-2026-10-22.json)
+contain no private questions, cards or database snapshot. The full report and raw
+traces remain local outside the repository. This is a private evaluation of a
+known sample, not a publicly reproducible benchmark: one model, two repeats and
+one new task establish neither general quality nor statistical significance.
 
-Учтён полный stdout/stderr до возможного усечения внешней оболочкой, повторные
-чтения и отказы доступа к файлам вне фиксированного списка. Не измерены полный
-модельный input с повторной историей, reasoning, кеширование, биллинг или задержка.
-Эффект compact JSON сюда не входит. Качество и выигрыш проверены для совокупной
-правки инструкций, а не только для уменьшения размера основного файла.
+Accounting includes complete stdout/stderr before possible outer-shell truncation,
+repeated reads and denied file access outside the fixed allowlist. Full model
+input with replayed history, reasoning, caching, billing and latency were not
+measured. Compact JSON's effect is excluded. Quality and savings are checked
+for the combined instruction change, not merely a smaller entry file.
 
-После этой правки полный suite: 587 тестов, 586 успешны, один Linux-only skip на
-macOS в одном запуске с разрешённым loopback. Recall acceptance 7/7, валидатор
-skill и локальные ссылки пройдены. Найденный ревью пропуск общего контракта
-обновления entity/edge исправлен в core до фиксации candidate. Исходные результаты
-первого эксперимента не заменялись. Установленная копия skill сама не обновляется:
-после принятия изменения нужна вся папка с новыми references.
+After this change, the full suite had 587 tests, 586 passed and one Linux-only
+skip on macOS in one run with permitted loopback. Recall acceptance 7/7, skill
+validation and local links passed. Review found a missing common entity/edge
+update contract; it was added to core before freezing the candidate. Original
+first-experiment results were not replaced. The installed skill does not update
+itself: after accepting the change, copy the whole directory with new references.

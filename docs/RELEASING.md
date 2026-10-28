@@ -1,4 +1,7 @@
+<a id="стабильные-релизы-github"></a>
 # Stable GitHub releases
+
+English | [Русский](RELEASING.ru.md)
 
 Richi's updater reads stable releases from [Hidanio/Richi](https://github.com/Hidanio/Richi/releases).
 It accepts strict `X.Y.Z` versions and `vX.Y.Z` tags. Drafts and prereleases are

@@ -1,35 +1,38 @@
 # Richi
 
-**Инженерная память для AI-агентов.**
+English | [Русский](README.ru.md)
 
-Richi превращает отдельные задачи в накопленный инженерный опыт: сохраняет
-решения, исследования, ошибки и знания о проектах, чтобы агенты могли использовать
-их в дальнейшей работе.
+**Engineering memory for AI agents.**
 
-Время и внимание человека ограничены. Работу можно распределять между агентами,
-но для этого им нужны память, контекст и понимание связей между задачами.
-Richi помогает сохранять этот контекст вместе с источниками и границами
-применимости знаний.
+Richi turns individual tasks into accumulated engineering experience. It stores
+project decisions, investigations, mistakes and knowledge so agents can use them
+in later work.
 
-## Что сохраняет Richi
+Human time and attention are limited. Work can be shared among agents, but they
+need memory, context and an understanding of how tasks relate. Richi preserves
+that context together with sources and the conditions under which knowledge applies.
 
-- Результаты задач, принятые решения, исследования и неудачные попытки.
-- Определения и технические понятия с учётом проекта и контекста.
-- Явные связи между знаниями, компонентами и проектами.
-- Ссылки на источники и версии кода, по которым сделаны выводы.
+<a id="что-сохраняет-richi"></a>
+## What Richi stores
 
-Рабочая реализация использует SQLite, текстовый поиск, граф связей,
-интерактивную карту и Git-источники с историей и сравнением версий. Проверка
-источников помогает обнаруживать изменения кода; совпадение байтов само по себе
-не подтверждает правильность вывода или состояние релиза.
+- Task outcomes, decisions, investigations and failed attempts.
+- Definitions and technical concepts scoped to a project and context.
+- Explicit links between knowledge, components and projects.
+- Source references and code revisions that support conclusions.
 
-## Быстрый старт
+The implementation uses SQLite, text search, a relationship graph, an interactive
+map and Git sources with history and revision comparison. Source checks help
+identify code changes; matching bytes alone do not establish that a conclusion
+is correct or that a release has shipped.
 
-Richi находится в активной разработке. Самостоятельная поставка включает CLI,
-SQLite-хранилище, Git-навигацию, локальную карту и переносимый skill для агента.
-Поддерживаемая среда: **macOS или Linux, Python 3.9+**. Для функций истории кода
-нужен установленный Git. Для быстрого выбора workspace доступно меню `richi use`. Готовый MCP-сервер
-пока не входит в эту поставку.
+<a id="быстрый-старт"></a>
+## Quick start
+
+Richi is under active development. The standalone distribution includes the CLI,
+SQLite store, Git navigation, local map and a portable agent skill. Supported
+platforms are **macOS or Linux with Python 3.9+**. Code history features require
+Git. The `richi use` menu provides quick workspace selection. An MCP server is
+not included in this distribution yet.
 
 ```sh
 curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh | sh -s -- --yes
@@ -43,43 +46,44 @@ Prerequisites include curl and Python with venv, ensurepip and sqlite3.
 See [one-command setup](docs/SETUP.md) for preview, existing skills, recovery and
 offline installation, or [manual installation](docs/INSTALLATION.md) for source builds.
 
-Стабильные релизы: `richi update check`, `richi update apply`,
-`richi update rollback`. Обновление сохраняет предыдущую версию, настройки dev
-и данные workspace. Фоновая проверка включается явно:
-`richi update auto enable --interval 6h`, состояние — `richi update auto status`.
-Она только сообщает о доступном релизе. Автоустановка выключена по умолчанию;
-для её отдельного включения добавьте `--install` к команде `auto enable`.
-Подробности — [обновления](docs/UPDATES.md) и
-[публикация релиза](docs/RELEASING.md).
+For stable releases, use `richi update check`, `richi update apply` and
+`richi update rollback`. Updates retain the previous version, dev settings and
+workspace data. Enable background checks explicitly with
+`richi update auto enable --interval 6h`; inspect results with
+`richi update auto status`. This only records release availability. Automatic
+installation is off by default; add `--install` to `auto enable` to authorize it
+separately. See [updates](docs/UPDATES.md) and [releasing](docs/RELEASING.md).
 
-Для разработки укажите исходники и включите общий dev-режим:
+For development, set the source checkout and enable the shared dev mode:
 
 ```sh
 richi config set development.source /path/to/Richi
 richi config set dev true
 ```
 
-Теперь CLI, агенты и карта используют текущий код этого checkout. CLI подхватывает
-изменения при следующем вызове, карта перезагружает сервер после изменения
-исходников; для обновления интерфейса обновите страницу браузера. Вернуться к
-установленной версии можно командой `richi config set dev false`. Внутри выбранного workspace настройки и
-база знаний остаются общими для двух режимов. Подробнее — в [инструкции установки](docs/INSTALLATION.md).
+The CLI, agents and map now use this checkout's runtime code. The CLI picks up
+changes on its next invocation; the map reloads its server after source changes.
+Refresh the browser page to update the interface. Use `richi config set dev false`
+to return to the installed version. Both modes share settings and the knowledge
+database within the selected workspace. Launcher changes still require
+reinstallation. See the [installation guide](docs/INSTALLATION.md).
 
-Для новой установки `init` создаёт пустую базу в каталоге данных пользователя,
-отдельно от исходников. Примеры не загружают готовую энциклопедию: знания добавляет
-пользователь или агент в процессе работы. Richi не читает чаты, трекеры задач
-и репозитории в фоне.
+For a new installation, `init` creates an empty database in the user data
+directory, outside the source checkout. Examples do not preload an encyclopedia:
+users or agents add knowledge as they work. Richi does not read chats, issue
+trackers or repositories in the background.
 
-**Если у вас уже есть база**, сначала настройте её путь и выполните `richi check`.
-Самостоятельная установка не переносит и не заменяет существующую память.
-Перенос данных, ярлыков и инструкций агента на прямой вызов `richi` описан
-в [руководстве миграции](docs/MIGRATION.md).
+**If you already have a database**, configure its path first and run `richi check`.
+Standalone installation does not move or replace existing memory. The
+[migration guide](docs/MIGRATION.md) covers moving data, shortcuts and agent
+instructions to direct `richi` invocation.
 
-## Рабочие области
+<a id="рабочие-области"></a>
+## Workspaces
 
-Каждый workspace объединяет проекты и хранит их знания в отдельной базе.
-Один репозиторий можно подключить к нескольким областям с независимой памятью.
-Текущая база остаётся в `default`.
+Each workspace groups projects and keeps their knowledge in a separate database.
+The same repository can belong to several workspaces with independent memory.
+An existing default database remains in `default`.
 
 ```sh
 richi workspace create work
@@ -87,43 +91,44 @@ richi -w work init
 richi -w work project add /path/to/service-example
 richi use work
 richi map
-# Быстрый выбор в терминале:
+# Quick selection in a terminal:
 richi use
 ```
 
-В новом чате агент один раз предлагает текущий workspace CLI или выбор другой
-области для этого чата. `richi chat bind --current` сохраняет текущий выбор,
-`richi chat bind NAME` — отдельный выбор чата. Последующие переключения через
-`richi use` его не меняют. Без привязки обнаруженный чат не получает доступ к памяти.
-Папку с репозиториями можно сначала просмотреть через `richi project scan PATH`,
-затем зарегистрировать найденные проекты с `--apply`.
-`richi status` показывает контекст чата, выбранный workspace, runtime и
-принадлежность текущей папки; `richi status --projects` проверяет зарегистрированные
-пути. До выбора области чат получает только предложение выбрать workspace.
-Подробности изоляции, общих репозиториев и настроек — в
-[руководстве workspaces](docs/WORKSPACES.md).
+In a new chat, the agent asks once whether to use the current CLI workspace or
+another workspace for that chat. `richi chat bind --current` saves the current
+choice; `richi chat bind NAME` selects a chat-specific workspace. Later changes
+through `richi use` do not redirect the chat. A detected unbound chat cannot
+access memory.
 
-## Настройка и работа агента
+Preview repository discovery with `richi project scan PATH`, then register the
+found projects with `--apply`. `richi status` shows the chat context, workspace,
+runtime and current directory's project membership; `richi status --projects`
+checks registered paths. Before workspace selection, the chat receives only a
+prompt to choose one. See the [workspace guide](docs/WORKSPACES.md) for isolation,
+shared repositories and settings.
 
-- [Установка и конфигурация](docs/INSTALLATION.md): база, каталог данных, порт карты,
-  переменные окружения и запуск из разных папок.
-- [Команды и форматы данных](docs/CLI.md): поиск, запись результатов, граф,
-  определения, проверка источников и ручное обслуживание.
-- [Skill project-memory](skills/project-memory/SKILL.md): чтение контекста и
-  накопление инженерных знаний с источниками, историей и защитой от
-  параллельных изменений.
-- [Компактный вывод для агента](docs/COMPACT_OUTPUT.md): `--compact-json`,
-  поэтапная загрузка инструкций и проверенные ограничения экономии токенов.
-- [Поиск и пакетное чтение](skills/project-memory/references/RETRIEVAL_TOOLS.md):
-  короткие карточки `discover` и полные записи через `fetch`.
-- [Метаданные без выгрузки карточек](skills/project-memory/references/QUERY_TOOLS.md):
-  `query count`, `exists`, `facets`, `select`; каталог операций — `capabilities list`.
-- [Составные фильтры и индексированный поиск](skills/project-memory/references/FILTERS.md):
-  строгий `--where` и явное построение производного индекса.
-- [Замеры токенов и контекста](docs/AGENT_WORKFLOW_EVAL.md): сравнение встроенных
-  операций с чтением карточек и рабочими Python-скриптами.
-- [Рост базы и обслуживание индексов](docs/STORAGE.md): учёт текущих записей,
-  истории и файлов; предварительный план и резервная копия перед оптимизацией.
+<a id="настройка-и-работа-агента"></a>
+## Agent setup and workflow
+
+- [Installation and configuration](docs/INSTALLATION.md): database, data directory,
+  map port, environment variables and invocation from different directories.
+- [Commands and data formats](docs/CLI.md): search, recording outcomes, the graph,
+  definitions, source checks and manual maintenance.
+- [Project Memory skill](skills/project-memory/SKILL.md): retrieving context and
+  accumulating engineering knowledge with sources, history and concurrency checks.
+- [Compact agent output](docs/COMPACT_OUTPUT.md): `--compact-json`, progressive
+  loading of instructions and measured limits of token savings.
+- [Discovery and batch retrieval](skills/project-memory/references/RETRIEVAL_TOOLS.md):
+  short `discover` cards and complete records through `fetch`.
+- [Metadata without loading cards](skills/project-memory/references/QUERY_TOOLS.md):
+  `query count`, `exists`, `facets`, `select`; operation catalog: `capabilities list`.
+- [Composed filters and indexed search](skills/project-memory/references/FILTERS.md):
+  strict `--where` filters and explicit construction of a derived index.
+- [Token and context measurements](docs/AGENT_WORKFLOW_EVAL.md): comparing built-in
+  operations with card reads and working Python scripts.
+- [Storage growth and index maintenance](docs/STORAGE.md): current records,
+  history and files; preview and backup before optimization.
 
 For Codex, the installer performs global integration; use `richi setup --status`
 to inspect it or `richi setup --yes` to connect a supported existing installation.
@@ -132,35 +137,47 @@ access to the installed CLI. Scope memory authorization in agent/project
 instructions. See [setup](docs/SETUP.md) and the
 [agent integration example](docs/INSTALLATION.md#подключение-агента).
 
-База, резервные копии, локальные Git-снимки и конфигурация принадлежат пользователю
-и не входят в репозиторий. Публичные тесты используют синтетические данные;
-реальные рабочие записи и частные проверочные наборы не публикуются.
+The database, backups, local Git snapshots and configuration belong to the user
+and are not part of the repository. Public tests use synthetic data; real work
+records and private evaluation sets are not published.
 
-## Лицензия
+## Documentation languages
 
-К публикуемым материалам Richi применяется собственная **source-available
-лицензия**. Проект не лицензируется как OSI open source.
+Guides and skill references are available in English (`*.md`) and Russian
+(`*.ru.md`), with a language link at the top of each page. Command names, API
+fields and examples retain their technical spelling. The installed skill entry
+point remains `SKILL.md`; `SKILL.ru.md` is its reference translation, not a second
+skill. Repository `AGENTS.md` remains the agent instruction entry point. The
+original English license is authoritative; its explanatory guide is bilingual.
 
-- Личное некоммерческое использование физическими лицами — бесплатно.
-- Использование организацией или в её интересах, а также коммерческое
-  использование — по предварительному письменному соглашению. Это включает
-  внутренние инструменты, работу сотрудников и подрядчиков, оценки и пилоты.
-- Публичные исходники и документацию может читать любой желающий.
-- Распространение копий и предоставление Richi как сервиса требуют отдельного
-  разрешения, кроме прав, независимо предоставленных законом, условиями
-  платформы или другими применимыми лицензиями.
-- Использование Richi само по себе не меняет права на ваши данные и знания.
+<a id="лицензия"></a>
+## License
 
-Полные условия: [LICENSE.md](LICENSE.md).
-Примеры и порядок согласования: [LICENSING.md](LICENSING.md).
+Published Richi material uses a custom **source-available license**. The project
+is not licensed as OSI open source.
 
-## Участие
+- Personal noncommercial use by individuals is free.
+- Organizational use, use on behalf of an organization and commercial use require
+  a prior written agreement. This includes internal tools, employee and contractor
+  work, evaluations and pilots.
+- Anyone may read the public source code and documentation.
+- Distributing copies or providing Richi as a service requires separate permission,
+  except for rights independently granted by law, platform terms or other
+  applicable licenses.
+- Using Richi does not by itself change ownership of your data and knowledge.
 
-Предложения и сообщения об ошибках приветствуются. Перед подготовкой изменений
-кода ознакомьтесь с [CONTRIBUTING.md](CONTRIBUTING.md): права на сторонние вклады
-нужно согласовать до их включения в продукт.
+Full terms: [LICENSE.md](LICENSE.md).
+Examples and permission requests: [LICENSING.md](LICENSING.md).
 
-## Автор и контакт
+<a id="участие"></a>
+## Contributing
+
+Suggestions and bug reports are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md)
+before preparing code changes: rights to third-party contributions must be agreed
+before incorporation into the product.
+
+<a id="автор-и-контакт"></a>
+## Author and contact
 
 **Richardas Kuchinskas** — [hidanjkezor@gmail.com](mailto:hidanjkezor@gmail.com).
 

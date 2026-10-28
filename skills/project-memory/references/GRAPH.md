@@ -1,20 +1,30 @@
-# Граф знаний: схема 2
+<a id="граф-знаний-схема-2"></a>
+# Knowledge graph: schema 2
 
-Граф дополняет существующую память. Проекты и записи остаются в своих таблицах, а `graph_nodes` хранит только ссылки на них. Новая сущность нужна, если объекту — PR, метрике, компоненту, понятию, документу или Jira-задаче — требуется отдельная карточка. Если задача уже сохранена как entry, используйте её узел; дублировать её сущностью `jira` не требуется.
+English | [Русский](GRAPH.ru.md)
 
-Ссылки на узлы имеют строгий вид:
+The graph extends existing memory. Projects and entries stay in their own tables;
+`graph_nodes` stores only references to them. Create an entity when an object—a
+PR, metric, component, concept, document or Jira task—needs its own card. If a task
+already exists as an entry, use that node; no duplicate `jira` entity is needed.
 
-| Узел | Ссылка |
+Node references have a strict format:
+
+| Node | Reference |
 |---|---|
-| Проект `service-example` | `project:service-example` |
-| Запись `task:ABC-123` | `entry:task:ABC-123` |
-| Сущность `pr:example-42` | `entity:pr:example-42` |
+| Project `service-example` | `project:service-example` |
+| Entry `task:ABC-123` | `entry:task:ABC-123` |
+| Entity `pr:example-42` | `entity:pr:example-42` |
 
-Идентификатор после первого двоеточия сохраняется целиком. Содержание проекта или записи не копируется в граф. INSERT-триггеры создают ссылки для новых записей, включая записи, добавляемые прежними командами CLI. Внешние ключи не позволяют записать ребро с отсутствующим узлом.
+The identifier after the first colon is preserved in full. Project and entry
+content is not copied into the graph. INSERT triggers create references for new
+records, including records added by older CLI commands. Foreign keys prevent
+edges from referring to missing nodes.
 
-## Переход с версии 1
+<a id="переход-с-версии-1"></a>
+## Migrating from version 1
 
-После установки Richi, из любой рабочей папки:
+After installing Richi, from any working directory:
 
 ```sh
 richi backup
@@ -22,13 +32,24 @@ richi migrate
 richi check
 ```
 
-`migrate` — явная атомарная миграция 1→2: проверяет исходную базу, добавляет таблицы/индексы/триггеры, создаёт ссылки на существующие проекты и записи, затем меняет `user_version`. Старые таблицы, записи, история и FTS остаются на месте. Ошибка откатывает всю транзакцию. Неизвестная версия отклоняется; повторный вызов на версии 2 возвращает `existing`.
+`migrate` performs an explicit atomic 1→2 migration: it checks the source
+database, adds tables/indexes/triggers, creates references to existing projects
+and entries, then changes `user_version`. Old tables, records, history and FTS
+remain in place. An error rolls back the entire transaction. Unknown versions
+are rejected; repeating the command on version 2 returns `existing`.
 
-Старые команды чтения и записи поддерживают версии 1 и 2. Команды графа требуют версию 2 и не запускают миграцию сами. `init` создаёт новую базу версии 2; на существующей версии 1 предлагает выполнить `migrate`. Backup можно сделать до миграции. Миграция получает блокировку записи SQLite, поэтому параллельные авторы ждут освобождения блокировки в пределах таймаута.
+Older read/write commands support versions 1 and 2. Graph commands require
+version 2 and never migrate automatically. `init` creates a new version 2 database;
+on an existing version 1 database it asks you to run `migrate`. A backup can be
+made before migration. Migration acquires SQLite's write lock, so concurrent
+writers wait for its release within their timeout.
 
-Файл `schema.sql` содержит общую схему версии 1; `graph_schema.sql` — добавочное расширение. `init` и `migrate` применяют расширение одной транзакцией. Не запускайте эти SQL-файлы вручную поверх рабочей базы.
+`schema.sql` contains the shared version 1 schema; `graph_schema.sql` contains
+the additive extension. `init` and `migrate` apply the extension in one
+transaction. Do not run these SQL files manually over a live database.
 
-## Сущности
+<a id="сущности"></a>
+## Entities
 
 ```sh
 richi entity put --json - <<'JSON'
@@ -48,16 +69,23 @@ JSON
 richi entity get pr:example-42
 ```
 
-Обязательны `id`, `kind`, `title`, `summary`. Допустимые kind: `pull_request`, `metric`, `component`, `concept`, `document`, `jira`. Остальные поля: `sources`, `knowledge_state` (по умолчанию `hypothesis`), `verified_at`, `tags`, `aliases`, `expected_updated_at`.
+Required fields are `id`, `kind`, `title`, `summary`. Allowed kinds:
+`pull_request`, `metric`, `component`, `concept`, `document`, `jira`. Other fields
+are `sources`, `knowledge_state` (default `hypothesis`), `verified_at`, `tags`,
+`aliases`, `expected_updated_at`.
 
-Источники имеют тот же формат, что у entries: массив объектов с обязательным `reference` и необязательными `label`, `type`, `observed_at`. Для любой новой сущности `confirmed` обязателен хотя бы один источник. Это проверка наличия ссылки, а не автоматическая верификация утверждений.
+Sources use the same format as entries: an array of objects with required
+`reference` and optional `label`, `type`, `observed_at`. Every new `confirmed`
+entity requires at least one source. This checks that a reference exists;
+it does not automatically verify claims.
 
-## Рёбра
+<a id="рёбра"></a>
+## Edges
 
-Понятия `kind: concept` также показаны в разделе «Энциклопедия». Их прямую
-область проекта задаёт подтверждённое ребро `used_in` от понятия к проекту
-с источником. Оно не выводится из связности графа. Формат определений,
-одноимённые значения и версии описаны в [ENCYCLOPEDIA.md](ENCYCLOPEDIA.md).
+`kind: concept` concepts also appear in the Encyclopedia section. Their direct
+project scope is defined by a confirmed `used_in` edge from concept to project,
+with a source. It is not inferred from graph connectivity. Definition format,
+same-named meanings and versions are described in [ENCYCLOPEDIA.md](ENCYCLOPEDIA.md).
 
 ```sh
 richi edge put --json - <<'JSON'
@@ -76,22 +104,42 @@ JSON
 richi edge get pr42-implements-abc123
 ```
 
-Все объекты и ссылки примера демонстрационные; endpoints нужно предварительно создать. Обязательны `id`, `from_ref`, `to_ref`, `kind`. `kind` — свободная строка, например `implements`, `measures`, `depends_on`, `documents`, `supersedes`. Дополнительные поля: `description`, `sources`, `knowledge_state`, `verified_at`, `expected_updated_at`. Для `confirmed` нужен источник. Направление значимо для смысла связи; просмотр соседей обходит оба направления.
+All example objects and references are synthetic; endpoints must be created
+first. Required fields are `id`, `from_ref`, `to_ref`, `kind`. `kind` is a free
+string, for example `implements`, `measures`, `depends_on`, `documents`,
+`supersedes`. Additional fields are `description`, `sources`, `knowledge_state`,
+`verified_at`, `expected_updated_at`. `confirmed` requires a source. Direction
+matters to the relationship's meaning; neighbor traversal follows both directions.
 
-`entity put` и `edge put` принимают одиночный объект либо массив и полностью заменяют поля по ID, как `entry put`. Пакет атомарен. `get` возвращает текущую полную карточку; `get ID --history` дополнительно возвращает неизменяемую историю `before`/`after`. При обновлении передавайте `expected_updated_at` из последнего чтения: устаревшее время отклоняет изменение. `null` означает ожидание отсутствующей карточки. Одинаковая нормализованная запись даёт `unchanged` без изменения времени и истории. Новые entity/edge команды не принимают `event_id`; идемпотентность повтора обеспечивается содержимым, а защита от устаревшего обновления — `expected_updated_at`.
+`entity put` and `edge put` accept a single object or array and fully replace
+fields by ID, like `entry put`. A batch is atomic. `get` returns the complete
+current card; `get ID --history` additionally returns immutable `before`/`after`
+history. For updates, pass `expected_updated_at` from the latest read: a stale
+time rejects the change. `null` means the card is expected to be absent. An
+identical normalized record returns `unchanged` without changing time or history.
+The new entity/edge commands do not accept `event_id`; content provides retry
+idempotency, while `expected_updated_at` protects against stale updates.
 
-Существующие `entry_projects` и `relations` отображаются автоматически. Связь записи с проектом называется `belongs_to_project`: это принадлежность записи, а не утверждение о техническом или бизнес-влиянии. Такие рёбра редактируются через `entry put project_ids`; связи проектов — через `relation put`. API отклоняет ручной дубль уже существующей производной связи. Если производная связь была создана позже ручной, экспорт сохраняет обе записи с разными `id` и `origin`: они могут иметь разные источники и уверенность, поэтому скрывать одну по совпадению направления и kind нельзя.
+Existing `entry_projects` and `relations` appear automatically. An entry's
+project link is named `belongs_to_project`: it expresses entry membership, not
+a claim of technical or business impact. Edit these edges through
+`entry put project_ids`; edit project relationships through `relation put`.
+The API rejects a manual duplicate of an existing derived relationship. If a
+derived relationship was created after a manual one, export preserves both with
+different `id` and `origin`: their evidence and confidence can differ, so hiding
+one merely because direction and kind match would be incorrect.
 
-## Задача и подробные записи
+<a id="задача-и-подробные-записи"></a>
+## Tasks and detailed records
 
-Стабильная task-запись содержит актуальное состояние. Самостоятельные разборы,
-эксперименты и основания решений используют существующие entry kinds
-`investigation`, `experiment`, `decision`; отдельной сущности для расследования
-не нужно. Поиск индексирует их текущий текст, а не старые ревизии родителя.
-Каждая запись сохраняет собственные источники, knowledge/work state, реальные
-`project_ids` и фактический `jira_key`, если это часть Jira-задачи.
+A stable task entry contains current state. Independent investigations,
+experiments and decision rationales use the existing entry kinds
+`investigation`, `experiment`, `decision`; no separate investigation entity is
+needed. Search indexes their current text, not the parent's older revisions.
+Each record keeps its own sources, knowledge/work state, actual `project_ids`
+and actual `jira_key` when it belongs to a Jira task.
 
-Предпочтительное направление связи — подробная запись → задача:
+The preferred relationship direction is detailed record → task:
 
 ```json
 {
@@ -106,29 +154,28 @@ richi edge get pr42-implements-abc123
 }
 ```
 
-Это синтетический пример payload для `edge put`; оба endpoint должны уже
-существовать. Новый ID с `expected_updated_at: null` создаётся только при
-отсутствии записи. На повторе сначала прочитайте и проверьте существующий
-объект, переиспользуйте его или внесите обоснованную правку с его текущим CAS.
-Для обновления не отправляйте старый payload поверх параллельной правки.
+This is a synthetic payload example for `edge put`; both endpoints must already
+exist. A new ID with `expected_updated_at: null` is created only if absent. On
+retry, first read and check the existing object, then reuse it or make a justified
+edit with its current CAS. Do not submit an old update payload over a concurrent edit.
 
-`part_of` утверждает принадлежность материала задаче, а не успешность подхода.
-Неудачный результат может быть confirmed при подтверждённых условиях;
-непроверенный подход остаётся hypothesis. `supports`/`informs` подходят лишь
-при источнике, подтверждающем соответствующий смысл. Не создавайте обратное
-ребро только для навигации: `neighbors` читает оба направления. Membership
-по-прежнему задаётся `project_ids`; графовое соседство не расширяет строгий
-scope `punisher --project`.
+`part_of` asserts that material belongs to the task, not that the approach
+succeeded. A failed outcome can be confirmed under verified conditions; an
+untested approach remains a hypothesis. `supports`/`informs` are appropriate
+only with a source supporting that meaning. Do not create a reverse edge solely
+for navigation: `neighbors` reads both directions. Membership remains defined
+by `project_ids`; graph adjacency does not expand strict `punisher --project` scope.
 
-До сокращения родителя создайте и проверьте все нужные подробные записи,
-рёбра и доступность через исходные запросы. Последним обновите родителя с
-его исходным `expected_updated_at`. Несколько entry/edge put не образуют
-общую транзакцию; CAS-конфликт требует перечитать и согласовать новые сведения.
-Подробный порядок и сохранение provenance — в [MAINTENANCE.md](MAINTENANCE.md).
+Before shortening the parent, create and verify all required detailed records,
+edges and retrieval through original queries. Update the parent last with its
+original `expected_updated_at`. Multiple entry/edge put commands do not form
+one transaction; a CAS conflict requires rereading and reconciling new information.
+The detailed procedure and provenance preservation are in [MAINTENANCE.md](MAINTENANCE.md).
 
-## Экспорт графа
+<a id="экспорт-графа"></a>
+## Graph export
 
-Для одного известного узла используйте [NEIGHBORS.md](NEIGHBORS.md).
+For one known node, use [NEIGHBORS.md](NEIGHBORS.md).
 
 ```sh
 richi graph export
@@ -136,13 +183,22 @@ richi graph export --project service-example
 richi graph export --include-hypotheses
 ```
 
-По умолчанию экспорт включает только `confirmed` записи, сущности и рёбра. Проекты отображаются как подтверждённые элементы локального каталога; это не дополнительная проверка их описания. `--include-hypotheses` добавляет гипотезы; `--include-superseded` добавляет устаревшие знания. Флаги независимы. Если endpoint исключён фильтром, его рёбра тоже скрываются.
+By default, export includes only `confirmed` entries, entities and edges.
+Projects appear as confirmed items of the local catalog; this does not
+additionally verify their descriptions. `--include-hypotheses` adds hypotheses;
+`--include-superseded` adds superseded knowledge. The flags are independent.
+If a filter excludes an endpoint, its edges are hidden as well.
 
-Без project-фильтра экспорт охватывает все доступные узлы, начиная с проектов. `--project ID` показывает компонент связности выбранного проекта: ближайшие узлы добавляются раньше дальних. Это может охватить несколько связанных проектов.
+Without a project filter, export covers all available nodes, starting with
+projects. `--project ID` shows the selected project's connected component:
+nearer nodes are added before farther ones. This can include several connected projects.
 
-Каждый экспорт читает один согласованный снимок в транзакции. Максимум — 2000 узлов и 10000 рёбер. При достижении лимита выставляются `truncated` и соответствующие поля `limits`; рёбра с endpoint за пределами возвращённых nodes не выдаются.
+Each export reads one consistent snapshot in a transaction. Limits are 2000
+nodes and 10000 edges. When a limit is reached, `truncated` and the corresponding
+`limits` fields are set; edges whose endpoints are outside the returned nodes
+are not emitted.
 
-Результат JSON:
+JSON result:
 
 ```json
 {
@@ -166,8 +222,24 @@ richi graph export --include-hypotheses
 }
 ```
 
-Узел содержит `id` (полную ссылку), `native_id`, `node_type` (`project`, `entry`, `entity`), `kind`, `title`, `summary`, `knowledge_state`, `work_state`, `project_ids`, `sources`, `tags`, `aliases`, `verified_at`. Entry/Entity также имеют время создания и обновления. Для сущностей без прямой канонической привязки `project_ids` пуст: связи доступны через edges, дополнительные привязки не выдумываются.
+A node contains `id` (the full reference), `native_id`, `node_type` (`project`,
+`entry`, `entity`), `kind`, `title`, `summary`, `knowledge_state`, `work_state`,
+`project_ids`, `sources`, `tags`, `aliases`, `verified_at`. Entries/entities also
+have creation and update times. For entities without a direct canonical
+membership, `project_ids` is empty: relationships are available through edges;
+no additional memberships are invented.
 
-Ребро содержит `id`, `from_ref`, `to_ref`, `kind`, `description`, `knowledge_state`, `sources`, `verified_at`, `origin`, `provenance`. `origin` равен `explicit`, `project_relation` или `entry_project`; `provenance` указывает исходную таблицу и ID. Идентификаторы экспорта имеют префиксы `edge:`, `relation:`, `membership:` для исключения коллизий. В `edge get` передаётся исходный ID, без добавленного экспортом `edge:`.
+An edge contains `id`, `from_ref`, `to_ref`, `kind`, `description`,
+`knowledge_state`, `sources`, `verified_at`, `origin`, `provenance`. `origin` is
+`explicit`, `project_relation` or `entry_project`; `provenance` identifies the
+source table and ID. Export identifiers use the `edge:`, `relation:`,
+`membership:` prefixes to avoid collisions. Pass the original ID to `edge get`,
+without the export-added `edge:` prefix.
 
-Интерактивная карта — отдельное представление этих данных: она рисует nodes/edges и показывает источники при выборе элемента. Экспорт сам не открывает сервер и не изменяет знания. Визуальная близость и путь между узлами не доказывают причинность: смысл определяет kind ребра и его источник. Старый текстовый `search` продолжает искать entries; `recall` ищет и entries, и entities и выбирает ограниченное окружение по явным связям. Отдельный FTS-индекс для entities пока не добавлен. Подробнее — в [RECALL.md](RECALL.md).
+The interactive map is a separate view of this data: it draws nodes/edges and
+shows sources when an element is selected. Export itself neither opens a server
+nor changes knowledge. Visual proximity and a path between nodes do not establish
+causality: the edge kind and its source define meaning. Older text `search`
+continues searching entries; `recall` searches entries and entities and selects
+a bounded neighborhood through explicit links. No separate FTS index for entities
+has been added yet. See [RECALL.md](RECALL.md).

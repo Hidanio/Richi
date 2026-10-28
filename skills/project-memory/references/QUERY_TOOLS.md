@@ -1,5 +1,7 @@
 # Exact metadata operations
 
+English | [Русский](QUERY_TOOLS.ru.md)
+
 Use the bound workspace and the usual `--project-path PATH` guard. These read-only
 operations execute inside SQLite and never require building the optional index.
 Use them for stored metadata questions, not for conclusions about record bodies.

@@ -1,19 +1,24 @@
-# Git: происхождение знаний и история кода
+<a id="git-происхождение-знаний-и-история-кода"></a>
+# Git: knowledge provenance and code history
 
-Richi связывает источник знания с репозиторием, путём, полным SHA коммита,
-Git blob и SHA-256 фактически прочитанных байтов. Команды работают через локальный
-Git и Python 3.9+ без дополнительных библиотек. Они не переключают ветку,
-не делают fetch и не меняют рабочие файлы или индекс.
+English | [Русский](GIT.ru.md)
 
-## Сохранить проверенную версию
+Richi ties a knowledge source to a repository, path, full commit SHA, Git blob
+and SHA-256 of the bytes actually read. Commands use local Git and Python 3.9+
+without additional libraries. They do not switch branches, fetch, or change
+working files or the index.
 
-Захват байтов, выбор checkout и безопасное добавление источника описаны в
-[GIT_CAPTURE.md](GIT_CAPTURE.md). Для Git-чтений ниже выбирайте linked worktree
-явным `--repo`: один `--project-path` проверяет membership, но не выбирает для
-них checkout. `sources related` читает сохранённые якоря, не выбирает checkout
-и не принимает `--repo`.
+<a id="сохранить-проверенную-версию"></a>
+## Save a verified version
 
-## Открыть код, историю и сравнение
+Byte capture, checkout selection and safe source attachment are described in
+[GIT_CAPTURE.md](GIT_CAPTURE.md). For the Git reads below, select a linked worktree
+with an explicit `--repo`: `--project-path` alone validates membership but does
+not select their checkout. `sources related` reads saved anchors, does not select
+a checkout and does not accept `--repo`.
+
+<a id="открыть-код-историю-и-сравнение"></a>
+## Open code, history and comparisons
 
 ```sh
 richi sources show --ref entry:task:ABC-123 --source 2
@@ -23,13 +28,13 @@ richi sources diff --ref entry:task:ABC-123 --source 2 --target main
 richi sources diff --ref entry:task:ABC-123 --source 2 --worktree
 ```
 
-`--source` — номер с единицы в **полном** массиве `sources` карточки, по умолчанию 1.
-Поддерживаются `entry:`, `entity:` и `edge:`. Вместо карточки можно передать
-`--json /tmp/cache-source-01.json` сразу после захвата.
+`--source` is a one-based position in the card's **full** `sources` array; the
+default is 1. `entry:`, `entity:` and `edge:` are supported. Instead of a card,
+you can pass `--json /tmp/cache-source-01.json` immediately after capture.
 
-CLI и карта используют общий просмотр источников. Старые `git:FULL_SHA:path`
-открываются теми же командами по `--ref`. Для ссылки только на коммит сначала
-получите список изменённых файлов, затем выберите доступный файл:
+The CLI and map share source viewing. Legacy `git:FULL_SHA:path` references open
+through the same commands with `--ref`. For a commit-only reference, first list
+changed files, then select an available file:
 
 ```sh
 richi sources commit --ref entry:task:ABC-123 --source 1
@@ -39,29 +44,31 @@ richi sources diff --ref entry:task:ABC-123 --source 1 --path internal/cache.go 
 richi sources git-check --ref entry:task:ABC-123 --source 1 --path internal/cache.go --target HEAD
 ```
 
-`--path` разрешён только для выбора файла из старой ссылки на целый коммит.
-Он не меняет путь у источника конкретного файла. `sources commit` принимает
-только такую ссылку в существующей карточке. Старые ссылки требуют явной области
-проектов карточки; один SHA без этой области в произвольном JSON недостаточен.
-Недоступные и неоднозначные репозитории возвращают ошибку. Вычисленная при чтении
-Git-привязка не записывается в память и не подменяет старую дату наблюдения.
+`--path` is allowed only to select a file from a legacy whole-commit reference.
+It cannot change the path of a file-specific source. `sources commit` accepts
+only such a reference in an existing card. Legacy references require the card's
+explicit project scope; a SHA alone without that scope in arbitrary JSON is
+insufficient. Unavailable or ambiguous repositories return an error. A Git
+anchor computed while reading is not saved to memory and does not replace the
+old observation date.
 
-`show` возвращает сохранённые байты, даже если файл уже изменён или удалён из
-текущей ветки. Текст — UTF-8, двоичные данные — base64. `history` по умолчанию
-заканчивается сохранённым коммитом; `--target HEAD` строит историю сохранённого
-пути до локального HEAD. HEAD может быть в другой ветке истории. Переименование
-вперёд и последующие правки нового пути автоматически не прослеживаются:
-сначала проверьте новый путь и при необходимости захватите его отдельно.
-В истории указаны SHA, родители, дата автора и тема коммита. Git `--follow`
-эвристически следует переименованиям назад; это не полный семантический анализ
-истории. У shallow-клона история неполная, что отмечается в ответе.
+`show` returns saved bytes even if the file has changed or been deleted from the
+current branch. Text is UTF-8; binary data is base64. By default, `history` ends
+at the saved commit; `--target HEAD` builds the saved path's history through local
+HEAD. HEAD may lie on a different branch of history. Forward renames and later
+changes at the new path are not followed automatically: verify the new path first
+and capture it separately if needed. History includes SHA, parents, author date
+and commit subject. Git `--follow` heuristically follows renames backward; it is
+not a complete semantic history analysis. A shallow clone has incomplete history,
+which the response indicates.
 
-`diff` сравнивает сохранённый код с явно выбранным локальным ref или текущими
-байтами рабочей копии. Ответ всегда содержит полный SHA разрешённой цели.
-Двоичный diff показывает факт различия без текстового patch. История Git
-описывает код; историю знаний нужно читать через `get --history`.
+`diff` compares saved code with an explicitly selected local ref or current
+working-tree bytes. The response always includes the resolved target's full SHA.
+Binary diff reports a difference without a text patch. Git history describes
+code; read knowledge history with `get --history`.
 
-## Проверить применимость и найти связанные знания
+<a id="проверить-применимость-и-найти-связанные-знания"></a>
+## Check applicability and find related knowledge
 
 ```sh
 richi sources git-check --ref entry:task:ABC-123 --target HEAD
@@ -71,112 +78,113 @@ richi sources related --project service-example \
   --path internal/cache.go --commit FULL_COMMIT_SHA
 ```
 
-Без `--source` команда `git-check` проверяет группу **структурированных** якорей
-`source.git`. Старые ссылки в такой групповой проверке пока не участвуют.
-С `--source N` нужен ровно один `--ref`; проверяется выбранный источник любого
-поддерживаемого формата, результат находится в `result`, как в карте.
-Для ссылки только на коммит дополнительно нужен `--path`.
+Without `--source`, `git-check` checks a group of **structured** `source.git`
+anchors. Legacy references do not yet participate in that group check. With
+`--source N`, exactly one `--ref` is required; the selected source of any supported
+format is checked and its output appears in `result`, as in the map. A
+commit-only reference also requires `--path`.
 
-Для каждого источника групповая `git-check` выдаёт `unchanged`, `changed`, `deleted` или
-`unavailable`. Общий статус — `unchanged`, `changed`, `unavailable` или
-`no_git_sources`; удаления дают общий `changed`, неполное покрытие — `unavailable`.
-Результат также содержит
-отношение целевого коммита к сохранённому: `same`, `ahead`, `behind`, `diverged`
-или `unknown`. При исчезновении пути в целевом коммите возможные переименования
-возвращаются отдельно; автоматически подменять ими источник нельзя.
+For each source, group `git-check` reports `unchanged`, `changed`, `deleted` or
+`unavailable`. Overall status is `unchanged`, `changed`, `unavailable` or
+`no_git_sources`; deletions produce overall `changed`, incomplete coverage
+produces `unavailable`. The result also includes the target commit's relation
+to the saved commit: `same`, `ahead`, `behind`, `diverged` or `unknown`. When the
+path is absent in the target commit, possible renames are returned separately;
+do not automatically substitute them for the source.
 
-`--project` здесь выбирает **источники с данным `git.repo_id`** во всех состояниях
-знаний, включая карточки других проектов и рёбра. Это отличается от проектного
-scope `punisher` и от приоритета проекта в `recall`. `related` ищет точное
-совпадение репозитория и пути, при необходимости — полного SHA. Это обратная
-связь «код → знания», без вывода о смысловой зависимости всех найденных записей.
+Here, `--project` selects **sources with this `git.repo_id`** in all knowledge
+states, including cards from other projects and edges. This differs from
+`punisher` project scope and project priority in `recall`. `related` finds exact
+repository/path matches, optionally also matching the full SHA. This is reverse
+“code → knowledge” lookup; it does not infer semantic dependencies for every result.
 
-`related` также читает структурированные якоря. Для подбора контекста сразу по
-изменённым файлам, включая поддерживаемые старые Git-ссылки, есть
-`sources impact --project ID --base BASE --target HEAD` или `--worktree`.
-Семантика сравнения, состояния знаний и ограничения — в [IMPACT.md](IMPACT.md).
+`related` also reads structured anchors. To select context for changed files,
+including supported legacy Git references, use
+`sources impact --project ID --base BASE --target HEAD` or `--worktree`.
+Comparison semantics, knowledge states and limitations are in [IMPACT.md](IMPACT.md).
 
-Для проверки источников одновременно с подбором контекста есть
+To check sources while selecting context, use
 `brief 'вопрос' --project ID --check-sources --target HEAD`.
-Он проверяет полные массивы источников только выбранных карточек: по умолчанию
-до 12 попыток, включая структурированные якоря и поддерживаемые файловые
-`git:FULL_SHA:path`. Ссылка только на коммит требует отдельного выбора файла.
-`--project` ограничивает репозиторий проверки, но сохраняет обычный приоритет
-проекта в recall. Поиск по diff (`--base`) и проверку можно включать независимо;
-вместе они используют один SHA цели. Результаты, пропуски, лимит времени и
-общий бюджет описаны в [BRIEF.md](BRIEF.md). Обычный `brief` без этих флагов
-Git не вызывает.
+It checks full source arrays only for selected cards: up to 12 attempts by
+default, including structured anchors and supported file references in
+`git:FULL_SHA:path` form. A commit-only reference requires a separate file
+selection. `--project` restricts the repository being checked while retaining
+normal project priority in recall. Diff-based retrieval (`--base`) and checking
+can be enabled independently; together they use one target SHA. Results,
+omissions, time limits and shared budget are described in [BRIEF.md](BRIEF.md).
+Ordinary `brief` without these flags does not invoke Git.
 
-`recall` и `entry read` возвращают Git-метаданные вместе с выбранными источниками.
-При усечении нужно получить полную карточку. `punisher` валидирует сохранённые
-Git-метаданные и подсказывает `sources git-check` для карточек с такими источниками;
-обычный запуск не сканирует репозитории. Изменение байтов — повод перепроверить
-вывод. Совпадение байтов не доказывает неизменность зависимостей или релиза.
-Ни одна проверка не меняет `verified_at`, `knowledge_state` или `work_state`.
+`recall` and `entry read` return Git metadata with selected sources. If truncated,
+retrieve the full card. `punisher` validates saved Git metadata and suggests
+`sources git-check` for cards containing those sources; an ordinary run does
+not scan repositories. Changed bytes are a reason to recheck the conclusion.
+Matching bytes do not prove unchanged dependencies or release state. No check
+changes `verified_at`, `knowledge_state` or `work_state`.
 
-`sources snapshot/check` сохраняет прежнюю семантику manifest: текущие карточки,
-рёбра и локальные файлы по `reference`. Он сохраняет вложенные Git-метаданные,
-но для сравнения с историческим кодом используется именно `git-check`.
+`sources snapshot/check` retains its original manifest semantics: current cards,
+edges and local files through `reference`. It preserves nested Git metadata,
+but historical-code comparison specifically uses `git-check`.
 
-## Границы и перенос данных
+<a id="границы-и-перенос-данных"></a>
+## Boundaries and data transfer
 
-- Идентификатор репозитория — зарегистрированный `project.id`. `--repo` разрешает
-  связанный worktree того же Git common directory. Отдельный клон не принимается
-за тот же репозиторий автоматически. При переносе канонического checkout
-  явно обновите полный объект проекта через `project upsert`.
-- Ветки и `origin/main` разрешаются только локально. Отсутствующий ref/объект
-  остаётся недоступным; сетевое обновление не выполняется. Partial/promisor
-  репозитории отклоняются, чтобы чтение не запускало скрытый lazy fetch.
-- Проверяются обычные файлы до 8 MiB; symlink, submodule, каталоги и выход за
-  пределы репозитория не поддерживаются. Текстовый diff ограничен 1 MiB на сторону
-  и 20 000 строками. Вывод ограничивается `--max-chars` (2000–100000);
-  смотрите `budget`, `truncated`, `coverage` и счётчики пропусков.
-- Проектный поиск просматривает до 5000 карточек и выбирает до 500 источников;
-  для точной проверки предпочтительны конкретные `--ref`. История — до 100 коммитов.
-- `backup` копирует SQLite. Для полного переноса дополнительно сохраните
-  `artifacts/git/` и нужные Git-объекты репозиториев: база не вмещает их автоматически.
-  Снимки проверяются по хешу и не перезаписываются; автоматического удаления нет.
+- The repository ID is its registered `project.id`. `--repo` permits a linked
+  worktree sharing the same Git common directory. A separate clone is not
+  automatically accepted as the same repository. When moving the canonical
+  checkout, explicitly update the full project object through `project upsert`.
+- Branches and `origin/main` resolve locally only. A missing ref/object stays
+  unavailable; no network refresh occurs. Partial/promisor repositories are
+  rejected to prevent a read from initiating a hidden lazy fetch.
+- Regular files up to 8 MiB are checked; symlinks, submodules, directories and
+  paths outside the repository are unsupported. Text diffs are limited to 1 MiB
+  per side and 20 000 lines. Output is bounded by `--max-chars` (2000–100000);
+  inspect `budget`, `truncated`, `coverage` and omission counts.
+- Project lookup visits up to 5000 cards and selects up to 500 sources; specific
+  `--ref` values are preferable for precise checks. History is limited to 100 commits.
+- `backup` copies SQLite. For a complete move, also preserve `artifacts/git/` and
+  required repository Git objects: the database does not automatically contain
+  them. Snapshots are hash-checked and never overwritten; there is no automatic deletion.
 
-## Кнопки в интерактивной карте
+<a id="кнопки-в-интерактивной-карте"></a>
+## Buttons in the interactive map
 
-Откройте карту командой `richi map`. В карточке задачи,
-понятия или явной связи рядом с источником, содержащим `git`, доступны кнопки
-**Код**, **История**, **Diff** и **Проверить**. Сохранённые ранее ссылки
-`git:<полный SHA>:<путь>` также открываются этими кнопками. У ссылки
-`git:<полный SHA>` доступна кнопка **Файлы коммита**: выберите изменённый файл,
-затем откройте его код, историю или сравнение.
+Open the map with `richi map`. In a task, concept or explicit-edge card, a source
+containing `git` has **Код** (Code), **История** (History), **Diff** and
+**Проверить** (Check) buttons. Previously saved `git:<полный SHA>:<путь>` references
+also open through these buttons. A `git:<полный SHA>` reference has a
+**Файлы коммита** (Commit files) button: select a changed file, then open its
+code, history or comparison.
 
-Для старой ссылки репозиторий проверяется только среди явно связанных с
-карточкой проектов. Коммит должен присутствовать ровно в одном подходящем
-репозитории; отсутствие или неоднозначность показываются как ошибка.
-Содержимое и хеши вычисляются при открытии из указанного исторического коммита.
-Это временное разрешение ссылки для просмотра, а не изменение записи и не
-подтверждение её выводов. Даты, состояния и источники в SQLite сохраняются.
-Произвольная ссылка, короткий SHA или путь без версии автоматически к HEAD
-не привязываются.
+For a legacy reference, repositories are checked only among projects explicitly
+linked to the card. The commit must exist in exactly one suitable repository;
+absence or ambiguity is reported as an error. Content and hashes are computed
+when opening the specified historical commit. This temporarily resolves the
+reference for viewing; it neither changes the record nor verifies its conclusions.
+SQLite dates, states and sources are preserved. Arbitrary references, short SHAs
+and paths without a version are not automatically anchored to HEAD.
 
-Для merge-коммита список изменений строится относительно первого родителя;
-для начального — относительно пустого дерева. Удалённые файлы отмечаются
-недоступными в самом коммите. Список ограничен, возможное усечение показывается.
+For a merge commit, changes are listed against the first parent; for an initial
+commit, against the empty tree. Deleted files are marked unavailable in the
+commit itself. The list is bounded and possible truncation is reported.
 
-Код и результаты открываются в отдельном окне. Сравнение позволяет указать
-локальную ветку, тег или SHA либо выбрать рабочую копию. Проверка относится к
-одному выбранному источнику. Полные SHA, признак незакоммиченного снимка,
-ограничение вывода и недоступность источника показаны в этом же окне.
+Code and results open in a separate window. Comparison accepts a local branch,
+tag or SHA, or the working tree. A check applies to one selected source. Full
+SHAs, the uncommitted-snapshot indicator, output limits and source unavailability
+appear in that same window.
 
-Если другая задача изменила карточку после загрузки карты, сервер отклоняет
-запрос старой версии: сначала обновите карту и выберите источник снова.
-Так сохранённый номер источника не переадресуется на другой файл. Git читается
-только по нажатию; карта по-прежнему не записывает знания, не делает fetch
-и не переключает ветки.
+If another task changed the card after the map loaded, the server rejects a
+request for the old version: refresh the map and select the source again. This
+prevents a saved source position from redirecting to a different file. Git is
+read only on a click; the map still does not write knowledge, fetch or switch branches.
 
-HTTP API принимает ссылку на существующую карточку, номер её источника
-и версию карточки. Для ссылки на целый коммит можно дополнительно выбрать
-только обычный файл из списка его изменений. Произвольные пути, JSON источников,
-capture и attach из браузера недоступны. API обслуживается тем же loopback-сервером с проверкой
-Host/Origin, ограничением размера ответа и одной Git-операцией за раз.
+The HTTP API accepts an existing card reference, its source position and card
+version. For a whole-commit reference, it additionally allows selection only of
+a regular file from the commit's change list. Arbitrary paths, source JSON,
+capture and attach are unavailable from the browser. The API uses the same
+loopback server with Host/Origin checks, a response-size limit and one Git
+operation at a time.
 
-Запускатель проверяет поддержку Git-интерфейса. Если прежний сервер ещё работает,
-новая версия запускается на следующем свободном порту; старый процесс не завершается
-принудительно. Выполните `richi map` заново, чтобы попасть в обновлённую карту.
-Интерактивное меню CLI остаётся последующим этапом.
+The launcher checks Git-interface support. If an older server is still running,
+the new version starts on the next free port; the old process is not forcibly
+terminated. Run `richi map` again to open the updated map. An interactive CLI
+menu remains a later step.

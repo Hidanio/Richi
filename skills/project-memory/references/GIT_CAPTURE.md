@@ -1,5 +1,7 @@
 # Capture and attach the code actually checked
 
+English | [Русский](GIT_CAPTURE.ru.md)
+
 Capture creates evidence, not a knowledge assertion or verification-date update.
 Use the selected workspace and repository membership guard from [SKILL.md](../SKILL.md).
 The registered project must have `repo_path`; all examples are synthetic.

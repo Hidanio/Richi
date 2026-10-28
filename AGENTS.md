@@ -1,5 +1,8 @@
 # Richi development
 
+Use branch names with underscores, such as `audit_fixes_bilingual_docs`, without
+the `codex/` prefix.
+
 Develop the implementation in `src/richi/` and the distributable agent skill in
 `skills/project-memory/`. Installed skills are local deployment copies; update
 and review their source here first. Use the installed `richi` CLI for all local

@@ -1,5 +1,7 @@
 # Derived search index layout comparison
 
+English | [Русский](INDEX_LAYOUT_EVAL.ru.md)
+
 The v2 layout reduced added SQLite allocation from **10,387,456 to 4,857,856
 bytes (53.2%)** on the public synthetic 10,000-entry/1,000-entity fixture.
 Canonical knowledge rows did not change. All 38 entry/entity candidate-set
