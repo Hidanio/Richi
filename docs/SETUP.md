@@ -160,3 +160,34 @@ the managed skill and command symlinks; optionally restore the reported skill
 backup. Then remove the dedicated environment and its installation metadata if
 unused. Keep workspace data. This release has no automatic uninstaller; removing
 the integration never requires deleting the whole AGENTS.md file.
+
+## Claude Code and agents installed later
+
+Run `richi agents` to discover and connect Codex or Claude Code, or
+`richi agents --status` for read-only status. Discovery checks executables/profile
+folders; it is not a client health check. The menu can rescan after a new client
+is installed. Existing default behavior remains Codex.
+
+```sh
+richi setup --agent claude --dry-run
+richi setup --agent claude --yes
+richi setup --agent claude --status
+```
+
+The installer also accepts `--agent claude`. Run setup separately for each client
+to connect both. Claude setup installs the bundled skill under
+`~/.claude/skills/project-memory`, a managed block in `~/.claude/CLAUDE.md`, and a
+SessionStart hook in `settings.json`, preserving unrelated settings and hooks.
+`CLAUDE_CONFIG_DIR` selects an alternate profile. Existing copied skills require
+`--replace-skill`, which backs them up outside skill discovery.
+
+Start a new local Claude Code session. The hook uses the actual session ID as
+`RICHI_CHAT_ID=claude:<session_id>` and provides an explicit `--chat` fallback in
+session context. Resumed sessions retain identity; new sessions choose a workspace
+independently. Setup does not override disabled hooks or permission policies.
+This supports Claude Code, not ordinary Claude chat or MCP. Both managed skills
+follow package updates/rollback; releases without multi-agent support are blocked.
+Launcher changes require installing a new package, even with runtime dev mode on.
+
+Claude contracts: [profile layout](https://code.claude.com/docs/en/claude-directory)
+and [SessionStart hooks](https://code.claude.com/docs/en/hooks#sessionstart).

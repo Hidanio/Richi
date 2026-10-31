@@ -53,7 +53,7 @@ def _confirm(plan, yes):
         return True
     try:
         with open("/dev/tty", "r+") as terminal:
-            terminal.write("Install Richi and connect it to all local Codex chats? [y/N] ")
+            terminal.write("Install Richi and connect " + plan["agent"] + "? [y/N] ")
             terminal.flush()
             return terminal.readline().strip().lower() in {"y", "yes"}
     except OSError as exc:
@@ -78,13 +78,17 @@ def install(args):
         raise ConfigError("Installation prefix is not a directory")
     owner = _owner(prefix) if prefix.exists() else None
     profile = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex").expanduser()
-    setup_plan = {"prefix": str(prefix), "agent": "codex", "scope": "user",
+    setup_plan = {"prefix": str(prefix), "agent": getattr(args, "agent", "codex"), "scope": "user",
                   "runtime": "Fixed release; existing development settings are preserved",
                   "skill": str(Path.home() / ".agents/skills/project-memory"),
                   "instructions": str(profile / "AGENTS.md"),
                   "instruction_override": "A nonempty AGENTS.override.md is used instead when present",
                   "shell_path": not args.no_path, "replace_existing_skill": args.replace_skill,
                   "database": "Existing stores and chat bindings are preserved; choose a workspace in your first chat"}
+    if getattr(args, "agent", "codex") == "claude":
+        profile = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude").expanduser()
+        setup_plan.update(skill=str(profile / "skills/project-memory"), instructions=str(profile / "CLAUDE.md"),
+                          instruction_override=None, session_hook=str(profile / "settings.json"))
     if args.dry_run:
         return dict(setup_plan, status="planned")
     if not _confirm(setup_plan, args.yes):
@@ -101,6 +105,8 @@ def install(args):
             raise ConfigError("Another installer is running for this prefix; retry after it finishes") from exc
         owner = _owner(prefix) if prefix.exists() else None
         setup_args = ["setup", "--yes"]
+        if getattr(args, "agent", "codex") != "codex":
+            setup_args += ["--agent", args.agent]
         if args.replace_skill:
             setup_args.append("--replace-skill")
         if args.no_path:
@@ -161,12 +167,13 @@ def install(args):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Install Richi and connect all local Codex chats (macOS/Linux, Python 3.9+)", allow_abbrev=False)
+    parser = argparse.ArgumentParser(description="Install Richi and connect Codex or Claude Code (macOS/Linux, Python 3.9+)", allow_abbrev=False)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--yes", action="store_true")
     mode.add_argument("--dry-run", action="store_true")
     parser.add_argument("--prefix", type=Path, help="Empty dedicated environment; default ~/.local/share/richi/venv")
     parser.add_argument("--version", help="Official stable X.Y.Z release; default latest")
+    parser.add_argument("--agent", choices=("codex", "claude"), default="codex")
     parser.add_argument("--replace-skill", action="store_true")
     parser.add_argument("--no-path", action="store_true")
     parser.add_argument("--wheel", type=Path, help="Offline wheel; requires its release manifest")

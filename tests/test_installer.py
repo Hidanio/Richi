@@ -30,6 +30,15 @@ class FirstInstallFailureTests(unittest.TestCase):
         with contextlib.redirect_stderr(io.StringIO()):
             return installer.install(self.args)
 
+    def test_claude_preview_selects_profile_without_writing(self):
+        self.args.agent = "claude"
+        self.args.dry_run = True
+        result = self.run_install()
+        self.assertEqual(result["agent"], "claude")
+        self.assertEqual(result["instructions"], str(self.home / ".claude/CLAUDE.md"))
+        self.assertFalse(self.prefix.exists())
+        self.assertFalse((self.home / ".claude").exists())
+
     def test_unowned_environment_is_preserved(self):
         self.prefix.mkdir()
         (self.prefix / "important.txt").write_text("mine")

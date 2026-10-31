@@ -23,10 +23,13 @@ def build_parser(parser_class, *, limit, positive_int, scan_depth):
     from . import __version__
     cli.add_argument("--version", action="version", version="Richi " + __version__)
     commands = cli.add_subparsers(dest="command", required=True)
+    agents = commands.add_parser("agents", help="Find and connect local AI agents")
+    agents.add_argument("--status", action="store_true")
     setup = commands.add_parser("setup", help="Connect this installation to all local Codex chats")
     setup_mode = setup.add_mutually_exclusive_group()
     for option in ("yes", "dry-run", "status"):
         setup_mode.add_argument("--" + option, action="store_true")
+    setup.add_argument("--agent", choices=("codex", "claude"), default="codex")
     setup.add_argument("--replace-skill", action="store_true")
     setup.add_argument("--no-path", action="store_true")
     update = commands.add_parser("update", help="Check, apply or roll back an installed release")
