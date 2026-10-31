@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import unittest
 from unittest.mock import patch
 import test_agent_setup
 from richi_launcher import agent_setup, installation
@@ -11,7 +12,7 @@ from richi_launcher.claude_setup import HOOK
 from richi_launcher.config import ConfigError
 
 
-class ClaudeSetupTests(test_agent_setup.AgentSetupTests):
+class ClaudeSetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
     def test_claude_preserves_settings_and_codex_and_is_idempotent(self):
         self.configure()
         codex = (self.home / '.codex/AGENTS.md').read_bytes()
@@ -98,3 +99,27 @@ class ClaudeSetupTests(test_agent_setup.AgentSetupTests):
         backup, = (self.home / '.claude/richi-skill-backups').glob('project-memory-*')
         self.assertEqual((backup / 'SKILL.md').read_text(), 'manual copy')
         self.assertTrue(skill.is_symlink())
+
+    def test_claude_does_not_validate_codex_profile_or_budget(self):
+        profile = self.home / '.claude'
+        profile.mkdir()
+        original = b'x' * 33000
+        (profile / 'CLAUDE.md').write_bytes(original)
+        target = self.home / 'codex-target'
+        target.mkdir()
+        (self.home / 'codex-link').symlink_to(target)
+        with patch.dict(os.environ, CODEX_HOME=str(self.home / 'codex-link')):
+            self.configure('--agent', 'claude')
+        self.assertTrue((profile / 'CLAUDE.md').read_bytes().startswith(original))
+
+    def test_duplicate_settings_keys_are_rejected_before_writing(self):
+        profile = self.home / '.claude'
+        profile.mkdir()
+        settings = profile / 'settings.json'
+        original = b'{"permissions":{"deny":["Bash(rm *)"]},"permissions":{}}'
+        settings.write_bytes(original)
+        before = self.paths()
+        with self.assertRaisesRegex(ConfigError, 'duplicate'):
+            self.configure('--agent', 'claude')
+        self.assertEqual(before, self.paths())
+        self.assertEqual(settings.read_bytes(), original)

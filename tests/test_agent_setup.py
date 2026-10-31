@@ -13,7 +13,7 @@ from richi_launcher import agent_setup, installation, setup_files
 from richi_launcher.config import ConfigError
 
 
-class AgentSetupTests(unittest.TestCase):
+class AgentSetupFixture:
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="richi-agent-setup-")
         self.addCleanup(temporary.cleanup)
@@ -70,6 +70,8 @@ class AgentSetupTests(unittest.TestCase):
         state["previous"], state["current"] = state["current"], generation
         return state
 
+
+class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
     def test_preserves_exact_user_bytes_and_repeated_setup_is_idempotent(self):
         instructions = self.home / ".codex/AGENTS.md"
         instructions.parent.mkdir()

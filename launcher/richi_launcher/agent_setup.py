@@ -120,10 +120,10 @@ def merge_block(data, block, start=START, end=END, expected=None):
     return data + separator + block + b"\n"
 
 
-def _file_op(path, block, start=START, end=END, expected=None):
+def _file_op(path, block, start=START, end=END, expected=None, codex_budget=False):
     before = files.snapshot(path)
     data = merge_block(files.contents(before), block, start, end, expected)
-    if start == START and len(data) > 32768:
+    if codex_budget and len(data) > 32768:
         raise ConfigError("Global instructions would exceed Codex's default 32 KiB discovery budget; shorten them before setup")
     return files.change(path, files.file_value(data, before.get("mode", 0o600)))
 
@@ -177,7 +177,6 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     root, hashes = bundle(active["site"])
     current = _load(ctx, agent)
     home = Path.home().resolve()
-    codex = files.safe_path(Path(os.environ.get("CODEX_HOME") or home / ".codex").expanduser() / "AGENTS.md").parent
     if agent == "claude":
         profile = files.safe_path(Path(os.environ.get("CLAUDE_CONFIG_DIR") or home / ".claude").expanduser() / "CLAUDE.md").parent
         instructions = profile / "CLAUDE.md"
@@ -185,6 +184,7 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
             raise ConfigError("Setup belongs to another CLAUDE_CONFIG_DIR; use its original profile")
         skill = profile / "skills/project-memory"
     else:
+        codex = files.safe_path(Path(os.environ.get("CODEX_HOME") or home / ".codex").expanduser() / "AGENTS.md").parent
         override = codex / "AGENTS.override.md"
         if current:
             instructions = Path(current["instructions"])
@@ -199,7 +199,7 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     executable = Path(ctx["original_prefix"]) / "bin" / "richi"
     if not executable.is_file():
         raise ConfigError("The permanent Richi console command is missing")
-    legacy = codex / "skills" / "project-memory"
+    legacy = codex / "skills" / "project-memory" if agent == "codex" else None
     legacy_op = None
     if agent == "codex" and files.snapshot(legacy)["kind"] != "absent":
         if current or not replace_skill:
@@ -217,7 +217,8 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     if command_op["before"]["kind"] != "absent" and command_op["before"] != command_op["after"]:
         raise ConfigError("Another command owns " + str(command) + "; it was not overwritten")
     block = _block(command, agent)
-    ops = [skill_op, command_op, _file_op(instructions, block, expected=current.get("block_sha256") if current else None)]
+    ops = [skill_op, command_op, _file_op(instructions, block, expected=current.get("block_sha256") if current else None,
+                                                codex_budget=agent == "codex")]
     if legacy_op:
         ops.insert(0, legacy_op)
     path_block = PATH_START + ("\nexport PATH=" + shlex.quote(str(command.parent)) + ':"$PATH"\n').encode() + PATH_END
@@ -339,33 +340,34 @@ def agents_command(argv):
     parser = Parser(prog="richi agents", description="Find and connect local AI agents")
     parser.add_argument("--status", action="store_true", help="List agents without changing files")
     args = parser.parse_args(argv)
-    records = _records(installation._context())
-    home = Path.home()
-    items = []
-    for name, directory in (("codex", os.environ.get("CODEX_HOME") or home / ".codex"),
-                            ("claude", os.environ.get("CLAUDE_CONFIG_DIR") or home / ".claude")):
-        item = {"agent": name, "detected": bool(shutil.which(name) or Path(directory).is_dir()),
-                "status": "not_configured"}
-        if name in records:
-            try:
-                item["status"] = command(["--agent", name, "--status"])["status"]
-            except ConfigError as exc:
-                item.update(status="conflict", error=str(exc))
-        items.append(item)
-    if args.status:
-        return {"agents": items}
-    try:
-        with open("/dev/tty", "r+") as terminal:
-            for index, item in enumerate(items, 1):
-                terminal.write(str(index) + ". " + item["agent"] + ": " + item["status"] +
-                               (" (found)" if item["detected"] else " (not detected)") + "\n")
-            terminal.write("3. Check for new agents\n0. Cancel\nChoose: ")
-            terminal.flush()
-            choice = terminal.readline().strip()
-    except OSError as exc:
-        raise ConfigError("Use richi agents --status or richi setup --agent claude --yes without a terminal") from exc
-    if choice == "3":
-        return agents_command(argv)
-    if choice in {"1", "2"}:
-        return command(["--agent", items[int(choice) - 1]["agent"]])
-    return {"status": "cancelled"}
+    while True:
+        records = _records(installation._context())
+        home = Path.home()
+        items = []
+        for name, directory in (("codex", os.environ.get("CODEX_HOME") or home / ".codex"),
+                                ("claude", os.environ.get("CLAUDE_CONFIG_DIR") or home / ".claude")):
+            item = {"agent": name, "detected": bool(shutil.which(name) or Path(directory).expanduser().is_dir()),
+                    "status": "not_configured"}
+            if name in records:
+                try:
+                    item["status"] = command(["--agent", name, "--status"])["status"]
+                except ConfigError as exc:
+                    item.update(status="conflict", error=str(exc))
+            items.append(item)
+        if args.status:
+            return {"agents": items}
+        try:
+            with open("/dev/tty", "r+") as terminal:
+                for index, item in enumerate(items, 1):
+                    terminal.write(str(index) + ". " + item["agent"] + ": " + item["status"] +
+                                   (" (found)" if item["detected"] else " (not detected)") + "\n")
+                terminal.write("3. Check for new agents\n0. Cancel\nChoose: ")
+                terminal.flush()
+                choice = terminal.readline().strip()
+        except OSError as exc:
+            raise ConfigError("Use richi agents --status or richi setup --agent claude --yes without a terminal") from exc
+        if choice == "3":
+            continue
+        if choice in {"1", "2"}:
+            return command(["--agent", items[int(choice) - 1]["agent"]])
+        return {"status": "cancelled"}

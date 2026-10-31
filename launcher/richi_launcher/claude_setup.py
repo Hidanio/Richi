@@ -22,6 +22,15 @@ print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "addit
 '''
 
 
+def _unique_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate settings key: " + key)
+        result[key] = value
+    return result
+
+
 def hook_operations(ctx, profile, current):
     script = profile / "richi/session_start.py"
     value = files.snapshot(script)
@@ -36,7 +45,7 @@ def hook_operations(ctx, profile, current):
     settings = profile / "settings.json"
     before = files.snapshot(settings)
     try:
-        data = json.loads(files.contents(before)) if before["kind"] != "absent" else {}
+        data = json.loads(files.contents(before), object_pairs_hook=_unique_keys) if before["kind"] != "absent" else {}
         if not isinstance(data, dict):
             raise ValueError("settings must be an object")
         hooks = data.setdefault("hooks", {})
