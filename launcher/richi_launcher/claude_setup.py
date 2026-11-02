@@ -1,10 +1,44 @@
 """Claude Code SessionStart adapter. No knowledge-store access."""
 import json
+import os
 from pathlib import Path
 import shlex
+import shutil
 
 from . import setup_files as files
 from .config import ConfigError
+
+LABEL = "Claude Code"
+INSTRUCTION_LIMIT = None
+
+
+def profile_dir():
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home().resolve() / ".claude").expanduser()
+
+
+def detected():
+    return bool(shutil.which("claude") or profile_dir().is_dir())
+
+
+def paths(current=None):
+    profile = files.safe_path(profile_dir() / "CLAUDE.md").parent
+    instructions = profile / "CLAUDE.md"
+    if current and Path(current["instructions"]) != instructions:
+        raise ConfigError("Setup belongs to another CLAUDE_CONFIG_DIR; use its original profile")
+    return profile, instructions, profile / "skills/project-memory"
+
+
+def setup_operations(ctx, profile, current, replace_skill):
+    return hook_operations(ctx, profile, current)
+
+
+def activation_operations(ctx, record, site):
+    from .agent_adapters import literal
+    content = literal(Path(site) / "richi_launcher/claude_setup.py", "HOOK")
+    if not isinstance(content, str):
+        raise ConfigError("Invalid Claude session hook in selected release")
+    return hook_operations(ctx, Path(record["instructions"]).parent, record, content)
+
 
 # A standalone hook uses the permanent installation's Python, not shell PATH.
 HOOK = '''import json, os, re, shlex, sys
@@ -31,10 +65,10 @@ def _unique_keys(pairs):
     return result
 
 
-def hook_operations(ctx, profile, current):
+def hook_operations(ctx, profile, current, content=None):
     script = profile / "richi/session_start.py"
     value = files.snapshot(script)
-    content = HOOK.encode()
+    content = (HOOK if content is None else content).encode()
     if current:
         if files.digest(files.contents(value)) != current.get("hook_sha256"):
             raise ConfigError("Managed Claude hook was edited or removed; preserved it")

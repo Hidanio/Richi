@@ -185,9 +185,42 @@ Start a new local Claude Code session. The hook uses the actual session ID as
 `RICHI_CHAT_ID=claude:<session_id>` and provides an explicit `--chat` fallback in
 session context. Resumed sessions retain identity; new sessions choose a workspace
 independently. Setup does not override disabled hooks or permission policies.
-This supports Claude Code, not ordinary Claude chat or MCP. Both managed skills
-follow package updates/rollback; releases without multi-agent support are blocked.
+This supports Claude Code, not ordinary Claude chat or MCP. Managed skills and
+Claude's session script follow package updates/rollback together. Releases that
+cannot maintain any configured agent are blocked before activation.
 Launcher changes require installing a new package, even with runtime dev mode on.
 
 Claude contracts: [profile layout](https://code.claude.com/docs/en/claude-directory)
 and [SessionStart hooks](https://code.claude.com/docs/en/hooks#sessionstart).
+
+## Adding another agent to Richi
+
+The menu rescans clients supported by the installed Richi package. Supporting a
+new client requires a new package; discovery does not install third-party code.
+
+Register a built-in adapter in `launcher/richi_launcher/agent_adapters.py`.
+This literal catalog supplies the setup/installer choices and menu entries.
+Put agent-specific behavior in its module, following `codex_setup.py` or
+`claude_setup.py`:
+
+- `LABEL` and `INSTRUCTION_LIMIT` describe the client and its instruction budget
+  (`None` if no smaller limit is known).
+- `detected()` checks the client's executable/profile without writes.
+- `paths(current=None)` returns the profile, effective instruction file and
+  skill path. Validate overrides and an existing record's profile here.
+- `setup_operations(ctx, profile, current, replace_skill)` and
+  `activation_operations(ctx, record, site)` return `(extra_metadata, operations)`.
+  Plan changes with `setup_files`; never write directly. The activation method
+  reads the selected package's resources, including during rollback, and uses
+  stored paths rather than the current shell's profile override.
+
+Shared code owns locks, skill links, instruction/PATH blocks, backups, manifests
+and recovery. Adapter metadata must not overwrite shared fields. The catalog's
+version describes the adapter's persisted metadata/resource contract, not the
+Richi release. Compatible releases retain it; incompatible versions fail closed
+until an explicit migration exists. Release inspection reads literal data without
+executing candidate code. Preserve literal `AGENTS` and Claude `HOOK` assignments.
+
+Each adapter must provide a stable chat identity and preserve the user's explicit
+workspace choice. Test its profile/settings behavior in a synthetic home;
+`tests/test_agent_adapters.py` verifies the shared flow with a third test adapter.

@@ -61,16 +61,46 @@ class ClaudeSetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         with self.assertRaisesRegex(ConfigError, 'cannot maintain'):
             installation._activate(self.ctx, self.next_state(), 'updated')
 
-    def test_both_skills_follow_activation(self):
+    def test_skills_and_hook_follow_activation_and_rollback(self):
         self.configure()
+        self.configure('--agent', 'claude')
+        old = installation._state(self.ctx)
+        (self.site / 'richi_launcher/agent_setup.py').write_text('PROTOCOL = 1\nMULTI_AGENT_PROTOCOL = 1\n')
+        state = self.next_state()
+        site = Path(state['generations'][state['current']]['site'])
+        (site / 'richi_launcher/agent_setup.py').write_text('PROTOCOL = 1\nMULTI_AGENT_PROTOCOL = 1\n')
+        new_hook = HOOK + '\n# Synthetic next hook\n'
+        (site / 'richi_launcher/claude_setup.py').write_text('HOOK = ' + repr(new_hook) + '\n')
+        hook = self.home / '.claude/richi/session_start.py'
+        settings = self.home / '.claude/settings.json'
+        original_settings = settings.read_bytes()
+        with patch.object(installation, '_collect', return_value={}):
+            installation._activate(self.ctx, state, 'updated')
+            self.assertEqual(hook.read_text(), new_hook)
+            for skill in ('.agents/skills/project-memory', '.claude/skills/project-memory'):
+                self.assertIn('Synthetic release 0.2.0', (self.home / skill / 'SKILL.md').read_text())
+            old['generations'].update(state['generations'])
+            old['previous'] = state['current']
+            installation._activate(self.ctx, old, 'rolled_back')
+        self.assertEqual(hook.read_text(), HOOK)
+        self.assertEqual(settings.read_bytes(), original_settings)
+        self.assertEqual(agent_setup.command(['--agent', 'claude', '--status'])['status'], 'configured')
+
+    def test_edited_hook_or_settings_prevent_activation(self):
         self.configure('--agent', 'claude')
         state = self.next_state()
         site = Path(state['generations'][state['current']]['site'])
         (site / 'richi_launcher/agent_setup.py').write_text('PROTOCOL = 1\nMULTI_AGENT_PROTOCOL = 1\n')
-        with patch.object(installation, '_collect', return_value={}):
-            installation._activate(self.ctx, state, 'updated')
-        for skill in ('.agents/skills/project-memory', '.claude/skills/project-memory'):
-            self.assertIn('Synthetic release 0.2.0', (self.home / skill / 'SKILL.md').read_text())
+        for name, content in (('richi/session_start.py', 'custom hook'), ('settings.json', '{}')):
+            with self.subTest(name=name):
+                path = self.home / '.claude' / name
+                original = path.read_bytes()
+                path.write_text(content)
+                with self.assertRaises(ConfigError):
+                    installation._activate(self.ctx, state, 'updated')
+                self.assertEqual(path.read_text(), content)
+                self.assertFalse((self.root / 'state.json').exists())
+                path.write_bytes(original)
 
     def test_malformed_settings_are_preserved_without_partial_setup(self):
         profile = self.home / '.claude'
