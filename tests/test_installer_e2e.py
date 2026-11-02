@@ -69,6 +69,9 @@ class InstallerLifecycleTests(unittest.TestCase):
             repeated = json.loads(self.run_process([*command, "--yes"]).stdout)
             self.assertEqual(repeated["changes"], [])
             self.assertEqual(instructions.read_bytes(), installed_instructions)
+            self.run_process([console, "setup", "--agent", "claude", "--yes", "--no-path"])
+            claude_skill = home / ".claude/skills/project-memory"
+            self.assertEqual(claude_skill.resolve(), skill.resolve())
             # Setup works even inside an unbound chat and does not bind it.
             self.environment["CODEX_THREAD_ID"] = "synthetic-new-chat"
             self.run_process([console, "setup", "--yes"])
@@ -90,10 +93,15 @@ class InstallerLifecycleTests(unittest.TestCase):
                 status = json.loads(self.run_process([console, "setup", "--status"]).stdout)
                 self.assertEqual(status["status"], "configured")
                 self.assertIn("v" + version, status["generation"])
+                claude_status = json.loads(self.run_process([console, "setup", "--agent", "claude", "--status"]).stdout)
+                self.assertEqual(claude_status["status"], "configured")
+                self.assertEqual(claude_skill.resolve(), skill.resolve())
                 self.assertTrue((skill / "SKILL.md").is_file())
             self.run_process([console, "update", "rollback"])
             self.assertEqual(self.run_process([console, "--version"]).stdout.strip(), "Richi 0.3.0")
             self.assertIn("v0.3.0", json.loads(self.run_process([console, "setup", "--status"]).stdout)["generation"])
+            self.assertEqual(claude_skill.resolve(), skill.resolve())
+            self.assertEqual(json.loads(self.run_process([console, "setup", "--agent", "claude", "--status"]).stdout)["status"], "configured")
             self.assertEqual(instructions.read_bytes(), installed_instructions)
             for path, contents in protected.items():
                 self.assertEqual(path.read_bytes(), contents, str(path))

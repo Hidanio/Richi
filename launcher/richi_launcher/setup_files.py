@@ -153,7 +153,9 @@ def recover(ctx):
         if transaction.get("generation") is not None:
             committed = installation._state(ctx)["current"] == transaction["generation"]
         operations = transaction["operations"]
-        if not isinstance(operations, list) or len(operations) > 20:
+        # snapshot/begin bound the whole journal to MAX_FILE bytes. The number
+        # of managed files grows with the configured agents, not a fixed count.
+        if not isinstance(operations, list):
             raise ValueError("journal operations")
         # Reverse only operations which were applied. Untouched operations
         # already match their before-state and are idempotently skipped.

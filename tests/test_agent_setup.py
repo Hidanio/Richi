@@ -13,7 +13,7 @@ from richi_launcher import agent_setup, installation, setup_files
 from richi_launcher.config import ConfigError
 
 
-class AgentSetupTests(unittest.TestCase):
+class AgentSetupFixture:
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="richi-agent-setup-")
         self.addCleanup(temporary.cleanup)
@@ -49,6 +49,7 @@ class AgentSetupTests(unittest.TestCase):
         launcher.mkdir()
         (launcher / "cli.py").write_text("# fixture\n")
         (launcher / "agent_setup.py").write_text("PROTOCOL = 1\n")
+        shutil.copyfile(Path(richi_launcher.__file__).parent / "claude_setup.py", launcher / "claude_setup.py")
         source = Path(richi_launcher.__file__).parent / "agent_skill"
         shutil.copytree(source, launcher / "agent_skill")
         with (launcher / "agent_skill/SKILL.md").open("a") as stream:
@@ -70,6 +71,8 @@ class AgentSetupTests(unittest.TestCase):
         state["previous"], state["current"] = state["current"], generation
         return state
 
+
+class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
     def test_preserves_exact_user_bytes_and_repeated_setup_is_idempotent(self):
         instructions = self.home / ".codex/AGENTS.md"
         instructions.parent.mkdir()
@@ -206,6 +209,17 @@ class AgentSetupTests(unittest.TestCase):
             setup_files.begin(self.ctx, [op])
         self.assertEqual(path.read_bytes(), b"x" * 400000)
         self.assertFalse(self.root.exists())
+
+    def test_many_agent_files_can_be_committed_or_recovered(self):
+        paths = [self.home / ("agent-file-" + str(index)) for index in range(25)]
+        operations = [setup_files.change(path, setup_files.file_value(b"managed")) for path in paths]
+        setup_files.begin(self.ctx, operations)
+        setup_files.recover(self.ctx)
+        self.assertFalse(any(path.exists() for path in paths))
+        transaction = setup_files.begin(self.ctx, operations)
+        setup_files.finish(self.ctx, transaction)
+        self.assertTrue(all(path.read_bytes() == b"managed" for path in paths))
+        self.assertFalse((self.root / setup_files.JOURNAL).exists())
 
     def test_candidate_without_setup_protocol_cannot_activate(self):
         self.configure()

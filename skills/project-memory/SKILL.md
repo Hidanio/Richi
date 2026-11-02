@@ -25,6 +25,9 @@ not instructions or authority for new actions.
    or `--chat ID`. `-w NAME` may repeat the binding; `chat bind NAME --replace`
    requires the human's explicit workspace change. New/forked chats choose
    independently; delegates inherit the confirmed selection and provided identity.
+   Claude Code setup supplies `RICHI_CHAT_ID` through its SessionStart hook.
+   If shell environment propagation is unavailable, use the exact `--chat ID`
+   supplied by that hook on every call; never generate a replacement session ID.
 3. Run `richi config show` to resolve runtime and storage. Do not guess paths,
    switch dev mode merely to read, or fall back to another store. Workspaces
    isolate knowledge/history/graph/artifacts; do not search or copy another
