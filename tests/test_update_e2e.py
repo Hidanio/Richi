@@ -21,6 +21,26 @@ import richi_launcher
 from cli_environment import cli_environment
 
 
+_REGISTRY_PATHS = """
+import json
+from richi_launcher import chats, workspaces
+print(json.dumps([str(workspaces._registry_path()), str(chats._registry_path())]))
+"""
+
+
+class RegistryPathTests(unittest.TestCase):
+    def test_linux_registries_use_config_root_instead_of_workspace_data_root(self):
+        with tempfile.TemporaryDirectory(prefix="richi-linux-registry-") as temporary:
+            environment = cli_environment(temporary)
+            result = subprocess.run([sys.executable, "-I", "-B", "-c",
+                                     "import sys; sys.platform = 'linux'\n" + _REGISTRY_PATHS],
+                                    env=environment, capture_output=True, text=True, check=True)
+            config_root = Path(environment["XDG_CONFIG_HOME"]) / "richi"
+            self.assertEqual(json.loads(result.stdout),
+                             [str(config_root / name) for name in ("workspaces.json", "chat-workspaces.json")])
+            self.assertNotEqual(config_root, Path(environment["XDG_DATA_HOME"]) / "richi")
+
+
 # Feed bytes and OS scheduler registration are the only replacements: real
 # release validation, staging, pip, self-check, activation and collection run.
 # Starting in the selected interpreter preserves the mock across bootstrap's
@@ -187,9 +207,8 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             database = Path(alpha["database"])
             database.write_bytes(b"Synthetic store: the package transition must not open it\n")
             config = self.console_json("config", "show")
-            registry = Path(alpha["config_file"]).parent.parent.parent
-            protected_paths = [database, Path(alpha["config_file"]),
-                               registry / "workspaces.json", registry / "chat-workspaces.json"]
+            registries = json.loads(self.run_process([self.python, "-I", "-B", "-c", _REGISTRY_PATHS]).stdout)
+            protected_paths = [database, Path(alpha["config_file"]), *map(Path, registries)]
             protected = {path: path.read_bytes() for path in protected_paths}
             runner = self.root / "offline_update.py"
             runner.write_text(_OFFLINE_COMMAND, encoding="utf-8")
