@@ -57,8 +57,13 @@ Entities have NULL `work_state` and `jira_key`. SQL three-valued logic applies:
 `work_state IS NULL OR work_state != 'planned'` when missing state is allowed.
 
 Entry projects come from explicit memberships. Concept scope requires an
-outgoing, confirmed `used_in` edge to a project with sources. Other entity kinds
-require a confirmed sourced project edge in either direction. Multiple projects
+outgoing, confirmed `used_in` edge to a project with sources. Tool scope comes
+from either such an outgoing `used_in` edge or a confirmed, sourced `uses_tool`
+edge from a confirmed entry to the tool, using that entry's explicit project
+memberships. Other incident links and a parent task's membership do not expand
+tool scope. Inclusion flags do not make a hypothesis or superseded usage entry
+establish project scope for this filter. The remaining entity kinds require a
+confirmed sourced project edge in either direction. Multiple projects
 are a set: positive project predicates mean any matching membership; negative
 predicates mean none, including unscoped records. `project IS NULL` selects only
 unscoped records. Hypotheses/superseded records remain excluded by recall unless their

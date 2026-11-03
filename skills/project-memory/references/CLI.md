@@ -11,6 +11,10 @@ database. One term may have several meanings across contexts and versions;
 shared synonyms do not merge cards. The catalog, authoring rules and semantic
 variants are described in [ENCYCLOPEDIA.md](ENCYCLOPEDIA.md).
 
+The Tools catalog holds `tool` entities and follows their explicit usage links
+to project tasks and standalone scenarios. Use `tools list` or `tools get ID`;
+see [TOOLS.md](TOOLS.md) for configuration, runs and scope.
+
 The database is stored separately from source code; `richi config show` reports its actual path. Python 3.9 or newer with the standard `sqlite3` module is required; the runtime uses the standard library and requires no cloud service. The interactive map uses an optional local HTTP server on `127.0.0.1`. Calls are explicit: there is no background reading of conversations, Jira or repositories, or updating of knowledge. A source in a record indicates provenance; the existence of a link alone does not prove a claim.
 
 <a id="быстрый-старт"></a>
@@ -197,7 +201,17 @@ checks are described in [MAINTENANCE.md](MAINTENANCE.md).
 
 WAL, a lock wait of up to 10 seconds, foreign keys and explicit transactions are used. Competing processes serialize writes; to protect a card from losing concurrent changes, pass `expected_updated_at` from the latest read. Without that field, the new payload replaces the previous one. There is no automatic conflict merging.
 
-`check` verifies schema version, SQLite integrity and foreign keys. New databases use schema 2. Older commands are compatible with schema 1; the graph requires an explicit migration: `backup`, then `migrate`. Unknown versions are rejected. Repeated `init` does not reset data; schema 1 requires `migrate`, and an unknown nonempty database is not reinitialized. Original SQL tables are `projects`, `entries`, `entry_projects`, `relations`, `entry_history`, `entry_events`, `metadata` and, where supported, `entries_fts`. Schema 2 adds `entities`, `graph_nodes`, `graph_edges`, histories for new objects and the `graph_links` view, preserving original records and FTS.
+`check` verifies schema version, SQLite integrity and foreign keys. New databases
+use schema 3. Core commands support schemas 1, 2 and 3; graph commands support
+schemas 2 and 3. Tool entities require schema 3. For an older store, migration is
+explicit: `backup`, then `migrate`. Unknown versions are rejected. Repeated `init`
+does not reset data; schema 1/2 requires `migrate`, and an unknown nonempty database
+is not reinitialized. Original tables are `projects`, `entries`, `entry_projects`,
+`relations`, `entry_history`, `entry_events`, `metadata` and, where supported,
+`entries_fts`. Schema 2 adds `entities`, `graph_nodes`, `graph_edges`, new object
+histories and the `graph_links` view. Schema 3 extends the entity-kind constraint
+with `tool`, preserving records, links, history and indexes. The map wire format
+stays at version 2. See [GRAPH.md](GRAPH.md) for migration and compatibility.
 
 ```sh
 richi backup

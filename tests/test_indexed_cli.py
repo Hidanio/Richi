@@ -74,7 +74,7 @@ class IndexedCliTests(unittest.TestCase):
         self.assertTrue(self.cli("search-index", "status")["available"])
         self.cli("recall", "routingneedle", "--where", "kind='note'")
         self.assertEqual(self.db.read_bytes(), indexed_bytes)
-        self.assertEqual(self.cli("check")["schema_version"], 2)
+        self.assertEqual(self.cli("check")["schema_version"], 3)
 
     def test_filter_applies_before_limit_and_does_not_override_state_policy(self):
         self.entry("a-noise", project_ids=["beta"])

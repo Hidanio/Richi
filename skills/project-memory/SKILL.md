@@ -1,6 +1,6 @@
 ---
 name: project-memory
-description: Find and record prior work, decisions, cross-project dependencies, and scoped technical definitions in local project memory. Use for project continuity and explicitly requested memory cleanup or knowledge consolidation.
+description: Find and record prior work, decisions, cross-project dependencies, tools and their use, and scoped technical definitions in local project memory. Use for project continuity and explicitly requested memory cleanup or knowledge consolidation.
 ---
 
 # Project memory
@@ -119,6 +119,7 @@ only when its specific operation or contract is needed.
 | Find candidates, then read several exact records | [RETRIEVAL_TOOLS.md](references/RETRIEVAL_TOOLS.md) |
 | Neighbors/links of a known node | [NEIGHBORS.md](references/NEIGHBORS.md) |
 | Scoped definitions or ambiguous aliases | [ENCYCLOPEDIA.md](references/ENCYCLOPEDIA.md) |
+| Tools, project configurations, scenarios and related tasks | [TOOLS.md](references/TOOLS.md) |
 | Capture/attach checked code, including worktrees | [GIT_CAPTURE.md](references/GIT_CAPTURE.md) |
 | Historical code, diffs or Git freshness | [GIT.md](references/GIT.md) |
 | Explain a missing known record | [RECALL_DEBUG.md](references/RECALL_DEBUG.md) |

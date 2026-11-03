@@ -78,7 +78,7 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(self.cli("migrate")["status"], "existing")
         with sqlite3.connect(str(self.db)) as conn:
             after = {t: conn.execute("SELECT * FROM " + t).fetchall() for t in tables}
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 3)
         self.assertEqual(before, after)
         self.assertIn("old", json.dumps(self.cli("search", "FTSneedlepersist")))
         self.assertEqual(len(self.cli("entry", "get", "old", "--history")["history"]), 2)

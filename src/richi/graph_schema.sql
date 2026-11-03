@@ -1,7 +1,7 @@
-/* Additive schema 2: also used inside the explicit v1 -> v2 migration. */
+/* Graph tables for schema 3: also used inside the explicit v1 -> v3 migration. */
 CREATE TABLE entities (
     id TEXT PRIMARY KEY
-    , kind TEXT NOT NULL CHECK (kind IN ('pull_request', 'metric', 'component', 'concept', 'document', 'jira'))
+    , kind TEXT NOT NULL CHECK (kind IN ('pull_request', 'metric', 'component', 'concept', 'document', 'jira', 'tool'))
     , title TEXT NOT NULL
     , summary TEXT NOT NULL
     , sources TEXT NOT NULL DEFAULT '[]'

@@ -546,6 +546,12 @@ def candidates(conn, query, terms, keys, states, project, api, trace=None, selec
                 if project and project in record["project_ids"]:
                     score += 18
                     reasons.append("confirmed_concept_scope")
+            elif record["kind"] == "tool":
+                from . import tool_catalog
+                record["project_ids"] = tool_catalog.project_ids(conn, node_ref)
+                if project and project in record["project_ids"]:
+                    score += 18
+                    reasons.append("confirmed_tool_usage")
             elif project and table_exists(conn, "graph_edges"):
                 # Only an explicitly recorded entity/project link grants this boost.
                 linked = conn.execute("SELECT 1 FROM graph_edges WHERE 1=1 AND knowledge_state IN (" + states_sql + ") AND ((from_ref = ? AND to_ref = ?) OR (to_ref = ? AND from_ref = ?)) LIMIT 1",
@@ -572,6 +578,9 @@ def load_node(conn, node_ref, states, api):
             record.update(project_ids=[], work_state=None)
             if record["kind"] == "concept":
                 record["project_ids"] = concept_projects(conn, node_ref)
+            elif record["kind"] == "tool":
+                from . import tool_catalog
+                record["project_ids"] = tool_catalog.project_ids(conn, node_ref)
     else:
         return None
     return record if record and record["knowledge_state"] in states else None

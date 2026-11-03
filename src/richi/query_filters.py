@@ -330,12 +330,29 @@ class ParsedFilter:
             column = "qf_project.id"
         exists = "EXISTS (SELECT 1 FROM " + source + " WHERE 1=1 AND " + scope + ")"
         if operation in {"is_null", "is_not_null"}:
-            return ("(NOT " + exists + ")" if operation == "is_null" else exists), []
-        negative = operation in {"!=", "not_in", "not_like"}
-        positive = {"!=": "=", "not_in": "in", "not_like": "like"}.get(operation, operation)
-        predicate, parameters = self._comparison(column, positive, value)
-        matching = "EXISTS (SELECT 1 FROM " + source + " WHERE 1=1 AND " + scope + " AND " + predicate + ")"
-        return ("(NOT " + matching + ")" if negative else matching), parameters
+            result, parameters = ("(NOT " + exists + ")" if operation == "is_null" else exists), []
+        else:
+            negative = operation in {"!=", "not_in", "not_like"}
+            positive = {"!=": "=", "not_in": "in", "not_like": "like"}.get(operation, operation)
+            predicate, parameters = self._comparison(column, positive, value)
+            matching = "EXISTS (SELECT 1 FROM " + source + " WHERE 1=1 AND " + scope + " AND " + predicate + ")"
+            result = "(NOT " + matching + ")" if negative else matching
+        if family == "entity":
+            from .tool_catalog import project_scope_sql
+            tool_source = "(" + project_scope_sql("'entity:' || " + alias + ".id") + ") AS qf_tool"
+            if operation in {"is_null", "is_not_null"}:
+                tool_result = "EXISTS (SELECT 1 FROM " + tool_source + ")"
+                if operation == "is_null":
+                    tool_result = "(NOT " + tool_result + ")"
+                tool_parameters = []
+            else:
+                tool_predicate, tool_parameters = self._comparison("qf_tool.id", positive, value)
+                tool_result = "EXISTS (SELECT 1 FROM " + tool_source + " WHERE " + tool_predicate + ")"
+                if negative:
+                    tool_result = "(NOT " + tool_result + ")"
+            result = "(CASE WHEN " + alias + ".kind = 'tool' THEN " + tool_result + " ELSE " + result + " END)"
+            parameters = tool_parameters + parameters
+        return result, parameters
 
     def matches_ref(self, conn, node_ref):
         self.api.string(node_ref, "node ref")

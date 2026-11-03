@@ -31,7 +31,7 @@ from .memory import Parser, MemoryError
 BASE = Path(__file__).resolve().parent
 API_VERSION = 4
 CAPABILITIES = ["git_source_viewer", "legacy_git_source_viewer", "standalone_runtime",
-                "runtime_selection", "runtime_reload", "workspace_selection"]
+                "runtime_selection", "runtime_reload", "workspace_selection", "tool_catalog"]
 GIT_QUERY_LIMIT = 8192
 GIT_OPERATION_TIMEOUT = 25
 GIT_WORKER_TIMEOUT = 30
@@ -220,12 +220,16 @@ def _run_git_request(database, options, runtime=None, config_file=None, workspac
         return 503, {"error": str(exc)[:1000], "code": "timeout" if isinstance(exc, (TimeoutError, subprocess.TimeoutExpired)) else "git_unavailable"}
 
 
-def _run_graph_request(database, flags, runtime, config_file=None, workspace=None, config_required=False):
+def _run_graph_request(database, flags, runtime, config_file=None, workspace=None, config_required=False,
+                       catalog=False, tool_id=None):
     """Node limits do not bound full card payloads; cap bytes before buffering them."""
     try:
+        operation = (["tools", "get", *flags, "--", tool_id] if tool_id is not None else
+                     ["tools", "list", "--limit", "200", *flags] if catalog else
+                     ["graph", "export", *flags])
         process = subprocess.Popen(
             runtime_command(runtime, [*config_arguments(config_file, config_required),
-                                      "--db", str(database), "graph", "export", *flags]),
+                                      "--db", str(database), *operation]),
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             pass_fds=lease_fds(), env=worker_environment(config_file, workspace, config_required))
         status, output, error = _read_worker_output(process, label="Graph export",
@@ -256,6 +260,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
     database = Path(database).expanduser().resolve()
     runtime = runtime or current_runtime()
     export_lock = threading.Lock()
+    tools_lock = threading.Lock()
     git_lock = threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
@@ -326,23 +331,36 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                     return self.send_data(503, {"error": "Git navigation is unavailable", "code": "git_unavailable"})
                 finally:
                     git_lock.release()
-            if url.path != "/api/graph":
+            if url.path not in {"/api/graph", "/api/tools"}:
                 return self.send_data(404, {"error": "Not found"})
             try:
-                params = parse_qs(url.query, keep_blank_values=True, strict_parsing=True) if url.query else {}
+                if len(url.query) > GIT_QUERY_LIMIT:
+                    return self.send_data(414, {"error": "Query exceeds the size limit"})
+                params = parse_qs(url.query, keep_blank_values=True, strict_parsing=True, max_num_fields=3) if url.query else {}
             except ValueError:
                 return self.send_data(400, {"error": "Invalid query"})
             supported = {"include_hypotheses", "include_superseded"}
-            if set(params) - supported or any(v not in (["0"], ["1"]) for v in params.values()):
+            if url.path == "/api/tools":
+                supported.add("tool")
+            tool_id = params.get("tool", [None])[0]
+            if (set(params) - supported
+                    or any(v not in (["0"], ["1"]) for key, v in params.items() if key != "tool")
+                    or ("tool" in params and (len(params["tool"]) != 1 or not tool_id
+                        or len(tool_id) > 200 or any(ord(char) < 32 or ord(char) == 127 for char in tool_id)))):
                 return self.send_data(400, {"error": "Flags must be 0 or 1"})
-            flags = ["--" + key.replace("_", "-") for key, value in params.items() if value == ["1"]]
-            if not export_lock.acquire(blocking=False):
+            flags = ["--" + key.replace("_", "-") for key, value in params.items() if key != "tool" and value == ["1"]]
+            request_lock = tools_lock if url.path == "/api/tools" else export_lock
+            if not request_lock.acquire(blocking=False):
                 return self.send_data(503, {"error": "Export in progress; try Refresh again"})
             try:
-                status, payload = _run_graph_request(database, flags, runtime, config_file, workspace, config_required)
+                if url.path == "/api/tools":
+                    status, payload = _run_graph_request(database, flags, runtime, config_file, workspace,
+                                                        config_required, catalog=True, tool_id=tool_id)
+                else:
+                    status, payload = _run_graph_request(database, flags, runtime, config_file, workspace, config_required)
                 return self.send_data(status, payload)
             finally:
-                export_lock.release()
+                request_lock.release()
 
         def do_HEAD(self):
             self.do_GET()
@@ -462,8 +480,8 @@ def _main(argv=None):
     if not 1 <= args.port <= 65535:
         parser.error("Port must be 1–65535")
     with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as conn:
-        if conn.execute("PRAGMA user_version").fetchone()[0] != 2:
-            parser.error("The map requires schema 2; run richi backup and richi migrate")
+        if conn.execute("PRAGMA user_version").fetchone()[0] not in (2, 3):
+            parser.error("The map requires schema 2 or 3; run richi backup and richi migrate")
     runtime = current_runtime()
     config_required = args.config is not None or "RICHI_CONFIG" in os.environ
     initial_source = source_fingerprint(runtime.package) if runtime.mode == "dev" else None

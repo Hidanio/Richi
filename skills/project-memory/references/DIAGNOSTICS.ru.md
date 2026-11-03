@@ -102,7 +102,7 @@ richi punisher --stale-days 180 --as-of 2026-10-01
 
 Punisher ничего не объединяет, не удаляет, не изменяет записи, историю,
 связи, состояния, даты проверки, FTS или schema version. Он поддерживает
-схемы 1 и 2, не читает entry_history, файлы источников, Git или сеть.
+схемы 1, 2 и 3, не читает entry_history, файлы источников, Git или сеть.
 Данные другого workspace не используются. Решения по кандидатам — в [MEMORY_AUDIT.md](MEMORY_AUDIT.ru.md);
 процедура изменений — в [MAINTENANCE.md](MAINTENANCE.ru.md).
 

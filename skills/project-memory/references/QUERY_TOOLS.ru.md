@@ -29,7 +29,7 @@ richi --compact-json query select --project example \
 `--family entity` или `--family all`. У entities поля work_state и jira_key равны NULL.
 Состояние знаний по умолчанию — confirmed; включай hypotheses/superseded осознанно
 отдельными флагами. Фильтр не может обойти эти ограничения состояния. Хранилища schema-1
-поддерживают entries; all использует доступные семейства, entity требует schema 2.
+поддерживают entries; all использует доступные семейства, entity требует schema 2 или 3.
 Каждый ответ сообщает фактическую область поиска.
 
 `facets --by FIELD` возвращает параллельные `columns` и `rows`, сгруппированные по одному — трём

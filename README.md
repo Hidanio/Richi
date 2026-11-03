@@ -17,6 +17,7 @@ that context together with sources and the conditions under which knowledge appl
 
 - Task outcomes, decisions, investigations and failed attempts.
 - Definitions and technical concepts scoped to a project and context.
+- [Tools](docs/TOOLS.md), practical recipes, configurations and linked project tasks.
 - Explicit links between knowledge, components and projects.
 - Source references and code revisions that support conclusions.
 

@@ -222,4 +222,6 @@ def build_parser(parser_class, *, limit, positive_int, scan_depth):
     impact.add_argument("--limit", type=limit, default=12)
     impact.add_argument("--max-chars", type=compact.max_chars, default=16000)
     graph.add_commands(commands, limit)
+    from . import tool_catalog
+    tool_catalog.add_commands(commands, limit)
     return cli

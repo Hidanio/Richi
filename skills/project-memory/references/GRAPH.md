@@ -1,11 +1,11 @@
 <a id="граф-знаний-схема-2"></a>
-# Knowledge graph: schema 2
+# Knowledge graph: schemas 2 and 3
 
 English | [Русский](GRAPH.ru.md)
 
 The graph extends existing memory. Projects and entries stay in their own tables;
 `graph_nodes` stores only references to them. Create an entity when an object—a
-PR, metric, component, concept, document or Jira task—needs its own card. If a task
+PR, metric, component, concept, tool, document or Jira task—needs its own card. If a task
 already exists as an entry, use that node; no duplicate `jira` entity is needed.
 
 Node references have a strict format:
@@ -22,7 +22,7 @@ records, including records added by older CLI commands. Foreign keys prevent
 edges from referring to missing nodes.
 
 <a id="переход-с-версии-1"></a>
-## Migrating from version 1
+## Migrating an existing store
 
 After installing Richi, from any working directory:
 
@@ -32,21 +32,26 @@ richi migrate
 richi check
 ```
 
-`migrate` performs an explicit atomic 1→2 migration: it checks the source
-database, adds tables/indexes/triggers, creates references to existing projects
-and entries, then changes `user_version`. Old tables, records, history and FTS
-remain in place. An error rolls back the entire transaction. Unknown versions
-are rejected; repeating the command on version 2 returns `existing`.
+`migrate` explicitly migrates schema 1 or 2 to schema 3 in one transaction.
+From schema 1 it adds the graph tables, indexes, triggers and references to
+existing projects/entries. From schema 2 it expands the entity-kind constraint
+to allow `tool`. IDs, payloads, history, graph links and existing search indexes
+are preserved. Integrity and foreign keys are checked before and after the
+change. An error rolls back the transaction. Unknown versions are rejected;
+repeating the command on schema 3 returns `existing`.
 
-Older read/write commands support versions 1 and 2. Graph commands require
-version 2 and never migrate automatically. `init` creates a new version 2 database;
-on an existing version 1 database it asks you to run `migrate`. A backup can be
-made before migration. Migration acquires SQLite's write lock, so concurrent
-writers wait for its release within their timeout.
+The current runtime reads/writes schemas 1, 2 and 3. Graph operations require
+schema 2 or 3; writing a `tool` requires schema 3. New `init` stores use schema 3.
+An existing schema 1/2 store is not silently upgraded by init, reads, dev mode or
+package updates. Make a backup and test migration on a copy before applying it
+to an existing knowledge store. Migration takes SQLite's write lock; concurrent
+writers wait within their timeout. Older runtimes may not support schema 3;
+switching runtime back does not downgrade the database.
 
-`schema.sql` contains the shared version 1 schema; `graph_schema.sql` contains
-the additive extension. `init` and `migrate` apply the extension in one
-transaction. Do not run these SQL files manually over a live database.
+`schema.sql` contains the shared core; `graph_schema.sql` contains the graph
+extension for new stores. Use the CLI migration for existing stores, never run
+these SQL files manually over them. The map's JSON wire format remains schema 2;
+that version is independent of SQLite's `user_version`.
 
 <a id="сущности"></a>
 ## Entities
@@ -70,7 +75,7 @@ richi entity get pr:example-42
 ```
 
 Required fields are `id`, `kind`, `title`, `summary`. Allowed kinds:
-`pull_request`, `metric`, `component`, `concept`, `document`, `jira`. Other fields
+`pull_request`, `metric`, `component`, `concept`, `tool`, `document`, `jira`. Other fields
 are `sources`, `knowledge_state` (default `hypothesis`), `verified_at`, `tags`,
 `aliases`, `expected_updated_at`.
 
@@ -78,6 +83,9 @@ Sources use the same format as entries: an array of objects with required
 `reference` and optional `label`, `type`, `observed_at`. Every new `confirmed`
 entity requires at least one source. This checks that a reference exists;
 it does not automatically verify claims.
+
+Tool cards and their scenarios use the same fields, sources and history; their
+authoring and canonical usage links are in [TOOLS.md](TOOLS.md).
 
 <a id="рёбра"></a>
 ## Edges

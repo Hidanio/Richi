@@ -52,10 +52,27 @@ is replaced by another file with the same version number, the result is
 version. Background checks without automatic installation report these reasons
 as well and do not suggest an installation command for a blocked release.
 
-Updating does not migrate a database. Protocol 1 requires compatibility with
-schemas 1 and 2 and map schema 2. Changing this contract requires a separate
-update mechanism with backups and data verification. An incompatible updater
-protocol is rejected before installation.
+Updating does not migrate a database. Protocol 1 accepts declared database
+support for schemas 1/2 or 1/2/3 and keeps map wire schema 2. The current runtime
+supports all three database schemas; tool cards require an explicit migration
+to schema 3. Runtime rollback does not downgrade a migrated database, and older
+runtimes may not read it. Preserve the pre-migration backup and use a compatible
+runtime for schema 3. An incompatible updater protocol is rejected before
+installation. See [graph migration](../skills/project-memory/references/GRAPH.md).
+
+Before adopting a schema-3-capable release from an older installation, reinstall
+the fixed package, launcher and stable bootstrap using the
+[installation procedure](INSTALLATION.md). The older protocol-1 manifest check
+accepts only `[1, 2]` and cannot perform this transition through automatic update.
+
+The updated manager records verified database-schema support per installed
+generation. Activation and rollback refuse to remove supported schemas, including
+a rollback from support for 1/2/3 to 1/2. This conservative check does not open
+workspace databases and applies even when no database has been migrated. The
+stable bootstrap checks before handing rollback to the previous manager, using
+recorded metadata even if the current package is damaged. Rollback between
+generations with compatible schema support remains available. A refusal reports
+that package rollback does not roll back databases; select a compatible release.
 
 <a id="сколько-версий-хранится"></a>
 ## Version retention

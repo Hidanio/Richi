@@ -225,6 +225,53 @@ class InstallationTests(unittest.TestCase):
         again = installation.rollback()
         self.assertEqual(again["current"], first["current"])
 
+    def test_schema_support_cannot_shrink_on_update_or_rollback(self):
+        candidate = self.release("0.2.0")
+        candidate["manifest"]["database_schemas"] = [1, 2, 3]
+        installed = installation.apply_release(candidate)
+        self.assertEqual(installed["current"]["database_schemas"], [1, 2, 3])
+        before = (self.root / "state.json").read_bytes()
+        with patch("sqlite3.connect", side_effect=AssertionError("Do not inspect knowledge stores")), \
+                patch("richi_launcher.auto_update.pause_for_rollback") as pause:
+            with self.assertRaisesRegex(bootstrap.InstallationError, "drops database schema support for 3"):
+                bootstrap.select(self.ctx, previous=True)
+            with self.assertRaisesRegex(ConfigError, "drops database schema support for 3"):
+                installation.rollback()
+            pause.assert_not_called()
+            with patch.object(installation, "_stage") as stage:
+                with self.assertRaisesRegex(ConfigError, "drops database schema support for 3"):
+                    installation.apply_release(self.release("0.3.0"))
+                stage.assert_not_called()
+        self.assertEqual((self.root / "state.json").read_bytes(), before)
+
+    def test_same_schema_rollback_recovers_corrupt_current_using_recorded_support(self):
+        for version in ("0.2.0", "0.3.0"):
+            candidate = self.release(version)
+            candidate["manifest"]["database_schemas"] = [1, 2, 3]
+            installed = installation.apply_release(candidate)
+        current = Path(installed["current"]["site"])
+        (current / "richi" / "memory.py").write_text("this module cannot be parsed or imported !!!")
+        (current / "richi_launcher" / "cli.py").write_text("raise RuntimeError('broken')")
+        record, generation, descriptor = bootstrap.select(self.ctx, previous=True)
+        try:
+            self.assertEqual(record["version"], "0.2.0")
+        finally:
+            os.close(descriptor)
+        with patch.object(installation, "_validate_layout"), \
+                patch("sqlite3.connect", side_effect=AssertionError("Do not inspect knowledge stores")):
+            result = installation.rollback()
+        self.assertEqual(result["current"]["generation"], generation)
+
+    def test_legacy_generation_capabilities_are_read_without_imports(self):
+        record = {"site": str(self.site)}
+        self.assertEqual(bootstrap.generation_schemas(record), [1, 2])
+        module = self.site / "richi" / "memory.py"
+        module.write_text("VERSION = 3\nraise RuntimeError('must not import')\n")
+        self.assertEqual(bootstrap.generation_schemas(record), [1, 2, 3])
+        module.write_text("broken legacy source !!!")
+        self.assertEqual(bootstrap.generation_schemas(record), [1, 2])
+        self.assertEqual(bootstrap.generation_schemas(dict(record, database_schemas=[1, 2, 3])), [1, 2, 3])
+
     def test_verified_same_version_cannot_be_replaced_by_different_wheel(self):
         first = self.apply("0.2.0")
         before = (self.root / "state.json").read_bytes()

@@ -112,6 +112,7 @@ richi status --projects --limit 50
 | Создать сущности и связи | [Граф](../skills/project-memory/references/GRAPH.ru.md) |
 | Прочитать соседей известной записи | [Соседи и границы выдачи](../skills/project-memory/references/NEIGHBORS.ru.md) |
 | Описать термины с разными значениями и версиями | [Энциклопедия](../skills/project-memory/references/ENCYCLOPEDIA.ru.md) |
+| Найти инструменты, настройки и задачи с их применением | [Инструменты](../skills/project-memory/references/TOOLS.ru.md) |
 | Разобрать пропущенный известный результат | [Диагностика recall](../skills/project-memory/references/RECALL_DEBUG.ru.md) |
 | Проверить состояние workspace, кандидатов или группу источников | [Диагностика](../skills/project-memory/references/DIAGNOSTICS.ru.md) |
 | Оценить дубли и необходимость объединения без изменений | [Ограниченный аудит](../skills/project-memory/references/MEMORY_AUDIT.ru.md) |

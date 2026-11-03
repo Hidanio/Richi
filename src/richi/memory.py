@@ -16,7 +16,8 @@ from . import compact
 from . import output
 
 
-VERSION = 2
+VERSION = 3
+SUPPORTED_VERSIONS = {1, 2, VERSION}
 BASE = Path(__file__).resolve().parent
 KINDS = {"task", "decision", "fact", "note", "investigation", "experiment", "procedure"}
 STATES = {"planned", "in_progress", "implemented", "merged", "released", "blocked", "done"}
@@ -212,8 +213,8 @@ def connect(path, create=False, readonly=False):
 
 def backend(conn):
     version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if version not in {1, VERSION}:
-        raise MemoryError("Unsupported schema version {}; this CLI supports 1 and {}. No migration was attempted.".format(version, VERSION))
+    if version not in SUPPORTED_VERSIONS:
+        raise MemoryError("Unsupported schema version {}; this CLI supports 1, 2 and {}. No migration was attempted.".format(version, VERSION))
     row = conn.execute("SELECT value FROM metadata WHERE 1=1 AND key = 'search_backend'").fetchone()
     if row is None or row[0] not in {"fts5", "scan"}:
         raise MemoryError("Missing or invalid search_backend metadata")
@@ -223,8 +224,8 @@ def backend(conn):
 def initialize(conn, path):
     # Validate before changing even the journal mode of an existing database.
     version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if version == 1:
-        raise MemoryError("Existing schema 1 requires an explicit migrate command; make a backup first")
+    if version in {1, 2}:
+        raise MemoryError("Existing schema {} requires an explicit migrate command; make a backup first".format(version))
     if version not in {0, VERSION}:
         backend(conn)
     if version == 0 and conn.execute(
@@ -255,7 +256,7 @@ def initialize(conn, path):
             search_backend = "scan"
         conn.execute("RELEASE optional_fts")
         conn.execute("INSERT INTO metadata(key, value) VALUES ('search_backend', ?)", (search_backend,))
-        conn.execute("PRAGMA user_version = 2")
+        conn.execute("PRAGMA user_version = 3")
     return {"database": str(path), "schema_version": VERSION, "search_backend": search_backend, "status": "created"}
 
 
@@ -621,6 +622,9 @@ def run(args):
             if args.command == "query":
                 from . import query_tools
                 return query_tools.run(conn, args, sys.modules[__name__])
+            if args.command == "tools":
+                from . import tool_catalog
+                return tool_catalog.run(conn, args, sys.modules[__name__])
             if args.command == "search-index":
                 from . import search_index
                 return search_index.build(conn, sys.modules[__name__]) if building_index else search_index.status(conn)

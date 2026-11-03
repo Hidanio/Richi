@@ -25,6 +25,8 @@ COMMANDS = (
     ('punisher', 'analysis', 'read', 'Inspect stale, conflicting or oversized knowledge; report review candidates.', 'MEMORY_AUDIT.md'),
     ('graph neighbors', 'graph', 'read', 'Read explicit neighbors; compact/full views and bounded graph context.', 'NEIGHBORS.md'),
     ('graph export', 'graph', 'read', 'Export the explicit knowledge graph.', 'GRAPH.md'),
+    ('tools list', 'graph', 'read', 'Browse tools with their evidenced project applications and related tasks.', 'TOOLS.md'),
+    ('tools get', 'graph', 'read', 'Read one tool with scoped scenarios, projects and tasks.', 'TOOLS.md'),
     ('entity get', 'graph', 'read', 'Read an exact entity, optionally its revision history.', 'GRAPH.md'),
     ('edge get', 'graph', 'read', 'Read an exact edge and its provenance.', 'GRAPH.md'),
     ('sources show', 'git', 'read', 'Read recorded file content at its source revision without checkout.', 'GIT.md'),

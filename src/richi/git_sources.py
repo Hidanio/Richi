@@ -248,7 +248,7 @@ def _scan(conn, api, refs=None, repo_id=None):
     else:
         api.require_project(conn, repo_id)
         tables = [("entry", "entries", "title")]
-        if conn.execute("PRAGMA user_version").fetchone()[0] == 2:
+        if conn.execute("PRAGMA user_version").fetchone()[0] in (2, 3):
             tables += [("entity", "entities", "title"), ("edge", "graph_edges", "description")]
         for family, table, title in tables:
             if coverage["source_chars_scanned"] >= MAX_SCAN_SOURCE_CHARS:

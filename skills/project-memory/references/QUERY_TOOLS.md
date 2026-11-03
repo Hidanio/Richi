@@ -27,7 +27,7 @@ with the project and state selectors. Default family is `entry`; use
 `--family entity` or `--family all`. Entities have NULL work_state and jira_key.
 Default knowledge state is confirmed; include hypotheses/superseded deliberately
 with their separate flags. A filter cannot override these state gates. Schema-1
-stores support entries; all uses available families, entity requires schema 2.
+stores support entries; all uses available families, entity requires schema 2 or 3.
 Every response states its actual scope.
 
 `facets --by FIELD` returns parallel `columns` and `rows`, grouped by one to three

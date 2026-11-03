@@ -36,6 +36,12 @@
 .scope-list{font-size:12px;color:var(--accent);margin:4px 0 12px;overflow-wrap:anywhere}
 @media(max-width:760px){.mode-tabs{padding:8px 12px 0}.mode-tab{padding:9px 12px}.encyclopedia{max-height:650px;min-height:450px;padding:20px 16px 30px}.encyclopedia-heading{display:block}.encyclopedia-count{margin-top:8px}.encyclopedia h2{font-size:20px}}
 
+.main.tools-mode{grid-template-columns:minmax(0,1fr)}.main.tools-mode>.sidebar{display:none}.main.tools-mode.tools-reading{grid-template-columns:minmax(0,1fr) 370px}.main.tools-mode.tools-reading>.sidebar{display:block}
+.tools{min-width:0;overflow:auto;background:var(--panel-soft);padding:30px 32px 42px;scroll-behavior:smooth}.tools[hidden]{display:none}.tools-inner{max-width:1420px;margin:auto}.tools-heading{display:flex;gap:24px;align-items:flex-start;justify-content:space-between;margin-bottom:24px}.tools-eyebrow{font-size:10px;font-weight:650;letter-spacing:1.3px;text-transform:uppercase;color:var(--accent);margin-bottom:8px}.tools h2{font-size:29px;line-height:1.2;letter-spacing:-.8px;overflow-wrap:anywhere}.tools-lead{font-size:13px;color:var(--muted);line-height:1.7;margin-top:10px;max-width:650px}.tools-total{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 18px;min-width:96px;text-align:center;flex:none}.tools-total strong{display:block;font-size:25px;font-weight:650;line-height:1.25;font-variant-numeric:tabular-nums}.tools-total span{font-size:11px;color:var(--muted)}
+.tools-warning{border:1px solid var(--entity);background:var(--panel);border-radius:10px;padding:11px 14px;font-size:12px;margin-bottom:18px;line-height:1.6}.tools-warning[hidden]{display:none}.tools-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,310px),1fr));gap:16px}.tool-card{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:21px;display:flex;flex-direction:column;min-width:0;box-shadow:0 3px 14px #21365a04;transition:border-color .16s,box-shadow .16s,transform .16s}.tool-card:hover{border-color:var(--accent);box-shadow:0 7px 24px #21365a0c;transform:translateY(-2px)}.tool-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:15px}.tool-mark{width:42px;height:42px;border:1px solid var(--line);border-radius:12px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);flex:none}.tool-mark svg{width:22px;height:22px}.tool-card-open{display:flex;align-items:center;gap:12px;justify-content:space-between;padding:0;border:0;border-radius:4px;background:transparent;text-align:left;font-weight:650;font-size:18px;letter-spacing:-.3px;line-height:1.35;overflow-wrap:anywhere;width:100%}.tool-card-open:hover{background:transparent;color:var(--accent)}.tool-card-open .tool-arrow{font-size:21px;color:var(--muted);font-weight:400;flex:none}.tool-card-summary{font-size:12px;color:var(--muted);line-height:1.7;margin:10px 0 16px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}.tool-card .tag-list{margin:0 0 17px}.tool-card-bottom{margin-top:auto;padding-top:15px;border-top:1px solid var(--line)}.tool-card-label{font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:9px}.tool-project-chips{display:flex;flex-wrap:wrap;gap:6px}.tool-project-chip{font-size:11px;padding:5px 8px;background:var(--panel-soft);border-radius:7px;text-align:left;overflow-wrap:anywhere;max-width:100%}.tool-card-footnote{font-size:10px;color:var(--muted);margin-top:13px}.tool-muted{font-size:12px;color:var(--muted);line-height:1.65}.tools-empty{padding:46px 28px;max-width:630px;margin:24px auto;text-align:center;border:1px dashed var(--line);border-radius:16px;background:var(--panel)}.tools-empty .tool-mark{margin:0 auto 18px;width:50px;height:50px}.tools-empty h3{font-size:18px;letter-spacing:-.3px;margin-bottom:9px}.tools-empty p{font-size:13px;color:var(--muted);line-height:1.7}.tools-empty button{margin-top:18px}
+.tools-breadcrumbs{display:flex;align-items:center;flex-wrap:wrap;gap:7px;color:var(--muted);font-size:12px;margin-bottom:25px;min-height:28px}.tools-breadcrumbs button{border:0;background:transparent;padding:4px 0;color:var(--accent);font-size:12px;text-align:left;overflow-wrap:anywhere}.tools-breadcrumbs button:hover{text-decoration:underline}.tools-breadcrumbs span{overflow-wrap:anywhere}.tools-title-row{display:flex;align-items:center;gap:15px}.tools-title-row>.tool-mark{width:52px;height:52px;border-radius:14px}.tools-title-row>.tool-mark svg{width:26px;height:26px}.tools-title-main{min-width:0}.tools-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--muted);margin-top:12px}.tools-subheading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:28px 0 12px}.tools-subheading h3{font-size:16px;letter-spacing:-.25px}.tools-subheading span{font-size:11px;color:var(--muted)}.tools-overview{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(260px,1fr);gap:22px;align-items:start}.tools-panel{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:22px;min-width:0}.tools-panel h3{font-size:14px;margin-bottom:12px}.tools-summary{font-size:13px;line-height:1.8;overflow-wrap:anywhere;white-space:pre-wrap;color:var(--ink)}.tools-summary p+p{margin-top:15px}.tools-fold{margin-top:18px}.tools-fold>summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--accent);padding:10px 0}.tools-fold .source{font-size:12px}.tools-fold h3{font-size:11px;color:var(--muted);margin-top:12px}.tools-facts{display:grid;gap:16px}.tools-fact-label{font-size:10px;text-transform:uppercase;letter-spacing:.65px;color:var(--muted);margin-bottom:5px}.tools-fact-value{font-size:12px;line-height:1.6;overflow-wrap:anywhere}.tool-project-list{display:grid;gap:10px}.tool-project-row{display:flex;gap:12px;align-items:center;text-align:left;border-radius:11px;padding:15px;background:var(--panel);width:100%;min-width:0}.tool-project-icon{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none;background:var(--accent-soft);color:var(--accent);font-size:17px}.tool-project-info{flex:1;min-width:0}.tool-project-name{display:block;font-size:13px;font-weight:600;overflow-wrap:anywhere}.tool-project-meta{display:block;font-size:11px;color:var(--muted);margin-top:4px}.tool-project-row>.tool-arrow{font-size:18px;color:var(--muted)}.tools-task-list{display:grid;gap:12px}.tools-task{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:18px 20px;min-width:0}.tools-task-header{display:flex;align-items:flex-start;gap:14px;justify-content:space-between}.tools-task-title{border:0;padding:0;background:transparent;font-size:14px;font-weight:600;text-align:left;line-height:1.5;color:var(--ink);overflow-wrap:anywhere;min-width:0}.tools-task-title:hover{color:var(--accent);background:transparent}.tools-task-header>.badges{flex:none;justify-content:flex-end;margin:2px 0 0;max-width:45%}.tools-task-summary{color:var(--muted);font-size:12px;line-height:1.7;margin-top:9px;overflow-wrap:anywhere}.tools-task-meta{color:var(--muted);font-size:10px;display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}.tools-task-context{border-top:1px solid var(--line);margin-top:13px;padding-top:11px}.tools-task-context-label{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:7px}.tools-record-link{display:block;border:0;background:transparent;padding:5px 0;color:var(--accent);font-size:12px;text-align:left;line-height:1.5;overflow-wrap:anywhere}.tools-record-link:hover{background:transparent;text-decoration:underline}.tools-record-kind{color:var(--muted);font-size:10px;margin-right:7px}.tools-inline-note{font-size:12px;color:var(--muted);padding:16px 18px;border:1px dashed var(--line);border-radius:11px;line-height:1.7}.tools-project-description{font-size:13px;color:var(--muted);line-height:1.7;margin-top:12px;max-width:780px;white-space:pre-wrap}.tools-back{font-size:12px}.tool-detail-heading{outline:none}.tool-detail-heading:focus-visible{outline:2px solid var(--accent);outline-offset:5px;border-radius:4px}
+@media(min-width:1500px){.tools-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:1100px){.tools-overview{grid-template-columns:minmax(0,1fr)}.main.tools-mode.tools-reading{grid-template-columns:minmax(0,1fr) 320px}.tools{padding:26px 23px 35px}.tools-grid{gap:12px}}@media(max-width:760px){.tools{padding:22px 16px 30px;max-height:none;min-height:450px}.main.tools-mode{display:block;height:auto;min-height:450px}.main.tools-mode.tools-reading>.sidebar{border-left:0;border-top:1px solid var(--line);max-height:none}.tools-heading{gap:14px;margin-bottom:20px}.tools h2{font-size:25px}.tools-total{padding:10px 12px;min-width:74px}.tools-total strong{font-size:22px}.tools-lead{font-size:12px}.tool-card{padding:18px}.tools-panel{padding:18px}.tools-title-row{gap:12px}.tools-title-row>.tool-mark{width:44px;height:44px}.tools-task{padding:16px}.tools-task-header{display:block}.tools-task-header>.badges{justify-content:flex-start;max-width:100%;margin-top:8px}.tools-breadcrumbs{margin-bottom:18px}.tools-grid{grid-template-columns:minmax(0,1fr)}.tools-overview{gap:16px}.tools-task-title{font-size:13px}.mode-tabs{overflow-x:auto}.mode-tab{white-space:nowrap}}
+
 .source-git{margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--panel-soft)}
 .source-git code{font-size:10px;overflow-wrap:anywhere}.source-git-label{font-size:10px;color:var(--muted);margin:3px 0 7px}
 .source-git-actions{display:flex;gap:5px;flex-wrap:wrap}.source-git-actions .small{padding:5px 7px;font-size:11px}
@@ -66,6 +72,7 @@
   <div class="mode-tabs" role="tablist" aria-label="Представление знаний">
     <button class="mode-tab" id="map-tab" type="button" role="tab" aria-selected="true" aria-controls="canvas">Карта</button>
     <button class="mode-tab" id="encyclopedia-tab" type="button" role="tab" aria-selected="false" aria-controls="encyclopedia" tabindex="-1">Энциклопедия</button>
+    <button class="mode-tab" id="tools-tab" type="button" role="tab" aria-selected="false" aria-controls="tool-catalog" tabindex="-1">Инструменты</button>
   </div>
   <div class="toolbar">
     <div class="field search-wrap"><label class="field-label" id="search-label" for="search">Найти в памяти</label><div class="input-wrap"><svg width="17" height="17" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 12L17 17" stroke="currentColor" stroke-width="1.6"/></svg><input id="search" type="search" placeholder="Проект, задача, решение, тег…" autocomplete="off" aria-controls="search-results" aria-expanded="false"></div><div class="results" id="search-results" hidden aria-label="Результаты поиска"></div></div>
@@ -89,6 +96,7 @@
       <nav class="alphabet" id="alphabet" aria-label="Алфавит понятий"></nav>
       <div id="concepts"></div>
     </section>
+    <section class="tools" id="tool-catalog" role="tabpanel" aria-labelledby="tools-tab" hidden><div class="tools-inner" id="tools-content"></div></section>
     <aside class="sidebar" id="sidebar" aria-label="Карточка выбранного объекта"><div class="sidebar-heading"><span id="detail-label">Как читать карту</span><button class="icon" id="close-details" type="button" title="Свернуть карточку" aria-label="Свернуть карточку">×</button></div><div class="detail" id="detail"></div></aside>
   </div>
   <div class="notice"><span id="data-note">Локальная память · только чтение</span><span id="view-hint">Перетаскивайте карту и узлы · колесо — масштаб</span></div>
@@ -116,12 +124,12 @@
 (() => {
   const $ = id => document.getElementById(id);
   const NS = 'http://www.w3.org/2000/svg';
-  const kindNames = {project:'Проекты',task:'Задачи',decision:'Решения',fact:'Факты',note:'Заметки',investigation:'Исследования',experiment:'Эксперименты',procedure:'Процедуры',service:'Сервисы',metric:'Метрики',concept:'Понятия',source:'Источники',document:'Документы',api:'API',dataset:'Наборы данных',table:'Таблицы',person:'Люди',team:'Команды',artifact:'Артефакты',system:'Системы',entity:'Сущности',repository:'Репозитории',component:'Компоненты',jira:'Jira'};
-  const singularNames = {project:'Проект',task:'Задача',decision:'Решение',fact:'Факт',note:'Заметка',investigation:'Исследование',experiment:'Эксперимент',procedure:'Процедура',service:'Сервис',metric:'Метрика',concept:'Понятие',source:'Источник',document:'Документ',api:'API',dataset:'Набор данных',table:'Таблица',person:'Человек',team:'Команда',artifact:'Артефакт',system:'Система',entity:'Сущность',repository:'Репозиторий',component:'Компонент',jira:'Jira'};
+  const kindNames = {project:'Проекты',task:'Задачи',decision:'Решения',fact:'Факты',note:'Заметки',investigation:'Исследования',experiment:'Эксперименты',procedure:'Процедуры',service:'Сервисы',metric:'Метрики',concept:'Понятия',source:'Источники',document:'Документы',api:'API',dataset:'Наборы данных',table:'Таблицы',person:'Люди',team:'Команды',artifact:'Артефакты',system:'Системы',entity:'Сущности',repository:'Репозитории',component:'Компоненты',tool:'Инструменты',jira:'Jira'};
+  const singularNames = {project:'Проект',task:'Задача',decision:'Решение',fact:'Факт',note:'Заметка',investigation:'Исследование',experiment:'Эксперимент',procedure:'Процедура',service:'Сервис',metric:'Метрика',concept:'Понятие',source:'Источник',document:'Документ',api:'API',dataset:'Набор данных',table:'Таблица',person:'Человек',team:'Команда',artifact:'Артефакт',system:'Система',entity:'Сущность',repository:'Репозиторий',component:'Компонент',tool:'Инструмент',jira:'Jira'};
   const stateNames = {confirmed:'Подтверждено',hypothesis:'Гипотеза',superseded:'Устарело'};
   const workNames = {planned:'Запланировано',in_progress:'В работе',implemented:'Реализовано',merged:'Влито',released:'Выпущено',blocked:'Заблокировано',done:'Завершено'};
-  const relationNames = {depends_on:'зависит от',related_to:'связано с',implements:'реализует',explains:'объясняет',supersedes:'заменяет',variant_of:'вариант понятия',used_in:'используется в',contradicts:'противоречит',uses:'использует',produces:'производит',consumes:'потребляет',part_of:'часть',belongs_to:'относится к',belongs_to_project:'относится к проекту',documented_by:'описано в',supported_by:'подтверждается',supports:'подтверждает',affects:'влияет на',references:'ссылается на',has_entry:'содержит запись',associated_with:'связано с',entry_project:'относится к проекту'};
-  const state = {mode:'map',mapQuery:'',conceptQuery:'',conceptProject:'',truncated:false,lastError:'',nodes:[],edges:[],nodeMap:new Map(),edgeMap:new Map(),adjacency:new Map(),kinds:new Set(),disabledKinds:new Set(),focus:null,selection:null,depth:1,positions:new Map(),visibleNodes:[],visibleEdges:[],camera:{x:0,y:0,k:1},loaded:false,loading:false,request:0,suppressClick:false,sidebarOpen:true};
+  const relationNames = {depends_on:'зависит от',related_to:'связано с',implements:'реализует',explains:'объясняет',supersedes:'заменяет',variant_of:'вариант понятия',used_in:'используется в',contradicts:'противоречит',uses:'использует',uses_tool:'применяет инструмент',produces:'производит',consumes:'потребляет',part_of:'часть',belongs_to:'относится к',belongs_to_project:'относится к проекту',documented_by:'описано в',supported_by:'подтверждается',supports:'подтверждает',affects:'влияет на',references:'ссылается на',has_entry:'содержит запись',associated_with:'связано с',entry_project:'относится к проекту'};
+  const state = {mode:'map',mapQuery:'',conceptQuery:'',conceptProject:'',toolQuery:'',toolFilter:'',toolId:'',toolProject:'',toolRecord:null,toolsData:null,toolsLoading:false,toolsError:'',toolsRequest:0,toolsFlags:'',toolsRequestedFlags:'',toolDetails:new Map(),toolDetailLoading:false,toolDetailError:'',toolDetailRequest:0,truncated:false,lastError:'',nodes:[],edges:[],nodeMap:new Map(),edgeMap:new Map(),adjacency:new Map(),kinds:new Set(),disabledKinds:new Set(),focus:null,selection:null,depth:1,positions:new Map(),visibleNodes:[],visibleEdges:[],camera:{x:0,y:0,k:1},loaded:false,loading:false,request:0,suppressClick:false,sidebarOpen:true};
   const svg = $('graph');
   const make = (tag,cls,text) => {const el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=String(text);return el;};
   const makeSvg = (tag,attrs={}) => {const el=document.createElementNS(NS,tag);for(const [k,v]of Object.entries(attrs))el.setAttribute(k,String(v));return el;};
@@ -294,7 +302,7 @@
   $('git-controls').addEventListener('submit',event=>{event.preventDefault();requestGit();});
   $('git-worktree').addEventListener('change',()=>{$('git-target').disabled=$('git-worktree').checked;});
 
-  function openSidebar(){state.sidebarOpen=true;$('main').classList.remove('sidebar-closed');$('open-details').hidden=true;}
+  function openSidebar(){state.sidebarOpen=true;$('main').classList.remove('sidebar-closed');$('main').classList.toggle('tools-reading',state.mode==='tools');$('open-details').hidden=true;}
   function showIntro(){
     if(state.mode==='encyclopedia'){
       $('detail-label').textContent='Как читать определения';const d=$('detail');d.replaceChildren();
@@ -307,7 +315,7 @@
   }
   function renderNodeDetail(node){
     openSidebar();$('detail-label').textContent=kindFor(node)==='concept'?'Определение понятия':'Карточка узла';const d=$('detail');d.replaceChildren();const badges=make('div','badges');addBadge(badges,kindLabel(kindFor(node),true));if(node.knowledge_state)addBadge(badges,stateNames[node.knowledge_state] || node.knowledge_state,node.knowledge_state);if(node.work_state)addBadge(badges,workNames[node.work_state] || node.work_state);d.append(badges,make('h2','',titleFor(node)));
-    const actions=make('div','detail-actions');const focus=make('button','small primary',state.mode==='encyclopedia'?'Открыть на карте':state.focus===node.id?'Фокус на этом узле':'Показать связи узла');focus.type='button';focus.disabled=state.mode==='map'&&state.focus===node.id;focus.addEventListener('click',()=>focusNode(node.id));actions.append(focus);d.append(actions);
+    const actions=make('div','detail-actions');const focus=make('button','small primary',state.mode==='encyclopedia'?'Открыть на карте':state.focus===node.id?'Фокус на этом узле':'Показать связи узла');focus.type='button';focus.disabled=state.mode==='map'&&state.focus===node.id;focus.addEventListener('click',()=>focusNode(node.id));actions.append(focus);if(kindFor(node)==='tool')actions.append(toolButton('Открыть инструмент',()=>{setMode('tools');openTool(node.id.replace(/^entity:/,''));},'small'));d.append(actions);
     if(kindFor(node)==='concept'){d.append(make('div','scope-list',scopeLabel(node)));}
     if(node.summary)d.append(make('div','summary',node.summary));else d.append(make('p','','Описание пока не добавлено.'));
     addMeta(d,'Идентификатор',node.id);if(node.verified_at)addMeta(d,'Последняя проверка',dateText(node.verified_at));
@@ -335,7 +343,14 @@
     const root=$('kind-filters');root.replaceChildren(make('span','filters-label','Типы узлов'));const kinds=[...state.kinds].sort((a,b)=>a==='project'?-1:b==='project'?1:kindLabel(a).localeCompare(kindLabel(b),'ru'));
     for(const kind of kinds){const members=state.nodes.filter(n=>kindFor(n)===kind);const b=make('button','chip');b.type='button';b.dataset.kind=kind;b.setAttribute('aria-pressed',String(!state.disabledKinds.has(kind)));const dot=make('i','swatch');dot.style.background=colorFor(members[0]);b.append(dot,document.createTextNode(kindLabel(kind)),make('span','',members.length));b.addEventListener('click',()=>{if(state.disabledKinds.has(kind))state.disabledKinds.delete(kind);else state.disabledKinds.add(kind);renderFilters();renderGraph(true);});root.append(b);}
   }
-  function renderProjectOptions(){const select=$('project-filter');select.replaceChildren(new Option('Все проекты',''));state.nodes.filter(n=>groupFor(n)==='project').sort(sortNodes).forEach(n=>select.add(new Option(titleFor(n),n.id)));select.value=state.mode==='encyclopedia'?state.conceptProject:state.focus && groupFor(state.nodeMap.get(state.focus))==='project'?state.focus:'';}
+  function renderProjectOptions(){
+    const select=$('project-filter');select.replaceChildren(new Option('Все проекты',''));
+    if(state.mode==='tools'){
+      const projects=new Map();for(const tool of list(state.toolsData?.tools))for(const project of toolProjects(tool))projects.set(project.ref||'project:'+project.id,project);
+      [...projects.entries()].sort((a,b)=>String(a[1].name).localeCompare(String(b[1].name),'ru')).forEach(([ref,project])=>select.add(new Option(project.name,ref)));if(state.toolFilter&&!projects.has(state.toolFilter))state.toolFilter='';select.value=state.toolFilter;return;
+    }
+    state.nodes.filter(n=>groupFor(n)==='project').sort(sortNodes).forEach(n=>select.add(new Option(titleFor(n),n.id)));select.value=state.mode==='encyclopedia'?state.conceptProject:state.focus&&groupFor(state.nodeMap.get(state.focus))==='project'?state.focus:'';
+  }
   function nodeAllowed(node){return !state.disabledKinds.has(kindFor(node));}
   function computeVisible(){
     const distance=new Map();
@@ -388,6 +403,7 @@
   function zoom(factor,x,y){const rect=svg.getBoundingClientRect();const px=x ?? rect.width/2,py=y ?? rect.height/2;const old=state.camera,k=Math.min(4,Math.max(.06,old.k*factor));state.camera={k,x:px-(px-old.x)*k/old.k,y:py-(py-old.y)*k/old.k};applyCamera();}
   function hideSearch(){$('search-results').hidden=true;$('search').setAttribute('aria-expanded','false');}
   function runSearch(){
+    if(state.mode==='tools'){state.toolQuery=$('search').value;state.toolId='';state.toolProject='';closeToolRecord();writeToolsLocation();hideSearch();renderTools();return;}
     if(state.mode==='encyclopedia'){state.conceptQuery=$('search').value;hideSearch();renderEncyclopedia();return;}
     state.mapQuery=$('search').value;
     const query=$('search').value.trim().toLocaleLowerCase('ru');const results=$('search-results');results.replaceChildren();if(!query){hideSearch();return;}
@@ -432,16 +448,156 @@
       for(const node of nodes){const card=make('button','concept-card');card.type='button';card.dataset.concept=node.id;card.setAttribute('aria-pressed',String(state.selection?.type==='node'&&state.selection.id===node.id));card.append(make('span','concept-title',titleFor(node)),make('span','concept-scope',scopeLabel(node)),make('span','concept-excerpt',definitionExcerpt(node)));if(list(node.aliases).length)card.append(make('span','concept-aliases','Также: '+list(node.aliases).join(' · ')));if(node.knowledge_state&&node.knowledge_state!=='confirmed')card.append(make('span','concept-status',stateNames[node.knowledge_state] || node.knowledge_state));card.addEventListener('click',()=>selectNode(node.id));cards.append(card);}group.append(cards);root.append(group);
     }
   }
-  function setMode(mode){
-    if(mode===state.mode)return;state[state.mode==='map'?'mapQuery':'conceptQuery']=$('search').value;state.mode=mode;const encyclopedia=mode==='encyclopedia';hideSearch();
-    $('canvas').hidden=encyclopedia;$('encyclopedia').hidden=!encyclopedia;$('kind-filters').hidden=encyclopedia;
-    for(const name of ['map','encyclopedia']){const tab=$(name+'-tab');tab.setAttribute('aria-selected',String(name===mode));tab.tabIndex=name===mode?0:-1;}
-    $('search-label').textContent=encyclopedia?'Найти понятие':'Найти в памяти';$('project-label').textContent=encyclopedia?'Область применения':'Вокруг проекта';
-    $('search').placeholder=encyclopedia?'Термин, синоним, определение…':'Проект, задача, решение, тег…';$('search').value=state[encyclopedia?'conceptQuery':'mapQuery'];
-    $('view-hint').textContent=encyclopedia?'Выберите определение, чтобы открыть полную карточку':'Перетаскивайте карту и узлы · колесо — масштаб';renderProjectOptions();
-    if(encyclopedia){renderEncyclopedia();if(state.selection?.type==='node'&&kindFor(state.nodeMap.get(state.selection.id))==='concept')renderNodeDetail(state.nodeMap.get(state.selection.id));else{state.selection=null;showIntro();}}
-    else{renderGraph(true);if(state.selection?.type==='node')renderNodeDetail(state.nodeMap.get(state.selection.id));else if(state.selection?.type==='edge')renderEdgeDetail(state.edgeMap.get(state.selection.id));else showIntro();}
-    announce(encyclopedia?'Энциклопедия понятий':'Карта знаний');
+  function toolMark(){
+    const mark=make('span','tool-mark');mark.setAttribute('aria-hidden','true');
+    const icon=makeSvg('svg',{viewBox:'0 0 24 24',fill:'none'});icon.append(makeSvg('path',{d:'M8 6V4h8v2M4 7h16v13H4V7Zm0 5h16M10 11v3h4v-3',stroke:'currentColor','stroke-width':'1.4','stroke-linejoin':'round'}));mark.append(icon);return mark;
+  }
+  const toolRef=record=>record.ref||'entry:'+record.id;
+  const toolRecordNode=record=>({...record,id:toolRef(record)});
+  function toolExcerpt(record,length=200){return cut(String(record.summary||'').trim().split(/\n\s*\n/)[0].replace(/^(?:Определение|Назначение|Definition)\s*[:：]\s*/i,'').replace(/\s+/g,' '),length);}
+  function toolButton(label,handler,cls=''){const button=make('button',cls,label);button.type='button';button.addEventListener('click',handler);return button;}
+  function closeToolRecord(){state.toolRecord=null;$('main').classList.remove('tools-reading');}
+  function writeToolsLocation(){
+    const params=new URLSearchParams();if(state.toolId)params.set('tool',state.toolId);if(state.toolProject)params.set('project',state.toolProject);
+    const hash='#tools'+(params.size?'?'+params:'');if(location.hash!==hash)history.pushState(null,'',hash);
+  }
+  function openTool(id,project='',focus=true){
+    state.toolId=id;state.toolProject=project;closeToolRecord();writeToolsLocation();renderTools();ensureToolDetail();$('tool-catalog').scrollTop=0;
+    if(focus){const heading=$('tools-content').querySelector('.tool-detail-heading');state.toolFocusPending=!heading;if(heading)heading.focus({preventScroll:true});}
+  }
+  function toolSection(parent,title,amount=null){const row=make('div','tools-subheading');row.append(make('h3','',title));if(amount!==null)row.append(make('span','',String(amount)));parent.append(row);}
+  function toolWarning(parent,text){const box=make('div','tools-warning',text);box.setAttribute('role','status');parent.append(box);}
+  function toolEmpty(parent,title,description,retry=false){const box=make('div','tools-empty');box.append(toolMark(),make('h3','',title),make('p','',description));if(retry)box.append(toolButton('Повторить загрузку',()=>loadTools(),'primary'));parent.append(box);}
+  function toolBreadcrumbs(parent,tool=null,project=null){
+    const nav=make('nav','tools-breadcrumbs');nav.setAttribute('aria-label','Навигация по инструментам');nav.append(toolButton('Инструменты',()=>openTool('')));
+    if(tool){nav.append(make('span','','/'));if(project)nav.append(toolButton(tool.title,()=>openTool(tool.id)));else{const name=make('span','',tool.title);name.setAttribute('aria-current','page');nav.append(name);}}
+    if(project){const name=make('span','',project.name);name.setAttribute('aria-current','page');nav.append(make('span','','/'),name);}parent.append(nav);
+  }
+  function toolStatus(parent,record){if(record.knowledge_state&&record.knowledge_state!=='confirmed')addBadge(parent,stateNames[record.knowledge_state]||record.knowledge_state,record.knowledge_state);}
+  function toolProjects(tool){return list(tool.projects).filter(project=>project&&typeof project.id==='string');}
+  function toolMatches(tool,query){
+    const fields=[tool.title,tool.summary,...list(tool.aliases),...list(tool.tags),...toolProjects(tool).map(project=>project.name)].map(normalized);
+    return query.split(/\s+/).filter(Boolean).every(word=>fields.some(field=>field.includes(word)));
+  }
+  function renderToolCard(tool){
+    const card=make('article','tool-card');const top=make('div','tool-card-top');top.append(toolMark());toolStatus(top,tool);card.append(top);
+    const open=toolButton('',()=>openTool(tool.id),'tool-card-open');open.dataset.tool=tool.id;open.append(make('span','',tool.title),make('span','tool-arrow','↗'));card.append(open,make('p','tool-card-summary',toolExcerpt(tool,340)||'Описание пока не добавлено.'));
+    if(list(tool.tags).length){const tags=make('div','tag-list');list(tool.tags).slice(0,3).forEach(tag=>tags.append(make('span','tag',tag)));card.append(tags);}
+    const bottom=make('div','tool-card-bottom');bottom.append(make('div','tool-card-label','Где применяли'));const projects=toolProjects(tool),chips=make('div','tool-project-chips');
+    for(const project of projects.slice(0,3)){const button=toolButton(project.name,()=>openTool(tool.id,project.id),'tool-project-chip');button.title='Задачи и применение · '+project.name;chips.append(button);}
+    if(projects.length>3)chips.append(toolButton('Ещё '+(projects.length-3),()=>openTool(tool.id),'tool-project-chip'));
+    if(!projects.length)chips.append(make('span','tool-muted','Проекты пока не указаны'));bottom.append(chips);
+    const stats=[];if(tool.task_count)stats.push('Задачи: '+tool.task_count);if(tool.record_count)stats.push('Применения: '+tool.record_count);if(tool.truncated)stats.push('Показана часть связей');else if(tool.verified_at)stats.push('Проверено '+dateText(tool.verified_at));if(stats.length)bottom.append(make('div','tool-card-footnote',stats.join(' · ')));card.append(bottom);return card;
+  }
+  function renderToolCatalog(root){
+    const all=list(state.toolsData?.tools),query=normalized(state.toolQuery),matches=all.filter(tool=>(!state.toolFilter||toolProjects(tool).some(project=>project.ref===state.toolFilter))&&toolMatches(tool,query));
+    const heading=make('div','tools-heading'),copy=make('div');copy.append(make('div','tools-eyebrow','Практика и опыт'),make('h2','tool-detail-heading','Инструменты'),make('p','tools-lead','Чем решали задачи, как настраивали и где применяли. Откройте инструмент, чтобы найти проекты и связанный опыт.'));copy.querySelector('h2').tabIndex=-1;
+    const count=make('div','tools-total');count.append(make('strong','',matches.length),make('span','',query||state.toolFilter?'найдено':'в каталоге'));heading.append(copy,count);root.append(heading);
+    if(state.toolsData?.truncated)toolWarning(root,'Показана часть каталога. Некоторые инструменты, проекты и задачи могут не попасть в этот список.');
+    if(!matches.length){toolEmpty(root,all.length?'Подходящих инструментов нет':'Здесь будет ваш инструментарий',all.length?'Попробуйте другое название, назначение или проект.':'Сохраняйте инструменты и связывайте их с задачами и сценариями. Здесь появятся карточки с проектами и опытом применения.');if(all.length){const reset=toolButton('Сбросить поиск и проект',()=>{state.toolQuery='';state.toolFilter='';$('search').value='';renderProjectOptions();renderTools();},'small');root.querySelector('.tools-empty').append(reset);}return;}
+    const cards=make('div','tools-grid');for(const tool of matches.sort((a,b)=>String(a.title).localeCompare(String(b.title),'ru')))cards.append(renderToolCard(tool));root.append(cards);
+  }
+  function renderToolFacts(tool){
+    const panel=make('div','tools-panel'),facts=make('div','tools-facts');panel.append(make('h3','','Об инструменте'));
+    for(const [label,value] of [['Другие названия',list(tool.aliases).join(' · ')],['Последняя проверка',tool.verified_at?dateText(tool.verified_at):'Пока не указана']]){if(!value)continue;const row=make('div');row.append(make('div','tools-fact-label',label),make('div','tools-fact-value',value));facts.append(row);}
+    if(list(tool.tags).length){const row=make('div');row.append(make('div','tools-fact-label','Темы'));const tags=make('div','tag-list');list(tool.tags).forEach(tag=>tags.append(make('span','tag',tag)));row.append(tags);facts.append(row);}panel.append(facts);
+    const sources=make('details','tools-fold');sources.append(make('summary','','Источники · '+list(tool.sources).length));addSources(sources,tool.sources,nodeSourceOwner({...tool,id:tool.ref||'entity:'+tool.id}));panel.append(sources);return panel;
+  }
+  function renderToolDescription(parent,tool){
+    const summary=String(tool.summary||'').trim(),paragraphs=summary.split(/\n\s*\n/).filter(Boolean),box=make('div','tools-summary');
+    if(!paragraphs.length)box.append(make('p','','Описание пока не добавлено.'));
+    for(const paragraph of paragraphs.slice(0,2))box.append(make('p','',paragraph));parent.append(box);
+    if(paragraphs.length>2){const more=make('details','tools-fold');more.append(make('summary','','Читать полное описание'));const rest=make('div','tools-summary');paragraphs.slice(2).forEach(paragraph=>rest.append(make('p','',paragraph)));more.append(rest);parent.append(more);}
+  }
+  function renderToolDetail(root,tool){
+    toolBreadcrumbs(root,tool);const heading=make('div','tools-heading'),titleRow=make('div','tools-title-row'),copy=make('div','tools-title-main');copy.append(make('div','tools-eyebrow','Инструмент'),make('h2','tool-detail-heading',tool.title));copy.querySelector('h2').tabIndex=-1;const meta=make('div','tools-meta');meta.append(make('span','','Проекты: '+toolProjects(tool).length),make('span','','Задачи: '+(tool.task_count||0)));toolStatus(meta,tool);copy.append(meta);titleRow.append(toolMark(),copy);heading.append(titleRow);root.append(heading);
+    if(tool.truncated||state.toolsData.truncated)toolWarning(root,'Часть связанного опыта не вошла в этот снимок. Список проектов, задач и применений может быть неполным.');
+    const overview=make('div','tools-overview'),left=make('div'),description=make('div','tools-panel');description.append(make('h3','','Назначение и использование'));renderToolDescription(description,tool);left.append(description);
+    toolSection(left,'Проекты',toolProjects(tool).length);const projects=make('div','tool-project-list');
+    for(const project of toolProjects(tool)){const row=toolButton('',()=>openTool(tool.id,project.id),'tool-project-row');row.dataset.toolProject=project.id;const info=make('span','tool-project-info');info.append(make('span','tool-project-name',project.name),make('span','tool-project-meta','Задачи: '+(project.task_count||0)+' · Применения: '+(project.record_count||0)+(project.truncated?' · часть данных':'')));row.append(make('span','tool-project-icon','▱'),info,make('span','tool-arrow','→'));projects.append(row);}
+    if(!projects.childElementCount)projects.append(make('p','tools-inline-note','Проекты применения пока не указаны. Они появятся после сохранения связи с проектом или записи об использовании инструмента.'));left.append(projects);overview.append(left,renderToolFacts(tool));root.append(overview);
+    const unscoped=list(tool.records).filter(record=>!list(record.project_ids).length);if(unscoped.length){toolSection(root,'Применения без проекта',unscoped.length);const records=make('div','tools-task-list');for(const record of unscoped)records.append(renderToolTask(record,[]));root.append(records);}
+  }
+  function openToolRecord(record){
+    state.toolRecord=record;openSidebar();$('detail-label').textContent=kindLabel(record.kind,true);const d=$('detail');d.replaceChildren();const badges=make('div','badges');addBadge(badges,kindLabel(record.kind,true));if(record.work_state)addBadge(badges,workNames[record.work_state]||record.work_state);toolStatus(badges,record);d.append(badges,make('h2','',record.title||record.id));
+    if(record.jira_key)d.append(make('div','scope-list',record.jira_key));d.append(make('div','summary',record.summary||'Описание пока не добавлено.'));if(record.verified_at)addMeta(d,'Последняя проверка',dateText(record.verified_at));addSources(d,record.sources,nodeSourceOwner(toolRecordNode(record)));
+    if(state.nodeMap.has(toolRef(record))){const actions=make('div','detail-actions');actions.append(toolButton('Открыть на карте',()=>focusNode(toolRef(record)),'small'));d.append(actions);}addMeta(d,'Идентификатор',record.id);$('sidebar').scrollTop=0;$('detail').querySelector('h2').tabIndex=-1;$('detail').querySelector('h2').focus({preventScroll:true});if(matchMedia('(max-width:760px)').matches)$('sidebar').scrollIntoView({block:'start'});announce('Открыта карточка: '+(record.title||record.id));
+  }
+  function renderToolTask(task,usage=list(task.usage_records)){
+    const card=make('article','tools-task'),head=make('div','tools-task-header'),button=toolButton(task.title||task.id,()=>openToolRecord(task),'tools-task-title');button.dataset.toolRecord=task.id;head.append(button);const badges=make('div','badges');if(task.work_state)addBadge(badges,workNames[task.work_state]||task.work_state);toolStatus(badges,task);if(badges.childElementCount)head.append(badges);card.append(head);
+    const excerpt=toolExcerpt(task,270);if(excerpt)card.append(make('p','tools-task-summary',excerpt));const meta=make('div','tools-task-meta');meta.append(make('span','',kindLabel(task.kind,true)));if(task.jira_key)meta.append(make('span','',task.jira_key));if(task.verified_at)meta.append(make('span','','Проверено '+dateText(task.verified_at)));card.append(meta);
+    const related=usage.filter(record=>record.id!==task.id);if(related.length){const context=make('div','tools-task-context');context.append(make('div','tools-task-context-label','Применение инструмента'));for(const record of related){const link=toolButton('',()=>openToolRecord(record),'tools-record-link');link.append(make('span','tools-record-kind',kindLabel(record.kind,true)+': '),document.createTextNode(record.title||record.id));context.append(link);}card.append(context);}return card;
+  }
+  function renderToolProject(root,tool,project){
+    toolBreadcrumbs(root,tool,project);const heading=make('div','tools-heading'),copy=make('div');copy.append(make('div','tools-eyebrow',tool.title+' / применение в проекте'),make('h2','tool-detail-heading',project.name));copy.querySelector('h2').tabIndex=-1;if(project.description)copy.append(make('p','tools-project-description',project.description));heading.append(copy);root.append(heading);
+    if(project.truncated||tool.truncated||state.toolsData.truncated)toolWarning(root,'Показана часть связанных задач и применений. Отсутствие записи в этом списке не означает, что такого опыта нет.');
+    const tasks=list(project.tasks);toolSection(root,'Задачи',tasks.length);const taskList=make('div','tools-task-list');for(const task of tasks)taskList.append(renderToolTask(task));if(!tasks.length)taskList.append(make('p','tools-inline-note','Связанные задачи пока не указаны. Здесь появятся задачи, в которых этот инструмент применяли напрямую или в рамках связанного сценария.'));root.append(taskList);
+    const shown=new Set(tasks.flatMap(task=>[task.id,...list(task.usage_records).map(record=>record.id)])),records=list(project.records).filter(record=>!shown.has(record.id));
+    if(records.length){toolSection(root,'Другие сценарии и результаты',records.length);const rows=make('div','tools-task-list');records.forEach(record=>rows.append(renderToolTask(record,[])));root.append(rows);}root.append(toolButton('← К инструменту',()=>openTool(tool.id),'tools-back small'));root.lastElementChild.style.marginTop='24px';
+  }
+  function renderTools(){
+    const root=$('tools-content');root.replaceChildren();$('tool-catalog').setAttribute('aria-busy',String(state.toolsLoading));
+    if(!state.toolsData){toolEmpty(root,state.toolsLoading?'Загружаем инструменты':state.toolsError?'Не удалось загрузить инструменты':'Каталог инструментов',state.toolsLoading?'Собираем карточки и связанный опыт.':state.toolsError||'Откройте каталог, чтобы посмотреть сохранённые инструменты.',Boolean(state.toolsError));return;}
+    if(state.toolsError)toolWarning(root,'Не удалось обновить каталог: '+state.toolsError+' Показан предыдущий снимок.');
+    if(!state.toolId){renderToolCatalog(root);return;}const tool=state.toolDetails.get(state.toolId)||list(state.toolsData.tools).find(item=>item.id===state.toolId||item.ref===state.toolId);
+    if(!tool&&!state.toolDetailLoading&&!state.toolDetailError){toolBreadcrumbs(root);toolEmpty(root,'Инструмент не найден в этом снимке','Он мог быть изменён, скрыт фильтром состояния или не войти в загруженную часть каталога.');return;}
+    if(!tool||tool.detail!==true){toolBreadcrumbs(root,tool);toolEmpty(root,state.toolDetailLoading?'Открываем инструмент':state.toolDetailError?'Не удалось открыть инструмент':'Загружаем применение',state.toolDetailLoading?'Читаем проекты, задачи и сценарии применения.':state.toolDetailError||'Читаем подробности инструмента.');if(state.toolDetailError)root.querySelector('.tools-empty').append(toolButton('Повторить',()=>loadToolDetail(state.toolId),'primary'));return;}
+    if(!state.toolProject){renderToolDetail(root,tool);return;}const project=toolProjects(tool).find(item=>item.id===state.toolProject||item.ref===state.toolProject);
+    if(!project){toolBreadcrumbs(root,tool);toolEmpty(root,'Применение в проекте не найдено','В текущем снимке нет подтверждённой связи этого инструмента с выбранным проектом.');return;}renderToolProject(root,tool,project);
+  }
+  let toolsController=null,toolDetailController=null;
+  const toolsFilterKey=()=>[$('hypotheses').checked,$('superseded').checked].join(':');
+  function hydrateToolDetail(data){
+    const records=data.records||{},resolve=value=>{if(typeof value==='string')return records[value]?{...records[value],ref:value}:null;if(value&&typeof value==='object')return value;return null;};
+    const value=list(data.tools)[0];if(!value)return null;
+    const tool={...value,detail:true};tool.records=list(value.records).map(resolve).filter(Boolean);
+    tool.projects=list(value.projects).map(project=>({...project,records:list(project.records).map(resolve).filter(Boolean),tasks:list(project.tasks).map(task=>{const full=resolve(task.ref||task);return full?{...full,usage_records:list(task.usage_refs||task.usage_records).map(resolve).filter(Boolean)}:null;}).filter(Boolean)}));return tool;
+  }
+  function currentToolDetail(){return state.toolDetails.get(state.toolId)||null;}
+  function ensureToolDetail(){if(state.mode==='tools'&&state.toolId&&state.toolsData&&!currentToolDetail())loadToolDetail(state.toolId);}
+  async function loadToolDetail(identity){
+    if(!identity)return;const id=identity.replace(/^entity:/,''),flags=toolsFilterKey(),key=id+'|'+flags;
+    if(state.toolDetailLoading&&toolDetailController?.key===key)return;
+    if(toolDetailController)toolDetailController.abort();const request=++state.toolDetailRequest,controller=new AbortController();controller.key=key;toolDetailController=controller;
+    const timeout=setTimeout(()=>controller.abort(),20000);state.toolDetailLoading=true;state.toolDetailError='';renderTools();
+    try{
+      const params=new URLSearchParams({tool:id,include_hypotheses:$('hypotheses').checked?'1':'0',include_superseded:$('superseded').checked?'1':'0'}),response=await fetch('/api/tools?'+params,{cache:'no-store',signal:controller.signal});
+      if(!response.ok)throw new Error(response.status===404?'Инструмент не найден в текущем состоянии памяти.':'Сервер вернул HTTP '+response.status);
+      const data=await response.json();if(request!==state.toolDetailRequest)return;const tool=hydrateToolDetail(data);if(!tool||tool.id!==id)throw new Error('Неожиданный формат карточки инструмента');
+      tool.truncated=Boolean(tool.truncated||data.truncated);state.toolDetails.set(tool.id,tool);state.toolDetails.set(tool.ref||'entity:'+tool.id,tool);state.toolDetailLoading=false;
+      renderTools();if(state.toolRecord){const records=[...tool.records,...toolProjects(tool).flatMap(project=>[...list(project.tasks),...list(project.records)])],fresh=records.find(record=>record.id===state.toolRecord.id);if(fresh&&state.mode==='tools')openToolRecord(fresh);else closeToolRecord();}else if(state.toolFocusPending&&state.mode==='tools'){state.toolFocusPending=false;$('tools-content').querySelector('.tool-detail-heading')?.focus({preventScroll:true});}
+      announce('Открыт инструмент: '+tool.title);
+    }catch(error){if(request!==state.toolDetailRequest)return;state.toolDetailLoading=false;state.toolDetailError=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;closeToolRecord();renderTools();}
+    finally{clearTimeout(timeout);if(request===state.toolDetailRequest){state.toolDetailLoading=false;toolDetailController=null;}}
+  }
+  async function loadTools(){
+    if(toolsController)toolsController.abort();if(toolDetailController)toolDetailController.abort();state.toolDetailRequest++;state.toolDetailLoading=false;state.toolDetailError='';
+    const flags=toolsFilterKey();if(state.toolsData&&state.toolsFlags!==flags){state.toolsData=null;state.toolDetails.clear();closeToolRecord();}
+    state.toolsRequestedFlags=flags;
+    const request=++state.toolsRequest;state.toolsLoading=true;state.toolsError='';renderTools();const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);toolsController=controller;
+    try{const params=new URLSearchParams({include_hypotheses:$('hypotheses').checked?'1':'0',include_superseded:$('superseded').checked?'1':'0'});const response=await fetch('/api/tools?'+params,{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('Сервер вернул HTTP '+response.status);const data=await response.json();if(!data||!Array.isArray(data.tools))throw new Error('Неожиданный формат каталога');if(request!==state.toolsRequest)return;state.toolsData=data;state.toolsFlags=flags;state.toolsLoading=false;state.toolDetails.clear();if(state.mode==='tools')renderProjectOptions();renderTools();ensureToolDetail();if(state.mode==='tools'&&data.generated_at)$('updated-at').textContent='Снимок: '+dateText(data.generated_at);announce('Каталог инструментов загружен');}
+    catch(error){if(request!==state.toolsRequest)return;state.toolsLoading=false;state.toolsError=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;renderTools();}
+    finally{clearTimeout(timeout);if(request===state.toolsRequest){state.toolsLoading=false;toolsController=null;$('tool-catalog').setAttribute('aria-busy','false');}}
+  }
+  function applyToolsLocation(){
+    if(location.hash==='#tools'||location.hash.startsWith('#tools?')){const params=new URLSearchParams(location.hash.split('?')[1]||'');state.toolId=params.get('tool')||'';state.toolProject=params.get('project')||'';closeToolRecord();if(state.mode!=='tools')setMode('tools',false);else{renderTools();ensureToolDetail();}}
+    else if(state.mode==='tools'&&['#map','#encyclopedia',''].includes(location.hash))setMode(location.hash==='#encyclopedia'?'encyclopedia':'map',false);
+  }
+  function setMode(mode,updateLocation=true){
+    if(!['map','encyclopedia','tools'].includes(mode)||mode===state.mode)return;
+    const queryKey={map:'mapQuery',encyclopedia:'conceptQuery',tools:'toolQuery'};state[queryKey[state.mode]]=$('search').value;state.mode=mode;const encyclopedia=mode==='encyclopedia',tools=mode==='tools';hideSearch();
+    $('canvas').hidden=mode!=='map';$('encyclopedia').hidden=!encyclopedia;$('tool-catalog').hidden=!tools;$('kind-filters').hidden=mode!=='map';$('main').classList.toggle('tools-mode',tools);$('main').classList.remove('tools-reading');
+    for(const name of ['map','encyclopedia','tools']){const tab=$(name+'-tab');tab.setAttribute('aria-selected',String(name===mode));tab.tabIndex=name===mode?0:-1;}
+    $('search-label').textContent=tools?'Найти инструмент':encyclopedia?'Найти понятие':'Найти в памяти';$('project-label').textContent=tools?'Применялся в проекте':encyclopedia?'Область применения':'Вокруг проекта';
+    $('search').placeholder=tools?'Название, назначение, тема…':encyclopedia?'Термин, синоним, определение…':'Проект, задача, решение, тег…';$('search').value=state[queryKey[mode]];
+    $('view-hint').textContent=tools?'Инструмент → проект → задачи':encyclopedia?'Выберите определение, чтобы открыть полную карточку':'Перетаскивайте карту и узлы · колесо — масштаб';renderProjectOptions();
+    if(tools){closeToolRecord();renderTools();if((!state.toolsData||state.toolsFlags!==toolsFilterKey())&&(!state.toolsLoading||state.toolsRequestedFlags!==toolsFilterKey()))loadTools();ensureToolDetail();if(updateLocation)writeToolsLocation();}
+    else{
+      if(updateLocation&&location.hash.startsWith('#tools'))history.pushState(null,'','#'+mode);
+      if(encyclopedia){renderEncyclopedia();if(state.selection?.type==='node'&&kindFor(state.nodeMap.get(state.selection.id))==='concept')renderNodeDetail(state.nodeMap.get(state.selection.id));else{state.selection=null;showIntro();}}
+      else{renderGraph(true);if(state.selection?.type==='node')renderNodeDetail(state.nodeMap.get(state.selection.id));else if(state.selection?.type==='edge')renderEdgeDetail(state.edgeMap.get(state.selection.id));else showIntro();}
+    }
+    announce(tools?'Каталог инструментов':encyclopedia?'Энциклопедия понятий':'Карта знаний');
   }
 
   async function loadWorkspace(){
@@ -452,14 +608,14 @@
   }
 
   async function loadGraph(){
-    loadWorkspace();
+    loadWorkspace();if(state.mode==='tools'&&(!state.toolsLoading||state.toolsRequestedFlags!==toolsFilterKey()))loadTools();
     if($('git-dialog').open)closeGit();
     const request=++state.request;state.loading=true;$('refresh').disabled=true;$('refresh').textContent='Обновляем…';$('error-banner').hidden=true;if(!state.loaded)showMessage('Загружаем карту','Читаем актуальные знания из локальной памяти.');
     const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),20000);
     try{const params=new URLSearchParams({include_hypotheses:$('hypotheses').checked?'1':'0',include_superseded:$('superseded').checked?'1':'0'});const response=await fetch('/api/graph?'+params,{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('Сервер вернул HTTP '+response.status);const data=await response.json();if(!data||!Array.isArray(data.nodes)||!Array.isArray(data.edges))throw new Error('Неожиданный формат ответа сервера');if(request!==state.request)return;
       state.nodes=data.nodes.filter(n=>n&&typeof n.id==='string');state.nodeMap=new Map(state.nodes.map(n=>[n.id,n]));state.edges=data.edges.filter(e=>e&&typeof e.id==='string'&&state.nodeMap.has(e.from_ref)&&state.nodeMap.has(e.to_ref));state.edgeMap=new Map(state.edges.map(e=>[e.id,e]));state.adjacency=new Map(state.nodes.map(n=>[n.id,[]]));for(const edge of state.edges){state.adjacency.get(edge.from_ref).push(edge);if(edge.to_ref!==edge.from_ref)state.adjacency.get(edge.to_ref).push(edge);}state.kinds=new Set(state.nodes.map(kindFor));state.loaded=true;state.loading=false;state.truncated=Boolean(data.truncated);state.lastError='';if(state.conceptProject&&!state.nodeMap.has(state.conceptProject))state.conceptProject='';
       if(state.focus&&!state.nodeMap.has(state.focus))state.focus=null;if(state.selection&&!(state.selection.type==='node'?state.nodeMap:state.edgeMap).has(state.selection.id))state.selection=null;
-      $('updated-at').textContent='Снимок: '+dateText(data.generated_at);$('data-note').textContent=data.truncated?'Локальная память · только чтение · ответ ограничен, показана часть данных':'Локальная память · только чтение';renderFilters();renderProjectOptions();renderGraph(true);renderEncyclopedia();if(state.selection?.type==='node')renderNodeDetail(state.nodeMap.get(state.selection.id));else if(state.selection?.type==='edge')renderEdgeDetail(state.edgeMap.get(state.selection.id));else showIntro();if($('search').value)runSearch();announce(`Загружено ${state.nodes.length} узлов и ${state.edges.length} связей`);
+      $('updated-at').textContent='Снимок: '+dateText(data.generated_at);$('data-note').textContent=data.truncated?'Локальная память · только чтение · ответ ограничен, показана часть данных':'Локальная память · только чтение';renderFilters();renderProjectOptions();renderGraph(true);renderEncyclopedia();if(state.mode==='tools'){renderTools();}else if(state.selection?.type==='node')renderNodeDetail(state.nodeMap.get(state.selection.id));else if(state.selection?.type==='edge')renderEdgeDetail(state.edgeMap.get(state.selection.id));else showIntro();if($('search').value&&state.mode!=='tools')runSearch();announce(`Загружено ${state.nodes.length} узлов и ${state.edges.length} связей`);
     }catch(error){if(request!==state.request)return;state.loading=false;const detail=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;state.lastError=detail;renderEncyclopedia();if(state.loaded){$('error-banner').textContent='Не удалось обновить: '+detail+' На карте остался предыдущий снимок.';$('error-banner').hidden=false;}else showMessage('Не удалось загрузить карту',detail+' Проверьте, что локальный сервер работает.','retry');announce('Не удалось загрузить карту');}
     finally{clearTimeout(timeout);if(request===state.request){state.loading=false;$('refresh').disabled=false;$('refresh').textContent='↻ Обновить';}}
   }
@@ -471,17 +627,17 @@
   svg.addEventListener('pointerup',endDrag);svg.addEventListener('pointercancel',endDrag);
   svg.addEventListener('wheel',event=>{event.preventDefault();const rect=svg.getBoundingClientRect();zoom(Math.exp(-event.deltaY*.0015),event.clientX-rect.left,event.clientY-rect.top);},{passive:false});
   $('zoom-in').addEventListener('click',()=>zoom(1.25));$('zoom-out').addEventListener('click',()=>zoom(.8));$('fit').addEventListener('click',fitGraph);$('reset').addEventListener('click',()=>resetView());$('refresh').addEventListener('click',loadGraph);$('hypotheses').addEventListener('change',loadGraph);$('superseded').addEventListener('change',loadGraph);$('message-action').addEventListener('click',()=>{$('message-action').dataset.action==='retry'?loadGraph():resetView();});
-  $('project-filter').addEventListener('change',event=>{if(state.mode==='encyclopedia'){state.conceptProject=event.target.value;renderEncyclopedia();}else{event.target.value?focusNode(event.target.value):resetView(false);}});document.querySelectorAll('[data-depth]').forEach(b=>b.addEventListener('click',()=>{state.depth=Number(b.dataset.depth);renderGraph(true);}));
-  $('search').addEventListener('input',runSearch);$('search').addEventListener('focus',()=>{if($('search').value)runSearch();});$('search').addEventListener('keydown',event=>{if(event.key==='Escape'){hideSearch();return;}if(event.key==='ArrowDown'){event.preventDefault();$('search-results').querySelector('button')?.focus();}if(event.key==='Enter'&&state.mode==='encyclopedia'){$('concepts').querySelector('button')?.focus();}if(event.key==='Enter'&&state.mode==='map'){$('search-results').querySelector('button')?.click();}});$('search-results').addEventListener('keydown',event=>{const buttons=[...$('search-results').querySelectorAll('button')],index=buttons.indexOf(document.activeElement);if(event.key==='ArrowDown'){event.preventDefault();buttons[Math.min(index+1,buttons.length-1)]?.focus();}if(event.key==='ArrowUp'){event.preventDefault();index<=0?$('search').focus():buttons[index-1]?.focus();}if(event.key==='Escape'){hideSearch();$('search').focus();}});document.addEventListener('click',event=>{if(!event.target.closest('.search-wrap'))hideSearch();});
-  $('close-details').addEventListener('click',()=>{state.sidebarOpen=false;$('main').classList.add('sidebar-closed');$('open-details').hidden=false;});$('open-details').addEventListener('click',openSidebar);
+  $('project-filter').addEventListener('change',event=>{if(state.mode==='tools'){state.toolFilter=event.target.value;openTool('');}else if(state.mode==='encyclopedia'){state.conceptProject=event.target.value;renderEncyclopedia();}else{event.target.value?focusNode(event.target.value):resetView(false);}});document.querySelectorAll('[data-depth]').forEach(b=>b.addEventListener('click',()=>{state.depth=Number(b.dataset.depth);renderGraph(true);}));
+  $('search').addEventListener('input',runSearch);$('search').addEventListener('focus',()=>{if($('search').value)runSearch();});$('search').addEventListener('keydown',event=>{if(event.key==='Escape'){hideSearch();return;}if(event.key==='ArrowDown'){event.preventDefault();$('search-results').querySelector('button')?.focus();}if(event.key==='Enter'&&state.mode==='tools'){$('tools-content').querySelector('[data-tool]')?.focus();}if(event.key==='Enter'&&state.mode==='encyclopedia'){$('concepts').querySelector('button')?.focus();}if(event.key==='Enter'&&state.mode==='map'){$('search-results').querySelector('button')?.click();}});$('search-results').addEventListener('keydown',event=>{const buttons=[...$('search-results').querySelectorAll('button')],index=buttons.indexOf(document.activeElement);if(event.key==='ArrowDown'){event.preventDefault();buttons[Math.min(index+1,buttons.length-1)]?.focus();}if(event.key==='ArrowUp'){event.preventDefault();index<=0?$('search').focus():buttons[index-1]?.focus();}if(event.key==='Escape'){hideSearch();$('search').focus();}});document.addEventListener('click',event=>{if(!event.target.closest('.search-wrap'))hideSearch();});
+  $('close-details').addEventListener('click',()=>{if(state.mode==='tools'){closeToolRecord();$('tools-content').querySelector('.tool-detail-heading')?.focus({preventScroll:true});return;}state.sidebarOpen=false;$('main').classList.add('sidebar-closed');$('open-details').hidden=false;});$('open-details').addEventListener('click',openSidebar);
   let resizeTimer;new ResizeObserver(()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(state.loaded)fitGraph();},80);}).observe($('canvas'));
-  $('map-tab').addEventListener('click',()=>setMode('map'));
-  $('encyclopedia-tab').addEventListener('click',()=>setMode('encyclopedia'));
-  for(const id of ['map-tab','encyclopedia-tab'])$(id).addEventListener('keydown',event=>{
-    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();
-    const mode=event.key==='Home'?'map':event.key==='End'?'encyclopedia':state.mode==='map'?'encyclopedia':'map';setMode(mode);$(mode==='map'?'map-tab':'encyclopedia-tab').focus();
-  });
-  showIntro();loadGraph();
+  const viewModes=['map','encyclopedia','tools'];
+  for(const mode of viewModes){const tab=$(mode+'-tab');tab.addEventListener('click',()=>setMode(mode));tab.addEventListener('keydown',event=>{
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const index=viewModes.indexOf(mode),next=event.key==='Home'?0:event.key==='End'?viewModes.length-1:(index+(event.key==='ArrowLeft'?-1:1)+viewModes.length)%viewModes.length;setMode(viewModes[next]);$(viewModes[next]+'-tab').focus();
+  });}
+  window.addEventListener('popstate',applyToolsLocation);
+  window.addEventListener('hashchange',applyToolsLocation);
+  showIntro();applyToolsLocation();loadGraph();
 })();
 </script>
 </body>

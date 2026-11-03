@@ -51,7 +51,7 @@ def build_manifest(wheel, source_root=ROOT, tag=None):
         "version": version,
         "updater_protocol": PROTOCOL,
         "python_min": [3, 9],
-        "database_schemas": [1, 2],
+        "database_schemas": [1, 2, 3],
         "map_schema": 2,
         "wheel": {"filename": wheel.name, "sha256": digest.hexdigest(), "size": size},
     })

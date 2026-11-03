@@ -21,6 +21,59 @@ class InstallationError(ValueError):
     pass
 
 
+def _schema_list(value):
+    if (not isinstance(value, list) or not value or len(value) > 32
+            or any(type(item) is not int or item < 1 for item in value)
+            or value != sorted(set(value))):
+        raise InstallationError("Invalid generation database schema compatibility")
+    return value
+
+
+def generation_schemas(record):
+    """Read compatibility without importing a generation or opening a store.
+
+    Schema-3 managers record the verified manifest. Older protocol-1 managers
+    did not; inspect their literal VERSION when intact. A missing/broken legacy
+    source falls back to the only schemas those managers supported, 1 and 2,
+    preserving recovery from broken imports. Newer records retain their schema
+    declarations even when all current package files are damaged.
+    """
+    if "database_schemas" in record:
+        return _schema_list(record["database_schemas"])
+    site = record.get("site")
+    if site:
+        import ast
+        try:
+            with (Path(site) / "richi" / "memory.py").open(encoding="utf-8") as handle:
+                content = handle.read(2_000_001)
+            if len(content) > 2_000_000:
+                raise InstallationError("Generation memory module exceeds the compatibility read limit")
+            statements = ast.parse(content).body
+        except (OSError, UnicodeError, SyntaxError):
+            # The fallback applies only to legacy records lacking declarations.
+            return [1, 2]
+        for statement in statements:
+            if isinstance(statement, ast.Assign) and any(
+                    isinstance(target, ast.Name) and target.id == "VERSION" for target in statement.targets):
+                try:
+                    version = ast.literal_eval(statement.value)
+                except (TypeError, ValueError):
+                    raise InstallationError("Cannot inspect generation database schema version")
+                if type(version) is not int or not 1 <= version <= 32:
+                    raise InstallationError("Invalid generation database schema version")
+                return list(range(1, version + 1))
+    return [1, 2]
+
+
+def require_schema_compatible(current, target):
+    missing = set(generation_schemas(current)) - set(generation_schemas(target))
+    if missing:
+        raise InstallationError(
+            "Cannot activate a release that drops database schema support for {}. "
+            "Package rollback does not roll back databases; choose a compatible release. "
+            "No knowledge store was opened or changed.".format(", ".join(str(item) for item in sorted(missing))))
+
+
 def _object(path):
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -114,6 +167,8 @@ def read_state(ctx):
             raise InstallationError("Generation package directory is outside its environment") from exc
         if not isinstance(record.get("version"), str):
             raise InstallationError("Invalid installation version")
+        if "database_schemas" in record:
+            _schema_list(record["database_schemas"])
     current, previous = state.get("current"), state.get("previous")
     if (not _generation_id(current) or current not in records
             or (previous is not None and (not _generation_id(previous) or previous not in records or previous == current))):
@@ -173,6 +228,8 @@ def select(ctx, previous=False):
         if generation is None:
             raise InstallationError("No previous Richi release is available for rollback")
         record = state["generations"][generation]
+        if previous:
+            require_schema_compatible(state["generations"][state["current"]], record)
         if previous and (root / "agent-setup.json").exists():
             if not (Path(record["site"]) / "richi_launcher" / "agent_setup.py").is_file():
                 raise InstallationError("Previous release cannot maintain the installed agent skill; repair with a setup-capable release")

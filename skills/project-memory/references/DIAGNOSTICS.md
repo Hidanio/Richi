@@ -101,7 +101,7 @@ stable: level (`error`, `review`, `info`), code, refs. A finding may be omitted
 entirely to fit the budget; identifiers are never shortened.
 
 Punisher does not merge, delete or change records, history, links, states,
-verification dates, FTS or the schema version. It supports schemas 1 and 2 and
+verification dates, FTS or the schema version. It supports schemas 1, 2 and 3 and
 does not read entry_history, source files, Git or the network. No data from
 another workspace is used. Candidate decisions are covered in
 [MEMORY_AUDIT.md](MEMORY_AUDIT.md); the change procedure is in
