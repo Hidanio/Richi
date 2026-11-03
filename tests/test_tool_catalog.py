@@ -127,6 +127,9 @@ class ToolCatalogTests(unittest.TestCase):
 
     def test_list_is_lightweight_and_detail_deduplicates_full_records(self):
         self.populate()
+        project_description = "shared-project-background " * 20000
+        self.put("project", {"id": "alpha", "name": "Alpha", "description": project_description,
+                             "repo_path": "/synthetic/project", "source": "synthetic evidence"}, action="upsert")
         self.put("entity", self.entity("tool:tracekit", kind="tool", summary="description " * 1000))
         self.put("entry", self.entry("procedure:recovery", kind="procedure", project_ids=["alpha", "beta"],
                                     summary="unique-long-scenario " * 500))
@@ -137,10 +140,63 @@ class ToolCatalogTests(unittest.TestCase):
         self.assertEqual(len(tool["summary"]), 1000)
         self.assertEqual(tool["sources_omitted"], 1)
         self.assertEqual(listing["records"], {})
+        for listed_tool in listing["tools"]:
+            for project in listed_tool["projects"]:
+                self.assertFalse({"description", "repo_path", "source", "verified_at"} & project.keys())
+        self.assertLess(len(json.dumps(listing)), 15000)
         detail = self.cli("tools", "get", "tool:tracekit")
+        alpha = next(project for project in detail["tools"][0]["projects"] if project["id"] == "alpha")
+        self.assertEqual(alpha["description"], project_description)
+        self.assertEqual(alpha["repo_path"], "/synthetic/project")
+        self.assertEqual(alpha["source"], "synthetic evidence")
         self.assertEqual(json.dumps(detail).count("unique-long-scenario"), 500)
         self.assertEqual(detail["tools"][0]["projects"][0]["records"],
                          ["entry:experiment:recovery", "entry:procedure:recovery"])
+
+    def test_project_limit_counts_destinations_and_bounds_evidence_separately(self):
+        self.put("entity", self.entity("tool:tracekit", kind="tool"))
+        self.put("edge", [self.edge("scope-alpha-" + str(i), "entity:tool:tracekit",
+                                    "project:alpha", kind="used_in") for i in range(100)] + [
+            self.edge("scope-beta", "entity:tool:tracekit", "project:beta", kind="used_in")])
+        for action in (("list",), ("get", "tool:tracekit")):
+            with self.subTest(action=action):
+                result = self.cli("tools", *action)
+                tool = result["tools"][0]
+                projects = {project["id"]: project for project in tool["projects"]}
+                self.assertEqual(set(projects), {"alpha", "beta"})
+                self.assertEqual(tool["project_count"], 2)
+                self.assertEqual(len(projects["alpha"]["usage_evidence"]), 20)
+                self.assertTrue(projects["alpha"]["usage_evidence_truncated"])
+                self.assertFalse(projects["beta"]["usage_evidence_truncated"])
+                self.assertEqual(projects["beta"]["usage_evidence"], ["edge:scope-beta"])
+                self.assertTrue(result["truncated"])
+                self.assertEqual(result["limits"]["evidence_edges_per_project"], 20)
+
+    def test_ancestor_limit_counts_destinations_instead_of_parallel_edges(self):
+        self.put("entity", self.entity("tool:tracekit", kind="tool"))
+        self.put("entry", [self.entry("usage", kind="procedure"), self.entry("first", kind="task"),
+                           self.entry("last", kind="task")])
+        self.put("edge", [self.edge("use", "entry:usage", "entity:tool:tracekit", kind="uses_tool")] + [
+            self.edge("parent-" + str(i).zfill(3), "entry:usage", "entry:first", kind="part_of")
+            for i in range(200)] + [self.edge("parent-last", "entry:usage", "entry:last", kind="part_of")])
+        result = self.cli("tools", "get", "tool:tracekit")
+        tool = result["tools"][0]
+        tasks = tool["projects"][0]["tasks"]
+        self.assertEqual({task["ref"] for task in tasks}, {"entry:first", "entry:last"})
+        first = next(task for task in tasks if task["ref"] == "entry:first")
+        self.assertEqual(first["usage_paths"][0]["edge_refs"], ["edge:parent-000"])
+        self.assertFalse(result["truncated"])
+
+    def test_ancestor_limit_excludes_the_usage_record_itself(self):
+        self.put("entity", self.entity("tool:tracekit", kind="tool"))
+        self.put("entry", [self.entry("usage", kind="procedure")] + [
+            self.entry("task:" + str(i), kind="task") for i in range(200)])
+        self.put("edge", [self.edge("use", "entry:usage", "entity:tool:tracekit", kind="uses_tool")] + [
+            self.edge("parent-" + str(i), "entry:usage", "entry:task:" + str(i), kind="part_of")
+            for i in range(200)])
+        result = self.cli("tools", "get", "tool:tracekit")
+        self.assertEqual(result["tools"][0]["task_count"], 200)
+        self.assertFalse(result["truncated"])
 
     def test_usage_and_task_limits_are_reported_without_fabricated_counts(self):
         self.populate()

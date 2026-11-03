@@ -539,10 +539,10 @@
     const root=$('tools-content');root.replaceChildren();$('tool-catalog').setAttribute('aria-busy',String(state.toolsLoading));
     if(!state.toolsData){toolEmpty(root,state.toolsLoading?'Загружаем инструменты':state.toolsError?'Не удалось загрузить инструменты':'Каталог инструментов',state.toolsLoading?'Собираем карточки и связанный опыт.':state.toolsError||'Откройте каталог, чтобы посмотреть сохранённые инструменты.',Boolean(state.toolsError));return;}
     if(state.toolsError)toolWarning(root,'Не удалось обновить каталог: '+state.toolsError+' Показан предыдущий снимок.');
-    if(!state.toolId){renderToolCatalog(root);return;}const tool=state.toolDetails.get(state.toolId)||list(state.toolsData.tools).find(item=>item.id===state.toolId||item.ref===state.toolId);
+    if(!state.toolId){renderToolCatalog(root);return;}const tool=state.toolDetails.get(state.toolId)||list(state.toolsData.tools).find(item=>item.id===state.toolId);
     if(!tool&&!state.toolDetailLoading&&!state.toolDetailError){toolBreadcrumbs(root);toolEmpty(root,'Инструмент не найден в этом снимке','Он мог быть изменён, скрыт фильтром состояния или не войти в загруженную часть каталога.');return;}
     if(!tool||tool.detail!==true){toolBreadcrumbs(root,tool);toolEmpty(root,state.toolDetailLoading?'Открываем инструмент':state.toolDetailError?'Не удалось открыть инструмент':'Загружаем применение',state.toolDetailLoading?'Читаем проекты, задачи и сценарии применения.':state.toolDetailError||'Читаем подробности инструмента.');if(state.toolDetailError)root.querySelector('.tools-empty').append(toolButton('Повторить',()=>loadToolDetail(state.toolId),'primary'));return;}
-    if(!state.toolProject){renderToolDetail(root,tool);return;}const project=toolProjects(tool).find(item=>item.id===state.toolProject||item.ref===state.toolProject);
+    if(!state.toolProject){renderToolDetail(root,tool);return;}const project=toolProjects(tool).find(item=>item.id===state.toolProject);
     if(!project){toolBreadcrumbs(root,tool);toolEmpty(root,'Применение в проекте не найдено','В текущем снимке нет подтверждённой связи этого инструмента с выбранным проектом.');return;}renderToolProject(root,tool,project);
   }
   let toolsController=null,toolDetailController=null;
@@ -553,18 +553,35 @@
     const tool={...value,detail:true};tool.records=list(value.records).map(resolve).filter(Boolean);
     tool.projects=list(value.projects).map(project=>({...project,records:list(project.records).map(resolve).filter(Boolean),tasks:list(project.tasks).map(task=>{const full=resolve(task.ref||task);return full?{...full,usage_records:list(task.usage_refs||task.usage_records).map(resolve).filter(Boolean)}:null;}).filter(Boolean)}));return tool;
   }
+  function waitForToolsRetry(delay,signal){
+    return new Promise((resolve,reject)=>{
+      const abort=()=>{clearTimeout(timer);reject(new DOMException('Request aborted','AbortError'));};let timer;
+      if(signal.aborted){abort();return;}
+      timer=setTimeout(()=>{signal.removeEventListener('abort',abort);resolve();},delay);signal.addEventListener('abort',abort,{once:true});
+    });
+  }
+  async function requestTools(params,signal){
+    // Aborting fetch does not stop the server worker. Wait for its bounded lock
+    // instead of turning rapid navigation or filter changes into a failed page.
+    // The caller's 20-second AbortSignal bounds both requests and retry waits.
+    for(let delay=250;;delay=Math.min(delay*2,2000)){
+      const response=await fetch('/api/tools?'+params,{cache:'no-store',signal});if(response.ok)return response.json();
+      let error=null;try{error=await response.json();}catch(cause){if(cause.name==='AbortError')throw cause;}
+      if(response.status===503&&error?.code==='busy'){await waitForToolsRetry(delay,signal);continue;}
+      throw new Error(response.status===404?'Инструмент не найден в текущем состоянии памяти.':'Сервер вернул HTTP '+response.status);
+    }
+  }
   function currentToolDetail(){return state.toolDetails.get(state.toolId)||null;}
   function ensureToolDetail(){if(state.mode==='tools'&&state.toolId&&state.toolsData&&!currentToolDetail())loadToolDetail(state.toolId);}
   async function loadToolDetail(identity){
-    if(!identity)return;const id=identity.replace(/^entity:/,''),flags=toolsFilterKey(),key=id+'|'+flags;
+    if(!identity)return;const id=identity,flags=toolsFilterKey(),key=id+'|'+flags;
     if(state.toolDetailLoading&&toolDetailController?.key===key)return;
     if(toolDetailController)toolDetailController.abort();const request=++state.toolDetailRequest,controller=new AbortController();controller.key=key;toolDetailController=controller;
     const timeout=setTimeout(()=>controller.abort(),20000);state.toolDetailLoading=true;state.toolDetailError='';renderTools();
     try{
-      const params=new URLSearchParams({tool:id,include_hypotheses:$('hypotheses').checked?'1':'0',include_superseded:$('superseded').checked?'1':'0'}),response=await fetch('/api/tools?'+params,{cache:'no-store',signal:controller.signal});
-      if(!response.ok)throw new Error(response.status===404?'Инструмент не найден в текущем состоянии памяти.':'Сервер вернул HTTP '+response.status);
-      const data=await response.json();if(request!==state.toolDetailRequest)return;const tool=hydrateToolDetail(data);if(!tool||tool.id!==id)throw new Error('Неожиданный формат карточки инструмента');
-      tool.truncated=Boolean(tool.truncated||data.truncated);state.toolDetails.set(tool.id,tool);state.toolDetails.set(tool.ref||'entity:'+tool.id,tool);state.toolDetailLoading=false;
+      const params=new URLSearchParams({tool:id,include_hypotheses:$('hypotheses').checked?'1':'0',include_superseded:$('superseded').checked?'1':'0'}),data=await requestTools(params,controller.signal);
+      if(request!==state.toolDetailRequest)return;const tool=hydrateToolDetail(data);if(!tool||tool.id!==id)throw new Error('Неожиданный формат карточки инструмента');
+      tool.truncated=Boolean(tool.truncated||data.truncated);state.toolDetails.set(tool.id,tool);state.toolDetailLoading=false;
       renderTools();if(state.toolRecord){const records=[...tool.records,...toolProjects(tool).flatMap(project=>[...list(project.tasks),...list(project.records)])],fresh=records.find(record=>record.id===state.toolRecord.id);if(fresh&&state.mode==='tools')openToolRecord(fresh);else closeToolRecord();}else if(state.toolFocusPending&&state.mode==='tools'){state.toolFocusPending=false;$('tools-content').querySelector('.tool-detail-heading')?.focus({preventScroll:true});}
       announce('Открыт инструмент: '+tool.title);
     }catch(error){if(request!==state.toolDetailRequest)return;state.toolDetailLoading=false;state.toolDetailError=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;closeToolRecord();renderTools();}
@@ -575,7 +592,7 @@
     const flags=toolsFilterKey();if(state.toolsData&&state.toolsFlags!==flags){state.toolsData=null;state.toolDetails.clear();closeToolRecord();}
     state.toolsRequestedFlags=flags;
     const request=++state.toolsRequest;state.toolsLoading=true;state.toolsError='';renderTools();const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);toolsController=controller;
-    try{const params=new URLSearchParams({include_hypotheses:$('hypotheses').checked?'1':'0',include_superseded:$('superseded').checked?'1':'0'});const response=await fetch('/api/tools?'+params,{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('Сервер вернул HTTP '+response.status);const data=await response.json();if(!data||!Array.isArray(data.tools))throw new Error('Неожиданный формат каталога');if(request!==state.toolsRequest)return;state.toolsData=data;state.toolsFlags=flags;state.toolsLoading=false;state.toolDetails.clear();if(state.mode==='tools')renderProjectOptions();renderTools();ensureToolDetail();if(state.mode==='tools'&&data.generated_at)$('updated-at').textContent='Снимок: '+dateText(data.generated_at);announce('Каталог инструментов загружен');}
+    try{const params=new URLSearchParams({include_hypotheses:$('hypotheses').checked?'1':'0',include_superseded:$('superseded').checked?'1':'0'});const data=await requestTools(params,controller.signal);if(!data||!Array.isArray(data.tools))throw new Error('Неожиданный формат каталога');if(request!==state.toolsRequest)return;state.toolsData=data;state.toolsFlags=flags;state.toolsLoading=false;state.toolDetails.clear();if(state.mode==='tools')renderProjectOptions();renderTools();ensureToolDetail();if(state.mode==='tools'&&data.generated_at)$('updated-at').textContent='Снимок: '+dateText(data.generated_at);announce('Каталог инструментов загружен');}
     catch(error){if(request!==state.toolsRequest)return;state.toolsLoading=false;state.toolsError=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;renderTools();}
     finally{clearTimeout(timeout);if(request===state.toolsRequest){state.toolsLoading=false;toolsController=null;$('tool-catalog').setAttribute('aria-busy','false');}}
   }

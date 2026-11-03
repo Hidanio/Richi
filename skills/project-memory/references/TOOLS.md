@@ -88,6 +88,8 @@ richi --compact-json --project-path /work/example entity get tool:tracekit
 limit is 1–200, default 100. Summaries are at most 1000 characters, with
 `summary_is_excerpt`; sources are omitted with an explicit `sources_omitted`
 count. Usage bodies, task ancestry and history are not loaded for the catalog.
+Project cards contain IDs, names and navigation metadata; their full descriptions,
+repository paths and sources are loaded only by `tools get`.
 `detail` is false and task counts are `null`, meaning “not loaded,” not zero.
 Follow `read_more` or call `tools get ID` for a native tool entity ID.
 
@@ -104,9 +106,14 @@ Both commands accept `--include-hypotheses` and `--include-superseded`; keep the
 same state selection when opening detail. These flags do not turn an unconfirmed
 or unsourced edge into usage evidence. Each call reads one snapshot; separate
 list/detail calls may observe intervening writes. Limits are 200 usage records,
-200 distinct tasks and 100 projects per tool, and 200 visited ancestors per usage record while
-following `part_of`. Detailed records include at most 20 `uses_tool` evidence
-edges each; `usage_evidence_truncated` propagates to the overall truncation flag.
+200 distinct tasks and 100 distinct projects per tool, and 200 distinct visited
+ancestors per usage record while following `part_of`; the usage record itself
+does not consume this ancestor limit. Parallel evidence edges do not consume
+additional project or ancestor slots. Detailed records include at most 20
+`uses_tool` evidence edges each. Project cards include at most 20 direct
+`used_in` evidence refs each, reported as `limits.evidence_edges_per_project`.
+Both evidence caps expose `usage_evidence_truncated`, which propagates to the
+overall truncation flag.
 Check `truncated` and `limits` before treating project/task/usage counts as totals;
 they describe the returned selection when truncated. `total_tools` counts all
 tools matching the selected state and ID filters.

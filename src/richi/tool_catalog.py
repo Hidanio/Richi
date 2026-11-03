@@ -14,6 +14,7 @@ MAX_RECORDS = 200
 MAX_ANCESTORS = 200
 MAX_PROJECTS = 100
 MAX_TASKS = 200
+MAX_PROJECT_EVIDENCE = 20
 
 
 def project_scope_sql(reference):
@@ -89,22 +90,20 @@ def _task_ancestors(conn, record, states, api):
         if current["kind"] == "task":
             tasks.append((current, path))
             continue
+        remaining = MAX_ANCESTORS - (len(visited) - 1)
+        visited_ids = sorted(visited)
         rows = conn.execute("""
-            SELECT e.id, link.id AS edge_id FROM graph_edges link
+            SELECT e.id, min(link.id) AS edge_id FROM graph_edges link
                 JOIN entries e ON e.id = substr(link.to_ref, 7) AND substr(link.to_ref, 1, 6) = 'entry:'
             WHERE link.from_ref = ? AND link.kind = 'part_of'
                 AND link.knowledge_state = 'confirmed' AND json_array_length(link.sources) > 0
                 AND e.knowledge_state IN (""" + placeholders + """ )
-            ORDER BY link.id LIMIT ?
-        """, [current["ref"], *states, MAX_ANCESTORS + 1]).fetchall()
-        if len(rows) > MAX_ANCESTORS:
+                AND e.id NOT IN (""" + ",".join("?" for _ in visited_ids) + """ )
+            GROUP BY e.id ORDER BY edge_id LIMIT ?
+        """, [current["ref"], *states, *visited_ids, remaining + 1]).fetchall()
+        if len(rows) > remaining:
             truncated = True
-        for row in rows[:MAX_ANCESTORS]:
-            if row["id"] in visited:
-                continue
-            if len(visited) >= MAX_ANCESTORS:
-                truncated = True
-                continue
+        for row in rows[:remaining]:
             visited.add(row["id"])
             parent = _entry(conn, row["id"], api)
             queue.append((parent, path + ["edge:" + row["edge_id"]]))
@@ -119,7 +118,7 @@ def _tool(conn, row, states, api, detailed):
     # application. An unrelated task in the same project is never included.
     memberships = {project for record in records for project in record["project_ids"]}
     direct = conn.execute("""
-        SELECT p.id, link.id AS edge_id FROM graph_edges link
+        SELECT DISTINCT p.id FROM graph_edges link
             JOIN projects p ON p.id = substr(link.to_ref, 9) AND substr(link.to_ref, 1, 8) = 'project:'
         WHERE link.from_ref = ? AND link.kind = 'used_in'
             AND link.knowledge_state = 'confirmed' AND json_array_length(link.sources) > 0
@@ -129,10 +128,18 @@ def _tool(conn, row, states, api, detailed):
     truncated = truncated or len(direct) > MAX_PROJECTS or len(memberships) > MAX_PROJECTS
     projects = {}
     for project_id in sorted(memberships)[:MAX_PROJECTS]:
-        project = dict(conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone())
+        fields = "*" if detailed else "id, name"
+        project = dict(conn.execute("SELECT " + fields + " FROM projects WHERE id = ?", (project_id,)).fetchone())
+        evidence = conn.execute("""
+            SELECT id FROM graph_edges WHERE from_ref = ? AND to_ref = ? AND kind = 'used_in'
+                AND knowledge_state = 'confirmed' AND json_array_length(sources) > 0
+            ORDER BY id LIMIT ?
+        """, (tool["ref"], "project:" + project_id, MAX_PROJECT_EVIDENCE + 1)).fetchall()
+        evidence_truncated = len(evidence) > MAX_PROJECT_EVIDENCE
+        truncated = truncated or evidence_truncated
         project.update(ref="project:" + project_id, tasks=[], records=[], truncated=False,
-                       usage_evidence=["edge:" + item["edge_id"] for item in direct
-                                       if item["id"] == project_id])
+                       usage_evidence=["edge:" + item["id"] for item in evidence[:MAX_PROJECT_EVIDENCE]],
+                       usage_evidence_truncated=evidence_truncated)
         projects[project_id] = project
     task_maps = {identity: {} for identity in projects}
     selected_tasks = set()
@@ -211,7 +218,7 @@ def run(conn, args, api):
             "total_tools": total, "truncated": total > len(tools) or any(tool["truncated"] for tool in tools),
             "limits": {"tools": maximum, "records_per_tool": MAX_RECORDS,
                        "ancestors_per_record": MAX_ANCESTORS, "projects_per_tool": MAX_PROJECTS,
-                       "tasks_per_tool": MAX_TASKS},
+                       "tasks_per_tool": MAX_TASKS, "evidence_edges_per_project": MAX_PROJECT_EVIDENCE},
             "notice": "Only explicit sourced usage is shown. Counts cover the returned selection when truncated."}
 
 

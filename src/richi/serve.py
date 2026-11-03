@@ -351,7 +351,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
             flags = ["--" + key.replace("_", "-") for key, value in params.items() if key != "tool" and value == ["1"]]
             request_lock = tools_lock if url.path == "/api/tools" else export_lock
             if not request_lock.acquire(blocking=False):
-                return self.send_data(503, {"error": "Export in progress; try Refresh again"})
+                return self.send_data(503, {"error": "Export in progress; try Refresh again", "code": "busy"})
             try:
                 if url.path == "/api/tools":
                     status, payload = _run_graph_request(database, flags, runtime, config_file, workspace,

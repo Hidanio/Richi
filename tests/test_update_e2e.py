@@ -77,7 +77,7 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
     def console_json(self, *arguments):
         return json.loads(self.console(*arguments).stdout)
 
-    def make_wheel(self, version):
+    def make_wheel(self, version, *, legacy_schemas=False):
         files = {}
         for package in (richi, richi_launcher):
             directory = Path(package.__file__).resolve().parent
@@ -88,6 +88,17 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
         changed, count = re.subn(r'(?m)^__version__\s*=.*$', '__version__ = "' + version + '"', original)
         self.assertEqual(count, 1)
         files["richi/__init__.py"] = changed.encode("utf-8")
+        if legacy_schemas:
+            # Keep the real package/launcher lifecycle while reproducing the
+            # schema-2 manager's fixed protocol-1 compatibility restriction.
+            memory = files["richi/memory.py"].decode("utf-8")
+            self.assertIn("VERSION = 3\n", memory)
+            files["richi/memory.py"] = memory.replace("VERSION = 3\n", "VERSION = 2\n", 1).encode()
+            manager = files["richi_launcher/installation.py"].decode("utf-8")
+            old = 'manifest.get("database_schemas") not in ([1, 2], [1, 2, 3])'
+            self.assertIn(old, manager)
+            files["richi_launcher/installation.py"] = manager.replace(
+                old, 'manifest.get("database_schemas") != [1, 2]', 1).encode()
         files["richi_bootstrap.py"] = Path(richi_bootstrap.__file__).read_bytes()
         info = "richi-" + version + ".dist-info/"
         files[info + "METADATA"] = ("Metadata-Version: 2.1\nName: richi\nVersion: " + version
@@ -108,11 +119,11 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
                 archive.writestr(name, data)
         return wheel
 
-    def feed_fixture(self, wheel, version):
+    def feed_fixture(self, wheel, version, *, database_schemas=(1, 2, 3)):
         data = wheel.read_bytes()
         filename = wheel.name
         manifest = {"format_version": 1, "version": version, "updater_protocol": 1,
-                    "python_min": [3, 9], "database_schemas": [1, 2, 3], "map_schema": 2,
+                    "python_min": [3, 9], "database_schemas": list(database_schemas), "map_schema": 2,
                     "wheel": {"filename": filename, "sha256": hashlib.sha256(data).hexdigest(),
                               "size": len(data)}}
         base = "https://github.com/Hidanio/Richi/releases/"
@@ -142,6 +153,107 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
         self.assertEqual(self.console(*arguments).stdout.strip(), "Richi " + version)
         self.assertEqual(self.run_process([self.python, "-I", "-B", "-m", "richi", *arguments]).stdout.strip(),
                          "Richi " + version)
+
+    def test_schema_three_transition_uses_fresh_prefix_and_preserves_workspace(self):
+        with tempfile.TemporaryDirectory(prefix="richi-schema-transition-") as temporary:
+            self.root = Path(temporary).resolve()
+            self.environment = cli_environment(self.root)
+            self.environment["CLAUDE_CONFIG_DIR"] = str(Path(self.environment["HOME"]) / ".claude")
+            for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
+                self.environment.pop(key, None)
+            wheels = {version: self.make_wheel(version, legacy_schemas=True)
+                      for version in ("0.1.0", "0.2.0", "0.3.0")}
+            wheels["0.4.0"] = self.make_wheel("0.4.0")
+
+            def install(prefix, wheel):
+                venv.EnvBuilder(with_pip=True, symlinks=True).create(str(prefix))
+                self.run_process([prefix / "bin/python", "-I", "-B", "-m", "pip", "--isolated",
+                                  "--disable-pip-version-check", "install", "--no-index", "--no-deps",
+                                  "--no-cache-dir", "--no-compile", wheel])
+
+            original = self.root / "original"
+            install(original, wheels["0.1.0"])
+            self.python, self.console_path = original / "bin/python", original / "bin/richi"
+            self.console("setup", "--yes", "--no-path")
+            claude_profile = Path(self.environment["HOME"]) / ".claude"
+            claude_profile.mkdir()
+            claude_settings = claude_profile / "settings.json"
+            unrelated_hook = {"hooks": [{"type": "command", "command": "printf synthetic-hook"}]}
+            claude_settings.write_text(json.dumps({"theme": "synthetic", "hooks": {"SessionStart": [unrelated_hook]}}))
+            self.console("setup", "--agent", "claude", "--yes", "--no-path")
+            alpha = self.console_json("workspace", "create", "alpha")
+            self.console("workspace", "use", "alpha")
+            self.console("--chat", "schema-transition", "chat", "bind", "alpha")
+            database = Path(alpha["database"])
+            database.write_bytes(b"Synthetic store: the package transition must not open it\n")
+            config = self.console_json("config", "show")
+            registry = Path(alpha["config_file"]).parent.parent.parent
+            protected_paths = [database, Path(alpha["config_file"]),
+                               registry / "workspaces.json", registry / "chat-workspaces.json"]
+            protected = {path: path.read_bytes() for path in protected_paths}
+            runner = self.root / "offline_update.py"
+            runner.write_text(_OFFLINE_COMMAND, encoding="utf-8")
+            for version in ("0.2.0", "0.3.0"):
+                feed = self.feed_fixture(wheels[version], version, database_schemas=(1, 2))
+                updated = json.loads(self.run_process([self.python, "-I", "-B", runner, feed,
+                                                      "update", "apply"]).stdout)
+            old_root = Path(updated["root"])
+            self.assertNotIn("seed", json.loads((old_root / "state.json").read_text())["generations"])
+            new_feed = self.feed_fixture(wheels["0.4.0"], "0.4.0")
+            blocked = json.loads(self.run_process([self.python, "-I", "-B", runner, new_feed,
+                                                  "update", "check"]).stdout)
+            self.assertEqual(blocked["status"], "incompatible_release")
+            self.run_process([self.python, "-I", "-B", runner, feed, "update", "auto", "enable"])
+            self.run_process([self.python, "-I", "-B", runner, feed, "update", "auto", "disable"])
+            old_claude = self.console_json("setup", "--agent", "claude", "--status")
+            old_paths = [old_root / name for name in ("state.json", "auto.json", "agent-setup.json")]
+            old_bytes = {path: path.read_bytes() for path in old_paths}
+
+            replacement = self.root / "schema-three"
+            install(replacement, wheels["0.4.0"])
+            self.python, self.console_path = replacement / "bin/python", replacement / "bin/richi"
+            self.assert_public_version("0.4.0")
+            self.assertEqual(self.console_json("config", "show")["database"], config["database"])
+            self.assertEqual(self.console_json("--chat", "schema-transition", "chat", "current")["workspace"], "alpha")
+            auto = self.console_json("update", "auto", "status")
+            self.assertFalse(auto["enabled"])
+            self.assertFalse(auto["auto_install"])
+            self.assertNotEqual(Path(auto["installation"]["root"]), old_root)
+
+            command = Path(self.environment["HOME"]) / ".local/bin/richi"
+            instructions = Path(self.environment["HOME"]) / ".codex/AGENTS.md"
+            instruction_bytes = instructions.read_bytes()
+            self.assertEqual(command.readlink(), original / "bin/richi")
+            conflict = self.console("setup", "--dry-run", "--replace-skill", "--no-path", ok=False)
+            self.assertIn("Another command owns", conflict.stderr)
+            command.rename(command.with_name("richi-before-schema3"))
+            self.console("setup", "--dry-run", "--replace-skill", "--no-path")
+            adopted = self.console_json("setup", "--yes", "--replace-skill", "--no-path")
+            self.assertTrue(adopted["skill_backups"])
+            self.assertEqual(command.readlink(), replacement / "bin/richi")
+            skill = Path(self.environment["HOME"]) / ".agents/skills/project-memory"
+            self.assertTrue(skill.resolve().is_relative_to(replacement))
+            self.assertEqual(self.console_json("setup", "--status")["status"], "configured")
+            self.assertEqual(instructions.read_bytes(), instruction_bytes)
+            hook_conflict = self.console("setup", "--agent", "claude", "--dry-run", "--replace-skill", ok=False)
+            self.assertIn("Another file owns the Claude hook path", hook_conflict.stderr)
+            (self.root / "claude-settings-before-schema3.json").write_bytes(claude_settings.read_bytes())
+            settings = json.loads(claude_settings.read_text())
+            self.assertEqual(settings["hooks"]["SessionStart"].count(old_claude["hook_entry"]), 1)
+            settings["hooks"]["SessionStart"].remove(old_claude["hook_entry"])
+            claude_settings.write_text(json.dumps(settings))
+            (claude_profile / "richi/session_start.py").rename(self.root / "claude-session-before-schema3.py")
+            self.console("setup", "--agent", "claude", "--dry-run", "--replace-skill", "--no-path")
+            self.console("setup", "--agent", "claude", "--yes", "--replace-skill", "--no-path")
+            new_claude = self.console_json("setup", "--agent", "claude", "--status")
+            self.assertEqual(new_claude["status"], "configured")
+            self.assertIn(str(replacement / "bin/python"), new_claude["hook_entry"]["hooks"][0]["command"])
+            self.assertEqual(json.loads(claude_settings.read_text()),
+                             {"theme": "synthetic", "hooks": {"SessionStart": [unrelated_hook, new_claude["hook_entry"]]}})
+            self.assertEqual({path: path.read_bytes() for path in protected_paths}, protected)
+            self.assertEqual({path: path.read_bytes() for path in old_paths}, old_bytes)
+            self.assertFalse(database.with_name(database.name + "-wal").exists())
+            self.assertFalse(database.with_name(database.name + "-shm").exists())
 
     def test_real_wheels_update_prune_and_recover_without_changing_workspaces(self):
         with tempfile.TemporaryDirectory(prefix="richi-wheel-lifecycle-") as temporary:

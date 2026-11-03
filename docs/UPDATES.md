@@ -60,10 +60,11 @@ runtimes may not read it. Preserve the pre-migration backup and use a compatible
 runtime for schema 3. An incompatible updater protocol is rejected before
 installation. See [graph migration](../skills/project-memory/references/GRAPH.md).
 
-Before adopting a schema-3-capable release from an older installation, reinstall
-the fixed package, launcher and stable bootstrap using the
-[installation procedure](INSTALLATION.md). The older protocol-1 manifest check
-accepts only `[1, 2]` and cannot perform this transition through automatic update.
+Older protocol-1 managers accept only `[1, 2]` and cannot install a schema-3
+release. Use the [fresh-environment transition](#schema-3-transition) below.
+Reinstalling into the original environment does not replace the managed
+current-version pointer: it still selects the old manager, even if its original
+seed package has already been collected.
 
 The updated manager records verified database-schema support per installed
 generation. Activation and rollback refuse to remove supported schemas, including
@@ -73,6 +74,69 @@ stable bootstrap checks before handing rollback to the previous manager, using
 recorded metadata even if the current package is damaged. Rollback between
 generations with compatible schema support remains available. A refusal reports
 that package rollback does not roll back databases; select a compatible release.
+
+<a id="schema-3-transition"></a>
+## Moving an older installation to schema 3 support
+
+Keep the old environments and installation metadata. The replacement uses a new
+installation identity with the existing workspace settings, chat bindings and
+data. It does not migrate a database. First record the old automatic-update
+policy and disable its schedule, using the old command:
+
+```sh
+richi update auto status
+richi update auto disable
+richi config show
+```
+
+From a checkout of the schema-3-capable release, install a fixed package into an
+**unused** prefix. Do not reinstall over a managed environment or edit its state:
+
+```sh
+richi_new_prefix="$HOME/.local/share/richi/venv-schema3"
+python3 -m venv "$richi_new_prefix"
+"$richi_new_prefix/bin/python" -m pip install --upgrade pip
+"$richi_new_prefix/bin/python" -m pip install .
+"$richi_new_prefix/bin/python" -I -c 'from richi import memory; assert 3 in memory.SUPPORTED_VERSIONS'
+"$richi_new_prefix/bin/richi" config show
+"$richi_new_prefix/bin/richi" chat current
+```
+
+Check that the configuration/database and any chat binding match the old
+command. Existing `dev` settings are preserved; inspect the selected runtime.
+If dev still selects an older checkout, select a schema-3-capable checkout or
+deliberately run `"$richi_new_prefix/bin/richi" config set dev false` before migration.
+For a managed Codex integration, inspect the old `richi setup --status` and
+`readlink "$HOME/.local/bin/richi"`. If Claude Code is configured, also save the
+old `richi setup --agent claude --status` now. Only after verifying that this is
+the old Richi command symlink, move it to an unused backup name and adopt the skill:
+
+```sh
+mv -i "$HOME/.local/bin/richi" "$HOME/.local/bin/richi-before-schema3"
+"$richi_new_prefix/bin/richi" setup --dry-run --replace-skill
+"$richi_new_prefix/bin/richi" setup --yes --replace-skill
+"$HOME/.local/bin/richi" setup --status
+```
+
+Setup preserves an existing skill outside discovery and retains unchanged
+instruction/PATH blocks. Resolve any reported edited-block or ownership conflict
+using [setup recovery](SETUP.md#резервные-копии-восстановление-и-удаление); do not
+delete installation metadata. Without managed agents, create the replacement
+command symlink with `ln -s "$richi_new_prefix/bin/richi" "$HOME/.local/bin/richi"`
+after the same verified backup, and update any manually configured agent paths.
+
+For managed Claude Code, use the saved old setup status. Back up its settings
+and hook script, remove only the reported `hook_entry` from
+`hooks.SessionStart`, and move its `richi/session_start.py` out of that path.
+Then run the replacement's `setup --agent claude --dry-run --replace-skill` and
+`setup --agent claude --yes --replace-skill`. Preserve unrelated hooks and settings;
+the new hook must use the replacement environment's Python.
+
+Open a new terminal/chat and restart maps. Automatic updates in the replacement
+start disabled; enable them only if desired using the commands below. Leave the
+old schedule disabled and use the replacement for future updates. Only after
+verifying the new runtime, back up and explicitly migrate the selected database
+as described in [graph migration](../skills/project-memory/references/GRAPH.md).
 
 <a id="сколько-версий-хранится"></a>
 ## Version retention
