@@ -115,10 +115,9 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             self.assertIn("VERSION = 3\n", memory)
             files["richi/memory.py"] = memory.replace("VERSION = 3\n", "VERSION = 2\n", 1).encode()
             manager = files["richi_launcher/installation.py"].decode("utf-8")
-            old = 'manifest.get("database_schemas") not in ([1, 2], [1, 2, 3])'
+            old = "not _contiguous_schemas(schemas)"
             self.assertIn(old, manager)
-            files["richi_launcher/installation.py"] = manager.replace(
-                old, 'manifest.get("database_schemas") != [1, 2]', 1).encode()
+            files["richi_launcher/installation.py"] = manager.replace(old, "schemas != [1, 2]", 1).encode()
         files["richi_bootstrap.py"] = Path(richi_bootstrap.__file__).read_bytes()
         info = "richi-" + version + ".dist-info/"
         files[info + "METADATA"] = ("Metadata-Version: 2.1\nName: richi\nVersion: " + version

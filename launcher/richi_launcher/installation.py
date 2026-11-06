@@ -177,8 +177,17 @@ def _compatible(manifest):
     if (not isinstance(minimum, list) or len(minimum) != 2
             or any(type(part) is not int for part in minimum) or tuple(minimum) > sys.version_info[:2]):
         raise ConfigError("Release is incompatible with this Python interpreter")
-    if manifest.get("database_schemas") not in ([1, 2], [1, 2, 3]) or manifest.get("map_schema") != 2:
+    # Protocol 1 accepts any release that reads every schema from 1 to its
+    # newest, so later schemas need no bridge release. Dropping a schema the
+    # current generation supports is refused separately on update and rollback.
+    schemas = manifest.get("database_schemas")
+    if not _contiguous_schemas(schemas) or manifest.get("map_schema") != 2:
         raise ConfigError("Release schema compatibility does not match updater protocol 1; no database was changed")
+
+
+def _contiguous_schemas(schemas):
+    return (isinstance(schemas, list) and len(schemas) >= 2
+            and all(type(item) is int for item in schemas) and schemas == list(range(1, len(schemas) + 1)))
 
 
 def assess_release(manifest, current):

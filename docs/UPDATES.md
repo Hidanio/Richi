@@ -52,17 +52,32 @@ is replaced by another file with the same version number, the result is
 version. Background checks without automatic installation report these reasons
 as well and do not suggest an installation command for a blocked release.
 
-Updating does not migrate a database. Protocol 1 accepts declared database
-support for schemas 1/2 or 1/2/3 and keeps map wire schema 2. The current runtime
+Updating does not migrate a database. Protocol 1 keeps map wire schema 2. From
+1.0.2, the manager accepts any release that declares support for every database
+schema from 1 to its newest, such as `[1, 2, 3]` or a later `[1, 2, 3, 4]`, provided
+it keeps every schema of the current version. One `update apply` can therefore
+skip any number of releases. The current runtime
 supports all three database schemas; tool cards require an explicit migration
 to schema 3. Runtime rollback does not downgrade a migrated database, and older
 runtimes may not read it. Preserve the pre-migration backup and use a compatible
 runtime for schema 3. An incompatible updater protocol is rejected before
 installation. See [graph migration](../skills/project-memory/references/GRAPH.md).
 
-Older protocol-1 managers accept only `[1, 2]` and cannot install a schema-3
-release. Use the [fresh-environment transition](#schema-3-transition) below.
-Reinstalling into the original environment does not replace the managed
+<a id="schema-3-bridge"></a>
+Managers in 1.0.1 and earlier accept only `[1, 2]` and cannot install a schema-3
+release directly. First install the 1.0.2 bridge release. It carries the new
+manager but supports only schemas 1 and 2, so rollback to the old version stays
+safe. Its `migrate` stops at schema 2, and it cannot write tool cards. Then update
+to the latest release:
+
+```sh
+richi update apply --version 1.0.2
+richi update apply
+```
+
+While 1.0.2 is the latest release, a plain `richi update apply` (or automatic
+installation) selects it. The [fresh-environment transition](#schema-3-transition)
+below remains an alternative. Reinstalling into the original environment does not replace the managed
 current-version pointer: it still selects the old manager, even if its original
 seed package has already been collected.
 

@@ -207,7 +207,9 @@ class InstallationTests(unittest.TestCase):
         self.assertEqual(list((self.root / "versions").iterdir()), [Path(first["current"]["prefix"])])
 
     def test_incompatible_protocol_or_schema_never_creates_state(self):
-        for key, value in (("updater_protocol", 2), ("database_schemas", [2, 3]), ("python_min", [99, 0])):
+        for key, value in (("updater_protocol", 2), ("database_schemas", [2, 3]), ("database_schemas", [1]),
+                           ("database_schemas", [1, 3]), ("database_schemas", [1, 2, 4]),
+                           ("database_schemas", [1, True]), ("map_schema", 3), ("python_min", [99, 0])):
             with self.subTest(key=key):
                 release = self.release("0.2.0")
                 release["manifest"][key] = value
@@ -243,6 +245,19 @@ class InstallationTests(unittest.TestCase):
                     installation.apply_release(self.release("0.3.0"))
                 stage.assert_not_called()
         self.assertEqual((self.root / "state.json").read_bytes(), before)
+
+    def test_later_schemas_install_directly_without_a_bridge_release(self):
+        # A manager that knows schemas 1-3 must accept 4+ releases, so users can
+        # skip any number of versions with one update.
+        for version, schemas in (("0.2.0", [1, 2]), ("0.3.0", [1, 2, 3]), ("0.5.0", [1, 2, 3, 4, 5])):
+            candidate = self.release(version)
+            candidate["manifest"]["database_schemas"] = schemas
+            with patch.object(installation, "_validate_layout"):
+                installed = installation.apply_release(candidate)
+            self.assertEqual(installed["current"]["database_schemas"], schemas)
+        future = self.release("0.9.0")["manifest"]
+        future["database_schemas"] = list(range(1, 10))
+        self.assertTrue(installation.assess_release(future, installed["current"])["can_apply"])
 
     def test_same_schema_rollback_recovers_corrupt_current_using_recorded_support(self):
         for version in ("0.2.0", "0.3.0"):
