@@ -97,7 +97,7 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
     def console_json(self, *arguments):
         return json.loads(self.console(*arguments).stdout)
 
-    def make_wheel(self, version, *, legacy_schemas=False):
+    def make_wheel(self, version, *, legacy_schemas=False, bridge=False):
         files = {}
         for package in (richi, richi_launcher):
             directory = Path(package.__file__).resolve().parent
@@ -108,6 +108,12 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
         changed, count = re.subn(r'(?m)^__version__\s*=.*$', '__version__ = "' + version + '"', original)
         self.assertEqual(count, 1)
         files["richi/__init__.py"] = changed.encode("utf-8")
+        if bridge:
+            # The 1.0.2 shape: the current schema-aware manager with database
+            # support capped at schemas 1 and 2.
+            memory = files["richi/memory.py"].decode("utf-8")
+            self.assertIn("VERSION = 3\n", memory)
+            files["richi/memory.py"] = memory.replace("VERSION = 3\n", "VERSION = 2\n", 1).encode()
         if legacy_schemas:
             # Keep the real package/launcher lifecycle while reproducing the
             # schema-2 manager's fixed protocol-1 compatibility restriction.
@@ -172,6 +178,40 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
         self.assertEqual(self.console(*arguments).stdout.strip(), "Richi " + version)
         self.assertEqual(self.run_process([self.python, "-I", "-B", "-m", "richi", *arguments]).stdout.strip(),
                          "Richi " + version)
+
+    def test_bridge_release_moves_legacy_manager_to_schema_three_in_place(self):
+        with tempfile.TemporaryDirectory(prefix="richi-schema-bridge-") as temporary:
+            self.root = Path(temporary).resolve()
+            self.environment = cli_environment(self.root)
+            for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
+                self.environment.pop(key, None)
+            legacy = self.make_wheel("0.1.0", legacy_schemas=True)
+            bridge = self.make_wheel("0.2.0", bridge=True)
+            latest = self.make_wheel("0.3.0")
+            seed = self.root / "seed"
+            venv.EnvBuilder(with_pip=True, symlinks=True).create(str(seed))
+            self.run_process([seed / "bin/python", "-I", "-B", "-m", "pip", "--isolated", "--disable-pip-version-check",
+                              "install", "--no-index", "--no-deps", "--no-cache-dir", "--no-compile", legacy])
+            self.python, self.console_path = seed / "bin/python", seed / "bin/richi"
+            runner = self.root / "offline_update.py"
+            runner.write_text(_OFFLINE_COMMAND, encoding="utf-8")
+
+            def update(feed, *arguments, ok=True):
+                return self.run_process([self.python, "-I", "-B", runner, feed, "update", *arguments], ok=ok)
+
+            latest_feed = self.feed_fixture(latest, "0.3.0")
+            blocked = json.loads(update(latest_feed, "check").stdout)
+            self.assertEqual(blocked["status"], "incompatible_release")
+            bridged = json.loads(update(self.feed_fixture(bridge, "0.2.0", database_schemas=(1, 2)), "apply").stdout)
+            self.assertEqual(bridged["current"]["version"], "0.2.0")
+            self.assert_public_version("0.2.0")
+            final = json.loads(update(latest_feed, "apply").stdout)
+            self.assertEqual((final["current"]["version"], final["current"]["database_schemas"]), ("0.3.0", [1, 2, 3]))
+            self.assertEqual(Path(final["root"]), Path(bridged["root"]))
+            self.assert_public_version("0.3.0")
+            refused = update(latest_feed, "rollback", ok=False)
+            self.assertIn("drops database schema support for 3", refused.stdout + refused.stderr)
+            self.assert_public_version("0.3.0")
 
     def test_schema_three_transition_uses_fresh_prefix_and_preserves_workspace(self):
         with tempfile.TemporaryDirectory(prefix="richi-schema-transition-") as temporary:
