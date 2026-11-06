@@ -45,8 +45,12 @@ def _records(ctx):
     value = files.snapshot(Path(ctx["root"]) / MANIFEST)
     if value["kind"] == "absent":
         return {}
+    return _parse_records(files.contents(value), ctx)
+
+
+def _parse_records(data, ctx):
     try:
-        record = json.loads(files.contents(value))
+        record = json.loads(data)
         if record["original_prefix"] != ctx["original_prefix"]:
             raise ValueError("different owner")
         if record["format_version"] == 1:
@@ -62,9 +66,26 @@ def _records(ctx):
                 raise ValueError("unsupported adapter version for " + agent)
             for key in ("skill", "command", "instructions"):
                 files.safe_path(item[key])
-        return records
+        # 1.0.1 wrote records without adapter_version, and its manager also
+        # activates the following release. Normalize them so the next write
+        # stores the current shape.
+        return {agent: dict(item, adapter_version=agent_adapters.AGENTS[agent][1])
+                for agent, item in records.items()}
     except (KeyError, TypeError, ValueError) as exc:
         raise ConfigError("Invalid agent setup metadata: " + str(exc)) from exc
+
+
+def _same_records(ctx, operation):
+    """A manifest whose records only need normalization is still configured."""
+    if Path(operation["path"]) != files.safe_path(Path(ctx["root"]) / MANIFEST):
+        return False
+    if operation["before"]["kind"] != "file" or operation["after"]["kind"] != "file":
+        return False
+    try:
+        return (_parse_records(files.contents(operation["before"]), ctx)
+                == _parse_records(files.contents(operation["after"]), ctx))
+    except ConfigError:
+        return False
 
 
 def _load(ctx, agent="codex"):
@@ -277,7 +298,7 @@ def command(argv):
             return dict(record, status="recovery_required", pending_recovery=True)
         # Replanning also detects shadowed/edited instructions and broken links.
         _, operations = plan(ctx, agent=args.agent)
-        drift = [op["path"] for op in operations if op["before"] != op["after"]]
+        drift = [op["path"] for op in operations if op["before"] != op["after"] and not _same_records(ctx, op)]
         return dict(record, status="repair_required" if drift else "configured", changes=drift,
                     pending_recovery=False)
     record, ops = plan(ctx, replace_skill=args.replace_skill, no_path=args.no_path, agent=args.agent)
