@@ -123,11 +123,15 @@ class ToolSchemaTests(unittest.TestCase):
 
     def test_release_supports_old_and_new_schemas_without_map_wire_change(self):
         manifest = {"format_version": 1, "updater_protocol": 1, "python_min": [3, 9], "map_schema": 2}
-        for schemas in ([1, 2], [1, 2, 3]):
+        # Later schemas need no bridge release: any support from 1 to the newest
+        # schema is accepted; shrinking support is refused on update/rollback.
+        for schemas in ([1, 2], [1, 2, 3], [1, 2, 3, 4]):
             installation._compatible(dict(manifest, database_schemas=schemas))
-        for schemas in ([2, 3], [1, 2, 3, 4]):
+        for schemas in ([2, 3], [1, 3], [1]):
             with self.assertRaises(ValueError):
                 installation._compatible(dict(manifest, database_schemas=schemas))
+        with self.assertRaises(ValueError):
+            installation._compatible(dict(manifest, database_schemas=[1, 2, 3], map_schema=3))
 
 
 if __name__ == "__main__":
