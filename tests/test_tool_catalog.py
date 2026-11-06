@@ -249,8 +249,11 @@ class ToolCatalogTests(unittest.TestCase):
         value = self.cli("tools", "list", "--limit", "1")
         self.assertTrue(value["truncated"])
         self.assertEqual(value["total_tools"], 2)
-        self.cli("tools", "get", "missing", ok=False)
-        self.cli("tools", "get", "concept:tracekit", ok=False)
+        for identity in ("missing", "concept:tracekit"):
+            with self.subTest(identity=identity):
+                error = self.cli("tools", "get", identity, ok=False)
+                self.assertEqual(error["code"], "not_found", error)
+        self.assertNotIn("code", self.cli("tools", "get", "x" * 201, ok=False))
         self.cli("tools", "list", "--limit", "201", ok=False)
 
     def test_recall_and_strict_filter_share_confirmed_usage_scope(self):

@@ -120,7 +120,8 @@ tools matching the selected state and ID filters.
 
 The Tools tab reads a catalog of at most 200 tools independently of the map's
 graph export, then loads detail when a tool is selected. `/api/tools?tool=ID`
-serves that detail from the same scoped, read-only worker path. The interface
+serves that detail from the same scoped, read-only worker path and answers 404
+with `code: not_found` when the tool is absent in the selected states. The interface
 shows a completeness warning when a result is truncated. Schema 2 remains
 readable, with an empty tool catalog until explicitly migrated and populated.
 

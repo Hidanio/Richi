@@ -236,9 +236,13 @@ def _run_graph_request(database, flags, runtime, config_file=None, workspace=Non
             timeout=GRAPH_WORKER_TIMEOUT, maximum=GRAPH_WORKER_OUTPUT_LIMIT)
         if status:
             try:
-                return 503, json.loads(error.decode("utf-8"))
+                payload = json.loads(error.decode("utf-8"))
             except (ValueError, UnicodeError):
                 return 503, {"error": "Graph export failed; run richi check"}
+            # A missing tool is a stable answer, not a worker failure to retry.
+            if tool_id is not None and isinstance(payload, dict) and payload.get("code") == "not_found":
+                return 404, payload
+            return 503, payload
         return 200, output
     except (TimeoutError, subprocess.TimeoutExpired):
         return 503, {"error": "Graph export timed out"}

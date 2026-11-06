@@ -205,7 +205,7 @@ def run(conn, args, api):
         maximum = 1
     total = conn.execute("SELECT count(*) FROM entities WHERE " + clause, values).fetchone()[0]
     if args.action == "get" and not total:
-        raise api.MemoryError("Tool not found in the selected knowledge states: " + args.id)
+        raise api.NotFoundError("Tool not found in the selected knowledge states: " + args.id)
     rows = conn.execute("SELECT * FROM entities WHERE " + clause +
                         " ORDER BY title COLLATE NOCASE, id LIMIT ?", values + [maximum])
     tools, records = [], {}

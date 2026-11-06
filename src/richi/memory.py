@@ -53,7 +53,12 @@ END
 
 
 class MemoryError(Exception):
-    pass
+    code = None
+
+
+class NotFoundError(MemoryError):
+    """The requested object is absent from the selected knowledge states."""
+    code = "not_found"
 
 
 def now():
@@ -706,7 +711,10 @@ def main(argv=None):
             sys.stdout.write(output.rendered(result))
         return 0
     except (MemoryError, sqlite3.Error, OSError, ValueError) as exc:
-        print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        payload = {"error": str(exc)}
+        if isinstance(exc, MemoryError) and exc.code:
+            payload["code"] = exc.code
+        print(json.dumps(payload, ensure_ascii=False), file=sys.stderr)
         return 1
 
 

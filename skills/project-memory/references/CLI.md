@@ -45,7 +45,7 @@ For another database, put `--db` **before** the command:
 richi --db '/путь с пробелами/память.sqlite3' init
 ```
 
-All results are JSON on stdout; errors are JSON on stderr with a nonzero exit code. `--help` prints plain text. For `put/upsert`, `--json` accepts a UTF-8 file or `-` for stdin. An import accepts one object or an array of up to 1000 objects and runs atomically: an error in one object rolls back the entire batch. Duplicate IDs within a batch are forbidden; the maximum input size is 10 million characters. Git `sources --json` commands accept a single-source file, without stdin.
+All results are JSON on stdout; errors are JSON on stderr with a nonzero exit code; a missing tool from `tools get` adds `"code": "not_found"`. `--help` prints plain text. For `put/upsert`, `--json` accepts a UTF-8 file or `-` for stdin. An import accepts one object or an array of up to 1000 objects and runs atomically: an error in one object rolls back the entire batch. Duplicate IDs within a batch are forbidden; the maximum input size is 10 million characters. Git `sources --json` commands accept a single-source file, without stdin.
 
 <a id="компактный-json-для-ии-и-скриптов"></a>
 

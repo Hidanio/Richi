@@ -89,6 +89,24 @@ assert.equal(calls,1);
 """)
 
 
+    def test_missing_tool_is_final_and_other_failures_keep_the_server_reason(self):
+        self.run_script(r"""
+let empty=null;
+toolEmpty=(root,title,description,retry)=>{empty={title,retry:Boolean(retry)};};
+global.fetch=async()=>({ok:false,status:404,json:async()=>({error:'Tool not found',code:'not_found'})});
+state.toolsData={tools:[{id:'gone',ref:'entity:gone',title:'Gone'}]};state.toolId='gone';
+await loadToolDetail('gone');
+assert.equal(state.toolDetailMissing,'gone');
+renderTools();
+assert.deepEqual(empty,{title:'Инструмент не найден',retry:false});
+// The verdict belongs to the requested tool only.
+state.toolDetails.set('kept',{id:'kept',ref:'entity:kept',title:'Kept',detail:true,projects:[]});
+state.toolId='kept';rendered=null;renderTools();
+assert.deepEqual(rendered,{tool:'kept'});
+global.fetch=async()=>({ok:false,status:503,json:async()=>({error:'Graph export timed out'})});
+await assert.rejects(requestTools(new URLSearchParams(),new AbortController().signal),/HTTP 503: Graph export timed out/);
+""")
+
     def test_busy_retry_uses_the_full_loader_deadline(self):
         self.run_script(r"""
 // A deterministic clock runs real loader deadlines and retry waits together.

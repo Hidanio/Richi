@@ -129,7 +129,7 @@
   const stateNames = {confirmed:'Подтверждено',hypothesis:'Гипотеза',superseded:'Устарело'};
   const workNames = {planned:'Запланировано',in_progress:'В работе',implemented:'Реализовано',merged:'Влито',released:'Выпущено',blocked:'Заблокировано',done:'Завершено'};
   const relationNames = {depends_on:'зависит от',related_to:'связано с',implements:'реализует',explains:'объясняет',supersedes:'заменяет',variant_of:'вариант понятия',used_in:'используется в',contradicts:'противоречит',uses:'использует',uses_tool:'применяет инструмент',produces:'производит',consumes:'потребляет',part_of:'часть',belongs_to:'относится к',belongs_to_project:'относится к проекту',documented_by:'описано в',supported_by:'подтверждается',supports:'подтверждает',affects:'влияет на',references:'ссылается на',has_entry:'содержит запись',associated_with:'связано с',entry_project:'относится к проекту'};
-  const state = {mode:'map',mapQuery:'',conceptQuery:'',conceptProject:'',toolQuery:'',toolFilter:'',toolId:'',toolProject:'',toolRecord:null,toolsData:null,toolsLoading:false,toolsError:'',toolsRequest:0,toolsFlags:'',toolsRequestedFlags:'',toolDetails:new Map(),toolDetailLoading:false,toolDetailError:'',toolDetailRequest:0,truncated:false,lastError:'',nodes:[],edges:[],nodeMap:new Map(),edgeMap:new Map(),adjacency:new Map(),kinds:new Set(),disabledKinds:new Set(),focus:null,selection:null,depth:1,positions:new Map(),visibleNodes:[],visibleEdges:[],camera:{x:0,y:0,k:1},loaded:false,loading:false,request:0,suppressClick:false,sidebarOpen:true};
+  const state = {mode:'map',mapQuery:'',conceptQuery:'',conceptProject:'',toolQuery:'',toolFilter:'',toolId:'',toolProject:'',toolRecord:null,toolsData:null,toolsLoading:false,toolsError:'',toolsRequest:0,toolsFlags:'',toolsRequestedFlags:'',toolDetails:new Map(),toolDetailLoading:false,toolDetailError:'',toolDetailMissing:'',toolDetailRequest:0,truncated:false,lastError:'',nodes:[],edges:[],nodeMap:new Map(),edgeMap:new Map(),adjacency:new Map(),kinds:new Set(),disabledKinds:new Set(),focus:null,selection:null,depth:1,positions:new Map(),visibleNodes:[],visibleEdges:[],camera:{x:0,y:0,k:1},loaded:false,loading:false,request:0,suppressClick:false,sidebarOpen:true};
   const svg = $('graph');
   const make = (tag,cls,text) => {const el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=String(text);return el;};
   const makeSvg = (tag,attrs={}) => {const el=document.createElementNS(NS,tag);for(const [k,v]of Object.entries(attrs))el.setAttribute(k,String(v));return el;};
@@ -540,6 +540,7 @@
     if(!state.toolsData){toolEmpty(root,state.toolsLoading?'Загружаем инструменты':state.toolsError?'Не удалось загрузить инструменты':'Каталог инструментов',state.toolsLoading?'Собираем карточки и связанный опыт.':state.toolsError||'Откройте каталог, чтобы посмотреть сохранённые инструменты.',Boolean(state.toolsError));return;}
     if(state.toolsError)toolWarning(root,'Не удалось обновить каталог: '+state.toolsError+' Показан предыдущий снимок.');
     if(!state.toolId){renderToolCatalog(root);return;}const tool=state.toolDetails.get(state.toolId)||list(state.toolsData.tools).find(item=>item.id===state.toolId);
+    if(state.toolDetailMissing===state.toolId&&!state.toolDetailLoading){toolBreadcrumbs(root);toolEmpty(root,'Инструмент не найден','В памяти нет этого инструмента при выбранных состояниях знаний. Его могли удалить или скрыть фильтром гипотез или устаревших записей.');return;}
     if(!tool&&!state.toolDetailLoading&&!state.toolDetailError){toolBreadcrumbs(root);toolEmpty(root,'Инструмент не найден в этом снимке','Он мог быть изменён, скрыт фильтром состояния или не войти в загруженную часть каталога.');return;}
     if(!tool||tool.detail!==true){toolBreadcrumbs(root,tool);toolEmpty(root,state.toolDetailLoading?'Открываем инструмент':state.toolDetailError?'Не удалось открыть инструмент':'Загружаем применение',state.toolDetailLoading?'Читаем проекты, задачи и сценарии применения.':state.toolDetailError||'Читаем подробности инструмента.');if(state.toolDetailError)root.querySelector('.tools-empty').append(toolButton('Повторить',()=>loadToolDetail(state.toolId),'primary'));return;}
     if(!state.toolProject){renderToolDetail(root,tool);return;}const project=toolProjects(tool).find(item=>item.id===state.toolProject);
@@ -568,7 +569,8 @@
       const response=await fetch('/api/tools?'+params,{cache:'no-store',signal});if(response.ok)return response.json();
       let error=null;try{error=await response.json();}catch(cause){if(cause.name==='AbortError')throw cause;}
       if(response.status===503&&error?.code==='busy'){await waitForToolsRetry(delay,signal);continue;}
-      throw new Error(response.status===404?'Инструмент не найден в текущем состоянии памяти.':'Сервер вернул HTTP '+response.status);
+      if(response.status===404){const missing=new Error('Инструмент не найден в текущем состоянии памяти.');missing.notFound=true;throw missing;}
+      throw new Error('Сервер вернул HTTP '+response.status+(typeof error?.error==='string'&&error.error?': '+error.error.slice(0,300):''));
     }
   }
   function currentToolDetail(){return state.toolDetails.get(state.toolId)||null;}
@@ -577,18 +579,18 @@
     if(!identity)return;const id=identity,flags=toolsFilterKey(),key=id+'|'+flags;
     if(state.toolDetailLoading&&toolDetailController?.key===key)return;
     if(toolDetailController)toolDetailController.abort();const request=++state.toolDetailRequest,controller=new AbortController();controller.key=key;toolDetailController=controller;
-    const timeout=setTimeout(()=>controller.abort(),20000);state.toolDetailLoading=true;state.toolDetailError='';renderTools();
+    const timeout=setTimeout(()=>controller.abort(),20000);state.toolDetailLoading=true;state.toolDetailError='';state.toolDetailMissing='';renderTools();
     try{
       const params=new URLSearchParams({tool:id,include_hypotheses:$('hypotheses').checked?'1':'0',include_superseded:$('superseded').checked?'1':'0'}),data=await requestTools(params,controller.signal);
       if(request!==state.toolDetailRequest)return;const tool=hydrateToolDetail(data);if(!tool||tool.id!==id)throw new Error('Неожиданный формат карточки инструмента');
       tool.truncated=Boolean(tool.truncated||data.truncated);state.toolDetails.set(tool.id,tool);state.toolDetailLoading=false;
       renderTools();if(state.toolRecord){const records=[...tool.records,...toolProjects(tool).flatMap(project=>[...list(project.tasks),...list(project.records)])],fresh=records.find(record=>record.id===state.toolRecord.id);if(fresh&&state.mode==='tools')openToolRecord(fresh);else closeToolRecord();}else if(state.toolFocusPending&&state.mode==='tools'){state.toolFocusPending=false;$('tools-content').querySelector('.tool-detail-heading')?.focus({preventScroll:true});}
       announce('Открыт инструмент: '+tool.title);
-    }catch(error){if(request!==state.toolDetailRequest)return;state.toolDetailLoading=false;state.toolDetailError=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;closeToolRecord();renderTools();}
+    }catch(error){if(request!==state.toolDetailRequest)return;state.toolDetailLoading=false;state.toolDetailMissing=error.notFound?id:'';state.toolDetailError=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;closeToolRecord();renderTools();}
     finally{clearTimeout(timeout);if(request===state.toolDetailRequest){state.toolDetailLoading=false;toolDetailController=null;}}
   }
   async function loadTools(){
-    if(toolsController)toolsController.abort();if(toolDetailController)toolDetailController.abort();state.toolDetailRequest++;state.toolDetailLoading=false;state.toolDetailError='';
+    if(toolsController)toolsController.abort();if(toolDetailController)toolDetailController.abort();state.toolDetailRequest++;state.toolDetailLoading=false;state.toolDetailError='';state.toolDetailMissing='';
     const flags=toolsFilterKey();if(state.toolsData&&state.toolsFlags!==flags){state.toolsData=null;state.toolDetails.clear();closeToolRecord();}
     state.toolsRequestedFlags=flags;
     const request=++state.toolsRequest;state.toolsLoading=true;state.toolsError='';renderTools();const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);toolsController=controller;
