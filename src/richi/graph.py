@@ -5,7 +5,8 @@ from collections import deque
 import json
 
 
-ENTITY_KINDS = {"pull_request", "metric", "component", "concept", "document", "jira"}
+ENTITY_KINDS = {"pull_request", "metric", "component", "concept", "document", "jira", "tool"}
+MAP_SCHEMA_VERSION = 2
 ENTITY_FIELDS = ("id", "kind", "title", "summary", "sources", "knowledge_state", "verified_at",
                  "tags", "aliases", "created_at", "updated_at")
 EDGE_FIELDS = ("id", "from_ref", "to_ref", "kind", "description", "sources", "knowledge_state",
@@ -15,32 +16,70 @@ MAX_EDGES = 10000
 
 
 def require_v2(conn, api):
-    if conn.execute("PRAGMA user_version").fetchone()[0] != 2:
-        raise api.MemoryError("Graph commands require schema 2; make a backup and run migrate explicitly")
+    if conn.execute("PRAGMA user_version").fetchone()[0] not in {2, 3}:
+        raise api.MemoryError("Graph commands require schema 2 or 3; make a backup and run migrate explicitly")
+
+
+def _migrate_entities_v3(conn, api):
+    """Expand the kind constraint without rewriting IDs, history or indexes.
+
+    The caller disables foreign keys outside its transaction, as required by
+    SQLite's table-rebuild procedure, and checks every constraint before commit.
+    Dependent tables keep referencing the name `entities` throughout the rebuild.
+    """
+    columns = tuple(row[1] for row in conn.execute("PRAGMA table_info(entities)"))
+    if columns != ENTITY_FIELDS:
+        raise api.MemoryError("Schema 2 entities columns do not match the migration contract")
+    schema_objects = conn.execute("""
+        SELECT sql FROM sqlite_master
+        WHERE tbl_name = 'entities' AND type IN ('index', 'trigger') AND sql IS NOT NULL
+        ORDER BY type, name
+    """).fetchall()
+    table_sql = (api.BASE / "graph_schema.sql").read_text(encoding="utf-8").split(";", 1)[0]
+    conn.execute(table_sql.replace("CREATE TABLE entities (", "CREATE TABLE richi_entities_v3 (", 1))
+    fields = ", ".join(ENTITY_FIELDS)
+    conn.execute("INSERT INTO richi_entities_v3 (rowid, " + fields + ") SELECT rowid, " + fields + " FROM entities")
+    conn.execute("DROP TABLE entities")
+    conn.execute("ALTER TABLE richi_entities_v3 RENAME TO entities")
+    for row in schema_objects:
+        conn.execute(row[0])
 
 
 def migrate(conn, path, api):
-    with api.transaction(conn):
-        version = conn.execute("PRAGMA user_version").fetchone()[0]
-        if version not in {1, 2}:
-            raise api.MemoryError("Cannot migrate unknown schema version: " + str(version))
-        api.backend(conn)
-        if version == 2:
-            require_v2(conn, api)
-            return {"status": "existing", "schema_version": 2, "database": str(path)}
-        expected = {"projects", "entries", "entry_projects", "relations", "entry_history", "entry_events", "metadata"}
-        existing = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE 1=1 AND type = 'table'")}
-        if not expected.issubset(existing):
-            raise api.MemoryError("Schema 1 is missing required tables; migration refused")
-        if conn.execute("PRAGMA foreign_key_check").fetchone():
-            raise api.MemoryError("Existing foreign key violations; migration refused")
-        if [row[0] for row in conn.execute("PRAGMA integrity_check")] != ["ok"]:
-            raise api.MemoryError("Existing integrity errors; migration refused")
-        api.execute_script(conn, (api.BASE / "graph_schema.sql").read_text(encoding="utf-8"))
-        if conn.execute("PRAGMA foreign_key_check").fetchone():
-            raise api.MemoryError("Migration foreign key check failed")
-        conn.execute("PRAGMA user_version = 2")
-    return {"status": "migrated", "from_version": 1, "schema_version": 2, "database": str(path)}
+    if conn.in_transaction:
+        raise api.MemoryError("Migration requires a connection without an active transaction")
+    foreign_keys = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        with api.transaction(conn):
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            if version not in {1, 2, 3}:
+                raise api.MemoryError("Cannot migrate unknown schema version: " + str(version))
+            api.backend(conn)
+            if version == 3:
+                return {"status": "existing", "schema_version": 3, "database": str(path)}
+            expected = {"projects", "entries", "entry_projects", "relations", "entry_history", "entry_events", "metadata"}
+            if version == 2:
+                expected.update({"entities", "graph_nodes", "graph_edges", "entity_history", "edge_history"})
+            existing = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            if not expected.issubset(existing):
+                raise api.MemoryError("Schema {} is missing required tables; migration refused".format(version))
+            if conn.execute("PRAGMA foreign_key_check").fetchone():
+                raise api.MemoryError("Existing foreign key violations; migration refused")
+            if [row[0] for row in conn.execute("PRAGMA integrity_check")] != ["ok"]:
+                raise api.MemoryError("Existing integrity errors; migration refused")
+            if version == 1:
+                api.execute_script(conn, (api.BASE / "graph_schema.sql").read_text(encoding="utf-8"))
+            else:
+                _migrate_entities_v3(conn, api)
+            if conn.execute("PRAGMA foreign_key_check").fetchone():
+                raise api.MemoryError("Migration foreign key check failed")
+            if [row[0] for row in conn.execute("PRAGMA integrity_check")] != ["ok"]:
+                raise api.MemoryError("Migration integrity check failed")
+            conn.execute("PRAGMA user_version = 3")
+        return {"status": "migrated", "from_version": version, "schema_version": 3, "database": str(path)}
+    finally:
+        conn.execute("PRAGMA foreign_keys = " + str(foreign_keys))
 
 
 def ref(value, api):
@@ -97,6 +136,8 @@ def put(conn, obj, kind, api):
         record.update(kind=api.enum(obj.get("kind"), "kind", ENTITY_KINDS),
                       title=api.string(obj.get("title"), "title"), summary=api.string(obj.get("summary"), "summary"),
                       tags=api.string_list(obj.get("tags", []), "tags"), aliases=api.string_list(obj.get("aliases", []), "aliases"))
+        if record["kind"] == "tool" and conn.execute("PRAGMA user_version").fetchone()[0] != 3:
+            raise api.MemoryError("Tool entities require schema 3; make a backup and run richi migrate explicitly")
         table, history_table = "entities", "entity_history"
     else:
         record.update(from_ref=ref(obj.get("from_ref"), api), to_ref=ref(obj.get("to_ref"), api),
@@ -260,7 +301,7 @@ def export(conn, args, api):
                 break
         if edges_truncated:
             break
-    return {"schema_version": 2, "generated_at": api.now(), "nodes": [node(conn, item, api) for item in selected],
+    return {"schema_version": MAP_SCHEMA_VERSION, "generated_at": api.now(), "nodes": [node(conn, item, api) for item in selected],
             "edges": result_edges, "truncated": truncated or edges_truncated,
             "limits": {"max_nodes": cap, "max_edges": MAX_EDGES, "nodes_truncated": truncated, "edges_truncated": edges_truncated},
             "scope": {"root": root, "depth": args.depth if is_neighbors else None,

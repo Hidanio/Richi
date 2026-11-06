@@ -98,7 +98,7 @@ def _changes(repo, base, target, worktree):
 
 def _inventory(conn, coverage, deadline):
     tables = [("entry", "entries", "summary", "title", "work_state", "NULL", "NULL")]
-    if conn.execute("PRAGMA user_version").fetchone()[0] == 2:
+    if conn.execute("PRAGMA user_version").fetchone()[0] in (2, 3):
         tables += [("entity", "entities", "summary", "title", "NULL", "NULL", "NULL"),
                    ("edge", "graph_edges", "description", "kind", "NULL", "from_ref", "to_ref")]
     for family, table, summary, title, work, origin, destination in tables:

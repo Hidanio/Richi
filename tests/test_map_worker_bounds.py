@@ -54,6 +54,18 @@ class GraphWorkerBoundsTests(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 3)
         self.assert_reaped(processes)
 
+    def test_missing_tool_maps_to_not_found_but_export_failures_stay_unavailable(self):
+        error = b'{"error": "Tool not found", "code": "not_found"}'
+        code = "import os,sys;os.write(2, " + repr(error) + ");sys.exit(1)"
+        for tool_id, expected in (("gone", 404), (None, 503)):
+            with self.subTest(tool_id=tool_id):
+                processes = []
+                with self.launch_fake(code, processes):
+                    status, payload = serve._run_graph_request(Path("/unread-database"), [], serve.current_runtime(),
+                                                               catalog=True, tool_id=tool_id)
+                self.assertEqual((status, payload["code"]), (expected, "not_found"))
+                self.assert_reaped(processes)
+
     def test_graph_success_keeps_exact_worker_bytes(self):
         processes = []
         payload = b'{"nodes": [], "edges": [], "title": "synthetic"}\n'

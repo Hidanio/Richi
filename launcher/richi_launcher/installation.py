@@ -68,11 +68,13 @@ def _validate_layout(ctx):
 def _seed_state(ctx):
     if ctx["prefix"] != ctx["original_prefix"]:
         raise ConfigError("Managed release is missing its installation state")
+    seed = {"kind": "seed", "prefix": ctx["original_prefix"],
+            "site": ctx["site"], "version": _version(ctx["site"])}
+    seed["database_schemas"] = bootstrap.generation_schemas(seed)
     return {"format_version": 1, "updater_protocol": 1,
             "original_prefix": ctx["original_prefix"], "seed_bootstrap": ctx["bootstrap"],
             "current": "seed", "previous": None,
-            "generations": {"seed": {"kind": "seed", "prefix": ctx["original_prefix"],
-                                      "site": ctx["site"], "version": _version(ctx["site"])}}}
+            "generations": {"seed": seed}}
 
 
 def _state(ctx):
@@ -175,7 +177,7 @@ def _compatible(manifest):
     if (not isinstance(minimum, list) or len(minimum) != 2
             or any(type(part) is not int for part in minimum) or tuple(minimum) > sys.version_info[:2]):
         raise ConfigError("Release is incompatible with this Python interpreter")
-    if manifest.get("database_schemas") != [1, 2] or manifest.get("map_schema") != 2:
+    if manifest.get("database_schemas") not in ([1, 2], [1, 2, 3]) or manifest.get("map_schema") != 2:
         raise ConfigError("Release schema compatibility does not match updater protocol 1; no database was changed")
 
 
@@ -184,9 +186,10 @@ def assess_release(manifest, current):
     from .releases import version_tuple
     try:
         _compatible(manifest)
+        bootstrap.require_schema_compatible(current, manifest)
         candidate = version_tuple(manifest.get("version"))
         installed = version_tuple(current["version"]) if current.get("version") is not None else None
-    except ConfigError as exc:
+    except (ConfigError, bootstrap.InstallationError) as exc:
         return {"status": "incompatible_release", "can_apply": False, "message": str(exc)}
     if installed is not None and candidate < installed:
         return {"status": "older_release", "can_apply": False,
@@ -206,10 +209,11 @@ def assess_release(manifest, current):
 _CHECK = r'''
 import json, pathlib, sysconfig
 import richi, richi_bootstrap
-from richi import memory, serve
+from richi import graph, memory, serve
 from richi_launcher import cli
 print(json.dumps({"version": richi.__version__, "updater_protocol": richi_bootstrap.BOOTSTRAP_PROTOCOL,
-                  "map_schema": memory.VERSION, "site": str(pathlib.Path(sysconfig.get_paths()["purelib"]).resolve())}))
+                  "database_schemas": sorted(getattr(memory, "SUPPORTED_VERSIONS", {1, memory.VERSION})),
+                  "map_schema": getattr(graph, "MAP_SCHEMA_VERSION", memory.VERSION), "site": str(pathlib.Path(sysconfig.get_paths()["purelib"]).resolve())}))
 '''
 
 
@@ -247,7 +251,7 @@ def _stage(ctx, generation, wheel, manifest):
         report = json.loads(_run([python, "-I", "-B", "-c", _CHECK], "Release self-check"))
     except ValueError as exc:
         raise ConfigError("Release self-check returned invalid metadata") from exc
-    for key in ("version", "updater_protocol", "map_schema"):
+    for key in ("version", "updater_protocol", "database_schemas", "map_schema"):
         if report.get(key) != manifest.get(key):
             raise ConfigError("Release self-check disagrees with manifest: " + key)
     site = Path(report["site"])
@@ -423,6 +427,8 @@ def apply_release(release, *, expected_generation=None, blocking=True,
                 wheel = releases.download_wheel(release, Path(temporary))
                 releases.verify_wheel(wheel, manifest)
                 record = _stage(ctx, generation, wheel, manifest)
+                # The verified manifest is the single source of schema support.
+                record["database_schemas"] = list(manifest["database_schemas"])
             if require_auto:
                 _run([str(candidate / "bin" / "python"), "-I", "-B", "-c",
                       "from richi_launcher import auto_update, update; "
@@ -478,6 +484,7 @@ def rollback():
             _verify_owner(ctx, state["previous"], Path(previous["prefix"]))
             if not (Path(previous["site"]) / "richi" / "memory.py").is_file():
                 raise ConfigError("Previous Richi release is missing; rollback was not applied")
+            bootstrap.require_schema_compatible(state["generations"][state["current"]], previous)
             from . import auto_update
             auto_update.pause_for_rollback(ctx, state["previous"])
             state["current"], state["previous"] = state["previous"], state["current"]

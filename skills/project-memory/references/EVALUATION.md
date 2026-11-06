@@ -94,7 +94,7 @@ this does not measure time, tokens or LLM quality on real memory.
 
 For `long_summary`, separately check Unicode-length boundaries, the new threshold
 and default, severity by state, strict scope, unchanged data/history/
-FTS/graph on schemas 1 and 2, absence of source/Git/network I/O and actual
+FTS/graph on schemas 1, 2 and 3, absence of source/Git/network I/O and actual
 JSON size under a tight budget. An omitted finding is counted, while a displayed finding
 retains mandatory details and the full ID. Incomplete scanning is not reported
 as full coverage, and candidates do not change integrity health. The contract is in

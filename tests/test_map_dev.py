@@ -55,9 +55,11 @@ class MapDevelopmentTests(unittest.TestCase):
             root = Path(temporary).resolve()
             _installed, checkout, package = self.copied_installation(root)
             graph_source = package / "graph.py"
-            graph_source.write_text(graph_source.read_text().replace(
-                'return {"schema_version": 2, "generated_at":',
-                'return {"dev_fixture": True, "schema_version": 2, "generated_at":'))
+            original = graph_source.read_text()
+            anchor = 'return {"schema_version": MAP_SCHEMA_VERSION, "generated_at":'
+            self.assertIn(anchor, original)
+            graph_source.write_text(original.replace(
+                anchor, 'return {"dev_fixture": True, "schema_version": MAP_SCHEMA_VERSION, "generated_at":'))
             runtime = describe_runtime(package, "dev", checkout)
             database = root / "memory.sqlite3"
             config = root / "config.json"

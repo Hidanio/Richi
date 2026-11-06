@@ -219,7 +219,7 @@ class StatusDiagnosticsTests(unittest.TestCase):
         self.assertEqual(report["projects"]["total"], 2)
 
     def test_schema_one_supported_unknown_schema_not_migrated(self):
-        for version, expected in ((1, "ready"), (99, "unsupported_schema")):
+        for version, expected in ((1, "ready"), (2, "ready"), (3, "ready"), (99, "unsupported_schema")):
             with sqlite3.connect(str(self.db)) as conn:
                 conn.execute("PRAGMA user_version = {}".format(version))
             digest = hashlib.sha256(self.db.read_bytes()).hexdigest()

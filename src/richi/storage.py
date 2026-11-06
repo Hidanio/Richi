@@ -197,7 +197,7 @@ def _stats(conn, args, api, database):
                  for name in ("page_size", "page_count", "freelist_count")}
         report["database_pages"] = dict(pages, allocated_bytes=pages["page_size"] * pages["page_count"],
                                         free_page_bytes=pages["page_size"] * pages["freelist_count"])
-        tables = BASE_TABLES + (GRAPH_TABLES if version == 2 else ())
+        tables = BASE_TABLES + (GRAPH_TABLES if version in (2, 3) else ())
         report["counts"] = {}
         try:
             for table in tables:

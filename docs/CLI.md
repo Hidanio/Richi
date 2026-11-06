@@ -112,6 +112,7 @@ directory is portable, without links to files outside it.
 | Create entities and edges | [Graph](../skills/project-memory/references/GRAPH.md) |
 | Read neighbors of a known record | [Neighbors and output boundaries](../skills/project-memory/references/NEIGHBORS.md) |
 | Describe terms with different meanings and versions | [Encyclopedia](../skills/project-memory/references/ENCYCLOPEDIA.md) |
+| Find tools, configurations and tasks that used them | [Tools](../skills/project-memory/references/TOOLS.md) |
 | Investigate a missing known result | [Recall diagnostics](../skills/project-memory/references/RECALL_DEBUG.md) |
 | Check workspace status, candidates or a source group | [Diagnostics](../skills/project-memory/references/DIAGNOSTICS.md) |
 | Assess duplicates and consolidation without changes | [Bounded audit](../skills/project-memory/references/MEMORY_AUDIT.md) |

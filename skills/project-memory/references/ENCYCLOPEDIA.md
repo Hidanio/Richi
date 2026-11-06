@@ -9,6 +9,10 @@ It uses the same SQLite database, history, sources and graph. No schema migratio
 or separate MCP is required. On the website, the “Encyclopedia” switch opens
 the definitions catalog; a card leads to sources and related map nodes.
 
+Practical tool cards use `kind: tool` in the separate Tools catalog. Keep
+definitions here; reusable commands, configurations and concrete attempts follow
+[TOOLS.md](TOOLS.md). A tool does not require a duplicate concept card.
+
 <a id="одно-название-несколько-значений"></a>
 
 ## One name, several meanings

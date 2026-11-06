@@ -206,6 +206,10 @@ class QueryFilterTests(unittest.TestCase):
         conn.executescript("""
             CREATE TABLE projects (id TEXT PRIMARY KEY);
             CREATE TABLE entities (id TEXT PRIMARY KEY, kind TEXT);
+            CREATE TABLE entries (id TEXT PRIMARY KEY, knowledge_state TEXT);
+            CREATE TABLE entry_projects (
+                entry_id TEXT, project_id TEXT, PRIMARY KEY (entry_id, project_id)
+            );
             CREATE TABLE graph_edges (
                 id TEXT PRIMARY KEY, from_ref TEXT, to_ref TEXT, kind TEXT,
                 sources TEXT, knowledge_state TEXT
