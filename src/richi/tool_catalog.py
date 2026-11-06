@@ -17,8 +17,15 @@ MAX_TASKS = 200
 MAX_PROJECT_EVIDENCE = 20
 
 
-def project_scope_sql(reference):
-    """SQL expression supplied by our caller, never a user-provided string."""
+def project_scope_sql(reference, entry_states="'confirmed'"):
+    """The single definition of a tool's project scope.
+
+    Both arguments are SQL fragments built by our callers, never user text:
+    `reference` yields the tool node ref and `entry_states` lists the accepted
+    usage-entry states as literals or placeholders. Bound placeholders follow
+    the two references in statement order. The catalog and recall pass the
+    selected states; strict filters keep confirmed usage only.
+    """
     return """
         SELECT substr(t_scope.to_ref, 9) AS id
         FROM graph_edges t_scope JOIN projects t_project
@@ -35,21 +42,32 @@ def project_scope_sql(reference):
         WHERE t_usage.to_ref = """ + reference + """
             AND t_usage.kind = 'uses_tool' AND t_usage.knowledge_state = 'confirmed'
             AND json_array_length(t_usage.sources) > 0
-            AND t_entry.knowledge_state = 'confirmed'
+            AND t_entry.knowledge_state IN (""" + entry_states + """)
     """
 
 
-def project_ids(conn, node_ref):
-    return sorted(row[0] for row in conn.execute(project_scope_sql("?"), (node_ref, node_ref)))
+def project_ids(conn, node_ref, states=("confirmed",)):
+    states = list(states)
+    sql = project_scope_sql("?", ",".join("?" for _ in states))
+    return sorted(row[0] for row in conn.execute(sql, [node_ref, node_ref, *states]))
 
 
-def _entry(conn, identity, api):
-    row = conn.execute("SELECT id, kind, title, knowledge_state FROM entries WHERE id = ?", (identity,)).fetchone()
-    if row is None:
-        return None
-    projects = [item[0] for item in conn.execute(
-        "SELECT project_id FROM entry_projects WHERE entry_id = ? ORDER BY project_id", (identity,))]
-    return dict(row, ref="entry:" + identity, project_ids=projects)
+def _records(conn, rows):
+    """Attach explicit project memberships to at most MAX_RECORDS entry rows.
+
+    One membership query per batch replaces two point queries per entry; every
+    caller passes at most 200 rows, well below SQLite's variable limit.
+    """
+    records = [{"id": row["id"], "kind": row["kind"], "title": row["title"],
+                "knowledge_state": row["knowledge_state"], "ref": "entry:" + row["id"], "project_ids": []}
+               for row in rows]
+    if records:
+        by_id = {record["id"]: record for record in records}
+        for row in conn.execute(
+                "SELECT entry_id, project_id FROM entry_projects WHERE entry_id IN (" +
+                ",".join("?" for _ in by_id) + ") ORDER BY entry_id, project_id", list(by_id)):
+            by_id[row["entry_id"]]["project_ids"].append(row["project_id"])
+    return records
 
 
 def _sort(record):
@@ -59,14 +77,14 @@ def _sort(record):
 def _applications(conn, tool, states, api, detailed):
     placeholders = ",".join("?" for _ in states)
     rows = conn.execute("""
-        SELECT DISTINCT e.id FROM graph_edges link
+        SELECT DISTINCT e.id, e.kind, e.title, e.knowledge_state FROM graph_edges link
             JOIN entries e ON e.id = substr(link.from_ref, 7) AND substr(link.from_ref, 1, 6) = 'entry:'
         WHERE link.to_ref = ? AND link.kind = 'uses_tool'
             AND link.knowledge_state = 'confirmed' AND json_array_length(link.sources) > 0
             AND e.knowledge_state IN (""" + placeholders + """ )
         ORDER BY e.title COLLATE NOCASE, e.id LIMIT ?
     """, [tool["ref"], *states, MAX_RECORDS + 1]).fetchall()
-    records = [_entry(conn, row[0], api) for row in rows[:MAX_RECORDS]]
+    records = _records(conn, rows[:MAX_RECORDS])
     truncated = len(rows) > MAX_RECORDS
     for record in records if detailed else []:
         evidence = conn.execute("""
@@ -80,7 +98,7 @@ def _applications(conn, tool, states, api, detailed):
     return records, truncated
 
 
-def _task_ancestors(conn, record, states, api):
+def _task_ancestors(conn, record, states):
     """Follow only outgoing part_of edges, stopping at tasks; cycles are harmless."""
     queue = deque([(record, [])])
     visited, tasks, truncated = {record["id"]}, [], False
@@ -93,7 +111,7 @@ def _task_ancestors(conn, record, states, api):
         remaining = MAX_ANCESTORS - (len(visited) - 1)
         visited_ids = sorted(visited)
         rows = conn.execute("""
-            SELECT e.id, min(link.id) AS edge_id FROM graph_edges link
+            SELECT e.id, e.kind, e.title, e.knowledge_state, min(link.id) AS edge_id FROM graph_edges link
                 JOIN entries e ON e.id = substr(link.to_ref, 7) AND substr(link.to_ref, 1, 6) = 'entry:'
             WHERE link.from_ref = ? AND link.kind = 'part_of'
                 AND link.knowledge_state = 'confirmed' AND json_array_length(link.sources) > 0
@@ -103,9 +121,9 @@ def _task_ancestors(conn, record, states, api):
         """, [current["ref"], *states, *visited_ids, remaining + 1]).fetchall()
         if len(rows) > remaining:
             truncated = True
-        for row in rows[:remaining]:
+        rows = rows[:remaining]
+        for row, parent in zip(rows, _records(conn, rows)):
             visited.add(row["id"])
-            parent = _entry(conn, row["id"], api)
             queue.append((parent, path + ["edge:" + row["edge_id"]]))
     return tasks, truncated
 
@@ -116,20 +134,16 @@ def _tool(conn, row, states, api, detailed):
     records, truncated = _applications(conn, tool, states, api, detailed)
     # Projects are established either by explicit tool scope or by an actual
     # application. An unrelated task in the same project is never included.
-    memberships = {project for record in records for project in record["project_ids"]}
-    direct = conn.execute("""
-        SELECT DISTINCT p.id FROM graph_edges link
-            JOIN projects p ON p.id = substr(link.to_ref, 9) AND substr(link.to_ref, 1, 8) = 'project:'
-        WHERE link.from_ref = ? AND link.kind = 'used_in'
-            AND link.knowledge_state = 'confirmed' AND json_array_length(link.sources) > 0
-        ORDER BY p.id LIMIT ?
-    """, (tool["ref"], MAX_PROJECTS + 1)).fetchall()
-    memberships.update(row["id"] for row in direct[:MAX_PROJECTS])
-    truncated = truncated or len(direct) > MAX_PROJECTS or len(memberships) > MAX_PROJECTS
+    # Recall and strict filters read this same scope definition.
+    memberships = project_ids(conn, tool["ref"], states)
+    truncated = truncated or len(memberships) > MAX_PROJECTS
+    selected = memberships[:MAX_PROJECTS]
+    fields = "*" if detailed else "id, name"
+    project_rows = {item["id"]: dict(item) for item in conn.execute(
+        "SELECT " + fields + " FROM projects WHERE id IN (" + ",".join("?" for _ in selected) + ")", selected)}
     projects = {}
-    for project_id in sorted(memberships)[:MAX_PROJECTS]:
-        fields = "*" if detailed else "id, name"
-        project = dict(conn.execute("SELECT " + fields + " FROM projects WHERE id = ?", (project_id,)).fetchone())
+    for project_id in selected:
+        project = project_rows[project_id]
         evidence = conn.execute("""
             SELECT id FROM graph_edges WHERE from_ref = ? AND to_ref = ? AND kind = 'used_in'
                 AND knowledge_state = 'confirmed' AND json_array_length(sources) > 0
@@ -144,7 +158,7 @@ def _tool(conn, row, states, api, detailed):
     task_maps = {identity: {} for identity in projects}
     selected_tasks = set()
     for record in records:
-        tasks, ancestor_truncated = _task_ancestors(conn, record, states, api) if detailed else ([], False)
+        tasks, ancestor_truncated = _task_ancestors(conn, record, states) if detailed else ([], False)
         truncated = truncated or ancestor_truncated
         for project_id in record["project_ids"]:
             project = projects.get(project_id)

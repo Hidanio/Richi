@@ -269,6 +269,45 @@ class ToolCatalogTests(unittest.TestCase):
                 result = self.cli("query", "count", "--family", "entity", "--where", "kind = 'tool' AND (" + predicate + ")")
                 self.assertEqual(result["count"], expected, result)
 
+    def test_catalog_and_recall_use_one_state_aware_scope_while_filters_stay_confirmed(self):
+        self.populate()
+        # Beta is reachable only through the scenario, which becomes a hypothesis.
+        self.put("entry", self.entry("procedure:recovery", kind="procedure", title="Recovery scenario",
+                                     project_ids=["alpha", "beta"], knowledge_state="hypothesis"))
+        for flags, expected in (((), ["alpha", "gamma"]), (("--include-hypotheses",), ["alpha", "beta", "gamma"])):
+            with self.subTest(flags=flags):
+                listed = next(tool for tool in self.cli("tools", "list", *flags)["tools"] if tool["id"] == "tool:tracekit")
+                self.assertEqual([project["id"] for project in listed["projects"]], expected)
+                self.assertEqual([project["id"] for project in self.tool("tool:tracekit", *flags)["projects"]], expected)
+                found = self.cli("recall", "TraceKit", "--project", "beta", *flags)
+                tool = next(record for record in found["results"] if record["id"] == "tool:tracekit")
+                self.assertEqual(tool["project_ids"], expected)
+                self.assertEqual("confirmed_tool_usage" in tool["match_reasons"], "beta" in expected)
+                # Strict project filters require confirmed usage regardless of flags.
+                strict = self.cli("query", "count", "--family", "entity", *flags,
+                                  "--where", "kind = 'tool' AND project = 'beta'")
+                self.assertEqual(strict["count"], 0, strict)
+
+    def test_list_reads_memberships_in_batches_instead_of_per_record(self):
+        self.populate()
+        self.put("entry", [self.entry("procedure:batch-" + str(i), kind="procedure", project_ids=["alpha", "beta"])
+                           for i in range(60)])
+        self.put("edge", [self.edge("batch-" + str(i), "entry:procedure:batch-" + str(i), "entity:tool:tracekit",
+                                    kind="uses_tool") for i in range(60)])
+        conn = memory.connect(self.db, readonly=True)
+        self.addCleanup(conn.close)
+        statements = []
+        conn.set_trace_callback(statements.append)
+        args = SimpleNamespace(action="list", limit=100, include_hypotheses=False, include_superseded=False)
+        result = tool_catalog.run(conn, args, memory)
+        conn.set_trace_callback(None)
+        tool = next(item for item in result["tools"] if item["id"] == "tool:tracekit")
+        self.assertEqual(tool["record_count"], 62)
+        self.assertEqual({project["id"]: project["record_count"] for project in tool["projects"]},
+                         {"alpha": 62, "beta": 61, "gamma": 0})
+        # Two tools: a constant number of statements each, not two per usage record.
+        self.assertLess(len(statements), 30, statements)
+
     def test_catalog_api_uses_separate_bounded_worker_and_rejects_bad_queries(self):
         server = serve.LoopbackHTTPServer(("127.0.0.1", 0), serve.handler_for(self.db))
         thread = threading.Thread(target=server.serve_forever, daemon=True)

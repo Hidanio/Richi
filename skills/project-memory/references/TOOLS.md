@@ -104,7 +104,10 @@ command loads revision history; request `entity get ID --history` or
 
 Both commands accept `--include-hypotheses` and `--include-superseded`; keep the
 same state selection when opening detail. These flags do not turn an unconfirmed
-or unsourced edge into usage evidence. Each call reads one snapshot; separate
+or unsourced edge into usage evidence. Tool cards and recall derive a tool's
+projects from one scope definition: confirmed sourced `used_in` edges plus the
+memberships of usage entries in the selected states. Strict `project` filters
+keep confirmed usage entries only, as described in FILTERS.md. Each call reads one snapshot; separate
 list/detail calls may observe intervening writes. Limits are 200 usage records,
 200 distinct tasks and 100 distinct projects per tool, and 200 distinct visited
 ancestors per usage record while following `part_of`; the usage record itself

@@ -548,7 +548,7 @@ def candidates(conn, query, terms, keys, states, project, api, trace=None, selec
                     reasons.append("confirmed_concept_scope")
             elif record["kind"] == "tool":
                 from . import tool_catalog
-                record["project_ids"] = tool_catalog.project_ids(conn, node_ref)
+                record["project_ids"] = tool_catalog.project_ids(conn, node_ref, states)
                 if project and project in record["project_ids"]:
                     score += 18
                     reasons.append("confirmed_tool_usage")
@@ -580,7 +580,7 @@ def load_node(conn, node_ref, states, api):
                 record["project_ids"] = concept_projects(conn, node_ref)
             elif record["kind"] == "tool":
                 from . import tool_catalog
-                record["project_ids"] = tool_catalog.project_ids(conn, node_ref)
+                record["project_ids"] = tool_catalog.project_ids(conn, node_ref, states)
     else:
         return None
     return record if record and record["knowledge_state"] in states else None
