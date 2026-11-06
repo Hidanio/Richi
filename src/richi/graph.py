@@ -301,7 +301,7 @@ def export(conn, args, api):
                 break
         if edges_truncated:
             break
-    return {"schema_version": 2, "generated_at": api.now(), "nodes": [node(conn, item, api) for item in selected],
+    return {"schema_version": MAP_SCHEMA_VERSION, "generated_at": api.now(), "nodes": [node(conn, item, api) for item in selected],
             "edges": result_edges, "truncated": truncated or edges_truncated,
             "limits": {"max_nodes": cap, "max_edges": MAX_EDGES, "nodes_truncated": truncated, "edges_truncated": edges_truncated},
             "scope": {"root": root, "depth": args.depth if is_neighbors else None,

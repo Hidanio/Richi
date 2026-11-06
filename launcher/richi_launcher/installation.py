@@ -258,7 +258,6 @@ def _stage(ctx, generation, wheel, manifest):
     if not site.is_relative_to(prefix):
         raise ConfigError("Release self-check returned a package directory outside its environment")
     return {"kind": "release", "prefix": str(prefix), "site": str(site), "version": manifest["version"],
-            "database_schemas": list(manifest["database_schemas"]),
             "wheel_sha256": manifest["wheel"]["sha256"], "installed_at": int(time.time())}
 
 
@@ -428,6 +427,7 @@ def apply_release(release, *, expected_generation=None, blocking=True,
                 wheel = releases.download_wheel(release, Path(temporary))
                 releases.verify_wheel(wheel, manifest)
                 record = _stage(ctx, generation, wheel, manifest)
+                # The verified manifest is the single source of schema support.
                 record["database_schemas"] = list(manifest["database_schemas"])
             if require_auto:
                 _run([str(candidate / "bin" / "python"), "-I", "-B", "-c",
