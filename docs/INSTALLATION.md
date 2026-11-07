@@ -122,14 +122,15 @@ of the database and its associated `artifacts/git/` directory.
 ### What dev switches
 
 Dev switches two things: the **runtime** (`src/richi/` for every CLI call,
-agent call and the map) and the **managed Project Memory skill links** created
-by `richi setup`. With dev on, the Codex link `~/.agents/skills/project-memory`
-and the Claude Code link `~/.claude/skills/project-memory` point to
-`<development.source>/skills/project-memory`, so agents read the skill text that
-matches the code they run. Dev does not switch the installed launcher
-(`launcher/`, including `setup`, `update` and `config`), the managed instruction
-blocks in `AGENTS.md`/`CLAUDE.md`, the Claude Code SessionStart hook or the PATH
-blocks: they always follow the installed release.
+agent call and the map) and the **managed Project Memory skill link of every
+agent connected with `richi setup`**. With dev on, each of these links points to
+`<development.source>/skills/project-memory`, so every agent reads the skill text
+that matches the code it runs. This works the same for any supported agent (for
+example `~/.agents/skills/project-memory` for Codex), including agents connected
+later. Dev does not switch the installed launcher (`launcher/`, including
+`setup`, `update` and `config`), agent-specific integration files such as
+managed instruction blocks and hooks, or PATH blocks: they always follow the
+installed release.
 
 Switching happens automatically. `richi config set dev true` or `false`
 re-points every managed link in one recoverable, journaled transaction and

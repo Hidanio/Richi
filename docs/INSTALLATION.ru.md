@@ -123,13 +123,14 @@ richi config show
 ### Что переключает dev
 
 Dev переключает две вещи: **runtime** (`src/richi/` для каждого вызова CLI,
-вызова агента и карты) и **управляемые ссылки skill Project Memory**, созданные
-`richi setup`. При включённом dev ссылка Codex `~/.agents/skills/project-memory`
-и ссылка Claude Code `~/.claude/skills/project-memory` указывают на
-`<development.source>/skills/project-memory`, поэтому агент читает текст skill,
-соответствующий выполняемому коду. Dev не переключает установленный запускатель
-(`launcher/`, включая `setup`, `update` и `config`), управляемые блоки инструкций
-в `AGENTS.md`/`CLAUDE.md`, SessionStart hook Claude Code и блоки PATH: они всегда
+вызова агента и карты) и **управляемую ссылку skill Project Memory каждого агента,
+подключённого через `richi setup`**. При включённом dev каждая такая ссылка
+указывает на `<development.source>/skills/project-memory`, поэтому любой агент
+читает текст skill, соответствующий выполняемому коду. Это одинаково работает для
+любого поддерживаемого агента (например, `~/.agents/skills/project-memory` у
+Codex), включая подключённых позже. Dev не переключает установленный запускатель
+(`launcher/`, включая `setup`, `update` и `config`), файлы интеграции конкретного
+агента, такие как управляемые блоки инструкций и hooks, и блоки PATH: они всегда
 следуют установленному релизу.
 
 Переключение автоматическое. `richi config set dev true` или `false` переводит

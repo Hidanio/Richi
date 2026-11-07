@@ -124,8 +124,9 @@ Workspace dev settings are preserved. Dev mode switches the runtime **and the
 managed skill links**: `richi config set dev true` points every managed skill to
 `<development.source>/skills/project-memory`, and `richi config set dev false`
 points it back to the installed release, each in one recoverable transaction
-reported as `agent_skills`. Instruction blocks, the Claude Code hook, PATH blocks
-and the launcher stay on the installed release. Links are user-wide and follow
+reported as `agent_skills`. This applies to every connected agent. Instruction
+blocks, adapter files such as hooks, PATH blocks and the launcher stay on the
+installed release. Links are user-wide and follow
 the latest `config set dev` in any workspace. Updates and rollbacks keep checkout
 links; before rolling back to 1.1.0 or older, run `richi config set dev false`.
 Details: [what dev switches](INSTALLATION.md#what-dev-switches).
@@ -200,7 +201,6 @@ independently. Setup does not override disabled hooks or permission policies.
 This supports Claude Code, not ordinary Claude chat or MCP. Managed skills and
 Claude's session script follow package updates/rollback together. Releases that
 cannot maintain any configured agent are blocked before activation.
-Dev mode moves the managed skills, not the Claude Code hook or instructions.
 Launcher changes require installing a new package, even with dev mode on.
 
 Claude contracts: [profile layout](https://code.claude.com/docs/en/claude-directory)
@@ -228,7 +228,9 @@ Put agent-specific behavior in its module, following `codex_setup.py` or
   stored paths rather than the current shell's profile override.
 
 Shared code owns locks, skill links, instruction/PATH blocks, backups, manifests
-and recovery. Adapter metadata must not overwrite shared fields. The catalog's
+and recovery. Dev mode is shared as well: `config set dev` and activation move the
+skill path returned by `paths()` for every configured adapter, so an adapter needs
+no dev-specific code; its own files keep following the installed release. Adapter metadata must not overwrite shared fields. The catalog's
 version describes the adapter's persisted metadata/resource contract, not the
 Richi release. Compatible releases retain it; incompatible versions fail closed
 until an explicit migration exists. Release inspection reads literal data without
