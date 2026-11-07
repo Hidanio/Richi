@@ -24,10 +24,8 @@ edges from referring to missing nodes.
 <a id="переход-с-версии-1"></a>
 ## Migrating an existing store
 
-A managed installation on 1.0.1 or earlier first updates through the
-[1.0.2 bridge release](https://github.com/Hidanio/Richi/blob/main/docs/UPDATES.md#schema-3-bridge)
-or the [fresh-environment transition](https://github.com/Hidanio/Richi/blob/main/docs/UPDATES.md#schema-3-transition).
-The 1.0.2 bridge itself migrates only to schema 2. Then, from any working directory:
+An installation on 1.0.1 first updates with `richi update apply`. Then, from any
+working directory:
 
 ```sh
 richi backup

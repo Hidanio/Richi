@@ -36,8 +36,9 @@ def _schema_list(value):
 def generation_schemas(record):
     """Read compatibility without importing a generation or opening a store.
 
-    Schema-3 managers record the verified manifest. Older protocol-1 managers
-    did not; inspect their literal VERSION when intact. A missing/broken legacy
+    Current managers record the support a release reported in its self-check.
+    Managers up to 1.0.1 did not; inspect the literal SCHEMA (or, in releases
+    before it existed, VERSION) when intact. A missing/broken legacy
     source falls back to the only schemas those managers supported, 1 and 2,
     preserving recovery from broken imports. Newer records retain their schema
     declarations even when all current package files are damaged.
@@ -56,16 +57,22 @@ def generation_schemas(record):
         except (OSError, UnicodeError, SyntaxError):
             # The fallback applies only to legacy records lacking declarations.
             return [1, 2]
+        literals = {}
         for statement in statements:
-            if isinstance(statement, ast.Assign) and any(
-                    isinstance(target, ast.Name) and target.id == "VERSION" for target in statement.targets):
-                try:
-                    version = ast.literal_eval(statement.value)
-                except (TypeError, ValueError):
-                    raise InstallationError("Cannot inspect generation database schema version")
-                if type(version) is not int or not 1 <= version <= 32:
-                    raise InstallationError("Invalid generation database schema version")
-                return list(range(1, version + 1))
+            if isinstance(statement, ast.Assign):
+                for target in statement.targets:
+                    if isinstance(target, ast.Name) and target.id in {"SCHEMA", "VERSION"}:
+                        literals[target.id] = statement.value
+        # From 1.1.0 VERSION is a frozen compatibility field; SCHEMA is storage.
+        value = literals.get("SCHEMA", literals.get("VERSION"))
+        if value is not None:
+            try:
+                version = ast.literal_eval(value)
+            except (TypeError, ValueError):
+                raise InstallationError("Cannot inspect generation database schema version")
+            if type(version) is not int or not 1 <= version <= MAX_GENERATION_SCHEMAS:
+                raise InstallationError("Invalid generation database schema version")
+            return list(range(1, version + 1))
     return [1, 2]
 
 

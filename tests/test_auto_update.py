@@ -113,7 +113,6 @@ class AutoUpdateTests(unittest.TestCase):
     def files(self):
         return {path: path.read_bytes() for path in self.base.rglob("*") if path.is_file()}
 
-    @patch.object(auto_update, "TRANSITIONAL_RELEASE", False)
     def test_chat_start_notice_reads_only_the_stored_check(self):
         before = list(self.base.rglob("*"))
         self.assertIsNone(auto_update.notice())
@@ -135,25 +134,22 @@ class AutoUpdateTests(unittest.TestCase):
         self.current = {"version": "0.2.0", "generation": "release-0.2.0"}
         self.assertIsNone(auto_update.notice())
 
-    def test_transitional_reminder_stops_once_a_check_finds_nothing_newer(self):
+    def test_newer_up_to_date_check_clears_an_older_notice(self):
+        auto_update.enable()
+        auto_update.run()
+        self.assertEqual(auto_update.notice()["version"], "0.2.0")
         self.current["wheel_sha256"] = "a" * 64
         releases.fetch_release.return_value = self.release("0.1.0")
-        with patch.object(auto_update, "TRANSITIONAL_RELEASE", True):
-            self.assertEqual(auto_update.notice()["status"], "transitional_release")
-            auto_update.enable()
-            self.assertEqual(auto_update.run()["status"], "up_to_date")
-            self.assertIsNone(auto_update.notice())
+        self.due()
+        self.assertEqual(auto_update.run()["status"], "up_to_date")
+        self.assertIsNone(auto_update.notice())
 
-    def test_transitional_release_reminds_even_without_a_usable_check(self):
-        with patch.object(auto_update, "TRANSITIONAL_RELEASE", True):
-            self.assertEqual(auto_update.notice()["status"], "transitional_release")
-            self.root.mkdir(parents=True)
-            (self.root / "auto-state.json").write_text("{broken")
-            self.assertEqual(auto_update.notice()["command"], "richi update apply")
-            with patch.object(installation, "current_record", side_effect=ConfigError("unmanaged")):
-                self.assertIsNone(auto_update.notice())
-        with patch.object(auto_update, "TRANSITIONAL_RELEASE", False):
+    def test_notice_is_absent_for_unmanaged_or_unreadable_installations(self):
+        with patch.object(installation, "current_record", side_effect=ConfigError("unmanaged")):
             self.assertIsNone(auto_update.notice())
+        self.root.mkdir(parents=True)
+        (self.root / "auto-state.json").write_text("{broken")
+        self.assertIsNone(auto_update.notice())
 
     def test_chat_current_carries_notice_only_when_present(self):
         from richi_launcher import cli

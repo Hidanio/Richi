@@ -187,13 +187,17 @@ def _compatible(manifest):
     if (not isinstance(minimum, list) or len(minimum) != 2
             or any(type(part) is not int for part in minimum) or tuple(minimum) > sys.version_info[:2]):
         raise ConfigError("Release is incompatible with this Python interpreter")
-    # Protocol 1 accepts any release that reads every schema from 1 to its
-    # newest, so later schemas need no bridge release. Dropping a schema the
-    # current generation supports is refused separately on update and rollback.
+    # Protocol-1 manifests are frozen at the fields 1.0.1 accepts, so every
+    # installed version can update in place. The schemas a release supports come
+    # from its self-check, and dropping one is refused on update and rollback.
     # Map wire schema 2 is part of protocol 1: changing it needs a new protocol.
-    schemas = manifest.get("database_schemas")
-    if not _contiguous_schemas(schemas) or manifest.get("map_schema") != 2:
+    if manifest.get("database_schemas") != BASELINE_SCHEMAS or manifest.get("map_schema") != 2:
         raise ConfigError("Release schema compatibility does not match updater protocol 1; no database was changed")
+
+
+# Exactly what updaters up to 1.0.1 accept in a manifest. Never change it under
+# protocol 1; a release's real support is its self-reported SUPPORTED_VERSIONS.
+BASELINE_SCHEMAS = [1, 2]
 
 
 def _contiguous_schemas(schemas):
@@ -206,7 +210,6 @@ def assess_release(manifest, current):
     from .releases import version_tuple
     try:
         _compatible(manifest)
-        bootstrap.require_schema_compatible(current, manifest)
         candidate = version_tuple(manifest.get("version"))
         installed = version_tuple(current["version"]) if current.get("version") is not None else None
     except (ConfigError, bootstrap.InstallationError) as exc:
@@ -271,14 +274,17 @@ def _stage(ctx, generation, wheel, manifest):
         report = json.loads(_run([python, "-I", "-B", "-c", _CHECK], "Release self-check"))
     except ValueError as exc:
         raise ConfigError("Release self-check returned invalid metadata") from exc
-    for key in ("version", "updater_protocol", "database_schemas", "map_schema"):
+    for key in ("version", "updater_protocol", "map_schema"):
         if report.get(key) != manifest.get(key):
             raise ConfigError("Release self-check disagrees with manifest: " + key)
+    if not _contiguous_schemas(report.get("database_schemas")):
+        raise ConfigError("Release self-check reports invalid database schema support")
     site = Path(report["site"])
     if not site.is_relative_to(prefix):
         raise ConfigError("Release self-check returned a package directory outside its environment")
     return {"kind": "release", "prefix": str(prefix), "site": str(site), "version": manifest["version"],
-            "wheel_sha256": manifest["wheel"]["sha256"], "installed_at": int(time.time())}
+            "wheel_sha256": manifest["wheel"]["sha256"], "installed_at": int(time.time()),
+            "database_schemas": list(report["database_schemas"])}
 
 
 def _remove_seed(ctx, state, record):
@@ -447,8 +453,11 @@ def apply_release(release, *, expected_generation=None, blocking=True,
                 wheel = releases.download_wheel(release, Path(temporary))
                 releases.verify_wheel(wheel, manifest)
                 record = _stage(ctx, generation, wheel, manifest)
-                # The verified manifest is the single source of schema support.
-                record["database_schemas"] = list(manifest["database_schemas"])
+                # Support is known only from the staged package's self-check.
+                try:
+                    bootstrap.require_schema_compatible(current, record)
+                except bootstrap.InstallationError as exc:
+                    raise ConfigError(str(exc)) from exc
             if require_auto:
                 _run([str(candidate / "bin" / "python"), "-I", "-B", "-c",
                       "from richi_launcher import auto_update, update; "

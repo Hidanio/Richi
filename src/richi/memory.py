@@ -16,8 +16,13 @@ from . import compact
 from . import output
 
 
-VERSION = 3
-SUPPORTED_VERSIONS = {1, 2, VERSION}
+# Newest storage schema: new stores are created with it and migrate targets it.
+SCHEMA = 3
+SUPPORTED_VERSIONS = {1, 2, SCHEMA}
+# Frozen at 2. Updaters up to 1.0.1 read memory.VERSION in a release's
+# self-check as its map wire schema and refuse the update unless it equals 2,
+# so changing it would strand those installations. Storage code uses SCHEMA.
+VERSION = 2
 BASE = Path(__file__).resolve().parent
 KINDS = {"task", "decision", "fact", "note", "investigation", "experiment", "procedure"}
 STATES = {"planned", "in_progress", "implemented", "merged", "released", "blocked", "done"}
@@ -219,7 +224,7 @@ def connect(path, create=False, readonly=False):
 def backend(conn):
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     if version not in SUPPORTED_VERSIONS:
-        raise MemoryError("Unsupported schema version {}; this CLI supports 1, 2 and {}. No migration was attempted.".format(version, VERSION))
+        raise MemoryError("Unsupported schema version {}; this CLI supports 1, 2 and {}. No migration was attempted.".format(version, SCHEMA))
     row = conn.execute("SELECT value FROM metadata WHERE 1=1 AND key = 'search_backend'").fetchone()
     if row is None or row[0] not in {"fts5", "scan"}:
         raise MemoryError("Missing or invalid search_backend metadata")
@@ -231,18 +236,18 @@ def initialize(conn, path):
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     if version in {1, 2}:
         raise MemoryError("Existing schema {} requires an explicit migrate command; make a backup first".format(version))
-    if version not in {0, VERSION}:
+    if version not in {0, SCHEMA}:
         backend(conn)
     if version == 0 and conn.execute(
             "SELECT name FROM sqlite_master WHERE 1=1 AND name NOT LIKE 'sqlite_%'").fetchone():
         raise MemoryError("Refusing to initialize a nonempty database with an unknown schema")
-    if version == VERSION:
+    if version == SCHEMA:
         backend(conn)
     conn.execute("PRAGMA journal_mode = WAL")
     with transaction(conn):
         version = conn.execute("PRAGMA user_version").fetchone()[0]
-        if version == VERSION:
-            return {"database": str(path), "schema_version": VERSION, "search_backend": backend(conn), "status": "existing"}
+        if version == SCHEMA:
+            return {"database": str(path), "schema_version": SCHEMA, "search_backend": backend(conn), "status": "existing"}
         if version != 0:
             backend(conn)
         existing = conn.execute("SELECT name FROM sqlite_master WHERE 1=1 AND name NOT LIKE 'sqlite_%'").fetchall()
@@ -262,7 +267,7 @@ def initialize(conn, path):
         conn.execute("RELEASE optional_fts")
         conn.execute("INSERT INTO metadata(key, value) VALUES ('search_backend', ?)", (search_backend,))
         conn.execute("PRAGMA user_version = 3")
-    return {"database": str(path), "schema_version": VERSION, "search_backend": search_backend, "status": "created"}
+    return {"database": str(path), "schema_version": SCHEMA, "search_backend": search_backend, "status": "created"}
 
 
 def upsert(conn, table, columns, record):

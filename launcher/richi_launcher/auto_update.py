@@ -21,8 +21,6 @@ MIN_INTERVAL = 15 * 60
 MAX_INTERVAL = 7 * 24 * 60 * 60
 MAX_HISTORY = 20
 AUTO_POLICY_VERSION = 2
-# A bridge release (such as 1.0.2) sets this so chat start reminds to update on.
-TRANSITIONAL_RELEASE = False
 
 
 def _now():
@@ -187,20 +185,14 @@ def status():
 def notice():
     """Return a pending update to mention at chat start, or None.
 
-    Only the stored result of the last background check is read: no network,
-    locks, policy migration or new files, and any failure means no notice.
-    A transitional (bridge) release reminds that it is not the target unless a
-    check on it found nothing newer.
+    Only the stored history of background checks is read: no network, locks,
+    policy migration or new files, and any failure means no notice.
     """
     failures = (ConfigError, OSError, ValueError, KeyError, TypeError, AttributeError)
     try:
         ctx, record = installation.current_record()
         current = record["version"]
         releases.version_tuple(current)
-    except failures:
-        return None
-    latest_known = False
-    try:
         # Newest first. Only checks made on this version count, and a failed
         # check does not hide a release an earlier check already found.
         for entry in reversed(_state(ctx)["history"]):
@@ -211,14 +203,9 @@ def notice():
                 return {"status": "update_available", "version": entry["version"], "current_version": current,
                         "checked_at": entry.get("time"), "command": "richi update apply"}
             if entry.get("status") == "up_to_date":
-                latest_known = True
-                break
+                return None
     except failures:
-        pass
-    if TRANSITIONAL_RELEASE and not latest_known:
-        return {"status": "transitional_release", "current_version": current, "command": "richi update apply",
-                "message": "This release only carries older installations to later releases. Run "
-                           "richi update apply to install the latest; it reports up_to_date if none is newer."}
+        return None
     return None
 
 

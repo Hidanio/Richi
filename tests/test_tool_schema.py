@@ -121,18 +121,18 @@ class ToolSchemaTests(unittest.TestCase):
         self.put_entity()
         self.assertEqual(self.conn.execute("SELECT count(*) FROM graph_nodes").fetchone()[0], 3)
 
-    def test_release_supports_old_and_new_schemas_without_map_wire_change(self):
+    def test_release_stays_installable_by_1_0_1_updaters(self):
+        # 1.0.1 accepts only manifests declaring [1, 2] and requires the release's
+        # memory.VERSION to equal map_schema 2; real support is SUPPORTED_VERSIONS.
+        self.assertEqual((memory.VERSION, graph.MAP_SCHEMA_VERSION, memory.SCHEMA), (2, 2, 3))
+        self.assertEqual(sorted(memory.SUPPORTED_VERSIONS), [1, 2, 3])
         manifest = {"format_version": 1, "updater_protocol": 1, "python_min": [3, 9], "map_schema": 2}
-        # Later schemas need no bridge release: any support from 1 to the newest
-        # schema is accepted; shrinking support is refused on update/rollback.
-        for schemas in ([1, 2], [1, 2, 3], [1, 2, 3, 4], list(range(1, 33))):
-            installation._compatible(dict(manifest, database_schemas=schemas))
-        # More than the bootstrap's generation limit would brick state.json.
-        for schemas in ([2, 3], [1, 3], [1], list(range(1, 34))):
+        installation._compatible(dict(manifest, database_schemas=[1, 2]))
+        for schemas in ([1, 2, 3], [2, 3], [1]):
             with self.assertRaises(ValueError):
                 installation._compatible(dict(manifest, database_schemas=schemas))
         with self.assertRaises(ValueError):
-            installation._compatible(dict(manifest, database_schemas=[1, 2, 3], map_schema=3))
+            installation._compatible(dict(manifest, database_schemas=[1, 2], map_schema=3))
 
 
 if __name__ == "__main__":
