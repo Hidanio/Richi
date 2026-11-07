@@ -148,7 +148,8 @@ reports it in `agent_skills`:
 `unavailable` (not a managed installation), `conflict` (a managed file was
 changed by hand), `error` or `busy` (an update holds the installation); in the
 last three cases no link changed. `config set development.source` re-points the
-links while dev is on. `config show` reports where the links point and `matches_config`.
+links while dev is on. `config show` reports where the links point and `matches_config`;
+agents state the mode at the start of each chat and point out a mismatch.
 Open a new agent chat after switching; running chats may keep the loaded skill.
 
 `dev` belongs to a workspace, but skill links are user-wide: the latest
