@@ -189,26 +189,33 @@ def notice():
 
     Only the stored result of the last background check is read: no network,
     locks, policy migration or new files, and any failure means no notice.
-    A transitional (bridge) release always reminds that it is not the target.
+    A transitional (bridge) release reminds that it is not the target unless a
+    check on it found nothing newer.
     """
     failures = (ConfigError, OSError, ValueError, KeyError, TypeError, AttributeError)
     try:
-        local = installation.status()
-        if not local.get("supported"):
-            return None
-        current = local["current"]["version"]
+        ctx, record = installation.current_record()
+        current = record["version"]
         releases.version_tuple(current)
     except failures:
         return None
+    latest_known = False
     try:
-        outcome = _state(installation._context()).get("last_outcome") or {}
-        if (outcome.get("status") == "update_available"
-                and releases.version_tuple(outcome.get("version")) > releases.version_tuple(current)):
-            return {"status": "update_available", "version": outcome["version"], "current_version": current,
-                    "checked_at": outcome.get("time"), "command": "richi update apply"}
+        # Newest first. Only checks made on this version count, and a failed
+        # check does not hide a release an earlier check already found.
+        for entry in reversed(_state(ctx)["history"]):
+            if entry.get("current_version") != current:
+                continue
+            if (entry.get("status") == "update_available"
+                    and releases.version_tuple(entry.get("version")) > releases.version_tuple(current)):
+                return {"status": "update_available", "version": entry["version"], "current_version": current,
+                        "checked_at": entry.get("time"), "command": "richi update apply"}
+            if entry.get("status") == "up_to_date":
+                latest_known = True
+                break
     except failures:
         pass
-    if TRANSITIONAL_RELEASE:
+    if TRANSITIONAL_RELEASE and not latest_known:
         return {"status": "transitional_release", "current_version": current, "command": "richi update apply",
                 "message": "This release only carries older installations to later releases. Run "
                            "richi update apply to install the latest; it reports up_to_date if none is newer."}

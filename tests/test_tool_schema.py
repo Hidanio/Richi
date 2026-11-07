@@ -125,9 +125,10 @@ class ToolSchemaTests(unittest.TestCase):
         manifest = {"format_version": 1, "updater_protocol": 1, "python_min": [3, 9], "map_schema": 2}
         # Later schemas need no bridge release: any support from 1 to the newest
         # schema is accepted; shrinking support is refused on update/rollback.
-        for schemas in ([1, 2], [1, 2, 3], [1, 2, 3, 4]):
+        for schemas in ([1, 2], [1, 2, 3], [1, 2, 3, 4], list(range(1, 33))):
             installation._compatible(dict(manifest, database_schemas=schemas))
-        for schemas in ([2, 3], [1, 3], [1]):
+        # More than the bootstrap's generation limit would brick state.json.
+        for schemas in ([2, 3], [1, 3], [1], list(range(1, 34))):
             with self.assertRaises(ValueError):
                 installation._compatible(dict(manifest, database_schemas=schemas))
         with self.assertRaises(ValueError):

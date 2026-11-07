@@ -108,18 +108,13 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
         changed, count = re.subn(r'(?m)^__version__\s*=.*$', '__version__ = "' + version + '"', original)
         self.assertEqual(count, 1)
         files["richi/__init__.py"] = changed.encode("utf-8")
-        if bridge:
-            # The 1.0.2 shape: the current schema-aware manager with database
-            # support capped at schemas 1 and 2.
+        if bridge or legacy_schemas:
+            # Database support capped at schemas 1 and 2: the 1.0.2 bridge
+            # shape, and with legacy_schemas also the 1.0.1 fixed manager.
             memory = files["richi/memory.py"].decode("utf-8")
             self.assertIn("VERSION = 3\n", memory)
             files["richi/memory.py"] = memory.replace("VERSION = 3\n", "VERSION = 2\n", 1).encode()
         if legacy_schemas:
-            # Keep the real package/launcher lifecycle while reproducing the
-            # schema-2 manager's fixed protocol-1 compatibility restriction.
-            memory = files["richi/memory.py"].decode("utf-8")
-            self.assertIn("VERSION = 3\n", memory)
-            files["richi/memory.py"] = memory.replace("VERSION = 3\n", "VERSION = 2\n", 1).encode()
             manager = files["richi_launcher/installation.py"].decode("utf-8")
             old = "not _contiguous_schemas(schemas)"
             self.assertIn(old, manager)

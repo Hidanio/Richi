@@ -52,7 +52,8 @@ is replaced by another file with the same version number, the result is
 version. Background checks without automatic installation report these reasons
 as well and do not suggest an installation command for a blocked release.
 
-Updating does not migrate a database. Protocol 1 keeps map wire schema 2. From
+Updating does not migrate a database. Protocol 1 keeps map wire schema 2; changing
+the map wire schema requires a new updater protocol. From
 1.0.2, the manager accepts any release that declares support for every database
 schema from 1 to its newest, such as `[1, 2, 3]` or a later `[1, 2, 3, 4]`, provided
 it keeps every schema of the current version. One `update apply` can therefore

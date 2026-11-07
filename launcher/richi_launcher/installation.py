@@ -157,6 +157,16 @@ def _summary(ctx, state):
             "restart_maps_required": True}
 
 
+def current_record():
+    """Context and current generation from metadata only, for per-command callers.
+
+    Unlike status(), this skips layout validation (a walk of every package file).
+    """
+    ctx = _context()
+    state = _state(ctx)
+    return ctx, dict(state["generations"][state["current"]], generation=state["current"])
+
+
 def status():
     """Inspect installation metadata; never create directories, lock files or DBs."""
     try:
@@ -180,13 +190,14 @@ def _compatible(manifest):
     # Protocol 1 accepts any release that reads every schema from 1 to its
     # newest, so later schemas need no bridge release. Dropping a schema the
     # current generation supports is refused separately on update and rollback.
+    # Map wire schema 2 is part of protocol 1: changing it needs a new protocol.
     schemas = manifest.get("database_schemas")
     if not _contiguous_schemas(schemas) or manifest.get("map_schema") != 2:
         raise ConfigError("Release schema compatibility does not match updater protocol 1; no database was changed")
 
 
 def _contiguous_schemas(schemas):
-    return (isinstance(schemas, list) and len(schemas) >= 2
+    return (isinstance(schemas, list) and 2 <= len(schemas) <= bootstrap.MAX_GENERATION_SCHEMAS
             and all(type(item) is int for item in schemas) and schemas == list(range(1, len(schemas) + 1)))
 
 

@@ -209,7 +209,7 @@ class InstallationTests(unittest.TestCase):
     def test_incompatible_protocol_or_schema_never_creates_state(self):
         for key, value in (("updater_protocol", 2), ("database_schemas", [2, 3]), ("database_schemas", [1]),
                            ("database_schemas", [1, 3]), ("database_schemas", [1, 2, 4]),
-                           ("database_schemas", [1, True]), ("map_schema", 3), ("python_min", [99, 0])):
+                           ("database_schemas", [1, True]), ("database_schemas", list(range(1, 34))), ("map_schema", 3), ("python_min", [99, 0])):
             with self.subTest(key=key):
                 release = self.release("0.2.0")
                 release["manifest"][key] = value

@@ -21,8 +21,12 @@ class InstallationError(ValueError):
     pass
 
 
+# State records more schemas than this are invalid; managers refuse such releases.
+MAX_GENERATION_SCHEMAS = 32
+
+
 def _schema_list(value):
-    if (not isinstance(value, list) or not value or len(value) > 32
+    if (not isinstance(value, list) or not value or len(value) > MAX_GENERATION_SCHEMAS
             or any(type(item) is not int or item < 1 for item in value)
             or value != sorted(set(value))):
         raise InstallationError("Invalid generation database schema compatibility")

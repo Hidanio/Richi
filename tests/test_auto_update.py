@@ -25,6 +25,7 @@ class AutoUpdateTests(unittest.TestCase):
         for module, name, kwargs in [
                 (installation, "_context", {"return_value": self.ctx}),
                 (installation, "status", {"side_effect": self.local}),
+                (installation, "current_record", {"side_effect": lambda: (self.ctx, dict(self.current))}),
                 (auto_update, "_now", {"side_effect": lambda: self.clock}),
                 (update_scheduler, "install", {"return_value": {"status": "installed"}}),
                 (update_scheduler, "remove", {"return_value": {"status": "removed"}}),
@@ -127,8 +128,21 @@ class AutoUpdateTests(unittest.TestCase):
         self.assertEqual({key: pending[key] for key in ("status", "version", "current_version", "command")},
                          {"status": "update_available", "version": "0.2.0", "current_version": "0.1.0",
                           "command": "richi update apply"})
+        self.due()
+        releases.fetch_release.side_effect = OSError("offline")
+        self.assertEqual(auto_update.run()["status"], "check_failed")
+        self.assertEqual(auto_update.notice()["version"], "0.2.0")
         self.current = {"version": "0.2.0", "generation": "release-0.2.0"}
         self.assertIsNone(auto_update.notice())
+
+    def test_transitional_reminder_stops_once_a_check_finds_nothing_newer(self):
+        self.current["wheel_sha256"] = "a" * 64
+        releases.fetch_release.return_value = self.release("0.1.0")
+        with patch.object(auto_update, "TRANSITIONAL_RELEASE", True):
+            self.assertEqual(auto_update.notice()["status"], "transitional_release")
+            auto_update.enable()
+            self.assertEqual(auto_update.run()["status"], "up_to_date")
+            self.assertIsNone(auto_update.notice())
 
     def test_transitional_release_reminds_even_without_a_usable_check(self):
         with patch.object(auto_update, "TRANSITIONAL_RELEASE", True):
@@ -136,7 +150,7 @@ class AutoUpdateTests(unittest.TestCase):
             self.root.mkdir(parents=True)
             (self.root / "auto-state.json").write_text("{broken")
             self.assertEqual(auto_update.notice()["command"], "richi update apply")
-            with patch.object(installation, "status", return_value={"supported": False}):
+            with patch.object(installation, "current_record", side_effect=ConfigError("unmanaged")):
                 self.assertIsNone(auto_update.notice())
         with patch.object(auto_update, "TRANSITIONAL_RELEASE", False):
             self.assertIsNone(auto_update.notice())
