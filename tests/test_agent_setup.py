@@ -255,6 +255,27 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
             self.assertIn("Synthetic release 0.1.0", skill.read_text())
         self.assertEqual((self.home / ".codex/AGENTS.md").read_bytes(), instruction)
 
+    def test_legacy_record_without_adapter_version_is_configured_and_upgraded(self):
+        # 1.0.1 wrote format-1 records without adapter_version, and its manager
+        # activates the next release, so the new launcher meets that shape.
+        self.configure()
+        path = self.root / agent_setup.MANIFEST
+        record = json.loads(path.read_text())
+        self.assertEqual(record.pop("adapter_version"), 1)
+        path.write_text(json.dumps(record, sort_keys=True, indent=2) + "\n")
+        status = agent_setup.command(["--status"])
+        self.assertEqual((status["status"], status["changes"]), ("configured", []))
+        command = Path(status["command"])
+        target = os.readlink(command)
+        command.unlink()
+        broken = agent_setup.command(["--status"])
+        self.assertEqual((broken["status"], broken["changes"]), ("repair_required", [str(command)]))
+        command.symlink_to(target)
+        with patch.object(installation, "_collect", return_value={}):
+            installation._activate(self.ctx, self.next_state(), "updated")
+        self.assertEqual(json.loads(path.read_text())["adapter_version"], 1)
+        self.assertEqual(agent_setup.command(["--status"])["changes"], [])
+
     def test_failed_state_commit_restores_skill_and_keeps_old_runtime(self):
         self.configure()
         state = self.next_state()

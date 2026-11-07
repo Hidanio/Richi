@@ -45,8 +45,12 @@ def _records(ctx):
     value = files.snapshot(Path(ctx["root"]) / MANIFEST)
     if value["kind"] == "absent":
         return {}
+    return _parse_records(files.contents(value), ctx)
+
+
+def _parse_records(data, ctx):
     try:
-        record = json.loads(files.contents(value))
+        record = json.loads(data)
         if record["original_prefix"] != ctx["original_prefix"]:
             raise ValueError("different owner")
         if record["format_version"] == 1:
@@ -62,7 +66,11 @@ def _records(ctx):
                 raise ValueError("unsupported adapter version for " + agent)
             for key in ("skill", "command", "instructions"):
                 files.safe_path(item[key])
-        return records
+        # 1.0.1 wrote records without adapter_version, and its manager also
+        # activates the following release. Normalize them so the next write
+        # stores the current shape.
+        return {agent: dict(item, adapter_version=agent_adapters.AGENTS[agent][1])
+                for agent, item in records.items()}
     except (KeyError, TypeError, ValueError) as exc:
         raise ConfigError("Invalid agent setup metadata: " + str(exc)) from exc
 
@@ -72,10 +80,20 @@ def _load(ctx, agent="codex"):
 
 
 def _manifest_op(ctx, records):
+    path = Path(ctx["root"]) / MANIFEST
     record = records["codex"] if set(records) == {"codex"} else {
         "format_version": 2, "original_prefix": ctx["original_prefix"], "agents": records}
-    return files.change(Path(ctx["root"]) / MANIFEST,
-                        files.file_value((json.dumps(record, sort_keys=True, indent=2) + "\n").encode()))
+    after = files.file_value((json.dumps(record, sort_keys=True, indent=2) + "\n").encode())
+    before = files.snapshot(path)
+    # Preserve exact bytes when the records did not change, including a 1.0.1
+    # record that only lacks normalized fields, so status reports no drift.
+    if before["kind"] == "file":
+        try:
+            if _parse_records(files.contents(before), ctx) == records:
+                after = before
+        except ConfigError:
+            pass
+    return files.change(path, after)
 
 
 def _block(command, agent="codex"):

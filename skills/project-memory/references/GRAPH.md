@@ -24,9 +24,8 @@ edges from referring to missing nodes.
 <a id="переход-с-версии-1"></a>
 ## Migrating an existing store
 
-For an older managed installation, first complete the
-[schema-3 release transition](https://github.com/Hidanio/Richi/blob/main/docs/UPDATES.md#schema-3-transition).
-Then, from any working directory:
+An installation on 1.0.1 first updates with `richi update apply`. Then, from any
+working directory:
 
 ```sh
 richi backup

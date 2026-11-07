@@ -20,3 +20,23 @@ jobs:
       - run: python -m pip install .
       - run: python -m unittest discover -s tests -v
       - run: python evals/evaluate_recall.py
+
+  legacy-update:
+    # Installed 1.0.1 updaters are frozen; this branch must stay installable by them.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - run: python -m pip install build
+      - run: python -m build --wheel --outdir dist
+      - run: python -m pip install --no-deps dist/*.whl
+      - run: python scripts/release_manifest.py dist/*.whl
+      - run: python tests/legacy_update_e2e.py dist

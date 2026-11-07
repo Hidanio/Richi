@@ -25,6 +25,7 @@ class AutoUpdateTests(unittest.TestCase):
         for module, name, kwargs in [
                 (installation, "_context", {"return_value": self.ctx}),
                 (installation, "status", {"side_effect": self.local}),
+                (installation, "current_record", {"side_effect": lambda: (self.ctx, dict(self.current))}),
                 (auto_update, "_now", {"side_effect": lambda: self.clock}),
                 (update_scheduler, "install", {"return_value": {"status": "installed"}}),
                 (update_scheduler, "remove", {"return_value": {"status": "removed"}}),
@@ -108,6 +109,88 @@ class AutoUpdateTests(unittest.TestCase):
         self.assertFalse((self.root / "state.json").exists())
         download.assert_not_called()
         installation.apply_release.assert_not_called()
+
+    def files(self):
+        return {path: path.read_bytes() for path in self.base.rglob("*") if path.is_file()}
+
+    def test_chat_start_notice_reads_only_the_stored_check(self):
+        before = list(self.base.rglob("*"))
+        self.assertIsNone(auto_update.notice())
+        self.assertEqual(list(self.base.rglob("*")), before)
+        auto_update.enable()
+        auto_update.run()
+        stored = self.files()
+        with patch.object(releases, "fetch_release", side_effect=AssertionError("network")), \
+                patch.object(installation, "apply_release", side_effect=AssertionError("install")):
+            pending = auto_update.notice()
+        self.assertEqual(self.files(), stored)
+        self.assertEqual({key: pending[key] for key in ("status", "version", "current_version", "command")},
+                         {"status": "update_available", "version": "0.2.0", "current_version": "0.1.0",
+                          "command": "richi update apply --version 0.2.0"})
+        self.due()
+        releases.fetch_release.side_effect = OSError("offline")
+        self.assertEqual(auto_update.run()["status"], "check_failed")
+        self.assertEqual(auto_update.notice()["version"], "0.2.0")
+        self.current = {"version": "0.2.0", "generation": "release-0.2.0"}
+        self.assertIsNone(auto_update.notice())
+
+    def test_newer_up_to_date_check_clears_an_older_notice(self):
+        auto_update.enable()
+        auto_update.run()
+        self.assertEqual(auto_update.notice()["version"], "0.2.0")
+        self.current["wheel_sha256"] = "a" * 64
+        releases.fetch_release.return_value = self.release("0.1.0")
+        self.due()
+        self.assertEqual(auto_update.run()["status"], "up_to_date")
+        self.assertIsNone(auto_update.notice())
+
+    def test_notice_never_advertises_a_release_a_later_check_found_unusable(self):
+        auto_update.enable()
+        auto_update.run()
+        # 0.3.0 needs a newer Python: a plain update apply would fail, so the
+        # notice keeps naming the compatible 0.2.0 explicitly.
+        incompatible = self.release("0.3.0")
+        incompatible["manifest"]["python_min"] = [99, 0]
+        releases.fetch_release.return_value = incompatible
+        self.due()
+        self.assertEqual(auto_update.run()["status"], "incompatible_release")
+        pending = auto_update.notice()
+        self.assertEqual((pending["version"], pending["command"]), ("0.2.0", "richi update apply --version 0.2.0"))
+        state = self.state()
+        state["history"].append(dict(state["history"][0], status="candidate_failed", version="0.2.0"))
+        self.save(state)
+        self.assertIsNone(auto_update.notice())
+
+    def test_rollback_pause_can_be_restored_when_rollback_fails(self):
+        auto_update.enable(auto_install=True)
+        restore = auto_update.pause_for_rollback(self.ctx, "seed")
+        self.assertTrue((self.root / "auto-pause.json").exists())
+        restore()
+        self.assertFalse((self.root / "auto-pause.json").exists())
+        earlier = {"format_version": 1, "reason": "installation_changed", "time": 1, "generation": "seed"}
+        installation._atomic_json(self.root / "auto-pause.json", earlier)
+        auto_update.pause_for_rollback(self.ctx, "release-0.2.0")()
+        self.assertEqual(json.loads((self.root / "auto-pause.json").read_text()), earlier)
+        auto_update.disable()
+        auto_update.pause_for_rollback(self.ctx, "seed")()
+
+    def test_notice_is_absent_for_unmanaged_or_unreadable_installations(self):
+        for error in (ConfigError("unmanaged"), SyntaxError("corrupt richi/__init__.py")):
+            with patch.object(installation, "current_record", side_effect=error):
+                self.assertIsNone(auto_update.notice())
+        self.root.mkdir(parents=True)
+        (self.root / "auto-state.json").write_text("{broken")
+        self.assertIsNone(auto_update.notice())
+
+    def test_chat_current_carries_notice_only_when_present(self):
+        from richi_launcher import cli
+        for pending in (None, {"status": "update_available", "version": "0.2.0"}):
+            with self.subTest(pending=pending), patch.object(auto_update, "notice", return_value=pending), \
+                    patch.object(cli, "current_chat", return_value={"chat_id": "c", "bound": True}), \
+                    patch("builtins.print") as printed:
+                cli.chat_command(["current"], {}, "c")
+            result = json.loads(printed.call_args[0][0])
+            self.assertEqual(result.get("update"), pending)
 
     def test_default_mode_distinguishes_unverified_same_version_release(self):
         auto_update.enable()

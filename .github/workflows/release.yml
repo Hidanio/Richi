@@ -58,6 +58,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          # The legacy update gate builds 1.0.1 from its tag.
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -88,6 +90,10 @@ jobs:
       - name: Test the exact installer artifact offline
         run: |
           python tests/installer_release_smoke.py dist
+      - name: Update a real 1.0.1 installation to this release in place
+        run: |
+          python -m pip install build
+          python tests/legacy_update_e2e.py dist
 
   publish:
     needs: [build, test]

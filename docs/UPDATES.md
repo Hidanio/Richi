@@ -45,98 +45,58 @@ release with the same version number can be installed once. A matching version
 number alone does not prove identical builds.
 
 `check` returns `incompatible_release` and `can_apply: false` if a release is
-incompatible with the current Python or schemas. An unknown protocol is rejected
-when reading the manifest. If the wheel for an already verified installed release
-is replaced by another file with the same version number, the result is
-`release_changed` and installation is rejected. A corrected build needs a new
-version. Background checks without automatic installation report these reasons
-as well and do not suggest an installation command for a blocked release.
+incompatible with the current Python, updater protocol or protocol-1 manifest
+fields. If the wheel for an already verified installed release is replaced by
+another file with the same version number, the result is `release_changed` and
+installation is rejected. A corrected build needs a new version. Background checks
+without automatic installation report these reasons as well and do not suggest an
+installation command for a blocked release. The database schemas a release
+supports are known only from its self-check, after download: a release that would
+drop a supported schema is refused at installation and its staged copy removed.
 
-Updating does not migrate a database. Protocol 1 accepts declared database
-support for schemas 1/2 or 1/2/3 and keeps map wire schema 2. The current runtime
-supports all three database schemas; tool cards require an explicit migration
-to schema 3. Runtime rollback does not downgrade a migrated database, and older
-runtimes may not read it. Preserve the pre-migration backup and use a compatible
-runtime for schema 3. An incompatible updater protocol is rejected before
-installation. See [graph migration](../skills/project-memory/references/GRAPH.md).
+Updating does not migrate a database. Every protocol-1 release keeps the manifest
+fields that updaters up to 1.0.1 accept: `database_schemas` is always `[1, 2]`, and
+`map_schema` and the release's `memory.VERSION` are always 2. The schemas a release
+actually supports come from its own self-check (`memory.SUPPORTED_VERSIONS`) and
+are recorded for each installed generation. Any managed installation, including
+one on 1.0.1, therefore reaches the latest protocol-1 release with one
+`richi update apply` (or automatic installation), however many releases it
+skipped. Maintainers: see the [release contract](RELEASING.md#protocol-1-release-contract).
 
-Older protocol-1 managers accept only `[1, 2]` and cannot install a schema-3
-release. Use the [fresh-environment transition](#schema-3-transition) below.
-Reinstalling into the original environment does not replace the managed
-current-version pointer: it still selects the old manager, even if its original
-seed package has already been collected.
+The current runtime supports database schemas 1, 2 and 3. New stores are created
+at schema 3; existing stores need an explicit migration for tool cards. Runtime
+rollback does not downgrade a store, and older runtimes may not read it. Preserve
+the pre-migration backup. See [graph migration](../skills/project-memory/references/GRAPH.md).
 
-The updated manager records verified database-schema support per installed
-generation. Activation and rollback refuse to remove supported schemas, including
-a rollback from support for 1/2/3 to 1/2. This conservative check does not open
-workspace databases and applies even when no database has been migrated. The
-stable bootstrap checks before handing rollback to the previous manager, using
-recorded metadata even if the current package is damaged. Rollback between
-generations with compatible schema support remains available. A refusal reports
-that package rollback does not roll back databases; select a compatible release.
+<a id="schema-support"></a>
+The manager records verified database-schema support per installed generation.
+Activation and rollback refuse to remove supported schemas, including a rollback
+from support for 1/2/3 to 1/2. This conservative check does not open workspace
+databases and applies even when no database has been migrated. A bootstrap
+installed by 1.1.0 or later also checks before handing rollback to the previous
+manager, using recorded metadata even if the current package is damaged;
+installations that started on 1.0.x keep their original bootstrap, which does not.
+Rollback between generations with compatible schema support remains available. A
+refusal reports that package rollback does not roll back databases; select a
+compatible release.
 
-<a id="schema-3-transition"></a>
-## Moving an older installation to schema 3 support
+Updaters up to 1.0.1 perform their own rollback without this check. If a store is
+at schema 3 (migrated, or created by `init` on 1.1.0 or later) and you roll back to
+1.0.1, it refuses to open that store and changes nothing in it; run
+`richi update apply` to return to the latest release. Once Claude Code is
+connected, 1.0.1 refuses the rollback itself, because it cannot maintain that
+integration. If automatic installation was enabled, that refused rollback leaves it
+paused; resume it with `richi update auto enable --install`. Later releases restore
+the previous pause state when a rollback fails.
 
-Keep the old environments and installation metadata. The replacement uses a new
-installation identity with the existing workspace settings, chat bindings and
-data. It does not migrate a database. First record the old automatic-update
-policy and disable its schedule, using the old command:
+<a id="updater-protocols"></a>
+## Updater protocols
 
-```sh
-richi update auto status
-richi update auto disable
-richi config show
-```
-
-From a checkout of the schema-3-capable release, install a fixed package into an
-**unused** prefix. Do not reinstall over a managed environment or edit its state:
-
-```sh
-richi_new_prefix="$HOME/.local/share/richi/venv-schema3"
-python3 -m venv "$richi_new_prefix"
-"$richi_new_prefix/bin/python" -m pip install --upgrade pip
-"$richi_new_prefix/bin/python" -m pip install .
-"$richi_new_prefix/bin/python" -I -c 'from richi import memory; assert 3 in memory.SUPPORTED_VERSIONS'
-"$richi_new_prefix/bin/richi" config show
-"$richi_new_prefix/bin/richi" chat current
-```
-
-Check that the configuration/database and any chat binding match the old
-command. Existing `dev` settings are preserved; inspect the selected runtime.
-If dev still selects an older checkout, select a schema-3-capable checkout or
-deliberately run `"$richi_new_prefix/bin/richi" config set dev false` before migration.
-For a managed Codex integration, inspect the old `richi setup --status` and
-`readlink "$HOME/.local/bin/richi"`. If Claude Code is configured, also save the
-old `richi setup --agent claude --status` now. Only after verifying that this is
-the old Richi command symlink, move it to an unused backup name and adopt the skill:
-
-```sh
-mv -i "$HOME/.local/bin/richi" "$HOME/.local/bin/richi-before-schema3"
-"$richi_new_prefix/bin/richi" setup --dry-run --replace-skill
-"$richi_new_prefix/bin/richi" setup --yes --replace-skill
-"$HOME/.local/bin/richi" setup --status
-```
-
-Setup preserves an existing skill outside discovery and retains unchanged
-instruction/PATH blocks. Resolve any reported edited-block or ownership conflict
-using [setup recovery](SETUP.md#резервные-копии-восстановление-и-удаление); do not
-delete installation metadata. Without managed agents, create the replacement
-command symlink with `ln -s "$richi_new_prefix/bin/richi" "$HOME/.local/bin/richi"`
-after the same verified backup, and update any manually configured agent paths.
-
-For managed Claude Code, use the saved old setup status. Back up its settings
-and hook script, remove only the reported `hook_entry` from
-`hooks.SessionStart`, and move its `richi/session_start.py` out of that path.
-Then run the replacement's `setup --agent claude --dry-run --replace-skill` and
-`setup --agent claude --yes --replace-skill`. Preserve unrelated hooks and settings;
-the new hook must use the replacement environment's Python.
-
-Open a new terminal/chat and restart maps. Automatic updates in the replacement
-start disabled; enable them only if desired using the commands below. Leave the
-old schedule disabled and use the replacement for future updates. Only after
-verifying the new runtime, back up and explicitly migrate the selected database
-as described in [graph migration](../skills/project-memory/references/GRAPH.md).
+Every release so far uses updater protocol 1. A release that needs a newer
+protocol is reported as `incompatible_release` (or rejected when its manifest is
+read) and nothing is installed or changed; its release notes describe how to move
+to it. Maintainers keep protocol-1 installations updatable as described in the
+[release contract](RELEASING.md#protocol-1-release-contract).
 
 <a id="сколько-версий-хранится"></a>
 ## Version retention
@@ -200,8 +160,11 @@ richi update auto status
 This mode retrieves release information without downloading the wheel or changing
 the installed version. `auto status` shows an available release and its installation
 command. The user decides when to run `richi update apply` or
-`richi update apply --version X.Y.Z`. System notifications and an install button
-in the map are not implemented yet.
+`richi update apply --version X.Y.Z`. `richi chat current` also reports a newer
+release found by the last check as `update`, read from the stored result without
+network access. Agents that follow Project Memory run it at every chat start,
+mention the update once and never install it themselves. System notifications and
+an install button in the map are not implemented yet.
 
 Automatic installation is a separate option, **disabled by default**. Enable it
 only if you want compatible releases installed without confirming each version:

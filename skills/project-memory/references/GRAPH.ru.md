@@ -18,9 +18,8 @@
 <a id="migrating-from-version-1"></a>
 ## Миграция существующего хранилища
 
-Для старой управляемой установки сначала выполните
-[переход на релиз со схемой 3](https://github.com/Hidanio/Richi/blob/main/docs/UPDATES.ru.md#schema-3-transition).
-Затем, из любой рабочей папки:
+Установка версии 1.0.1 сначала обновляется через `richi update apply`. Затем, из
+любой рабочей папки:
 
 ```sh
 richi backup
