@@ -88,7 +88,9 @@ JSON-настройки этого режима:
 ```
 
 По умолчанию `dev` равен `false`. Настройка действует на все команды, агентов
-и карту, использующих этот конфиг выбранного workspace. Каждый вызов CLI в dev использует текущие
+и карту, использующих этот конфиг выбранного workspace, и переводит управляемые
+skills агентов на checkout ([что переключает dev](#что-переключает-dev)).
+Каждый вызов CLI в dev использует текущие
 исходники; правки и переключение веток checkout сразу влияют на дальнейшую
 работу. Карта автоматически перезагружает сервер при изменении Python- и
 SQL-файлов. Для изменений интерфейса обновите страницу браузера.
@@ -116,6 +118,59 @@ richi config show
 проверяют выполняемая CLI-операция и карта перед заменой runtime; автоматических
 миграций нет. Для экспериментов со схемой используйте отдельную копию базы
 и связанного каталога `artifacts/git/`.
+
+<a id="what-dev-switches"></a>
+### Что переключает dev
+
+Dev переключает две вещи: **runtime** (`src/richi/` для каждого вызова CLI,
+вызова агента и карты) и **управляемые ссылки skill Project Memory**, созданные
+`richi setup`. При включённом dev ссылка Codex `~/.agents/skills/project-memory`
+и ссылка Claude Code `~/.claude/skills/project-memory` указывают на
+`<development.source>/skills/project-memory`, поэтому агент читает текст skill,
+соответствующий выполняемому коду. Dev не переключает установленный запускатель
+(`launcher/`, включая `setup`, `update` и `config`), управляемые блоки инструкций
+в `AGENTS.md`/`CLAUDE.md`, SessionStart hook Claude Code и блоки PATH: они всегда
+следуют установленному релизу.
+
+Переключение автоматическое. `richi config set dev true` или `false` переводит
+все управляемые ссылки одной восстанавливаемой транзакцией с журналом и сообщает
+результат в `agent_skills`:
+
+```json
+"agent_skills": {"status": "changed", "mode": "dev",
+                 "source": "/path/to/Richi",
+                 "target": "/path/to/Richi/skills/project-memory",
+                 "changes": ["/home/me/.agents/skills/project-memory",
+                             "/home/me/.claude/skills/project-memory"]}
+```
+
+`status` принимает значения `changed`, `unchanged`, `not_configured` (`richi setup`
+ещё не выполнялся), `conflict` или `busy`. При включённом dev команда
+`config set development.source` перенаправляет ссылки на новый checkout.
+`config show` показывает, куда указывают ссылки, и `matches_config`. После
+переключения откройте новый чат агента: работающие чаты могут хранить уже
+загруженный skill.
+
+`dev` принадлежит workspace, а ссылки skill общие для пользователя: их положение
+определяет последняя команда `config set dev` в любом workspace. Если `config show`
+показывает `"matches_config": false`, повторите `richi config set dev true`
+(или `false`) в том workspace, где работаете.
+
+- Checkout без корректного `skills/project-memory/SKILL.md` или dev без
+  `development.source` направляет ссылки на установленный релиз; причина
+  указана в `reason`. `config set dev false` всегда возвращает ссылки на релиз,
+  даже если checkout удалён или сломан.
+- Правки skill в checkout считаются разработкой, а не расхождением.
+- Изменённый через ссылку skill релиза или вручную заменённая управляемая ссылка
+  блокируют переключение (`"status": "conflict"`) и сохраняются. Конфигурация
+  всё равно записывается; согласуйте указанный путь и повторите команду.
+- Skills, созданные не через `richi setup`, никогда не изменяются.
+- `richi update apply` и `richi update rollback` оставляют ссылки на checkout,
+  пока dev включён. Если в checkout пропал skill, активация возвращает skill
+  релиза. Релизы до 1.1.0 включительно не умеют обслуживать ссылки на checkout:
+  перед откатом на такой релиз выполните `richi config set dev false`, иначе он
+  откажет в откате и ничего не изменит. `config set dev true` предупреждает об
+  этом в `agent_skills.rollback`, если предыдущий релиз относится к ним.
 
 <a id="workspaces"></a>
 ## Рабочие области

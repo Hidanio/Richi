@@ -125,6 +125,14 @@ def configuration(argv, selectors, *, compact_json=False):
         result["installed_runtime"] = installed_runtime().as_dict()
     except ConfigError as exc:
         result["installed_runtime"] = {"available": False, "error": str(exc)}
+    # Managed agent skills are user-wide and follow the latest dev switch:
+    # `config set dev` re-points them, as does a new source while dev is on.
+    # The installed launcher does this, so broken sources never block it.
+    from . import agent_setup
+    if args.action == "set" and (args.key == "dev" or settings.dev):
+        result["agent_skills"] = agent_setup.switch_skills(settings.dev, settings.development_source)
+    else:
+        result["agent_skills"] = agent_setup.skill_links(settings.dev, settings.development_source)
     return _emit(result, compact_json=compact_json)
 
 

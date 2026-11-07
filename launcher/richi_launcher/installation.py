@@ -390,7 +390,10 @@ def _activate(ctx, state, action):
             setup_files.finish(ctx, transaction)
         collection = _collect(ctx, state)
         _atomic_json(Path(ctx["root"]) / "state.json", state)
-        return dict(_summary(ctx, state), status=action, cleanup=collection)
+        result = dict(_summary(ctx, state), status=action, cleanup=collection)
+        if operations:
+            result["agent_skills"] = agent_setup.activated_links(ctx)
+        return result
 
 
 def _candidate_referenced(ctx, generation):

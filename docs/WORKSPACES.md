@@ -206,7 +206,9 @@ richi -w personal config set dev false
 
 Dev and the installed version use one database within a workspace. Switching
 modes does not move knowledge between workspaces or apply SQLite migrations.
-Changes to the installed launcher require reinstalling the package.
+Changes to the installed launcher require reinstalling the package. Managed agent
+skill links are user-wide: the latest `config set dev` in any workspace decides
+whether they point to the checkout ([what dev switches](INSTALLATION.md#what-dev-switches)).
 
 `richi -w work map` opens that workspace's map. The map displays the workspace
 name and remains pinned to its database even after `richi use personal`. Another

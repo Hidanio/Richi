@@ -13,6 +13,9 @@ from . import agent_adapters
 
 PROTOCOL = 1
 MULTI_AGENT_PROTOCOL = 1
+# Releases declaring this literal keep managed skill links on a development
+# checkout across activation. Older managers only accept their bundled skill.
+DEV_SKILL_PROTOCOL = 1
 MANIFEST = "agent-setup.json"
 START = b"<!-- richi:project-memory:start -->"
 END = b"<!-- richi:project-memory:end -->"
@@ -41,6 +44,65 @@ def bundle(site):
     return root, hashes
 
 
+def _source(value):
+    """Normalize a development checkout path stored for skill links."""
+    if isinstance(value, os.PathLike):
+        value = os.fspath(value)
+    if not isinstance(value, str) or not value or not os.path.isabs(value) or any(
+            ord(c) < 32 or ord(c) == 127 for c in value):
+        raise ConfigError("Development source for skills must be an absolute path")
+    return os.path.abspath(value)
+
+
+def _dev_link(source):
+    # Derived, not stored: the checkout's skill is the developer's to edit.
+    return str(Path(_source(source)) / "skills" / "project-memory")
+
+
+def dev_skill(source):
+    """Validate the checkout's Project Memory skill; its contents are never hashed."""
+    root = Path(_dev_link(source))
+    try:
+        skill = root / "SKILL.md"
+        valid = (root.is_dir() and not root.is_symlink() and skill.is_file()
+                 and skill.stat().st_size <= files.MAX_FILE
+                 and "name: project-memory" in skill.read_text(encoding="utf-8"))
+    except (OSError, RuntimeError, UnicodeError) as exc:
+        raise ConfigError("Cannot inspect development skill " + str(root) + ": " + str(exc)) from exc
+    if not valid:
+        raise ConfigError("development.source has no Project Memory skill at " + str(root))
+    return str(root)
+
+
+def _desired_link(release, source):
+    """Return (link target, dev source or None, fallback reason or None).
+
+    A missing or invalid checkout never blocks a link to the installed release.
+    """
+    if source is None:
+        return str(release), None, None
+    try:
+        return dev_skill(source), _source(source), None
+    except ConfigError as exc:
+        return str(release), None, str(exc) + "; using the installed release skill"
+
+
+def _link_target(record):
+    return _dev_link(record["dev_source"]) if record.get("dev_source") else record["skill_target"]
+
+
+def _shared_source(records):
+    sources = {record.get("dev_source") for record in records.values()}
+    return sources.pop() if len(sources) == 1 else None
+
+
+def _dev_capable(site):
+    try:
+        return agent_adapters.literal(Path(site) / "richi_launcher/agent_setup.py", "DEV_SKILL_PROTOCOL") == 1
+    except ConfigError:
+        return False
+
+
 def _records(ctx):
     value = files.snapshot(Path(ctx["root"]) / MANIFEST)
     if value["kind"] == "absent":
@@ -66,6 +128,8 @@ def _parse_records(data, ctx):
                 raise ValueError("unsupported adapter version for " + agent)
             for key in ("skill", "command", "instructions"):
                 files.safe_path(item[key])
+            if "dev_source" in item:
+                _source(item["dev_source"])
         # 1.0.1 wrote records without adapter_version, and its manager also
         # activates the following release. Normalize them so the next write
         # stores the current shape.
@@ -195,7 +259,8 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     state = installation._state(ctx)
     active = state["generations"][state["current"]]
     root, hashes = bundle(active["site"])
-    current = _load(ctx, agent)
+    records = _records(ctx)
+    current = records.get(agent)
     home = Path.home().resolve()
     adapter = agent_adapters.get(agent)
     profile, instructions, skill = adapter.paths(current)
@@ -204,9 +269,15 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     executable = Path(ctx["original_prefix"]) / "bin" / "richi"
     if not executable.is_file():
         raise ConfigError("The permanent Richi console command is missing")
-    skill_op = files.change(skill, {"kind": "link", "target": str(root)})
+    # Dev skill links are installation-wide: a newly connected agent follows
+    # the others. A broken checkout plans the release link (repair).
+    source = current.get("dev_source") if current else _shared_source(records)
+    link, dev_source, _ = _desired_link(root, source)
+    skill_op = files.change(skill, {"kind": "link", "target": link})
     if current:
         _verify_skill(current)
+    elif skill_op["before"] == skill_op["after"]:
+        pass  # Already the exact managed link (for example a manual dev link).
     elif skill_op["before"]["kind"] != "absent":
         if not replace_skill:
             raise ConfigError("Project Memory already exists. Use --replace-skill to preserve it outside skill discovery and install this version")
@@ -228,17 +299,22 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
               "command": str(command), "instructions": str(instructions),
               "block_sha256": files.digest(block), "profiles": profiles,
               "path_block_sha256": files.digest(path_block), "generation": state["current"]}
+    if dev_source:
+        record["dev_source"] = dev_source
     record.update(extra)
     record["adapter_version"] = agent_adapters.AGENTS[agent][1]
-    records = _records(ctx)
     records[agent] = record
     ops.append(_manifest_op(ctx, records))
     return record, ops
 
 
 def _verify_skill(record):
-    if files.snapshot(record["skill"]) != {"kind": "link", "target": record["skill_target"]}:
+    # skill_target and skill_hashes always describe the release bundle, so a
+    # manager without dev support refuses a dev link instead of adopting it.
+    if files.snapshot(record["skill"]) != {"kind": "link", "target": _link_target(record)}:
         raise ConfigError("Managed skill link was changed; preserved it. Reconcile it before updating Richi")
+    if record.get("dev_source"):
+        return  # Checkout edits are development work, not drift.
     root = Path(record["skill_target"])
     _, hashes = bundle(root.parent.parent)
     if hashes != record["skill_hashes"]:
@@ -254,16 +330,145 @@ def activation_operations(ctx, state):
         raise ConfigError("The selected release cannot maintain agent setup; activation was cancelled")
     agent_adapters.require_supported(site, records)
     target, hashes = bundle(site)
+    # Keep links on the checkout only if the activated release maintains them;
+    # a missing checkout falls back to the release skill instead of blocking.
+    dev_capable = _dev_capable(site)
     ops = []
     for agent, record in records.items():
         _verify_skill(record)
         extra, adapter_ops = agent_adapters.get(agent).activation_operations(ctx, record, site)
         ops.extend(adapter_ops)
+        link, source, _ = _desired_link(target, record.get("dev_source") if dev_capable else None)
         records[agent] = dict(record, skill_target=str(target), skill_hashes=hashes, generation=state["current"])
+        records[agent].pop("dev_source", None)
+        if source:
+            records[agent]["dev_source"] = source
         records[agent].update(extra)
-        ops.append(files.change(record["skill"], {"kind": "link", "target": str(target)}))
+        ops.append(files.change(record["skill"], {"kind": "link", "target": link}))
     ops.append(_manifest_op(ctx, records))
     return ops
+
+
+def _switch_operations(ctx, state, source):
+    records = _records(ctx)
+    release, _ = bundle(Path(state["generations"][state["current"]]["site"]))
+    link, dev_source, reason = _desired_link(release, source)
+    ops, agents = [], {}
+    for agent, record in records.items():
+        if record["skill_target"] != str(release):
+            raise ConfigError(agent + ": managed skill metadata does not match the active release; "
+                              "run richi setup --agent " + agent + " --yes")
+        operation = files.change(record["skill"], {"kind": "link", "target": link})
+        if operation["before"] != operation["after"]:
+            try:
+                # A release skill edited through its link stays protected:
+                # moving the link away would let a later update discard it.
+                _verify_skill(record)
+            except ConfigError as exc:
+                raise ConfigError(agent + ": " + str(exc)) from exc
+        # Release hashes are kept as recorded, so later activation still
+        # detects edits to the bundle.
+        updated = dict(record)
+        updated.pop("dev_source", None)
+        if dev_source:
+            updated["dev_source"] = dev_source
+        records[agent] = updated
+        ops.append(operation)
+        agents[agent] = {"skill": record["skill"], "target": link,
+                         "changed": operation["before"] != operation["after"]}
+    ops.append(_manifest_op(ctx, records))
+    report = {"mode": "dev" if dev_source else "release", "target": link, "agents": agents}
+    if dev_source:
+        report["source"] = dev_source
+        previous = state.get("previous")
+        # Rollback runs the previous release's manager; an old one refuses
+        # checkout links with a generic message, so say it here first.
+        if previous is not None and not _dev_capable(state["generations"][previous]["site"]):
+            report["rollback"] = ("The previous release " + str(state["generations"][previous].get("version"))
+                                  + " cannot keep checkout skill links; run richi config set dev false"
+                                  " before richi update rollback")
+    if reason:
+        report["reason"] = reason
+    return ops, report
+
+
+def _requested(dev, source):
+    if not dev:
+        return None, None
+    if source is None:
+        return None, "development.source is not configured; using the installed release skill"
+    return source, None
+
+
+def switch_skills(dev, source):
+    """Point every managed skill at the dev checkout or the installed release.
+
+    Called after `config set` has already saved the configuration. It never
+    raises, so disabling dev always succeeds; the report says what happened.
+    Links follow the latest switch: they are installation-wide, unlike `dev`.
+    """
+    command = "richi config set dev " + ("true" if dev else "false")
+    source, missing = _requested(dev, source)
+    try:
+        from . import installation
+        ctx = installation._context()
+        if not (Path(ctx["root"]) / MANIFEST).is_file():
+            return {"status": "not_configured"}
+    except (ValueError, OSError, RuntimeError, ImportError) as exc:
+        return {"status": "unavailable", "reason": "No managed agent setup: " + str(exc)}
+    try:
+        with installation._locked(ctx, blocking=False), installation._locked(ctx, state=True):
+            files.recover(ctx)
+            ops, report = _switch_operations(ctx, installation._state(ctx), source)
+            changes = [op["path"] for op in ops if op["before"] != op["after"]]
+            if changes:
+                files.finish(ctx, files.begin(ctx, ops))
+    except installation._InstallationBusy:
+        return {"status": "busy", "error": "An installation update is in progress; skill links were not changed",
+                "next_command": command}
+    except (ValueError, OSError, RuntimeError, KeyError, TypeError) as exc:
+        return {"status": "conflict", "error": str(exc), "next_command": command,
+                "recovery": "Reconcile the reported path, then rerun the command; the configuration was saved"}
+    links = [path for path in changes if Path(path).name != MANIFEST]
+    if missing:
+        report["reason"] = missing
+    return dict(report, status="changed" if links else "unchanged", changes=links)
+
+
+def activated_links(ctx):
+    """Where managed skills point after an update or rollback."""
+    try:
+        return {agent: {"mode": "dev" if record.get("dev_source") else "release",
+                        "target": _link_target(record)} for agent, record in _records(ctx).items()}
+    except ConfigError as exc:
+        return {"error": str(exc)}
+
+
+def skill_links(dev, source):
+    """Read-only summary of managed skill links for `config show`; never raises."""
+    source, missing = _requested(dev, source)
+    try:
+        from . import installation
+        ctx = installation._context()
+        if not (Path(ctx["root"]) / MANIFEST).is_file():
+            return {"status": "not_configured"}
+        records = _records(ctx)
+        agents = {agent: {"skill": record["skill"], "target": _link_target(record),
+                          "mode": "dev" if record.get("dev_source") else "release"}
+                  for agent, record in records.items()}
+        # The expectation mirrors switch_skills: an unusable checkout means release.
+        _, expected, reason = _desired_link("", source)
+        matches = all(record.get("dev_source") == expected for record in records.values())
+    except (ValueError, OSError, RuntimeError, ImportError, KeyError, TypeError) as exc:
+        return {"status": "unavailable", "reason": str(exc)}
+    modes = {item["mode"] for item in agents.values()}
+    result = {"status": "configured", "mode": modes.pop() if len(modes) == 1 else "mixed",
+              "matches_config": matches, "agents": agents}
+    if reason or missing:
+        result["reason"] = reason or missing
+    if not matches:
+        result["next_command"] = "richi config set dev " + ("true" if dev else "false")
+    return result
 
 
 def recover_pending():
@@ -296,12 +501,21 @@ def command(argv):
         # Replanning also detects shadowed/edited instructions and broken links.
         _, operations = plan(ctx, agent=args.agent)
         drift = [op["path"] for op in operations if op["before"] != op["after"]]
-        return dict(record, status="repair_required" if drift else "configured", changes=drift,
-                    pending_recovery=False)
+        result = dict(record, status="repair_required" if drift else "configured", changes=drift,
+                      pending_recovery=False, skill_mode="dev" if record.get("dev_source") else "release",
+                      skill_link=_link_target(record))
+        if record.get("dev_source"):
+            try:
+                dev_skill(record["dev_source"])
+            except ConfigError as exc:
+                result["dev_skill_error"] = str(exc) + "; repair links to the release or fix the checkout"
+        return result
     record, ops = plan(ctx, replace_skill=args.replace_skill, no_path=args.no_path, agent=args.agent)
     changed = [op["path"] for op in ops if op["before"] != op["after"]]
     result = {"status": "planned", "agent": args.agent, "scope": "user",
-              "changes": changed, "skill": record["skill"], "instructions": record["instructions"],
+              "changes": changed, "skill": record["skill"], "skill_link": _link_target(record),
+              "skill_mode": "dev" if record.get("dev_source") else "release",
+              "instructions": record["instructions"],
               "command": record["command"], "backups": str(Path(ctx["root"]) / "setup-backups"),
               "skill_backups": [op["backup"] for op in ops if "backup" in op],
               "next_step": "Open a new " + agent_adapters.get(args.agent).LABEL + " chat and choose its workspace. Open a new terminal for PATH changes.",
@@ -324,6 +538,8 @@ def command(argv):
         record, ops = plan(ctx, replace_skill=args.replace_skill, no_path=args.no_path, agent=args.agent)
         result["skill_backups"] = [op["backup"] for op in ops if "backup" in op]
         result["changes"] = [op["path"] for op in ops if op["before"] != op["after"]]
+        result["skill_link"] = _link_target(record)
+        result["skill_mode"] = "dev" if record.get("dev_source") else "release"
         if any(op["before"] != op["after"] for op in ops):
             transaction = files.begin(ctx, ops)
             files.finish(ctx, transaction)

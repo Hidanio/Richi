@@ -23,9 +23,12 @@ Updates affect the **entire installation**, across every workspace using it.
 Update commands do not accept `-w`, `--config`, `--db` or `--project-path`, do not
 read databases, and do not require workspace selection in a new chat. Existing
 chat bindings, `dev` settings, source paths, SQLite and captured Git bytes remain
-unchanged. With dev enabled, memory commands keep using source code; `dev false`
-selects the installed release. Broken dev sources do not block release checks
-or installation.
+unchanged. With dev enabled, memory commands keep using source code and managed
+skill links stay on the checkout; `dev false` selects the installed release and
+its skill. Broken dev sources do not block release checks or installation.
+Releases up to 1.1.0 cannot maintain checkout skill links: run
+`richi config set dev false` before rolling back to one of them
+([what dev switches](INSTALLATION.md#what-dev-switches)).
 
 <a id="установка-и-откат"></a>
 ## Installation and rollback

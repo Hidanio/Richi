@@ -120,10 +120,22 @@ a new chat after updating, since running agents may retain loaded skill content.
 
 Automatic installation stays off unless explicitly enabled with
 `richi update auto enable --interval 6h --install`; see [UPDATES.md](UPDATES.md).
-Workspace dev settings are preserved. CLI/map can use development sources, but
-the managed **global skill follows the installed release**. For skill development,
-retain a separately managed source symlink instead of adopting it with
-`--replace-skill`. Setup never edits the source checkout.
+Workspace dev settings are preserved. Dev mode switches the runtime **and the
+managed skill links**: `richi config set dev true` points every managed skill to
+`<development.source>/skills/project-memory`, and `richi config set dev false`
+points it back to the installed release, each in one recoverable transaction
+reported as `agent_skills`. Instruction blocks, the Claude Code hook, PATH blocks
+and the launcher stay on the installed release. Links are user-wide and follow
+the latest `config set dev` in any workspace. Updates and rollbacks keep checkout
+links; before rolling back to 1.1.0 or older, run `richi config set dev false`.
+Details: [what dev switches](INSTALLATION.md#what-dev-switches).
+
+`richi setup --status` reports `skill_mode` (`release` or `dev`) and the expected
+`skill_link`. A dev link whose checkout lost its skill is `repair_required` with
+`dev_skill_error`; `richi setup --yes` then restores the release skill. An agent
+connected while dev is on follows the checkout. An existing link that already
+points to exactly the managed target is adopted without `--replace-skill`; other
+existing skills still require it. Setup never edits the source checkout.
 
 <a id="офлайн-установка"></a>
 ## Offline installation
@@ -188,7 +200,8 @@ independently. Setup does not override disabled hooks or permission policies.
 This supports Claude Code, not ordinary Claude chat or MCP. Managed skills and
 Claude's session script follow package updates/rollback together. Releases that
 cannot maintain any configured agent are blocked before activation.
-Launcher changes require installing a new package, even with runtime dev mode on.
+Dev mode moves the managed skills, not the Claude Code hook or instructions.
+Launcher changes require installing a new package, even with dev mode on.
 
 Claude contracts: [profile layout](https://code.claude.com/docs/en/claude-directory)
 and [SessionStart hooks](https://code.claude.com/docs/en/hooks#sessionstart).

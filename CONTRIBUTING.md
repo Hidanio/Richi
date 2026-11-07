@@ -65,7 +65,8 @@ the launcher requires a fixed package for release mode and recovery.
 
 For everyday CLI development, configure `development.source` and `dev true` as
 described in the [installation guide](docs/INSTALLATION.md). This selects
-`src/richi/` for CLI, agents and the map. It does not redirect direct Python
+`src/richi/` for CLI, agents and the map, and links the managed agent skills to
+`skills/project-memory/`. It does not redirect direct Python
 imports or load launcher changes from the checkout; changes under `launcher/`
 require reinstalling the package.
 
