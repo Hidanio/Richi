@@ -126,7 +126,7 @@ class AutoUpdateTests(unittest.TestCase):
         self.assertEqual(self.files(), stored)
         self.assertEqual({key: pending[key] for key in ("status", "version", "current_version", "command")},
                          {"status": "update_available", "version": "0.2.0", "current_version": "0.1.0",
-                          "command": "richi update apply"})
+                          "command": "richi update apply --version 0.2.0"})
         self.due()
         releases.fetch_release.side_effect = OSError("offline")
         self.assertEqual(auto_update.run()["status"], "check_failed")
@@ -144,9 +144,40 @@ class AutoUpdateTests(unittest.TestCase):
         self.assertEqual(auto_update.run()["status"], "up_to_date")
         self.assertIsNone(auto_update.notice())
 
+    def test_notice_never_advertises_a_release_a_later_check_found_unusable(self):
+        auto_update.enable()
+        auto_update.run()
+        # 0.3.0 needs a newer Python: a plain update apply would fail, so the
+        # notice keeps naming the compatible 0.2.0 explicitly.
+        incompatible = self.release("0.3.0")
+        incompatible["manifest"]["python_min"] = [99, 0]
+        releases.fetch_release.return_value = incompatible
+        self.due()
+        self.assertEqual(auto_update.run()["status"], "incompatible_release")
+        pending = auto_update.notice()
+        self.assertEqual((pending["version"], pending["command"]), ("0.2.0", "richi update apply --version 0.2.0"))
+        state = self.state()
+        state["history"].append(dict(state["history"][0], status="candidate_failed", version="0.2.0"))
+        self.save(state)
+        self.assertIsNone(auto_update.notice())
+
+    def test_rollback_pause_can_be_restored_when_rollback_fails(self):
+        auto_update.enable(auto_install=True)
+        restore = auto_update.pause_for_rollback(self.ctx, "seed")
+        self.assertTrue((self.root / "auto-pause.json").exists())
+        restore()
+        self.assertFalse((self.root / "auto-pause.json").exists())
+        earlier = {"format_version": 1, "reason": "installation_changed", "time": 1, "generation": "seed"}
+        installation._atomic_json(self.root / "auto-pause.json", earlier)
+        auto_update.pause_for_rollback(self.ctx, "release-0.2.0")()
+        self.assertEqual(json.loads((self.root / "auto-pause.json").read_text()), earlier)
+        auto_update.disable()
+        auto_update.pause_for_rollback(self.ctx, "seed")()
+
     def test_notice_is_absent_for_unmanaged_or_unreadable_installations(self):
-        with patch.object(installation, "current_record", side_effect=ConfigError("unmanaged")):
-            self.assertIsNone(auto_update.notice())
+        for error in (ConfigError("unmanaged"), SyntaxError("corrupt richi/__init__.py")):
+            with patch.object(installation, "current_record", side_effect=error):
+                self.assertIsNone(auto_update.notice())
         self.root.mkdir(parents=True)
         (self.root / "auto-state.json").write_text("{broken")
         self.assertIsNone(auto_update.notice())

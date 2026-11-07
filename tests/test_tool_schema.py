@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+import ast
+import richi_bootstrap
 from richi import graph, memory, search_index
 from richi_launcher import installation
 
@@ -124,8 +126,8 @@ class ToolSchemaTests(unittest.TestCase):
     def test_release_stays_installable_by_1_0_1_updaters(self):
         # 1.0.1 accepts only manifests declaring [1, 2] and requires the release's
         # memory.VERSION to equal map_schema 2; real support is SUPPORTED_VERSIONS.
-        self.assertEqual((memory.VERSION, graph.MAP_SCHEMA_VERSION, memory.SCHEMA), (2, 2, 3))
-        self.assertEqual(sorted(memory.SUPPORTED_VERSIONS), [1, 2, 3])
+        self.assertEqual((memory.VERSION, graph.MAP_SCHEMA_VERSION), (2, 2))
+        self.assertEqual((installation.PROTOCOL1_DATABASE_SCHEMAS, installation.PROTOCOL1_MAP_SCHEMA), ([1, 2], 2))
         manifest = {"format_version": 1, "updater_protocol": 1, "python_min": [3, 9], "map_schema": 2}
         installation._compatible(dict(manifest, database_schemas=[1, 2]))
         for schemas in ([1, 2, 3], [2, 3], [1]):
@@ -134,6 +136,23 @@ class ToolSchemaTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             installation._compatible(dict(manifest, database_schemas=[1, 2], map_schema=3))
 
+    def test_storage_schema_contract_holds_for_any_schema_bump(self):
+        # Support is every schema from 1 to SCHEMA, migrate reaches SCHEMA, and
+        # bootstrap's source inference (used for generations 1.0.1 installed)
+        # agrees with the real package.
+        self.assertEqual(memory.SUPPORTED_VERSIONS, set(range(1, memory.SCHEMA + 1)))
+        self.assertEqual(graph.MIGRATION_TARGET, memory.SCHEMA)
+        site = Path(memory.__file__).resolve().parents[1]
+        self.assertEqual(richi_bootstrap.generation_schemas({"site": str(site)}), sorted(memory.SUPPORTED_VERSIONS))
+        # The frozen compatibility field is never read by storage code.
+        tree = ast.parse(Path(memory.__file__).read_text(encoding="utf-8"))
+        reads = [node for node in ast.walk(tree) if isinstance(node, ast.Name) and node.id == "VERSION"
+                 and isinstance(node.ctx, ast.Load)]
+        self.assertEqual(reads, [])
+        for module in Path(memory.__file__).resolve().parent.glob("*.py"):
+            for node in ast.walk(ast.parse(module.read_text(encoding="utf-8"))):
+                if isinstance(node, ast.Attribute) and node.attr == "VERSION" and getattr(node.value, "id", "") in {"memory", "api"}:
+                    self.fail(module.name + " reads memory.VERSION; use memory.SCHEMA")
 
 if __name__ == "__main__":
     unittest.main()

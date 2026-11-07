@@ -9,6 +9,7 @@ import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from unittest import mock
 from unittest.mock import patch
 
 import richi_bootstrap as bootstrap
@@ -219,6 +220,24 @@ class InstallationTests(unittest.TestCase):
                 with self.assertRaises(ConfigError):
                     installation.apply_release(release)
                 self.assertFalse(self.root.exists())
+
+    def test_failed_rollback_activation_restores_the_auto_install_pause(self):
+        self.apply("0.2.0")
+        before = (self.root / "state.json").read_bytes()
+        restore = mock.Mock()
+        with patch("richi_launcher.auto_update.pause_for_rollback", return_value=restore) as pause, \
+                patch.object(installation, "_activate", side_effect=ConfigError("activation failed")):
+            with self.assertRaisesRegex(ConfigError, "activation failed"):
+                installation.rollback()
+        pause.assert_called_once()
+        restore.assert_called_once_with()
+        self.assertEqual((self.root / "state.json").read_bytes(), before)
+
+    def test_newer_protocol_message_points_to_the_upgrade_docs(self):
+        release = self.release("0.2.0")
+        release["manifest"]["updater_protocol"] = 2
+        with self.assertRaisesRegex(ConfigError, "updater-protocols"):
+            installation.apply_release(release)
 
     def test_downgrade_refused_and_rollback_swaps_existing_generations(self):
         first = self.apply("0.2.0")

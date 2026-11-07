@@ -45,42 +45,58 @@ release with the same version number can be installed once. A matching version
 number alone does not prove identical builds.
 
 `check` returns `incompatible_release` and `can_apply: false` if a release is
-incompatible with the current Python or schemas. An unknown protocol is rejected
-when reading the manifest. If the wheel for an already verified installed release
-is replaced by another file with the same version number, the result is
-`release_changed` and installation is rejected. A corrected build needs a new
-version. Background checks without automatic installation report these reasons
-as well and do not suggest an installation command for a blocked release.
+incompatible with the current Python, updater protocol or protocol-1 manifest
+fields. If the wheel for an already verified installed release is replaced by
+another file with the same version number, the result is `release_changed` and
+installation is rejected. A corrected build needs a new version. Background checks
+without automatic installation report these reasons as well and do not suggest an
+installation command for a blocked release. The database schemas a release
+supports are known only from its self-check, after download: a release that would
+drop a supported schema is refused at installation and its staged copy removed.
 
 Updating does not migrate a database. Every protocol-1 release keeps the manifest
 fields that updaters up to 1.0.1 accept: `database_schemas` is always `[1, 2]`, and
 `map_schema` and the release's `memory.VERSION` are always 2. The schemas a release
 actually supports come from its own self-check (`memory.SUPPORTED_VERSIONS`) and
-are recorded for each installed generation. Any installed version, including
-1.0.1, therefore reaches the latest release with one `richi update apply` (or
-automatic installation), however many releases it skipped. Changing the map wire
-schema requires a new updater protocol.
+are recorded for each installed generation. Any managed installation, including
+one on 1.0.1, therefore reaches the latest protocol-1 release with one
+`richi update apply` (or automatic installation), however many releases it
+skipped. Maintainers: see the [release contract](RELEASING.md#protocol-1-release-contract).
 
-The current runtime supports database schemas 1, 2 and 3; tool cards require an
-explicit migration to schema 3. Runtime rollback does not downgrade a migrated
-database, and older runtimes may not read it. Preserve the pre-migration backup.
-See [graph migration](../skills/project-memory/references/GRAPH.md).
+The current runtime supports database schemas 1, 2 and 3. New stores are created
+at schema 3; existing stores need an explicit migration for tool cards. Runtime
+rollback does not downgrade a store, and older runtimes may not read it. Preserve
+the pre-migration backup. See [graph migration](../skills/project-memory/references/GRAPH.md).
 
 <a id="schema-support"></a>
 The manager records verified database-schema support per installed generation.
 Activation and rollback refuse to remove supported schemas, including a rollback
 from support for 1/2/3 to 1/2. This conservative check does not open workspace
-databases and applies even when no database has been migrated. The stable
-bootstrap checks before handing rollback to the previous manager, using recorded
-metadata even if the current package is damaged. Rollback between generations with
-compatible schema support remains available. A refusal reports that package
-rollback does not roll back databases; select a compatible release.
+databases and applies even when no database has been migrated. A bootstrap
+installed by 1.1.0 or later also checks before handing rollback to the previous
+manager, using recorded metadata even if the current package is damaged;
+installations that started on 1.0.x keep their original bootstrap, which does not.
+Rollback between generations with compatible schema support remains available. A
+refusal reports that package rollback does not roll back databases; select a
+compatible release.
 
-Updaters up to 1.0.1 perform their own rollback without this check. If you migrate
-a store to schema 3 and then roll back to 1.0.1, it refuses to open that store and
-changes nothing; run `richi update apply` to return to the latest release. Once
-Claude Code is connected, 1.0.1 refuses the rollback itself, because it cannot
-maintain that integration; nothing is changed.
+Updaters up to 1.0.1 perform their own rollback without this check. If a store is
+at schema 3 (migrated, or created by `init` on 1.1.0 or later) and you roll back to
+1.0.1, it refuses to open that store and changes nothing in it; run
+`richi update apply` to return to the latest release. Once Claude Code is
+connected, 1.0.1 refuses the rollback itself, because it cannot maintain that
+integration. If automatic installation was enabled, that refused rollback leaves it
+paused; resume it with `richi update auto enable --install`. Later releases restore
+the previous pause state when a rollback fails.
+
+<a id="updater-protocols"></a>
+## Updater protocols
+
+Every release so far uses updater protocol 1. A release that needs a newer
+protocol is reported as `incompatible_release` (or rejected when its manifest is
+read) and nothing is installed or changed; its release notes describe how to move
+to it. Maintainers keep protocol-1 installations updatable as described in the
+[release contract](RELEASING.md#protocol-1-release-contract).
 
 <a id="сколько-версий-хранится"></a>
 ## Version retention

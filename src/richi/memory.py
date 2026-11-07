@@ -17,8 +17,11 @@ from . import output
 
 
 # Newest storage schema: new stores are created with it and migrate targets it.
+# Release contract (docs/RELEASING.md): SCHEMA stays a top-level int literal,
+# because bootstrap parses it for generations installed by 1.0.1, and support
+# is every schema from 1 to SCHEMA.
 SCHEMA = 3
-SUPPORTED_VERSIONS = {1, 2, SCHEMA}
+SUPPORTED_VERSIONS = set(range(1, SCHEMA + 1))
 # Frozen at 2. Updaters up to 1.0.1 read memory.VERSION in a release's
 # self-check as its map wire schema and refuse the update unless it equals 2,
 # so changing it would strand those installations. Storage code uses SCHEMA.
@@ -266,7 +269,7 @@ def initialize(conn, path):
             search_backend = "scan"
         conn.execute("RELEASE optional_fts")
         conn.execute("INSERT INTO metadata(key, value) VALUES ('search_backend', ?)", (search_backend,))
-        conn.execute("PRAGMA user_version = 3")
+        conn.execute("PRAGMA user_version = " + str(SCHEMA))
     return {"database": str(path), "schema_version": SCHEMA, "search_backend": search_backend, "status": "created"}
 
 

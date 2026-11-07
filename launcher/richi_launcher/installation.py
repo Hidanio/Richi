@@ -178,11 +178,20 @@ def status():
                 "updater_protocol": bootstrap.BOOTSTRAP_PROTOCOL}
 
 
+# Exactly what updaters up to 1.0.1 accept in a manifest. Never change these
+# under protocol 1 (docs/RELEASING.md); a release's real support is its
+# self-reported SUPPORTED_VERSIONS. scripts/release_manifest.py uses them too.
+PROTOCOL1_DATABASE_SCHEMAS = [1, 2]
+PROTOCOL1_MAP_SCHEMA = 2
+PROTOCOL_DOCS = "https://github.com/Hidanio/Richi/blob/main/docs/UPDATES.md#updater-protocols"
+
+
 def _compatible(manifest):
     if not isinstance(manifest, dict) or manifest.get("format_version") != 1:
         raise ConfigError("Unsupported release manifest format")
     if manifest.get("updater_protocol") != bootstrap.BOOTSTRAP_PROTOCOL:
-        raise ConfigError("Release needs a different updater protocol; reinstall the stable launcher")
+        raise ConfigError("Release needs updater protocol {}; this installation cannot install it in place and "
+                          "nothing was changed. See {}".format(manifest.get("updater_protocol"), PROTOCOL_DOCS))
     minimum = manifest.get("python_min")
     if (not isinstance(minimum, list) or len(minimum) != 2
             or any(type(part) is not int for part in minimum) or tuple(minimum) > sys.version_info[:2]):
@@ -191,13 +200,9 @@ def _compatible(manifest):
     # installed version can update in place. The schemas a release supports come
     # from its self-check, and dropping one is refused on update and rollback.
     # Map wire schema 2 is part of protocol 1: changing it needs a new protocol.
-    if manifest.get("database_schemas") != BASELINE_SCHEMAS or manifest.get("map_schema") != 2:
+    if (manifest.get("database_schemas") != PROTOCOL1_DATABASE_SCHEMAS
+            or manifest.get("map_schema") != PROTOCOL1_MAP_SCHEMA):
         raise ConfigError("Release schema compatibility does not match updater protocol 1; no database was changed")
-
-
-# Exactly what updaters up to 1.0.1 accept in a manifest. Never change it under
-# protocol 1; a release's real support is its self-reported SUPPORTED_VERSIONS.
-BASELINE_SCHEMAS = [1, 2]
 
 
 def _contiguous_schemas(schemas):
@@ -515,9 +520,13 @@ def rollback():
                 raise ConfigError("Previous Richi release is missing; rollback was not applied")
             bootstrap.require_schema_compatible(state["generations"][state["current"]], previous)
             from . import auto_update
-            auto_update.pause_for_rollback(ctx, state["previous"])
+            restore_pause = auto_update.pause_for_rollback(ctx, state["previous"])
             state["current"], state["previous"] = state["previous"], state["current"]
-            return _activate(ctx, state, "rolled_back")
+            try:
+                return _activate(ctx, state, "rolled_back")
+            except BaseException:
+                restore_pause()
+                raise
     except (bootstrap.InstallationError, OSError, ValueError, SyntaxError) as exc:
         if isinstance(exc, ConfigError):
             raise

@@ -84,7 +84,8 @@ def validate_manifest(raw):
     if type(raw["format_version"]) is not int or raw["format_version"] != 1:
         raise ConfigError("Unsupported release manifest format")
     if type(raw["updater_protocol"]) is not int or raw["updater_protocol"] != PROTOCOL:
-        raise ConfigError("Release requires an unsupported updater protocol")
+        raise ConfigError("Release requires an unsupported updater protocol; this installation cannot install it "
+                          "in place. See https://github.com/Hidanio/Richi/blob/main/docs/UPDATES.md#updater-protocols")
     version_tuple(raw["version"])
     minimum = raw["python_min"]
     if (not isinstance(minimum, list) or len(minimum) != 2

@@ -75,14 +75,38 @@ public compatibility metadata plus the wheel's filename, SHA256 and byte size:
 }
 ```
 
-Compatibility fields describe this runtime and must be reviewed when Python,
-SQLite schema or map requirements change. New manifest formats or updater
-protocols require an explicit launcher upgrade path. The client enforces a
+`python_min` must be reviewed when Python requirements change. The other
+compatibility fields are frozen; see the release contract below. The client enforces a
 50 MiB wheel limit and verifies the checksum and metadata before installation.
 Downloads start at fixed repository URLs and follow redirects only to GitHub's
 release asset hosts. No manifest field can select a download host or command.
 SHA256 detects corruption; publisher authenticity relies on GitHub HTTPS and
 control of the official repository. Protect release tags and repository access.
+
+<a id="protocol-1-release-contract"></a>
+## Protocol-1 release contract
+
+Installed 1.0.1 updaters are frozen code, and they install only what they accept.
+Every protocol-1 release keeps them able to update in place:
+
+- The manifest declares `database_schemas: [1, 2]` and `map_schema: 2`, always.
+  `scripts/release_manifest.py` takes both from
+  `installation.PROTOCOL1_DATABASE_SCHEMAS` and `PROTOCOL1_MAP_SCHEMA`; never change
+  them. Real support is what the package reports in its self-check.
+- `richi.memory.VERSION` and `richi.graph.MAP_SCHEMA_VERSION` stay 2: 1.0.1 compares
+  `memory.VERSION` with `map_schema`. Storage code uses `memory.SCHEMA`.
+- `memory.SCHEMA` stays a top-level integer literal (the bootstrap parses it for
+  generations installed by 1.0.1), and `SUPPORTED_VERSIONS` is every schema from 1
+  to `SCHEMA`. Never drop a schema: 1.0.1 installs without checking support, and
+  its rollback has no schema checks. A schema bump also extends `migrate`
+  (`graph.MIGRATION_TARGET`); `tests/test_tool_schema.py` enforces these rules.
+- Changing a manifest field or format, the map wire schema or the updater protocol
+  needs a new protocol. Publish its manifest as an additional asset (for example
+  `richi-release-2.json`): protocol-1 updaters select `richi-release.json` by exact
+  name and ignore other assets. Keep publishing a protocol-1 manifest while
+  protocol-1 installations must update.
+- `tests/legacy_update_e2e.py` builds 1.0.1 from its tag and updates it to the
+  candidate in place; the test and release workflows run it before publication.
 
 The wheel bundles the entire canonical `skills/project-memory/` directory.
 `build_installer.py` creates a deterministic stdlib-only `richi-installer.pyz`
