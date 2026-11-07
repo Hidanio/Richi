@@ -234,7 +234,8 @@ no dev-specific code; its own files keep following the installed release. Adapte
 version describes the adapter's persisted metadata/resource contract, not the
 Richi release. Compatible releases retain it; incompatible versions fail closed
 until an explicit migration exists. Release inspection reads literal data without
-executing candidate code. Preserve literal `AGENTS` and Claude `HOOK` assignments.
+executing candidate code. Preserve literal `AGENTS`, `DEV_SKILL_PROTOCOL` and
+Claude `HOOK` assignments.
 
 Each adapter must provide a stable chat identity and preserve the user's explicit
 workspace choice. Test its profile/settings behavior in a synthetic home;

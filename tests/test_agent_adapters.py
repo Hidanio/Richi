@@ -95,6 +95,9 @@ class AgentAdapterTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         self.configure("--agent", "demo")
         checkout = self.home / "checkout"
         shutil.copytree(Path(agent_setup.__file__).parent / "agent_skill", checkout / "skills/project-memory")
+        (checkout / "src/richi").mkdir(parents=True)
+        for name in ("pyproject.toml", "src/richi/__init__.py", "src/richi/memory.py", "src/richi/serve.py"):
+            (checkout / name).write_text("")
         skill, dev_link = self.profile / "skills/project-memory", str(checkout / "skills/project-memory")
         policy = (self.profile / "POLICY.md").read_bytes()
         report = agent_setup.switch_skills(True, checkout)

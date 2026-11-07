@@ -8,6 +8,7 @@ import sys
 import uuid
 
 from .config import ConfigError
+from .runtime import development_package
 from . import setup_files as files
 from . import agent_adapters
 
@@ -55,13 +56,18 @@ def _source(value):
 
 
 def _dev_link(source):
-    # Derived, not stored: the checkout's skill is the developer's to edit.
+    # Derived from dev_source and never stored, so a record cannot disagree.
     return str(Path(_source(source)) / "skills" / "project-memory")
 
 
 def dev_skill(source):
-    """Validate the checkout's Project Memory skill; its contents are never hashed."""
+    """Validate the checkout's Project Memory skill; its contents are never hashed.
+
+    The checkout must pass the runtime's own check, so skills never follow a
+    directory that dev mode would refuse to run.
+    """
     root = Path(_dev_link(source))
+    development_package(Path(_source(source)))
     try:
         skill = root / "SKILL.md"
         valid = (root.is_dir() and not root.is_symlink() and skill.is_file()
@@ -89,6 +95,19 @@ def _desired_link(release, source):
 
 def _link_target(record):
     return _dev_link(record["dev_source"]) if record.get("dev_source") else record["skill_target"]
+
+
+def _mode(record):
+    return "dev" if record.get("dev_source") else "release"
+
+
+def _context():
+    """Installation identity without importing the update machinery.
+
+    `config show` runs at the start of agent chats; this keeps it light.
+    """
+    import richi_bootstrap
+    return richi_bootstrap.context()
 
 
 def _shared_source(records):
@@ -410,10 +429,10 @@ def switch_skills(dev, source):
     command = "richi config set dev " + ("true" if dev else "false")
     source, missing = _requested(dev, source)
     try:
-        from . import installation
-        ctx = installation._context()
+        ctx = _context()
         if not (Path(ctx["root"]) / MANIFEST).is_file():
             return {"status": "not_configured"}
+        from . import installation
     except (ValueError, OSError, RuntimeError, ImportError) as exc:
         return {"status": "unavailable", "reason": "No managed agent setup: " + str(exc)}
     try:
@@ -427,7 +446,10 @@ def switch_skills(dev, source):
         return {"status": "busy", "error": "An installation update is in progress; skill links were not changed",
                 "next_command": command}
     except (ValueError, OSError, RuntimeError, KeyError, TypeError) as exc:
-        return {"status": "conflict", "error": str(exc), "next_command": command,
+        # Refusals to touch user-changed files are conflicts; anything else
+        # (unreadable metadata, I/O) is an error. Either way nothing changed.
+        return {"status": "conflict" if isinstance(exc, ConfigError) else "error",
+                "error": str(exc), "next_command": command,
                 "recovery": "Reconcile the reported path, then rerun the command; the configuration was saved"}
     links = [path for path in changes if Path(path).name != MANIFEST]
     if missing:
@@ -438,7 +460,7 @@ def switch_skills(dev, source):
 def activated_links(ctx):
     """Where managed skills point after an update or rollback."""
     try:
-        return {agent: {"mode": "dev" if record.get("dev_source") else "release",
+        return {agent: {"mode": _mode(record),
                         "target": _link_target(record)} for agent, record in _records(ctx).items()}
     except ConfigError as exc:
         return {"error": str(exc)}
@@ -448,13 +470,12 @@ def skill_links(dev, source):
     """Read-only summary of managed skill links for `config show`; never raises."""
     source, missing = _requested(dev, source)
     try:
-        from . import installation
-        ctx = installation._context()
+        ctx = _context()
         if not (Path(ctx["root"]) / MANIFEST).is_file():
             return {"status": "not_configured"}
         records = _records(ctx)
         agents = {agent: {"skill": record["skill"], "target": _link_target(record),
-                          "mode": "dev" if record.get("dev_source") else "release"}
+                          "mode": _mode(record)}
                   for agent, record in records.items()}
         # The expectation mirrors switch_skills: an unusable checkout means release.
         _, expected, reason = _desired_link("", source)
@@ -502,7 +523,7 @@ def command(argv):
         _, operations = plan(ctx, agent=args.agent)
         drift = [op["path"] for op in operations if op["before"] != op["after"]]
         result = dict(record, status="repair_required" if drift else "configured", changes=drift,
-                      pending_recovery=False, skill_mode="dev" if record.get("dev_source") else "release",
+                      pending_recovery=False, skill_mode=_mode(record),
                       skill_link=_link_target(record))
         if record.get("dev_source"):
             try:
@@ -514,7 +535,7 @@ def command(argv):
     changed = [op["path"] for op in ops if op["before"] != op["after"]]
     result = {"status": "planned", "agent": args.agent, "scope": "user",
               "changes": changed, "skill": record["skill"], "skill_link": _link_target(record),
-              "skill_mode": "dev" if record.get("dev_source") else "release",
+              "skill_mode": _mode(record),
               "instructions": record["instructions"],
               "command": record["command"], "backups": str(Path(ctx["root"]) / "setup-backups"),
               "skill_backups": [op["backup"] for op in ops if "backup" in op],
@@ -539,7 +560,7 @@ def command(argv):
         result["skill_backups"] = [op["backup"] for op in ops if "backup" in op]
         result["changes"] = [op["path"] for op in ops if op["before"] != op["after"]]
         result["skill_link"] = _link_target(record)
-        result["skill_mode"] = "dev" if record.get("dev_source") else "release"
+        result["skill_mode"] = _mode(record)
         if any(op["before"] != op["after"] for op in ops):
             transaction = files.begin(ctx, ops)
             files.finish(ctx, transaction)

@@ -145,8 +145,10 @@ reports it in `agent_skills`:
 ```
 
 `status` is `changed`, `unchanged`, `not_configured` (no `richi setup` yet),
-`conflict` or `busy`. `config set development.source` re-points the links while
-dev is on. `config show` reports where the links point and `matches_config`.
+`unavailable` (not a managed installation), `conflict` (a managed file was
+changed by hand), `error` or `busy` (an update holds the installation); in the
+last three cases no link changed. `config set development.source` re-points the
+links while dev is on. `config show` reports where the links point and `matches_config`.
 Open a new agent chat after switching; running chats may keep the loaded skill.
 
 `dev` belongs to a workspace, but skill links are user-wide: the latest
@@ -154,10 +156,12 @@ Open a new agent chat after switching; running chats may keep the loaded skill.
 reports `"matches_config": false`, rerun `richi config set dev true` (or `false`)
 in the workspace you work in.
 
-- A checkout without a valid `skills/project-memory/SKILL.md`, or dev without
-  `development.source`, points the links to the installed release; `reason`
-  explains why. `config set dev false` always restores release links, even when
-  the checkout is missing or broken.
+- Links follow a checkout only if it passes the same check as the dev runtime
+  (`pyproject.toml` and `src/richi/`) and has `skills/project-memory/SKILL.md`.
+  Otherwise, and for dev without `development.source`, they point to the
+  installed release; `reason` explains why. Restoring release links with
+  `config set dev false` never depends on the checkout, even a missing or
+  broken one.
 - Skill edits in the checkout are development work, not drift.
 - A release skill edited through its link, or a managed link replaced by hand,
   blocks the switch (`"status": "conflict"`) and is preserved. The configuration

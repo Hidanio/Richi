@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import richi_launcher
 import test_agent_setup
-from richi_launcher import agent_setup, cli, installation, setup_files
+from richi_launcher import agent_adapters, agent_setup, cli, installation, setup_files
 
 MULTI_AGENT = "PROTOCOL = 1\nMULTI_AGENT_PROTOCOL = 1\n"
 DEV_CAPABLE = MULTI_AGENT + "DEV_SKILL_PROTOCOL = 1\n"
@@ -28,6 +28,11 @@ class DevSkillLinkTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
 
     @staticmethod
     def make_checkout(root, label):
+        # The same minimal layout the runtime requires of development.source.
+        (root / "src/richi").mkdir(parents=True)
+        (root / "pyproject.toml").write_text('[project]\nname = "richi"\n')
+        for name in ("__init__.py", "memory.py", "serve.py"):
+            (root / "src/richi" / name).write_text('__version__ = "dev"\n' if name == "__init__.py" else "")
         skill = root / "skills/project-memory"
         shutil.copytree(Path(richi_launcher.__file__).parent / "agent_skill", skill)
         with (skill / "SKILL.md").open("a") as stream:
@@ -110,13 +115,19 @@ class DevSkillLinkTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         self.configure_both()
         missing = agent_setup.switch_skills(True, self.home / "missing")
         self.assertEqual((missing["status"], missing["mode"]), ("unchanged", "release"))
-        self.assertIn("no Project Memory skill", missing["reason"])
+        self.assertIn("must be a Richi checkout", missing["reason"])
+        # A directory with only a skill is not a checkout the runtime would run.
+        lone = self.home / "lone-skill"
+        shutil.copytree(self.checkout / "skills", lone / "skills")
+        self.assertIn("must be a Richi checkout", agent_setup.switch_skills(True, lone)["reason"])
         unset = agent_setup.switch_skills(True, None)
         self.assertIn("development.source is not configured", unset["reason"])
         invalid = self.home / "invalid"
-        (invalid / "skills/project-memory").mkdir(parents=True)
+        self.make_checkout(invalid, "invalid")
         (invalid / "skills/project-memory/SKILL.md").write_text("name: something-else\n")
-        self.assertEqual(agent_setup.switch_skills(True, invalid)["mode"], "release")
+        rejected = agent_setup.switch_skills(True, invalid)
+        self.assertEqual(rejected["mode"], "release")
+        self.assertIn("no Project Memory skill", rejected["reason"])
         self.assertEqual(self.links(), (self.release, self.release))
 
     def test_edited_or_replaced_skills_block_switching_and_are_preserved(self):
@@ -158,7 +169,7 @@ class DevSkillLinkTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         shutil.rmtree(other)
         shown = self.cli(config, "show")["agent_skills"]
         self.assertFalse(shown["matches_config"])
-        self.assertIn("no Project Memory skill", shown["reason"])
+        self.assertIn("must be a Richi checkout", shown["reason"])
         disabled = self.cli(config, "set", "dev", "false")
         self.assertFalse(disabled["dev"])
         self.assertEqual((disabled["agent_skills"]["status"], disabled["agent_skills"]["mode"]), ("changed", "release"))
@@ -274,7 +285,16 @@ class DevSkillLinkTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         with patch.object(installation, "_locked", side_effect=installation._InstallationBusy()):
             busy = agent_setup.switch_skills(True, self.checkout)
         self.assertEqual(busy["status"], "busy")
+        with patch.object(setup_files, "begin", side_effect=OSError("disk full")):
+            failed = agent_setup.switch_skills(True, self.checkout)
+        self.assertEqual((failed["status"], failed["error"]), ("error", "disk full"))
         self.assertEqual(os.readlink(self.codex), self.release)
+
+    def test_protocol_literal_is_readable_by_other_managers(self):
+        # Managers inspect candidate releases without executing them.
+        module = Path(agent_setup.__file__)
+        self.assertEqual(agent_adapters.literal(module, "DEV_SKILL_PROTOCOL"), 1)
+        self.assertTrue(agent_setup._dev_capable(module.parent.parent))
 
 
 if __name__ == "__main__":
