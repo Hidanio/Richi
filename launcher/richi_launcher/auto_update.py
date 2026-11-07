@@ -140,22 +140,38 @@ def _pause(ctx):
 
 
 def pause_for_rollback(ctx, generation):
-    """Called under update.lock; pause installing, keep scheduled checks active."""
+    """Called under update.lock; pause installing, keep scheduled checks active.
+
+    Returns a function that restores the previous pause state, for a rollback
+    that fails to activate; otherwise installation would stay paused unnoticed.
+    """
     with _lock(ctx):
         try:
             config = _config(ctx)
             if not config["enabled"]:
-                return
+                return lambda: None
             # A previous launcher must not reinterpret a legacy enabled policy
             # as consent to install when rollback selects its older code.
             config = _migrate_policy(ctx, config)
             if not config["auto_install"]:
-                return
+                return lambda: None
         except ConfigError:
             # A broken policy must never permit silently undoing rollback.
             pass
+        try:
+            previous = _pause(ctx)
+        except ConfigError:
+            previous = None
         _write(ctx, "auto-pause.json", {"format_version": 1, "reason": "manual_rollback",
                                         "time": _now(), "generation": generation})
+
+    def restore():
+        with _lock(ctx):
+            if previous is None:
+                (Path(ctx["root"]) / "auto-pause.json").unlink(missing_ok=True)
+            else:
+                _write(ctx, "auto-pause.json", previous)
+    return restore
 
 
 def _snapshot(ctx, local=None):
@@ -180,6 +196,45 @@ def status():
     if not local.get("supported"):
         return {"status": "unsupported", "enabled": False, "auto_install": False, "installation": local}
     return _snapshot(installation._context(), local)
+
+
+# Outcomes that say nothing about which release is current or usable.
+_TRANSIENT_OUTCOMES = {"check_failed", "download_failed", "cancelled", "busy"}
+# Outcomes that make a specific release version unusable here.
+_BLOCKED_OUTCOMES = {"incompatible_release", "release_changed", "candidate_failed", "quarantined"}
+
+
+def notice():
+    """Return a pending update to mention at chat start, or None.
+
+    Only the stored history of background checks is read: no network, locks,
+    policy migration or new files, and any failure means no notice. The command
+    names the exact version found compatible, so it cannot install a newer
+    release that a later check found unusable.
+    """
+    failures = (ConfigError, OSError, ValueError, KeyError, TypeError, AttributeError, SyntaxError)
+    try:
+        ctx, record = installation.current_record()
+        current = record["version"]
+        releases.version_tuple(current)
+        blocked = set()
+        # Newest first, only checks made on this version.
+        for entry in reversed(_state(ctx)["history"]):
+            status = entry.get("status")
+            if entry.get("current_version") != current or status in _TRANSIENT_OUTCOMES:
+                continue
+            if status in _BLOCKED_OUTCOMES:
+                blocked.add(entry.get("version"))
+                continue
+            version = entry.get("version")
+            if (status == "update_available" and version not in blocked
+                    and releases.version_tuple(version) > releases.version_tuple(current)):
+                return {"status": "update_available", "version": version, "current_version": current,
+                        "checked_at": entry.get("time"), "command": "richi update apply --version " + version}
+            return None
+    except failures:
+        return None
+    return None
 
 
 def enable(interval_seconds=DEFAULT_INTERVAL, *, auto_install=False):

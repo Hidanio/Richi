@@ -153,3 +153,14 @@ class ClaudeSetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
             self.configure('--agent', 'claude')
         self.assertEqual(before, self.paths())
         self.assertEqual(settings.read_bytes(), original)
+
+
+class SyntheticEnvironmentTests(unittest.TestCase):
+    def test_cli_environment_never_targets_the_callers_agent_profiles(self):
+        # Shells started by Claude Code export CLAUDE_CONFIG_DIR.
+        from cli_environment import cli_environment
+        with patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": "/real/claude", "CODEX_HOME": "/real/codex"}):
+            environment = cli_environment("/synthetic")
+        self.assertNotIn("CLAUDE_CONFIG_DIR", environment)
+        self.assertNotIn("CODEX_HOME", environment)
+        self.assertTrue(environment["HOME"].endswith("cli-home"))

@@ -198,7 +198,14 @@ def chat_command(argv, selectors, chat_id, *, compact_json=False):
     if selectors:
         raise ConfigError("Use chat bind NAME or chat bind --current without storage selectors")
     if args.action == "current":
-        return _emit(current_chat(chat_id), compact_json=compact_json)
+        result = current_chat(chat_id)
+        # Agents run this at every chat start, so it carries a stored update
+        # notice; it never checks the network or installs anything.
+        from . import auto_update
+        pending = auto_update.notice()
+        if pending is not None:
+            result["update"] = pending
+        return _emit(result, compact_json=compact_json)
     reject_storage_overrides(selectors)
     return _emit(bind_chat(chat_id, workspace=args.name, current=args.current, replace=args.replace),
                  compact_json=compact_json)

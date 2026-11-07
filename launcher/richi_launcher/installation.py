@@ -157,6 +157,16 @@ def _summary(ctx, state):
             "restart_maps_required": True}
 
 
+def current_record():
+    """Context and current generation from metadata only, for per-command callers.
+
+    Unlike status(), this skips layout validation (a walk of every package file).
+    """
+    ctx = _context()
+    state = _state(ctx)
+    return ctx, dict(state["generations"][state["current"]], generation=state["current"])
+
+
 def status():
     """Inspect installation metadata; never create directories, lock files or DBs."""
     try:
@@ -168,17 +178,36 @@ def status():
                 "updater_protocol": bootstrap.BOOTSTRAP_PROTOCOL}
 
 
+# Exactly what updaters up to 1.0.1 accept in a manifest. Never change these
+# under protocol 1 (docs/RELEASING.md); a release's real support is its
+# self-reported SUPPORTED_VERSIONS. scripts/release_manifest.py uses them too.
+PROTOCOL1_DATABASE_SCHEMAS = [1, 2]
+PROTOCOL1_MAP_SCHEMA = 2
+PROTOCOL_DOCS = "https://github.com/Hidanio/Richi/blob/main/docs/UPDATES.md#updater-protocols"
+
+
 def _compatible(manifest):
     if not isinstance(manifest, dict) or manifest.get("format_version") != 1:
         raise ConfigError("Unsupported release manifest format")
     if manifest.get("updater_protocol") != bootstrap.BOOTSTRAP_PROTOCOL:
-        raise ConfigError("Release needs a different updater protocol; reinstall the stable launcher")
+        raise ConfigError("Release needs updater protocol {}; this installation cannot install it in place and "
+                          "nothing was changed. See {}".format(manifest.get("updater_protocol"), PROTOCOL_DOCS))
     minimum = manifest.get("python_min")
     if (not isinstance(minimum, list) or len(minimum) != 2
             or any(type(part) is not int for part in minimum) or tuple(minimum) > sys.version_info[:2]):
         raise ConfigError("Release is incompatible with this Python interpreter")
-    if manifest.get("database_schemas") not in ([1, 2], [1, 2, 3]) or manifest.get("map_schema") != 2:
+    # Protocol-1 manifests are frozen at the fields 1.0.1 accepts, so every
+    # installed version can update in place. The schemas a release supports come
+    # from its self-check, and dropping one is refused on update and rollback.
+    # Map wire schema 2 is part of protocol 1: changing it needs a new protocol.
+    if (manifest.get("database_schemas") != PROTOCOL1_DATABASE_SCHEMAS
+            or manifest.get("map_schema") != PROTOCOL1_MAP_SCHEMA):
         raise ConfigError("Release schema compatibility does not match updater protocol 1; no database was changed")
+
+
+def _contiguous_schemas(schemas):
+    return (isinstance(schemas, list) and 2 <= len(schemas) <= bootstrap.MAX_GENERATION_SCHEMAS
+            and all(type(item) is int for item in schemas) and schemas == list(range(1, len(schemas) + 1)))
 
 
 def assess_release(manifest, current):
@@ -186,7 +215,6 @@ def assess_release(manifest, current):
     from .releases import version_tuple
     try:
         _compatible(manifest)
-        bootstrap.require_schema_compatible(current, manifest)
         candidate = version_tuple(manifest.get("version"))
         installed = version_tuple(current["version"]) if current.get("version") is not None else None
     except (ConfigError, bootstrap.InstallationError) as exc:
@@ -251,14 +279,17 @@ def _stage(ctx, generation, wheel, manifest):
         report = json.loads(_run([python, "-I", "-B", "-c", _CHECK], "Release self-check"))
     except ValueError as exc:
         raise ConfigError("Release self-check returned invalid metadata") from exc
-    for key in ("version", "updater_protocol", "database_schemas", "map_schema"):
+    for key in ("version", "updater_protocol", "map_schema"):
         if report.get(key) != manifest.get(key):
             raise ConfigError("Release self-check disagrees with manifest: " + key)
+    if not _contiguous_schemas(report.get("database_schemas")):
+        raise ConfigError("Release self-check reports invalid database schema support")
     site = Path(report["site"])
     if not site.is_relative_to(prefix):
         raise ConfigError("Release self-check returned a package directory outside its environment")
     return {"kind": "release", "prefix": str(prefix), "site": str(site), "version": manifest["version"],
-            "wheel_sha256": manifest["wheel"]["sha256"], "installed_at": int(time.time())}
+            "wheel_sha256": manifest["wheel"]["sha256"], "installed_at": int(time.time()),
+            "database_schemas": list(report["database_schemas"])}
 
 
 def _remove_seed(ctx, state, record):
@@ -427,8 +458,11 @@ def apply_release(release, *, expected_generation=None, blocking=True,
                 wheel = releases.download_wheel(release, Path(temporary))
                 releases.verify_wheel(wheel, manifest)
                 record = _stage(ctx, generation, wheel, manifest)
-                # The verified manifest is the single source of schema support.
-                record["database_schemas"] = list(manifest["database_schemas"])
+                # Support is known only from the staged package's self-check.
+                try:
+                    bootstrap.require_schema_compatible(current, record)
+                except bootstrap.InstallationError as exc:
+                    raise ConfigError(str(exc)) from exc
             if require_auto:
                 _run([str(candidate / "bin" / "python"), "-I", "-B", "-c",
                       "from richi_launcher import auto_update, update; "
@@ -486,9 +520,13 @@ def rollback():
                 raise ConfigError("Previous Richi release is missing; rollback was not applied")
             bootstrap.require_schema_compatible(state["generations"][state["current"]], previous)
             from . import auto_update
-            auto_update.pause_for_rollback(ctx, state["previous"])
+            restore_pause = auto_update.pause_for_rollback(ctx, state["previous"])
             state["current"], state["previous"] = state["previous"], state["current"]
-            return _activate(ctx, state, "rolled_back")
+            try:
+                return _activate(ctx, state, "rolled_back")
+            except BaseException:
+                restore_pause()
+                raise
     except (bootstrap.InstallationError, OSError, ValueError, SyntaxError) as exc:
         if isinstance(exc, ConfigError):
             raise

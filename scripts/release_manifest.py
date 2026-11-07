@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "launcher"))
 
 from richi_launcher.config import ConfigError
+from richi_launcher.installation import PROTOCOL1_DATABASE_SCHEMAS, PROTOCOL1_MAP_SCHEMA
 from richi_launcher.releases import (MANIFEST_FILENAME, MAX_WHEEL_SIZE, PROTOCOL,
                                      _source_version, validate_manifest,
                                      verify_wheel, version_tuple)
@@ -51,8 +52,8 @@ def build_manifest(wheel, source_root=ROOT, tag=None):
         "version": version,
         "updater_protocol": PROTOCOL,
         "python_min": [3, 9],
-        "database_schemas": [1, 2, 3],
-        "map_schema": 2,
+        "database_schemas": list(PROTOCOL1_DATABASE_SCHEMAS),
+        "map_schema": PROTOCOL1_MAP_SCHEMA,
         "wheel": {"filename": wheel.name, "sha256": digest.hexdigest(), "size": size},
     })
     verify_wheel(wheel, manifest)

@@ -15,6 +15,11 @@ MAX_NODES = 2000
 MAX_EDGES = 10000
 
 
+# The schema migrate produces; tests require it to equal memory.SCHEMA, so a
+# schema bump cannot ship without extending migrate.
+MIGRATION_TARGET = 3
+
+
 def require_v2(conn, api):
     if conn.execute("PRAGMA user_version").fetchone()[0] not in {2, 3}:
         raise api.MemoryError("Graph commands require schema 2 or 3; make a backup and run migrate explicitly")
@@ -56,8 +61,8 @@ def migrate(conn, path, api):
             if version not in {1, 2, 3}:
                 raise api.MemoryError("Cannot migrate unknown schema version: " + str(version))
             api.backend(conn)
-            if version == 3:
-                return {"status": "existing", "schema_version": 3, "database": str(path)}
+            if version == MIGRATION_TARGET:
+                return {"status": "existing", "schema_version": MIGRATION_TARGET, "database": str(path)}
             expected = {"projects", "entries", "entry_projects", "relations", "entry_history", "entry_events", "metadata"}
             if version == 2:
                 expected.update({"entities", "graph_nodes", "graph_edges", "entity_history", "edge_history"})
@@ -76,8 +81,8 @@ def migrate(conn, path, api):
                 raise api.MemoryError("Migration foreign key check failed")
             if [row[0] for row in conn.execute("PRAGMA integrity_check")] != ["ok"]:
                 raise api.MemoryError("Migration integrity check failed")
-            conn.execute("PRAGMA user_version = 3")
-        return {"status": "migrated", "from_version": version, "schema_version": 3, "database": str(path)}
+            conn.execute("PRAGMA user_version = " + str(MIGRATION_TARGET))
+        return {"status": "migrated", "from_version": version, "schema_version": MIGRATION_TARGET, "database": str(path)}
     finally:
         conn.execute("PRAGMA foreign_keys = " + str(foreign_keys))
 

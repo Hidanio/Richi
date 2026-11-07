@@ -9,6 +9,7 @@ import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from unittest import mock
 from unittest.mock import patch
 
 import richi_bootstrap as bootstrap
@@ -36,6 +37,7 @@ class InstallationTests(unittest.TestCase):
                     "site": str(self.site), "bootstrap": str(self.site / "richi_bootstrap.py"),
                     "root": str(self.base / "data" / "installations" / "test")}
         self.root = Path(self.ctx["root"])
+        self.package_schemas = [1, 2]
         self.patches = [patch.object(installation, "_context", return_value=self.ctx),
                         patch.object(installation, "_stage", side_effect=self._stage),
                         patch("richi_launcher.releases.download_wheel", side_effect=self._download),
@@ -64,7 +66,8 @@ class InstallationTests(unittest.TestCase):
         site = prefix / "lib" / "python3.9" / "site-packages"
         self._package(site, manifest["version"])
         return {"kind": "release", "prefix": str(prefix), "site": str(site),
-                "version": manifest["version"], "wheel_sha256": manifest["wheel"]["sha256"]}
+                "version": manifest["version"], "wheel_sha256": manifest["wheel"]["sha256"],
+                "database_schemas": list(self.package_schemas)}
 
     def release(self, version):
         return {"version": version, "manifest": {"format_version": 1, "version": version,
@@ -207,13 +210,34 @@ class InstallationTests(unittest.TestCase):
         self.assertEqual(list((self.root / "versions").iterdir()), [Path(first["current"]["prefix"])])
 
     def test_incompatible_protocol_or_schema_never_creates_state(self):
-        for key, value in (("updater_protocol", 2), ("database_schemas", [2, 3]), ("python_min", [99, 0])):
+        # Protocol-1 manifests must declare exactly [1, 2], as 1.0.1 requires.
+        for key, value in (("updater_protocol", 2), ("database_schemas", [1, 2, 3]), ("database_schemas", [2, 3]),
+                           ("database_schemas", [1]), ("database_schemas", [1, True]), ("map_schema", 3),
+                           ("python_min", [99, 0])):
             with self.subTest(key=key):
                 release = self.release("0.2.0")
                 release["manifest"][key] = value
                 with self.assertRaises(ConfigError):
                     installation.apply_release(release)
                 self.assertFalse(self.root.exists())
+
+    def test_failed_rollback_activation_restores_the_auto_install_pause(self):
+        self.apply("0.2.0")
+        before = (self.root / "state.json").read_bytes()
+        restore = mock.Mock()
+        with patch("richi_launcher.auto_update.pause_for_rollback", return_value=restore) as pause, \
+                patch.object(installation, "_activate", side_effect=ConfigError("activation failed")):
+            with self.assertRaisesRegex(ConfigError, "activation failed"):
+                installation.rollback()
+        pause.assert_called_once()
+        restore.assert_called_once_with()
+        self.assertEqual((self.root / "state.json").read_bytes(), before)
+
+    def test_newer_protocol_message_points_to_the_upgrade_docs(self):
+        release = self.release("0.2.0")
+        release["manifest"]["updater_protocol"] = 2
+        with self.assertRaisesRegex(ConfigError, "updater-protocols"):
+            installation.apply_release(release)
 
     def test_downgrade_refused_and_rollback_swaps_existing_generations(self):
         first = self.apply("0.2.0")
@@ -226,9 +250,8 @@ class InstallationTests(unittest.TestCase):
         self.assertEqual(again["current"], first["current"])
 
     def test_schema_support_cannot_shrink_on_update_or_rollback(self):
-        candidate = self.release("0.2.0")
-        candidate["manifest"]["database_schemas"] = [1, 2, 3]
-        installed = installation.apply_release(candidate)
+        self.package_schemas = [1, 2, 3]
+        installed = installation.apply_release(self.release("0.2.0"))
         self.assertEqual(installed["current"]["database_schemas"], [1, 2, 3])
         before = (self.root / "state.json").read_bytes()
         with patch("sqlite3.connect", side_effect=AssertionError("Do not inspect knowledge stores")), \
@@ -238,17 +261,28 @@ class InstallationTests(unittest.TestCase):
             with self.assertRaisesRegex(ConfigError, "drops database schema support for 3"):
                 installation.rollback()
             pause.assert_not_called()
-            with patch.object(installation, "_stage") as stage:
-                with self.assertRaisesRegex(ConfigError, "drops database schema support for 3"):
-                    installation.apply_release(self.release("0.3.0"))
-                stage.assert_not_called()
+            # Support is known after the self-check; the staged candidate is removed.
+            self.package_schemas = [1, 2]
+            versions = set((self.root / "versions").iterdir())
+            with self.assertRaisesRegex(ConfigError, "drops database schema support for 3"):
+                installation.apply_release(self.release("0.3.0"))
+            self.assertEqual(set((self.root / "versions").iterdir()), versions)
         self.assertEqual((self.root / "state.json").read_bytes(), before)
 
+    def test_later_schemas_install_directly_without_a_bridge_release(self):
+        # Manifests stay [1, 2]; each release's own support is recorded, so one
+        # update can skip any number of versions and schemas.
+        for version, schemas in (("0.2.0", [1, 2]), ("0.3.0", [1, 2, 3]), ("0.5.0", [1, 2, 3, 4, 5])):
+            self.package_schemas = schemas
+            with patch.object(installation, "_validate_layout"):
+                installed = installation.apply_release(self.release(version))
+            self.assertEqual(installed["current"]["database_schemas"], schemas)
+        self.assertTrue(installation.assess_release(self.release("0.9.0")["manifest"], installed["current"])["can_apply"])
+
     def test_same_schema_rollback_recovers_corrupt_current_using_recorded_support(self):
+        self.package_schemas = [1, 2, 3]
         for version in ("0.2.0", "0.3.0"):
-            candidate = self.release(version)
-            candidate["manifest"]["database_schemas"] = [1, 2, 3]
-            installed = installation.apply_release(candidate)
+            installed = installation.apply_release(self.release(version))
         current = Path(installed["current"]["site"])
         (current / "richi" / "memory.py").write_text("this module cannot be parsed or imported !!!")
         (current / "richi_launcher" / "cli.py").write_text("raise RuntimeError('broken')")
@@ -267,6 +301,9 @@ class InstallationTests(unittest.TestCase):
         self.assertEqual(bootstrap.generation_schemas(record), [1, 2])
         module = self.site / "richi" / "memory.py"
         module.write_text("VERSION = 3\nraise RuntimeError('must not import')\n")
+        self.assertEqual(bootstrap.generation_schemas(record), [1, 2, 3])
+        # From 1.1.0 VERSION is frozen at 2 and SCHEMA is the storage schema.
+        module.write_text("SCHEMA = 3\nVERSION = 2\nraise RuntimeError('must not import')\n")
         self.assertEqual(bootstrap.generation_schemas(record), [1, 2, 3])
         module.write_text("broken legacy source !!!")
         self.assertEqual(bootstrap.generation_schemas(record), [1, 2])
