@@ -13,8 +13,9 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
-from richi import serve
+from richi import launch_map, serve
 import richi_bootstrap
 import richi_launcher
 from richi_launcher import maps
@@ -126,14 +127,15 @@ class MapControlTests(unittest.TestCase):
     def health(self, port=None):
         return maps.read_health(port or self.port)
 
-    def registry(self):
-        return {path.name: json.loads(path.read_text()) for path in self.root.rglob("installations/*/maps/[0-9]*.json")}
+    def assert_no_installation_files(self):
+        # Before a first update nothing is written to the installation's data
+        # directory; managed registries are covered by test_update_e2e.
+        self.assertEqual(list(self.root.rglob("installations")), [])
 
     def test_stop_restart_keep_the_url_and_wait_for_the_old_process(self):
         self.assertEqual(self.map("stop"), {"status": "not_running", "url": maps.url(self.port)})
         started = self.map("--no-open")
         self.assertEqual((started["status"], started["url"]), ("started", maps.url(self.port)))
-        self.assertEqual([entry["pid"] for entry in self.registry().values()], [started["pid"]])
         self.assertIn(maps.HANDOFF_CAPABILITY, self.health()["capabilities"])
         restarted = self.map("restart", "--no-open")
         self.assertEqual((restarted["status"], restarted["url"]), ("restarted", maps.url(self.port)))
@@ -141,11 +143,9 @@ class MapControlTests(unittest.TestCase):
         self.assertTrue(restarted["previous"]["exited"])
         self.assertFalse(alive(started["pid"]) and maps.process_arguments(started["pid"]))
         self.assertEqual(self.health()["pid"], restarted["pid"])
-        self.assertEqual([entry["pid"] for entry in self.registry().values()], [restarted["pid"]])
         stopped = self.map("stop")
         self.assertEqual((stopped["status"], stopped["pid"], stopped["exited"]), ("stopped", restarted["pid"], True))
         self.assertTrue(maps.port_free(self.port))
-        self.assertEqual(self.registry(), {})
         self.assertEqual(self.map("stop")["status"], "not_running")
         again = self.map("restart", "--no-open")
         self.assertEqual((again["status"], again["url"]), ("started", maps.url(self.port)))
@@ -153,6 +153,7 @@ class MapControlTests(unittest.TestCase):
         for arguments in (("stop", "--no-open"), ("stop", "--open"), ("--open",)):
             with self.subTest(arguments=arguments):
                 self.assertIn("error", self.map(*arguments, ok=False))
+        self.assert_no_installation_files()
 
     def test_foreign_and_forged_listeners_are_never_signalled(self):
         sleeper = subprocess.Popen(["/bin/sleep", "60"])
@@ -230,7 +231,7 @@ class MapControlTests(unittest.TestCase):
         os.kill(started["pid"], signal.SIGUSR1)
         deadline = time.monotonic() + 20
         log = self.root / "runtime" / "map-server.log"
-        while "Installation changed; restarting map on the same URL." not in log.read_text():
+        while "Restart requested; restarting map on the same URL." not in log.read_text():
             self.assertLess(time.monotonic(), deadline, log.read_text())
             time.sleep(0.1)
         while not maps.is_map(self.health()):
@@ -239,8 +240,36 @@ class MapControlTests(unittest.TestCase):
         after = self.health()
         self.assertEqual(after["pid"], started["pid"])
         self.assertEqual(after["runtime"], before["runtime"])
-        self.assertEqual([entry["pid"] for entry in self.registry().values()], [started["pid"]])
         self.assertEqual(self.map("--no-open")["status"], "existing")
+        self.assert_no_installation_files()
+
+
+class LaunchRaceTests(unittest.TestCase):
+    def test_a_map_changing_under_richi_map_is_rescanned_instead_of_failing(self):
+        with tempfile.TemporaryDirectory(prefix="richi-map-race-") as temporary:
+            database = Path(temporary) / "memory.sqlite3"
+            database.write_bytes(b"")
+            refusal = maps.refusal("changed", 4321, pid=99999)
+            outcomes = [launch_map.MapRefused(refusal), {"url": maps.url(4321), "status": "existing"}]
+
+            def scan(*_arguments):
+                outcome = outcomes.pop(0)
+                if isinstance(outcome, Exception):
+                    raise outcome
+                return outcome
+
+            with mock.patch.object(launch_map, "_launch_locked", side_effect=scan) as scanned, \
+                    mock.patch.object(launch_map, "_settle") as settled:
+                result = launch_map.launch(database, 4321, runtime=mock.sentinel.runtime)
+            self.assertEqual(result["status"], "existing")
+            self.assertEqual(scanned.call_count, 2)
+            settled.assert_called_once_with(4321)
+            for reason in ("unverified_process", "foreign_user"):
+                with self.subTest(reason=reason):
+                    failing = launch_map.MapRefused(maps.refusal(reason, 4321, pid=99999))
+                    with mock.patch.object(launch_map, "_launch_locked", side_effect=failing), \
+                            self.assertRaises(launch_map.MapRefused):
+                        launch_map.launch(database, 4321, runtime=mock.sentinel.runtime)
 
 
 if __name__ == "__main__":

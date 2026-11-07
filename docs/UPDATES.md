@@ -135,25 +135,36 @@ change.
 
 - A map started by this release or later re-executes itself on the newly current
   version, keeping its process and URL; a foreground `richi map serve` stays in
-  its terminal. Right after activation the updater asks every such map to do so,
-  waits for it and reports it in its JSON result as `maps`: one entry per map with
-  `url`, `status` (`restarted`, or `pending`/`failed` with an `error`),
-  `from_version` and `version`. `restart_maps_required` is `false` when every
-  reported map runs the new version. If an older manager changes the current
-  version, for example a rollback performed by 1.1.0 or earlier, the map notices
-  within a few seconds and follows by itself.
+  its terminal. Right after activation the updater asks the maps it finds to do
+  so: those registered by a managed installation and those on the default ports
+  (8765 and the next ten, or from `RICHI_PORT`). It waits for them and reports
+  them in its JSON result as `maps`: one entry per map with `url`, `status`
+  (`restarted`; `restart_required` for an older map, see below; `pending` or
+  `failed` with an `error`), `from_version` and `version`. Activation results
+  also carry `restart_maps_required`, which is `true` while a found map still
+  runs an older version. If an older manager changes the current version, for
+  example a rollback performed by 1.1.0 or earlier, the map notices within a few
+  seconds and follows by itself.
+- A map stays on its version, and logs the reason once, if the newly current
+  release is incomplete or cannot read the map's database schema. This happens,
+  for example, after 1.0.1 rolls itself back while the store is at schema 3:
+  1.0.1 cannot open that store, so the newer map keeps serving it. The map
+  follows as soon as the installation changes again.
 - A map started by 1.1.0 or earlier cannot follow. After an update by such a
-  manager, the first `richi` command that runs the new version replaces it once:
-  it stops that map and starts the new version on the same port. It checks the
-  maps recorded by newer releases and the ports `richi map` would use for that
-  command's workspace (the configured port and the next ten). A command with a
-  chat identity comes from an agent and may run in a sandbox, so it never starts
-  a server; the next command from a terminal, or `richi map`, does.
-- `richi map` itself replaces a map of its workspace that runs another version or
-  comes from another installation environment, on the same URL. A desktop
-  shortcut that runs `richi map` therefore always opens the current version.
-  The new version is checked first, and a map is never stopped where no local
-  port can be opened.
+  manager, the first `richi` command from a terminal that runs the new version
+  replaces it once: it stops that map and starts the new version on the same
+  port. It checks the maps the installation has registered and the ports
+  `richi map` would use for that command's workspace (the configured port and
+  the next ten). A command with a chat identity comes from an agent and may run
+  in a sandbox, so it only asks newer maps to switch and never starts a server;
+  the next command from a terminal, or `richi map`, replaces an older map.
+- `richi map` keeps its workspace's map current on the same URL. It asks a map of
+  the same installation to switch in place; it replaces a map started by 1.1.0 or
+  earlier, or one from another installation environment. A desktop shortcut
+  that runs `richi map` therefore always opens the current version. The new
+  version is checked first, and a map is never stopped where no local port can
+  be opened. If two installations serve the same store, the one whose
+  `richi map` ran last owns the map.
 
 To stop or restart the selected workspace's map explicitly:
 
@@ -179,8 +190,11 @@ never stopped. Stopping sends `SIGTERM` only: the map closes its port and exits.
 A map keeps the lease on its old version until that code stops running, so
 cleanup never removes code still in use; versions released by a handoff are
 removed by the updater right away or by the next `update cleanup`. A handoff
-reads no workspace data beyond what the map itself reads; the updater still opens
-no database.
+reads no workspace data beyond what the map itself reads (to check schema
+support, the map reads its store's schema number); the updater still opens no
+database and reads no workspace configuration. The registry of running maps
+lives in `maps/` beside the installation state and exists only once the
+installation is managed.
 
 To transition from an older installation without this updater, install the new
 wheel once in the original dedicated Python environment and restart all old

@@ -432,16 +432,30 @@ def source_fingerprint(package=None):
     return digest.digest()
 
 
+def database_schema(database):
+    """The store's schema, read the same read-only way as at startup; None if unknown."""
+    try:
+        with closing(sqlite3.connect(Path(database).as_uri() + "?mode=ro", uri=True)) as conn:
+            return conn.execute("PRAGMA user_version").fetchone()[0]
+    except sqlite3.Error:
+        return None
+
+
+HANDOFF_RECHECK = 30
+
+
 def watch_runtime(server, runtime, original, database, config_file, config_required,
                   stopped, reload_requested, handoff_requested=None):
     """Switch this server only after its selected runtime passes a read-only check.
 
     A map also follows its installation: when another generation becomes current
-    (or an updater asks), it re-executes through the stable entry point.
+    (or an updater asks), it re-executes through the stable entry point, unless
+    that release is incomplete or cannot read this store. Then it keeps serving.
     """
     pending = last_error = None
     root, generation = os.environ.get("RICHI_INSTALLATION_ROOT"), os.environ.get(GENERATION_ENV)
     changed_since = None
+    blocked = None  # (current generation, monotonic time, reason) of a refused handoff
 
     def selected():
         settings = resolve_settings(db=database, config_file=config_file,
@@ -453,21 +467,32 @@ def watch_runtime(server, runtime, original, database, config_file, config_requi
     original_key = (runtime.identity, original)
     while not stopped.wait(1):
         if handoff_requested is not None and maps is not None:
-            if root and generation:
-                current = maps.current_generation(root)
-                if current is None or current == generation:
-                    changed_since = None
-                elif changed_since is None:
-                    changed_since = time.monotonic()
-            if handoff_requested.is_set() or (changed_since is not None
-                                              and time.monotonic() - changed_since >= maps.HANDOFF_GRACE):
-                if stopped.is_set():
+            current = maps.current_generation(root) if root and generation else None
+            if current is None or current == generation:
+                changed_since = blocked = None
+            elif changed_since is None:
+                changed_since = time.monotonic()
+            due = handoff_requested.is_set() or (changed_since is not None
+                                                 and time.monotonic() - changed_since >= maps.HANDOFF_GRACE)
+            if due and blocked is not None and blocked[0] == current and time.monotonic() - blocked[1] < HANDOFF_RECHECK:
+                handoff_requested.clear()
+                due = False
+            if due:
+                problem = maps.handoff_problem(database_schema(database)) if root else None
+                if problem is not None:
+                    if blocked is None or blocked[2] != problem:
+                        print("Map keeps its version instead of restarting: " + problem, flush=True)
+                    blocked = (current, time.monotonic(), problem)
+                    handoff_requested.clear()
+                else:
+                    if stopped.is_set():
+                        return
+                    print(("Installation changed" if changed_since is not None else "Restart requested")
+                          + "; restarting map on the same URL.", flush=True)
+                    handoff_requested.set()
+                    reload_requested.set()
+                    server.shutdown()
                     return
-                print("Installation changed; restarting map on the same URL.", flush=True)
-                handoff_requested.set()
-                reload_requested.set()
-                server.shutdown()
-                return
         try:
             target, key = selected()
             if key == original_key:

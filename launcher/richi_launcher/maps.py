@@ -23,6 +23,7 @@ HANDOFF_CAPABILITY = "installation_handoff"
 # Not SIGHUP: a foreground map must still end when its terminal closes.
 HANDOFF_SIGNAL = "SIGUSR1"
 PORT_RANGE = 11
+DEFAULT_PORT = 8765
 STOP_TIMEOUT = 20
 EXIT_TIMEOUT = 10
 HANDOFF_TIMEOUT = 25
@@ -65,12 +66,6 @@ def is_map(health):
             and isinstance(health.get("runtime"), dict)
             and isinstance(health["runtime"].get("identity"), str)
             and isinstance(health.get("capabilities"), list))
-
-
-def serves(health, database, config_file):
-    """The map serves this exact storage selection, whatever runtime it runs."""
-    return (is_map(health) and health.get("database") == str(database)
-            and health.get("config_file") == (str(config_file) if config_file is not None else None))
 
 
 def port_free(port):
@@ -336,11 +331,17 @@ def _registry(root, create=False):
 
 
 def register(port, pid=None):
-    """Record a running map so updaters can find it on any port; never fatal."""
+    """Record a running map so updaters can find it on any port; never fatal.
+
+    Only a managed installation has a registry. Before its first update no
+    directory is created; such a map is found on its port or follows by itself.
+    """
     root, generation = os.environ.get(ROOT_ENV), os.environ.get(GENERATION_ENV)
     if not root or not generation or not Path(root).is_absolute():
         return None
     try:
+        if not (Path(root) / "state.json").is_file():
+            return None
         directory = _registry(root, create=True)
         if directory is None:
             return None
@@ -406,7 +407,47 @@ def _within(path, parent):
         return False
 
 
-def _signal_handoff(port, health):
+def installation_owns(launcher):
+    """The launcher directory belongs to one of this installation's environments."""
+    try:
+        ctx = _context()
+    except Exception:
+        return False
+    return any(_within(launcher, path) for path in
+               (Path(ctx["original_prefix"]), Path(ctx["root"]) / "versions"))
+
+
+def running_current_generation():
+    """This process runs the installation's current generation."""
+    root, generation = os.environ.get(ROOT_ENV), os.environ.get(GENERATION_ENV)
+    return bool(root and generation) and current_generation(root) == generation
+
+
+def handoff_problem(schema=None):
+    """Why a map must stay on its version instead of following the current one, or None.
+
+    Unlike the per-second check, this validates the state as the stable entry
+    point will: the current release must be complete and able to read the store.
+    """
+    import richi_bootstrap as bootstrap
+    try:
+        ctx = _context()
+        if not (Path(ctx["root"]) / "state.json").exists():
+            return None
+        state = bootstrap.read_state(ctx)
+        record = state["generations"][state["current"]]
+        site = Path(record["site"])
+        if not (site / "richi_launcher" / "cli.py").is_file() or not (site / "richi" / "memory.py").is_file():
+            return "release {} is incomplete; repair the installation".format(record.get("version"))
+        if schema is not None and schema not in bootstrap.generation_schemas(record):
+            return "release {} cannot read database schema {}".format(record.get("version"), schema)
+    except (bootstrap.InstallationError, OSError, KeyError, ValueError, TypeError) as exc:
+        return "the installation state cannot be read: " + str(exc)
+    return None
+
+
+def request_handoff(port, health):
+    """Ask a verified map to re-execute on the current generation; return a refusal reason or None."""
     import signal
     if not _same_process(port, health):
         return "changed"
@@ -478,7 +519,7 @@ def reconcile(ports=(), *, replace=False, timeout=HANDOFF_TIMEOUT):
         entry = {"url": url(port), "pid": health["pid"], "from_version": health["runtime"].get("version"),
                  "from_generation": health.get("installation_generation")}
         if HANDOFF_CAPABILITY in health["capabilities"]:
-            problem = _signal_handoff(port, health)
+            problem = request_handoff(port, health)
             if problem is None:
                 pending.append((port, entry))
                 continue
@@ -487,7 +528,7 @@ def reconcile(ports=(), *, replace=False, timeout=HANDOFF_TIMEOUT):
             entry.update(_spawn_replacement(port, health))
         else:
             entry.update(status="restart_required",
-                         error="This map predates automatic handoff; it is restarted by the next richi command or richi map")
+                         error="This map predates automatic handoff; the next richi command from a terminal or richi map replaces it")
         results.append(entry)
     deadline = time.monotonic() + timeout
     while pending:
@@ -502,7 +543,8 @@ def reconcile(ports=(), *, replace=False, timeout=HANDOFF_TIMEOUT):
             break
         if time.monotonic() > deadline:
             for port, entry in pending:
-                entry.update(status="pending", error="The map was asked to restart but has not reported the new version yet")
+                entry.update(status="pending", error="The map was asked to restart but has not reported the new "
+                                                     "version yet; see runtime/map-server.log beside its database")
                 results.append(entry)
             break
         time.sleep(0.1)
@@ -524,18 +566,30 @@ def _reset_marker(root):
             pass
 
 
+def _default_ports():
+    """The launcher's default port range; the updater reads no workspace configuration."""
+    try:
+        first = int(os.environ.get("RICHI_PORT", DEFAULT_PORT))
+    except ValueError:
+        first = DEFAULT_PORT
+    if not 1 <= first <= 65535:
+        first = DEFAULT_PORT
+    return range(first, min(first + PORT_RANGE, 65536))
+
+
 def after_activation(result):
     """Updater step after a committed activation; it never fails the update.
 
-    Registered maps are asked to restart on the activated generation. Older
-    unregistered maps are handled at the next richi command, which reconciles
-    once per generation, or by richi map itself.
+    Maps found in the registry or on the default ports are asked to restart on
+    the activated generation; older maps there are reported. Maps elsewhere are
+    handled by the next terminal command, which reconciles once per generation,
+    or by richi map itself.
     """
     if not isinstance(result, dict) or result.get("status") not in {"updated", "rolled_back"}:
         return result
     try:
         _reset_marker(_context()["root"])
-        maps = reconcile()
+        maps = reconcile(_default_ports())
     except Exception as exc:  # The activation is already committed.
         result["maps"] = []
         result["maps_error"] = str(exc)[:500]

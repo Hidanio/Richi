@@ -153,8 +153,7 @@ def _summary(ctx, state):
             "current": dict(records[current], generation=current),
             "previous": dict(records[previous], generation=previous) if previous is not None else None,
             "retired": [dict(record, generation=key) for key, record in records.items() if key not in {current, previous}],
-            "running_generation": os.environ.get(bootstrap.GENERATION_ENV),
-            "restart_maps_required": True}
+            "running_generation": os.environ.get(bootstrap.GENERATION_ENV)}
 
 
 def current_record():

@@ -255,9 +255,10 @@ A running map follows Richi updates by itself: after `update apply`, automatic
 installation or `update rollback` it continues on the new version at the same
 URL, so refreshing the browser tab is enough. The update result lists such maps
 in `maps`. A map started by 1.1.0 or earlier is replaced by the first `richi`
-command after the update, and `richi map` replaces its workspace's map whenever
-it runs another version or installation, so a shortcut running `richi map` always
-works. `richi map stop` reports `stopped`, `not_running` or `refused` with a
+command run from a terminal after the update; an agent's command (one with a
+chat identity) never starts a server, so do not tell the user that your command
+restarted their map. `richi map` keeps its workspace's map on the current version
+at the same URL, so a shortcut running `richi map` always works. `richi map stop` reports `stopped`, `not_running` or `refused` with a
 `reason` (exit code 1); `richi map restart` stops the map and starts the current
 version on the same URL, opening the browser unless `--no-open` is given. Only a
 process verified through `/api/health` as this user's Richi map with the reported

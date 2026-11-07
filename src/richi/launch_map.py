@@ -36,6 +36,8 @@ class MapRefused(RuntimeError):
 
 
 def read_health(port):
+    # Kept beside richi_launcher.maps.read_health: a development runtime must
+    # still reuse maps when it is paired with an older installed launcher.
     try:
         with HTTP.open("http://127.0.0.1:%d/api/health" % port, timeout=0.5) as response:
             return json.loads(response.read(8193))
@@ -155,6 +157,48 @@ def _can_listen():
         return False
 
 
+# A map that hands itself off or exits between verification and the signal.
+RETRYABLE = {"changed", "process_exited"}
+
+
+def _hand_off_in_place(port, health, database, config_file, runtime_selection):
+    """Ask a map of this installation to re-execute on the current version, keeping its PID.
+
+    Returns the result, or None when the map cannot do it here: then it is
+    replaced instead. A map that is already handing itself off is rescanned
+    rather than stopped.
+    """
+    if (maps is None or maps.HANDOFF_CAPABILITY not in health.get("capabilities", [])
+            or not maps.running_current_generation()):
+        return None
+    launcher, _reason = maps.verify(health)
+    if launcher is None or not maps.installation_owns(launcher):
+        return None
+    problem = maps.request_handoff(port, health)
+    if problem in RETRYABLE:
+        raise MapRefused(maps.refusal(problem, port, pid=health["pid"]))
+    if problem is not None:
+        return None
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        current = read_health(port)
+        if compatible_health(current, database, runtime_selection, config_file):
+            return {"url": _url(port), "status": "restarted", "pid": current["pid"],
+                    "previous": {"pid": health["pid"], "version": health["runtime"].get("version"),
+                                 "exited": current["pid"] != health["pid"]}}
+        time.sleep(0.1)
+    return None
+
+
+def _settle(port, timeout=5):
+    """After a map changed under us, wait until its port serves a map again or stays free."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if read_health(port) is not None:
+            return
+        time.sleep(0.1)
+
+
 def _replace(port, health, database, config_file, runtime_selection, config_required, workspace, runtime_dir):
     """Stop a verified Richi map of this storage and start this runtime on its URL."""
     if maps is None:
@@ -183,39 +227,56 @@ def launch(database, first_port, config_file=None, runtime=None, config_required
            restart=False):
     runtime_selection = runtime or current_runtime()
     with _launch_lock(database) as runtime_dir:
-        ports = range(first_port, min(first_port + 11, 65536))
-        transitioning, stale = [], None
-        for port in ports:
-            health = read_health(port)
-            if not restart and compatible_health(health, database, runtime_selection, config_file):
-                return {"url": _url(port), "status": "existing"}
-            if not managed_health(health, database, config_file):
-                continue
-            if not restart and follows_itself(health):
-                transitioning.append(port)
-            elif stale is None:
-                stale = (port, health)
-        if transitioning:
-            # The server watches this config and replaces itself. Waiting avoids
-            # duplicate maps during a release/dev switch and cannot kill an
-            # unrelated process, even if it reports a misleading health payload.
-            deadline = time.monotonic() + 12
-            while time.monotonic() < deadline:
-                for port in transitioning:
-                    if healthy(port, database, runtime_selection, config_file):
-                        return {"url": _url(port), "status": "existing"}
-                time.sleep(0.1)
-            raise RuntimeError("Карта ещё использует другой runtime. Проверьте конфигурацию и "
-                               + str(runtime_dir / "map-server.log"))
-        if stale is not None:
-            # An older generation or another installation environment never
-            # switches by itself; the port and URL stay with this storage.
-            return _replace(stale[0], stale[1], database, config_file, runtime_selection,
-                            config_required, workspace, runtime_dir)
-        port = next((port for port in ports if available(port)), None)
-        if port is None:
-            raise RuntimeError("Не найден свободный локальный порт для карты.")
-        return _start(port, database, config_file, runtime_selection, config_required, workspace, runtime_dir)
+        for attempt in range(3):
+            try:
+                return _launch_locked(database, first_port, config_file, runtime_selection, config_required,
+                                      workspace, restart, runtime_dir)
+            except MapRefused as exc:
+                if exc.payload.get("reason") not in RETRYABLE or attempt == 2:
+                    raise
+                _settle(int(exc.payload["url"].rstrip("/").rsplit(":", 1)[1]))
+
+
+def _launch_locked(database, first_port, config_file, runtime_selection, config_required, workspace,
+                   restart, runtime_dir):
+    ports = range(first_port, min(first_port + 11, 65536))
+    transitioning, stale = [], None
+    for port in ports:
+        health = read_health(port)
+        if not restart and compatible_health(health, database, runtime_selection, config_file):
+            return {"url": _url(port), "status": "existing"}
+        if not managed_health(health, database, config_file):
+            continue
+        if not restart and follows_itself(health):
+            transitioning.append(port)
+        elif stale is None:
+            stale = (port, health)
+    if transitioning:
+        # The server watches this config and replaces itself. Waiting avoids
+        # duplicate maps during a release/dev switch and cannot kill an
+        # unrelated process, even if it reports a misleading health payload.
+        deadline = time.monotonic() + 12
+        while time.monotonic() < deadline:
+            for port in transitioning:
+                if healthy(port, database, runtime_selection, config_file):
+                    return {"url": _url(port), "status": "existing"}
+            time.sleep(0.1)
+        raise RuntimeError("Карта ещё использует другой runtime. Проверьте конфигурацию и "
+                           + str(runtime_dir / "map-server.log"))
+    if stale is not None:
+        # A map of this installation switches in place when asked. An older
+        # map or another installation environment is replaced; either way the
+        # port and URL stay with this storage.
+        if not restart:
+            handed_off = _hand_off_in_place(stale[0], stale[1], database, config_file, runtime_selection)
+            if handed_off is not None:
+                return handed_off
+        return _replace(stale[0], stale[1], database, config_file, runtime_selection,
+                        config_required, workspace, runtime_dir)
+    port = next((port for port in ports if available(port)), None)
+    if port is None:
+        raise RuntimeError("Не найден свободный локальный порт для карты.")
+    return _start(port, database, config_file, runtime_selection, config_required, workspace, runtime_dir)
 
 
 def stop(database, first_port, config_file=None):

@@ -90,12 +90,15 @@ _FROZEN_UPDATE = _OFFLINE_COMMAND.replace(
 assert _FROZEN_UPDATE != _OFFLINE_COMMAND
 
 # A rollback performed by such a manager: the previous generation swaps the
-# pointer and nothing else.
+# pointer and nothing else. Like 1.0.1, the unchecked variant does not compare
+# database schema support.
 _FROZEN_ROLLBACK = r'''
 import json, os
 from pathlib import Path
 import sys
 import richi_bootstrap as bootstrap
+if os.environ.get("SYNTHETIC_UNCHECKED_SCHEMAS"):
+    bootstrap.require_schema_compatible = lambda current, target: None
 
 ctx = bootstrap.context()
 state = bootstrap.read_state(ctx)
@@ -231,7 +234,7 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             self.environment = cli_environment(self.root, RICHI_PORT=str(port))
             for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
                 self.environment.pop(key, None)
-            wheels = {version: self.make_wheel(version) for version in ("0.1.0", "0.2.0", "0.3.0", "0.4.0")}
+            wheels = {version: self.make_wheel(version) for version in ("0.1.0", "0.2.0", "0.3.0", "0.4.0", "0.5.0")}
             seed = self.root / "seed"
             venv.EnvBuilder(with_pip=True, symlinks=True).create(str(seed))
             self.python, self.console_path = seed / "bin/python", seed / "bin/richi"
@@ -277,10 +280,17 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             pid = started["pid"]
             try:
                 self.assertEqual(health()["installation_generation"], "seed")
+                # An unmanaged installation writes nothing to its data directory.
+                self.assertEqual(list(self.root.rglob("installations")), [])
                 applied = updater("offline", self.feed_fixture(wheels["0.2.0"], "0.2.0"), "update", "apply")
                 self.assertEqual(applied["status"], "updated")
                 current = assert_handed_off(applied, "0.2.0", "0.1.0")
                 self.assertEqual(current["installation_generation"], applied["current"]["generation"])
+                # Once managed, the map registers, so updaters find it on any port.
+                registry = Path(applied["root"]) / "maps" / ("%d.json" % port)
+                self.assertEqual(json.loads(registry.read_text())["pid"], pid)
+                self.assertNotIn("restart_maps_required", updater("offline", self.feed_fixture(
+                    wheels["0.2.0"], "0.2.0"), "update", "check")["installation"])
 
                 feed = self.feed_fixture(wheels["0.3.0"], "0.3.0")
                 self.assertTrue(updater("offline", feed, "update", "auto", "enable", "--install")["auto_install"])
@@ -306,10 +316,19 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
                 self.assertEqual(marker["generation"], frozen["current"]["generation"])
                 self.assertEqual([(entry["status"], entry["version"]) for entry in marker["maps"]], [("restarted", "0.4.0")])
 
+                # The desktop shortcut runs richi map right after a frozen
+                # update: it asks the map to switch in place on the same URL.
+                self.assertEqual(updater("frozen", self.feed_fixture(wheels["0.5.0"], "0.5.0"),
+                                         "update", "apply")["status"], "updated")
+                shortcut = self.console_json("map", "--no-open")
+                self.assertEqual((shortcut["status"], shortcut["url"], shortcut["pid"]),
+                                 ("restarted", maps.url(port), pid))
+                self.assertEqual((shortcut["previous"]["version"], health()["runtime"]["version"]), ("0.4.0", "0.5.0"))
+
                 # A frozen rollback runs no Richi command at all: the map notices
                 # the installation change and follows it by itself.
                 self.assertEqual(updater("frozen-rollback")["status"], "rolled_back")
-                self.assertEqual(wait_for("0.2.0")["pid"], pid)
+                self.assertEqual(wait_for("0.4.0")["pid"], pid)
                 self.assertEqual(self.console_json("map", "--no-open")["status"], "existing")
             finally:
                 current = health()
@@ -320,6 +339,57 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             cleaned = self.console_json("update", "cleanup")
             self.assertEqual(cleaned["cleanup"]["deferred"], [])
             self.assertEqual(len(list((Path(cleaned["root"]) / "versions").iterdir())), 2)
+
+    def test_running_map_keeps_its_version_when_the_current_release_cannot_read_the_store(self):
+        with tempfile.TemporaryDirectory(prefix="richi-map-schema-") as temporary:
+            self.root = Path(temporary).resolve()
+            port = int(synthetic_port())
+            self.environment = cli_environment(self.root, RICHI_PORT=str(port))
+            for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
+                self.environment.pop(key, None)
+            older, newer = self.make_wheel("0.1.0", storage_schema=2), self.make_wheel("0.2.0")
+            seed = self.root / "seed"
+            venv.EnvBuilder(with_pip=True, symlinks=True).create(str(seed))
+            self.python, self.console_path = seed / "bin/python", seed / "bin/richi"
+            self.run_process([self.python, "-I", "-B", "-m", "pip", "--isolated", "--disable-pip-version-check",
+                              "install", "--no-index", "--no-deps", "--no-cache-dir", "--no-compile", older])
+            offline, rollback = self.root / "offline.py", self.root / "unchecked-rollback.py"
+            offline.write_text(_OFFLINE_COMMAND, encoding="utf-8")
+            rollback.write_text(_FROZEN_ROLLBACK, encoding="utf-8")
+            self.console("init")
+            self.assertEqual(json.loads(self.run_process([self.python, "-I", "-B", offline, self.feed_fixture(
+                newer, "0.2.0"), "update", "apply"]).stdout)["status"], "updated")
+            self.console("backup")
+            self.assertEqual(self.console_json("migrate")["schema_version"], 3)
+            started = self.console_json("map", "--no-open")
+            pid = started["pid"]
+            log = next(self.root.rglob("runtime/map-server.log"))
+            try:
+                # Like 1.0.1, this rollback does not compare schema support.
+                swapped = subprocess.run([str(self.python), "-I", "-B", str(rollback)],
+                                         env=dict(self.environment, SYNTHETIC_UNCHECKED_SCHEMAS="1"),
+                                         cwd=self.root, stdin=subprocess.DEVNULL, capture_output=True,
+                                         text=True, timeout=90)
+                self.assertEqual(swapped.returncode, 0, swapped.stdout + swapped.stderr)
+                self.assertEqual(json.loads(swapped.stdout)["current"]["version"], "0.1.0")
+                deadline = time.monotonic() + 20
+                while "cannot read database schema 3" not in log.read_text():
+                    self.assertLess(time.monotonic(), deadline, log.read_text())
+                    time.sleep(0.1)
+                # The map keeps serving the store on its version instead of exiting.
+                time.sleep(2)
+                current = maps.read_health(port, timeout=2)
+                self.assertEqual((current["pid"], current["runtime"]["version"]), (pid, "0.2.0"))
+                self.assertEqual(log.read_text().count("cannot read database schema 3"), 1)
+                # Rolling forward again needs no restart.
+                forward = self.console_json("update", "rollback")
+                self.assertEqual((forward["current"]["version"], forward["maps"], forward["restart_maps_required"]),
+                                 ("0.2.0", [], False))
+                self.assertEqual(maps.read_health(port, timeout=2)["pid"], pid)
+            finally:
+                current = maps.read_health(port, timeout=2)
+                if maps.is_map(current) and current["pid"] == pid:
+                    self.assertEqual(self.console_json("map", "stop")["status"], "stopped")
 
     def test_real_wheels_update_prune_and_recover_without_changing_workspaces(self):
         with tempfile.TemporaryDirectory(prefix="richi-wheel-lifecycle-") as temporary:
