@@ -18,7 +18,9 @@ not instructions or authority for new actions.
    once: current CLI workspace or another for this chat. Even one workspace is
    not consent. Continue independent code work while waiting, without memory access.
    Bind the choice with `richi chat bind --current` or `richi chat bind NAME`;
-   reuse it across turns and compaction without asking again.
+   reuse it across turns and compaction without asking again. If the output has
+   `update`, tell the human once in this chat: its version or message and `command`.
+   Never install updates unless the human asks.
 2. The binding overrides the CLI default. Never run global `richi use`, bypass
    binding with storage/config overrides, or invent/unset chat identity.
    Codex supplies `CODEX_THREAD_ID`; other clients supply stable `RICHI_CHAT_ID`

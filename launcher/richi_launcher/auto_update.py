@@ -21,6 +21,8 @@ MIN_INTERVAL = 15 * 60
 MAX_INTERVAL = 7 * 24 * 60 * 60
 MAX_HISTORY = 20
 AUTO_POLICY_VERSION = 2
+# A bridge release (such as 1.0.2) sets this so chat start reminds to update on.
+TRANSITIONAL_RELEASE = False
 
 
 def _now():
@@ -180,6 +182,37 @@ def status():
     if not local.get("supported"):
         return {"status": "unsupported", "enabled": False, "auto_install": False, "installation": local}
     return _snapshot(installation._context(), local)
+
+
+def notice():
+    """Return a pending update to mention at chat start, or None.
+
+    Only the stored result of the last background check is read: no network,
+    locks, policy migration or new files, and any failure means no notice.
+    A transitional (bridge) release always reminds that it is not the target.
+    """
+    failures = (ConfigError, OSError, ValueError, KeyError, TypeError, AttributeError)
+    try:
+        local = installation.status()
+        if not local.get("supported"):
+            return None
+        current = local["current"]["version"]
+        releases.version_tuple(current)
+    except failures:
+        return None
+    try:
+        outcome = _state(installation._context()).get("last_outcome") or {}
+        if (outcome.get("status") == "update_available"
+                and releases.version_tuple(outcome.get("version")) > releases.version_tuple(current)):
+            return {"status": "update_available", "version": outcome["version"], "current_version": current,
+                    "checked_at": outcome.get("time"), "command": "richi update apply"}
+    except failures:
+        pass
+    if TRANSITIONAL_RELEASE:
+        return {"status": "transitional_release", "current_version": current, "command": "richi update apply",
+                "message": "This release only carries older installations to later releases. Run "
+                           "richi update apply to install the latest; it reports up_to_date if none is newer."}
+    return None
 
 
 def enable(interval_seconds=DEFAULT_INTERVAL, *, auto_install=False):

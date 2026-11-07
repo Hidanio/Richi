@@ -76,7 +76,9 @@ richi update apply
 ```
 
 While 1.0.2 is the latest release, a plain `richi update apply` (or automatic
-installation) selects it. The [fresh-environment transition](#schema-3-transition)
+installation) selects it. On 1.0.2, `richi chat current` always reminds of the next
+step (`update.status: transitional_release`), so agents mention it at chat start.
+The [fresh-environment transition](#schema-3-transition)
 below remains an alternative. Reinstalling into the original environment does not replace the managed
 current-version pointer: it still selects the old manager, even if its original
 seed package has already been collected.
@@ -215,8 +217,11 @@ richi update auto status
 This mode retrieves release information without downloading the wheel or changing
 the installed version. `auto status` shows an available release and its installation
 command. The user decides when to run `richi update apply` or
-`richi update apply --version X.Y.Z`. System notifications and an install button
-in the map are not implemented yet.
+`richi update apply --version X.Y.Z`. `richi chat current` also reports a newer
+release found by the last check as `update`, read from the stored result without
+network access. Agents that follow Project Memory run it at every chat start,
+mention the update once and never install it themselves. System notifications and
+an install button in the map are not implemented yet.
 
 Automatic installation is a separate option, **disabled by default**. Enable it
 only if you want compatible releases installed without confirming each version:

@@ -109,6 +109,48 @@ class AutoUpdateTests(unittest.TestCase):
         download.assert_not_called()
         installation.apply_release.assert_not_called()
 
+    def files(self):
+        return {path: path.read_bytes() for path in self.base.rglob("*") if path.is_file()}
+
+    @patch.object(auto_update, "TRANSITIONAL_RELEASE", False)
+    def test_chat_start_notice_reads_only_the_stored_check(self):
+        before = list(self.base.rglob("*"))
+        self.assertIsNone(auto_update.notice())
+        self.assertEqual(list(self.base.rglob("*")), before)
+        auto_update.enable()
+        auto_update.run()
+        stored = self.files()
+        with patch.object(releases, "fetch_release", side_effect=AssertionError("network")), \
+                patch.object(installation, "apply_release", side_effect=AssertionError("install")):
+            pending = auto_update.notice()
+        self.assertEqual(self.files(), stored)
+        self.assertEqual({key: pending[key] for key in ("status", "version", "current_version", "command")},
+                         {"status": "update_available", "version": "0.2.0", "current_version": "0.1.0",
+                          "command": "richi update apply"})
+        self.current = {"version": "0.2.0", "generation": "release-0.2.0"}
+        self.assertIsNone(auto_update.notice())
+
+    def test_transitional_release_reminds_even_without_a_usable_check(self):
+        with patch.object(auto_update, "TRANSITIONAL_RELEASE", True):
+            self.assertEqual(auto_update.notice()["status"], "transitional_release")
+            self.root.mkdir(parents=True)
+            (self.root / "auto-state.json").write_text("{broken")
+            self.assertEqual(auto_update.notice()["command"], "richi update apply")
+            with patch.object(installation, "status", return_value={"supported": False}):
+                self.assertIsNone(auto_update.notice())
+        with patch.object(auto_update, "TRANSITIONAL_RELEASE", False):
+            self.assertIsNone(auto_update.notice())
+
+    def test_chat_current_carries_notice_only_when_present(self):
+        from richi_launcher import cli
+        for pending in (None, {"status": "update_available", "version": "0.2.0"}):
+            with self.subTest(pending=pending), patch.object(auto_update, "notice", return_value=pending), \
+                    patch.object(cli, "current_chat", return_value={"chat_id": "c", "bound": True}), \
+                    patch("builtins.print") as printed:
+                cli.chat_command(["current"], {}, "c")
+            result = json.loads(printed.call_args[0][0])
+            self.assertEqual(result.get("update"), pending)
+
     def test_default_mode_distinguishes_unverified_same_version_release(self):
         auto_update.enable()
         releases.fetch_release.return_value = self.release("0.1.0")
