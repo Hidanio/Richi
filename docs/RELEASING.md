@@ -105,8 +105,19 @@ Every protocol-1 release keeps them able to update in place:
   `richi-release-2.json`): protocol-1 updaters select `richi-release.json` by exact
   name and ignore other assets. Keep publishing a protocol-1 manifest while
   protocol-1 installations must update.
-- `tests/legacy_update_e2e.py` builds 1.0.1 from its tag and updates it to the
-  candidate in place; the test and release workflows run it before publication.
+- `tests/update_matrix_e2e.py` updates every published release to the candidate in
+  place. Its sources are the stable `vX.Y.Z` tags from `v1.0.1` below the candidate's
+  version, so a new tag joins the matrix without edits. Each source is built from its
+  tag with its own release scripts and installed with its own installer next to
+  Codex, Claude Code where it supports it, and a workspace with graph records and a
+  bound chat. For every source it runs a manual update, a rollback through the
+  original console and forward again, and an automatic installation; one more run
+  updates the oldest release through every intermediate one. After each step the
+  expected release must be active and every connected agent configured in
+  `setup --status`, with the chat binding, recall/search/read results and store
+  schema unchanged. The test and release workflows run it before publication.
+  Locally it needs a full clone with tags, the `build` package and the candidate
+  installed; `--from vX.Y.Z` runs one source.
 
 The wheel bundles the entire canonical `skills/project-memory/` directory.
 `build_installer.py` creates a deterministic stdlib-only `richi-installer.pyz`
