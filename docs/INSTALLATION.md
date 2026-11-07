@@ -61,8 +61,9 @@ richi update auto disable
 ```
 
 The current and previous versions are retained; running processes keep their
-code until they finish. Restart the map after an update. Workspace dev settings
-and databases remain unchanged. See [UPDATES.md](UPDATES.md) for checks, cleanup
+code until they finish. A running map moves to the new version by itself, on the
+same URL; `richi map stop` and `richi map restart` manage it explicitly. Workspace
+dev settings and databases remain unchanged. See [UPDATES.md](UPDATES.md) for checks, cleanup
 and the initial transition from an older installation.
 
 <a id="режим-разработки"></a>
@@ -274,6 +275,9 @@ richi map
 # Сервер в текущем терминале; Ctrl+C завершает его:
 richi map serve --open
 richi map serve --port 8766 --open
+# Остановить или перезапустить фоновую карту:
+richi map stop
+richi map restart
 ```
 
 Both commands follow the shared `dev` configuration setting; the map needs no

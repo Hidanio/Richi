@@ -1,7 +1,7 @@
 """Explicit installation maintenance, independent of workspace and dev code."""
 import re
 
-from . import installation, releases
+from . import installation, maps, releases
 from .config import ConfigError
 
 
@@ -40,7 +40,7 @@ def command(argv):
         return {"disable": auto_update.disable, "status": auto_update.status,
                 "run": auto_update.run}[args.auto_action]()
     if args.action == "rollback":
-        return installation.rollback()
+        return maps.after_activation(installation.rollback())
     if args.action == "cleanup":
         return installation.cleanup()
     local = installation.status()
@@ -51,7 +51,8 @@ def command(argv):
         return {"status": "no_release", "installation": local,
                 "message": "No stable release has been published yet"}
     if args.action == "apply":
-        return installation.apply_release(release)
+        # Running maps move to the activated release once no update lock is held.
+        return maps.after_activation(installation.apply_release(release))
     current = local.get("current") or {}
     candidate = release["version"]
     assessment = installation.assess_release(release["manifest"], current)

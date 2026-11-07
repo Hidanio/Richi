@@ -242,11 +242,27 @@ richi map
 richi map serve --open
 # Другая база и порт задаются явно:
 richi --db /path/to/memory.sqlite3 map serve --port 8766 --open
+# Остановить или перезапустить карту выбранного workspace:
+richi map stop
+richi map restart --no-open
 ```
 
 The server is accessible only through `127.0.0.1`. In `map serve` mode, Ctrl+C
 stops the process. Richi does not install a desktop shortcut automatically.
 An existing local shortcut can be retained through the transitional adapter.
+
+A running map follows Richi updates by itself: after `update apply`, automatic
+installation or `update rollback` it continues on the new version at the same
+URL, so refreshing the browser tab is enough. The update result lists such maps
+in `maps`. A map started by 1.1.0 or earlier is replaced by the first `richi`
+command after the update, and `richi map` replaces its workspace's map whenever
+it runs another version or installation, so a shortcut running `richi map` always
+works. `richi map stop` reports `stopped`, `not_running` or `refused` with a
+`reason` (exit code 1); `richi map restart` stops the map and starts the current
+version on the same URL, opening the browser unless `--no-open` is given. Only a
+process verified through `/api/health` as this user's Richi map with the reported
+runtime is ever stopped; other programs on the port are left alone. Details:
+[UPDATES.md](../../../docs/UPDATES.md#работающая-карта-и-первоначальный-переход).
 
 The initial view shows projects. Map search finds titles, descriptions, tags and aliases of loaded objects; selecting an object reveals its neighborhood within 1–3 hops. Nodes can be dragged, and the mouse changes zoom and position. A node card shows the full summary, work state, verification date and sources. An edge card shows direction, meaning, provenance and evidence. Hypotheses and superseded knowledge are enabled separately. Record membership in a project comes automatically from `project_ids`; it does not prove an effect on service behavior.
 
@@ -259,7 +275,7 @@ are checked locally when opened; the original record is not rewritten.
 The viewer reads the stored source through a bounded API, while comparison reads the selected
 local version or working copy. URLs do not provide arbitrary file access.
 If another task changes a card, the map asks to refresh data first.
-See [GIT.md](GIT.md). After updating the server, run `richi map` again:
-the launcher will choose a version supporting Git viewing.
+See [GIT.md](GIT.md). An older map without Git viewing is replaced by the
+current version when `richi map` runs.
 
 For large graphs, export is limited to 2000 nodes and 10000 edges; the map reports truncation. Map search operates within the loaded snapshot. Full-text `richi search` over records operates separately and is not restricted to the map snapshot. The shared graph is stored in SQLite; a separate graph server is not yet needed. Formats for new entities, relationships and commands are described in [GRAPH.md](GRAPH.md).

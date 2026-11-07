@@ -81,6 +81,15 @@ def _wants_help(arguments):
     return "--help" in options or "-h" in options
 
 
+def _hand_off_maps(port, replace):
+    """Once per installation generation; never prevents the requested command."""
+    try:
+        from .maps import first_invocation
+        first_invocation(port, replace=replace)
+    except Exception:
+        pass
+
+
 def _emit(result, *, compact_json=False):
     print(json.dumps(result, ensure_ascii=False, indent=None if compact_json else 2,
                      separators=(",", ":") if compact_json else None))
@@ -290,6 +299,11 @@ def main(argv=None):
         selectors = pin_chat(chat_id, selectors)
         settings = resolve_settings(**selectors)
         selected = resolve_runtime(settings)
+        if command != "map" and "RICHI_INSTALLATION_GENERATION" in os.environ:
+            # A frozen updater cannot hand off maps; the first command of the
+            # new generation does. richi map replaces its own map itself. An
+            # agent's command may be sandboxed: it never starts a server here.
+            _hand_off_maps(settings.port, replace=chat_id is None)
         # Pin the resolution before entering mutable code. In particular, strip
         # map-local storage options: they must not override this selected store.
         arguments = ["--db", str(settings.database)]

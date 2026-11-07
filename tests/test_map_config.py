@@ -79,6 +79,9 @@ class MapConfigTests(unittest.TestCase):
             bad_config = root / "invalid.json"
             bad_config.write_text("this deliberately is not JSON")
             environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_") and key != "CODEX_THREAD_ID"}
+            # Running maps register in their installation's data directory.
+            environment.update(HOME=str(root / "home"), XDG_CONFIG_HOME=str(root / "config"),
+                               XDG_DATA_HOME=str(root / "data"))
             environment["RICHI_CONFIG"] = str(bad_config)
             command = [sys.executable, "-B", "-m", "richi", "--config", str(good_config)]
             initialized = subprocess.run(command + ["init"], capture_output=True, text=True,

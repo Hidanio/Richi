@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import venv
 import zipfile
@@ -17,8 +18,9 @@ import zipfile
 import richi
 import richi_bootstrap
 import richi_launcher
+from richi_launcher import maps
 
-from cli_environment import cli_environment
+from cli_environment import cli_environment, synthetic_port
 
 
 _REGISTRY_PATHS = """
@@ -78,6 +80,31 @@ with patch("richi_launcher.releases._transfer", side_effect=transfer), \
             "supported": True, "installed": True, "registered": True, "active": True,
             "enabled": True, "backend": "synthetic"}):
     raise SystemExit(bootstrap.main(sys.argv[2:]))
+'''
+
+# An updater that cannot hand off maps, like the frozen managers up to 1.1.0.
+_FROZEN_UPDATE = _OFFLINE_COMMAND.replace(
+    'with patch("richi_launcher.releases._transfer", side_effect=transfer), \\',
+    'with patch("richi_launcher.maps.after_activation", side_effect=lambda result: result), \\\n'
+    '        patch("richi_launcher.releases._transfer", side_effect=transfer), \\')
+assert _FROZEN_UPDATE != _OFFLINE_COMMAND
+
+# A rollback performed by such a manager: the previous generation swaps the
+# pointer and nothing else.
+_FROZEN_ROLLBACK = r'''
+import json, os
+from pathlib import Path
+import sys
+import richi_bootstrap as bootstrap
+
+ctx = bootstrap.context()
+state = bootstrap.read_state(ctx)
+prefix = Path(state["generations"][state["previous"]]["prefix"])
+if prefix != Path(sys.prefix).resolve():
+    python = str(prefix / "bin" / "python")
+    os.execve(python, [python, "-I", "-B", __file__], dict(os.environ))
+from richi_launcher import installation
+print(json.dumps(installation.rollback()))
 '''
 
 
@@ -173,7 +200,8 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
         # the manager learns real support from the release's self-check.
         with tempfile.TemporaryDirectory(prefix="richi-schema-in-place-") as temporary:
             self.root = Path(temporary).resolve()
-            self.environment = cli_environment(self.root)
+            # After an update the first command looks for maps on its port.
+            self.environment = cli_environment(self.root, RICHI_PORT=synthetic_port())
             for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
                 self.environment.pop(key, None)
             older = self.make_wheel("0.1.0", storage_schema=2)
@@ -195,10 +223,109 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             self.assertIn("drops database schema support for 3", refused.stdout + refused.stderr)
             self.assert_public_version("0.2.0")
 
+    def test_running_map_follows_every_activation_on_the_same_url(self):
+        with tempfile.TemporaryDirectory(prefix="richi-map-handoff-") as temporary:
+            self.root = Path(temporary).resolve()
+            port = int(synthetic_port())
+            # Every command addresses this ephemeral port, never a real map.
+            self.environment = cli_environment(self.root, RICHI_PORT=str(port))
+            for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
+                self.environment.pop(key, None)
+            wheels = {version: self.make_wheel(version) for version in ("0.1.0", "0.2.0", "0.3.0", "0.4.0")}
+            seed = self.root / "seed"
+            venv.EnvBuilder(with_pip=True, symlinks=True).create(str(seed))
+            self.python, self.console_path = seed / "bin/python", seed / "bin/richi"
+            self.run_process([self.python, "-I", "-B", "-m", "pip", "--isolated", "--disable-pip-version-check",
+                              "install", "--no-index", "--no-deps", "--no-cache-dir", "--no-compile", wheels["0.1.0"]])
+            scripts = {}
+            for name, text in (("offline", _OFFLINE_COMMAND), ("frozen", _FROZEN_UPDATE),
+                               ("frozen-rollback", _FROZEN_ROLLBACK)):
+                scripts[name] = self.root / (name + ".py")
+                scripts[name].write_text(text, encoding="utf-8")
+
+            def updater(name, *arguments):
+                return json.loads(self.run_process([self.python, "-I", "-B", scripts[name], *arguments]).stdout)
+
+            def health():
+                return maps.read_health(port, timeout=2)
+
+            def wait_for(version, timeout=30):
+                deadline = time.monotonic() + timeout
+                while True:
+                    current = health()
+                    if maps.is_map(current) and current["runtime"]["version"] == version:
+                        return current
+                    self.assertLess(time.monotonic(), deadline, "Map did not reach " + version + ": " + str(current))
+                    time.sleep(0.1)
+
+            def map_log():
+                return "\n".join(path.read_text() for path in self.root.rglob("runtime/map-server.log"))
+
+            def assert_handed_off(result, version, previous):
+                self.assertFalse(result["restart_maps_required"], json.dumps(result) + "\n" + map_log())
+                self.assertEqual([(entry["url"], entry["status"], entry["from_version"], entry["version"], entry["pid"])
+                                  for entry in result["maps"]],
+                                 [(maps.url(port), "restarted", previous, version, pid)])
+                current = health()
+                # The map re-executes itself: same process, same URL, new code and lease.
+                self.assertEqual((current["pid"], current["runtime"]["version"]), (pid, version))
+                return current
+
+            self.console("init")
+            started = self.console_json("map", "--no-open")
+            self.assertEqual((started["status"], started["url"]), ("started", maps.url(port)))
+            pid = started["pid"]
+            try:
+                self.assertEqual(health()["installation_generation"], "seed")
+                applied = updater("offline", self.feed_fixture(wheels["0.2.0"], "0.2.0"), "update", "apply")
+                self.assertEqual(applied["status"], "updated")
+                current = assert_handed_off(applied, "0.2.0", "0.1.0")
+                self.assertEqual(current["installation_generation"], applied["current"]["generation"])
+
+                feed = self.feed_fixture(wheels["0.3.0"], "0.3.0")
+                self.assertTrue(updater("offline", feed, "update", "auto", "enable", "--install")["auto_install"])
+                installed = updater("offline", feed, "update", "auto", "run")
+                self.assertEqual(installed["status"], "updated", installed)
+                assert_handed_off(installed, "0.3.0", "0.2.0")
+                # The seed's code was retired while no map leased it.
+                self.assertFalse((Path(applied["previous"]["site"]) / "richi/memory.py").exists())
+
+                rolled_back = self.console_json("update", "rollback")
+                self.assertEqual(rolled_back["status"], "rolled_back")
+                assert_handed_off(rolled_back, "0.2.0", "0.3.0")
+
+                # A frozen updater activates 0.4.0 and leaves the map behind. The
+                # first command of the new generation hands it off once.
+                frozen = updater("frozen", self.feed_fixture(wheels["0.4.0"], "0.4.0"), "update", "apply")
+                self.assertEqual(frozen["status"], "updated")
+                self.assertNotIn("maps", frozen)
+                self.assertEqual(health()["runtime"]["version"], "0.2.0")
+                self.console("--version")
+                self.assertEqual((health()["pid"], health()["runtime"]["version"]), (pid, "0.4.0"))
+                marker = json.loads((Path(frozen["root"]) / "maps" / "handoff.json").read_text())
+                self.assertEqual(marker["generation"], frozen["current"]["generation"])
+                self.assertEqual([(entry["status"], entry["version"]) for entry in marker["maps"]], [("restarted", "0.4.0")])
+
+                # A frozen rollback runs no Richi command at all: the map notices
+                # the installation change and follows it by itself.
+                self.assertEqual(updater("frozen-rollback")["status"], "rolled_back")
+                self.assertEqual(wait_for("0.2.0")["pid"], pid)
+                self.assertEqual(self.console_json("map", "--no-open")["status"], "existing")
+            finally:
+                current = health()
+                if maps.is_map(current) and current["pid"] == pid:
+                    stopped = self.console_json("map", "stop")
+                    self.assertEqual((stopped["status"], stopped["pid"], stopped["exited"]), ("stopped", pid, True))
+            self.assertTrue(maps.port_free(port))
+            cleaned = self.console_json("update", "cleanup")
+            self.assertEqual(cleaned["cleanup"]["deferred"], [])
+            self.assertEqual(len(list((Path(cleaned["root"]) / "versions").iterdir())), 2)
+
     def test_real_wheels_update_prune_and_recover_without_changing_workspaces(self):
         with tempfile.TemporaryDirectory(prefix="richi-wheel-lifecycle-") as temporary:
             self.root = Path(temporary).resolve()
-            self.environment = cli_environment(self.root)
+            # After an update the first command looks for maps on its port.
+            self.environment = cli_environment(self.root, RICHI_PORT=synthetic_port())
             for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
                 self.environment.pop(key, None)
             wheels = {version: self.make_wheel(version) for version in ("0.1.0", "0.2.0", "0.3.0", "0.4.0")}

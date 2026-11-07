@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 
-from cli_environment import cli_environment
+from cli_environment import cli_environment, synthetic_port
 
 
 def main():
@@ -16,7 +16,8 @@ def main():
     manifest = distribution / "richi-release.json"
     release = json.loads(manifest.read_text())
     with tempfile.TemporaryDirectory(prefix="richi-release-install-") as directory:
-        environment = cli_environment(directory, SHELL="/bin/zsh")
+        # After an update the first command looks for maps on its port.
+        environment = cli_environment(directory, SHELL="/bin/zsh", RICHI_PORT=synthetic_port())
         command = [sys.executable, "-I", str(archive), "--yes", "--no-path",
                    "--wheel", str(distribution / release["wheel"]["filename"]),
                    "--manifest", str(manifest)]

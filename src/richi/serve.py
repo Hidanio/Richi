@@ -25,13 +25,19 @@ import webbrowser
 from richi_launcher.config import resolve_settings, ConfigError
 from richi_launcher.runtime import (bootstrap_command, current_runtime, preflight,
                                     resolve_runtime, runtime_command, lease_fds)
+try:
+    from richi_launcher import maps
+except ImportError:  # A development runtime paired with an older installed launcher.
+    maps = None
 from .memory import Parser, MemoryError
 
 
 BASE = Path(__file__).resolve().parent
 API_VERSION = 4
 CAPABILITIES = ["git_source_viewer", "legacy_git_source_viewer", "standalone_runtime",
-                "runtime_selection", "runtime_reload", "workspace_selection", "tool_catalog"]
+                "runtime_selection", "runtime_reload", "workspace_selection", "tool_catalog",
+                "installation_handoff"]
+GENERATION_ENV = "RICHI_INSTALLATION_GENERATION"
 GIT_QUERY_LIMIT = 8192
 GIT_OPERATION_TIMEOUT = 25
 GIT_WORKER_TIMEOUT = 30
@@ -257,6 +263,9 @@ def compatible_health(health, database, runtime=None, config_file=None):
             and all(capability in health["capabilities"]
                     for capability in CAPABILITIES)
             and health.get("runtime") == (runtime or current_runtime()).as_dict()
+            # A map on another installation generation holds that generation's
+            # lease and launcher even when a development runtime is identical.
+            and health.get("installation_generation") == os.environ.get(GENERATION_ENV)
             and health.get("config_file") == (str(config_file) if config_file is not None else None))
 
 
@@ -319,7 +328,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 return self.send_data(200, {"application": "project-memory-map", "database": str(database),
                                             "api_version": API_VERSION, "capabilities": CAPABILITIES,
                                             "runtime": runtime.as_dict(), "workspace": workspace, "pid": os.getpid(),
-                                            "installation_generation": os.environ.get("RICHI_INSTALLATION_GENERATION"),
+                                            "installation_generation": os.environ.get(GENERATION_ENV),
                                             "config_file": str(config_file) if config_file is not None else None})
             if url.path == "/api/git":
                 try:
@@ -424,9 +433,15 @@ def source_fingerprint(package=None):
 
 
 def watch_runtime(server, runtime, original, database, config_file, config_required,
-                  stopped, reload_requested):
-    """Switch this server only after its selected runtime passes a read-only check."""
+                  stopped, reload_requested, handoff_requested=None):
+    """Switch this server only after its selected runtime passes a read-only check.
+
+    A map also follows its installation: when another generation becomes current
+    (or an updater asks), it re-executes through the stable entry point.
+    """
     pending = last_error = None
+    root, generation = os.environ.get("RICHI_INSTALLATION_ROOT"), os.environ.get(GENERATION_ENV)
+    changed_since = None
 
     def selected():
         settings = resolve_settings(db=database, config_file=config_file,
@@ -437,6 +452,22 @@ def watch_runtime(server, runtime, original, database, config_file, config_requi
 
     original_key = (runtime.identity, original)
     while not stopped.wait(1):
+        if handoff_requested is not None and maps is not None:
+            if root and generation:
+                current = maps.current_generation(root)
+                if current is None or current == generation:
+                    changed_since = None
+                elif changed_since is None:
+                    changed_since = time.monotonic()
+            if handoff_requested.is_set() or (changed_since is not None
+                                              and time.monotonic() - changed_since >= maps.HANDOFF_GRACE):
+                if stopped.is_set():
+                    return
+                print("Installation changed; restarting map on the same URL.", flush=True)
+                handoff_requested.set()
+                reload_requested.set()
+                server.shutdown()
+                return
         try:
             target, key = selected()
             if key == original_key:
@@ -490,6 +521,18 @@ def _main(argv=None):
     config_required = args.config is not None or "RICHI_CONFIG" in os.environ
     initial_source = source_fingerprint(runtime.package) if runtime.mode == "dev" else None
     address = "http://127.0.0.1:%d/" % args.port
+    stopped, reload_requested, handoff_requested = threading.Event(), threading.Event(), threading.Event()
+    # Install before listening: anyone who can read this map's health may ask it
+    # to hand off, and the default action of SIGUSR1 would terminate it.
+    handoff_signal = getattr(signal, maps.HANDOFF_SIGNAL, None) if maps is not None else None
+    follows_installation = handoff_signal is not None
+    previous_handoff = (signal.signal(handoff_signal, lambda _signum, _frame: handoff_requested.set())
+                        if follows_installation else None)
+
+    def restore_handoff():
+        if follows_installation:
+            signal.signal(handoff_signal, signal.SIG_DFL if previous_handoff is None else previous_handoff)
+
     try:
         server = LoopbackHTTPServer(("127.0.0.1", args.port), handler_for(database, settings.config_file, runtime, config_required, settings.workspace))
     except OSError as exc:
@@ -498,21 +541,24 @@ def _main(argv=None):
                 with urlopen(address + "api/health", timeout=2) as response:
                     health = json.load(response)
                 if compatible_health(health, database, runtime, settings.config_file):
+                    restore_handoff()
                     webbrowser.open(address)
                     print("Existing map: " + address, flush=True)
                     return
             except (OSError, ValueError):
                 pass
+        restore_handoff()
         parser.error("Cannot listen on port %d: %s. Choose another --port." % (args.port, exc))
     server.daemon_threads = False
+    registration = maps.register(args.port) if maps is not None else None
     print("Project memory map: " + address, flush=True)
     print("Local read-only viewer. Press Ctrl+C to stop.", flush=True)
     if args.open:
         webbrowser.open(address)
-    stopped, reload_requested = threading.Event(), threading.Event()
     watcher = threading.Thread(target=watch_runtime,
                                args=(server, runtime, initial_source, database,
-                                     settings.config_file, config_required, stopped, reload_requested),
+                                     settings.config_file, config_required, stopped, reload_requested,
+                                     handoff_requested if follows_installation else None),
                                daemon=False)
     def terminate(_signum, _frame):
         raise KeyboardInterrupt
@@ -530,13 +576,28 @@ def _main(argv=None):
         # Let it reap that child before this process exits.
         watcher.join(timeout=17)
         signal.signal(signal.SIGTERM, previous_sigterm)
+        if maps is not None:
+            maps.unregister(registration)
+        # A reloading map keeps its handler until exec resets it; a late request
+        # must not terminate it on the way.
+        if not reload_requested.is_set():
+            restore_handoff()
     if reload_requested.is_set():
         # Replace this process, preserving its PID and URL. No supervisor or old
         # server is left running; --open is intentionally not repeated.
-        command = bootstrap_command([*config_arguments(settings.config_file, config_required),
-                                     "--db", str(database), "map", "serve", "--port", str(args.port)])
+        arguments = [*config_arguments(settings.config_file, config_required),
+                     "--db", str(database), "map", "serve", "--port", str(args.port)]
         environment = worker_environment(settings.config_file, settings.workspace, config_required)
         environment.pop("RICHI_ACTIVE_RUNTIME", None)
+        command, managed = (maps.stable_command(arguments) if handoff_requested.is_set()
+                            else (bootstrap_command(arguments), False))
+        if managed:
+            # The entry point selects and leases the current generation. Close
+            # this generation's lease on exec, when its code stops running.
+            for key in ("RICHI_INSTALLATION_LEASE_FD", "RICHI_INSTALLATION_ROOT", GENERATION_ENV):
+                environment.pop(key, None)
+            for descriptor in lease_fds():
+                os.set_inheritable(descriptor, False)
         os.execve(command[0], command, environment)
 
 

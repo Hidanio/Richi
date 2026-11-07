@@ -1,6 +1,14 @@
 """Synthetic terminal environment for CLI fixtures that do not test chats."""
 import os
 from pathlib import Path
+import socket
+
+
+def synthetic_port():
+    """An unused loopback port, so map lookups never reach a developer's real map."""
+    with socket.socket() as reservation:
+        reservation.bind(("127.0.0.1", 0))
+        return str(reservation.getsockname()[1])
 
 
 def cli_environment(directory, **overrides):
