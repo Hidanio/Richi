@@ -466,8 +466,17 @@ def activated_links(ctx):
         return {"error": str(exc)}
 
 
-def skill_links(dev, source):
-    """Read-only summary of managed skill links for `config show`; never raises."""
+UNREGISTERED = ("This configuration is not a registered workspace; its dev setting "
+                "does not move the user-wide agent skills")
+
+
+def skill_links(dev, source, registered=True):
+    """Read-only summary of managed skill links for `config show`; never raises.
+
+    For an unregistered (ad hoc) configuration it only reports where the links
+    point: comparing them with its dev setting would suggest a command that
+    cannot move them.
+    """
     source, missing = _requested(dev, source)
     try:
         ctx = _context()
@@ -483,8 +492,10 @@ def skill_links(dev, source):
     except (ValueError, OSError, RuntimeError, ImportError, KeyError, TypeError) as exc:
         return {"status": "unavailable", "reason": str(exc)}
     modes = {item["mode"] for item in agents.values()}
-    result = {"status": "configured", "mode": modes.pop() if len(modes) == 1 else "mixed",
-              "matches_config": matches, "agents": agents}
+    result = {"status": "configured", "mode": modes.pop() if len(modes) == 1 else "mixed", "agents": agents}
+    if not registered:
+        return dict(result, reason=UNREGISTERED)
+    result["matches_config"] = matches
     if reason or missing:
         result["reason"] = reason or missing
     if not matches:

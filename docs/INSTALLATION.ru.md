@@ -146,7 +146,7 @@ Codex), включая подключённых позже. Dev не перек�
 ```
 
 `status` принимает значения `changed`, `unchanged`, `not_configured` (`richi setup`
-ещё не выполнялся), `unavailable` (установка не управляемая), `conflict`
+ещё не выполнялся), `skipped` (см. ниже), `unavailable` (установка не управляемая), `conflict`
 (управляемый файл изменён вручную), `error` или `busy` (установку занимает
 обновление); в трёх последних случаях ссылки не меняются. При включённом dev команда
 `config set development.source` перенаправляет ссылки на новый checkout.
@@ -156,7 +156,10 @@ Codex), включая подключённых позже. Dev не перек�
 загруженный skill.
 
 `dev` принадлежит workspace, а ссылки skill общие для пользователя: их положение
-определяет последняя команда `config set dev` в любом workspace. Если `config show`
+определяет последняя команда `config set dev` в любом зарегистрированном
+workspace. Файл конфигурации вне реестра workspace, выбранный разово через
+`--config` или `RICHI_CONFIG`, меняет только свои настройки: `agent_skills`
+сообщает `skipped`, а ссылки остаются на месте. Если `config show`
 показывает `"matches_config": false`, повторите `richi config set dev true`
 (или `false`) в том workspace, где работаете.
 

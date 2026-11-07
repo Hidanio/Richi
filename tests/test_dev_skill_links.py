@@ -65,12 +65,16 @@ class DevSkillLinkTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         with patch.object(installation, "_collect", return_value={}):
             return installation._activate(self.ctx, state, action)
 
-    def cli(self, config, *arguments):
+    def cli(self, *arguments):
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
-            status = cli.main(["--config", str(config), "config", *arguments])
+            status = cli.main(list(arguments))
         self.assertEqual(status, 0, err.getvalue())
         return json.loads(out.getvalue())
+
+    def config(self, *arguments, selector=()):
+        # Without selectors this is the registered default workspace.
+        return self.cli(*selector, "config", *arguments)
 
     def test_dev_switch_moves_every_agent_and_back_without_touching_instructions(self):
         protected = self.configure_both()
@@ -151,26 +155,25 @@ class DevSkillLinkTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
 
     def test_config_set_switches_links_and_dev_false_recovers_without_a_checkout(self):
         self.configure_both()
-        config = self.home / "settings.json"
-        source = self.cli(config, "set", "development.source", str(self.checkout))
+        source = self.config("set", "development.source", str(self.checkout))
         self.assertEqual((source["agent_skills"]["mode"], source["agent_skills"]["matches_config"]), ("release", True))
         self.assertEqual(self.links(), (self.release, self.release))
-        enabled = self.cli(config, "set", "dev", "true")
+        enabled = self.config("set", "dev", "true")
         self.assertEqual((enabled["agent_skills"]["status"], enabled["agent_skills"]["mode"]), ("changed", "dev"))
         self.assertEqual(self.links(), (self.dev_link(), self.dev_link()))
-        shown = self.cli(config, "show")["agent_skills"]
+        shown = self.config("show")["agent_skills"]
         self.assertEqual((shown["mode"], shown["matches_config"]), ("dev", True))
         # A new source while dev is on re-points the links.
         other = self.home / "other-checkout"
         self.make_checkout(other, "bravo")
-        moved = self.cli(config, "set", "development.source", str(other))
+        moved = self.config("set", "development.source", str(other))
         self.assertEqual(moved["agent_skills"]["source"], str(other))
         self.assertEqual(self.links(), (self.dev_link(other), self.dev_link(other)))
         shutil.rmtree(other)
-        shown = self.cli(config, "show")["agent_skills"]
+        shown = self.config("show")["agent_skills"]
         self.assertFalse(shown["matches_config"])
         self.assertIn("must be a Richi checkout", shown["reason"])
-        disabled = self.cli(config, "set", "dev", "false")
+        disabled = self.config("set", "dev", "false")
         self.assertFalse(disabled["dev"])
         self.assertEqual((disabled["agent_skills"]["status"], disabled["agent_skills"]["mode"]), ("changed", "release"))
         self.assertEqual(self.links(), (self.release, self.release))
@@ -181,13 +184,33 @@ class DevSkillLinkTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         self.configure()
         self.codex.unlink()
         self.codex.symlink_to(self.home)
-        config = self.home / "settings.json"
-        self.cli(config, "set", "development.source", str(self.checkout))
-        enabled = self.cli(config, "set", "dev", "true")
+        self.config("set", "development.source", str(self.checkout))
+        enabled = self.config("set", "dev", "true")
         self.assertEqual(enabled["agent_skills"]["status"], "conflict")
         self.assertEqual(enabled["agent_skills"]["next_command"], "richi config set dev true")
-        self.assertIs(json.loads(config.read_text())["dev"], True)
+        self.assertIs(json.loads(Path(enabled["config_file"]).read_text())["dev"], True)
         self.assertEqual(os.readlink(self.codex), str(self.home))
+
+    def test_only_registered_workspaces_move_links(self):
+        self.configure_both()
+        named = self.cli("workspace", "create", "alpha")
+        adhoc = self.home / "experiment.json"
+        for selector in (("--config", str(adhoc)), ()):
+            with self.subTest(selector=selector), patch.dict(os.environ, RICHI_CONFIG=str(adhoc)):
+                self.config("set", "development.source", str(self.checkout), selector=selector)
+                skipped = self.config("set", "dev", "true", selector=selector)["agent_skills"]
+                self.assertEqual((skipped["status"], skipped["mode"]), ("skipped", "release"))
+                self.assertIn("not a registered workspace", skipped["reason"])
+                self.assertNotIn("matches_config", self.config("show", selector=selector)["agent_skills"])
+                self.assertEqual(self.links(), (self.release, self.release))
+        self.assertIs(json.loads(adhoc.read_text())["dev"], True)
+        # --config naming a registered workspace's file is that workspace.
+        selector = ("--config", named["config_file"])
+        self.config("set", "development.source", str(self.checkout), selector=selector)
+        self.assertEqual(self.config("set", "dev", "true", selector=selector)["agent_skills"]["status"], "changed")
+        self.assertEqual(self.links(), (self.dev_link(), self.dev_link()))
+        self.assertEqual(self.config("set", "dev", "false", selector=("-w", "alpha"))["agent_skills"]["mode"], "release")
+        self.assertEqual(self.links(), (self.release, self.release))
 
     def test_update_and_rollback_keep_dev_links_with_dev_capable_releases(self):
         self.configure_both()

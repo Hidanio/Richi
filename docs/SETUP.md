@@ -127,7 +127,8 @@ points it back to the installed release, each in one recoverable transaction
 reported as `agent_skills`. This applies to every connected agent. Instruction
 blocks, adapter files such as hooks, PATH blocks and the launcher stay on the
 installed release. Links are user-wide and follow
-the latest `config set dev` in any workspace. Updates and rollbacks keep checkout
+the latest `config set dev` in any registered workspace; ad hoc `--config` or
+`RICHI_CONFIG` files do not move them. Updates and rollbacks keep checkout
 links; before rolling back to 1.1.0 or older, run `richi config set dev false`.
 Details: [what dev switches](INSTALLATION.md#what-dev-switches).
 

@@ -145,7 +145,7 @@ reports it in `agent_skills`:
 ```
 
 `status` is `changed`, `unchanged`, `not_configured` (no `richi setup` yet),
-`unavailable` (not a managed installation), `conflict` (a managed file was
+`skipped` (see below), `unavailable` (not a managed installation), `conflict` (a managed file was
 changed by hand), `error` or `busy` (an update holds the installation); in the
 last three cases no link changed. `config set development.source` re-points the
 links while dev is on. `config show` reports where the links point and `matches_config`;
@@ -153,7 +153,10 @@ agents state the mode at the start of each chat and point out a mismatch.
 Open a new agent chat after switching; running chats may keep the loaded skill.
 
 `dev` belongs to a workspace, but skill links are user-wide: the latest
-`config set dev` in any workspace decides where they point. If `config show`
+`config set dev` in any registered workspace decides where they point. A
+configuration file outside the workspace registry, selected ad hoc with
+`--config` or `RICHI_CONFIG`, changes only its own settings: `agent_skills`
+reports `skipped` and the links stay where they are. If `config show`
 reports `"matches_config": false`, rerun `richi config set dev true` (or `false`)
 in the workspace you work in.
 

@@ -100,6 +100,19 @@ def choose_config(workspace=None, config_file=None):
     return Path(registry["workspaces"][name]["config_file"]), name != "default", name
 
 
+def registered_config(path):
+    """Whether a config file belongs to a registered workspace; reads only.
+
+    An unreadable registry counts as unregistered, so callers fail closed.
+    """
+    try:
+        registry = _read_registry()
+        target = _path(path, "config file")
+    except (ConfigError, OSError):
+        return False
+    return any(Path(record["config_file"]) == target for record in registry["workspaces"].values())
+
+
 def _validate_storage(name, path, values):
     """Managed workspace stores cannot be redirected into another directory."""
     if name in (None, "default"):

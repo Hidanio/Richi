@@ -125,14 +125,20 @@ def configuration(argv, selectors, *, compact_json=False):
         result["installed_runtime"] = installed_runtime().as_dict()
     except ConfigError as exc:
         result["installed_runtime"] = {"available": False, "error": str(exc)}
-    # Managed agent skills are user-wide and follow the latest dev switch:
-    # `config set dev` re-points them, as does a new source while dev is on.
-    # The installed launcher does this, so broken sources never block it.
+    # Managed agent skills are user-wide and follow the latest dev switch of a
+    # registered workspace: `config set dev` re-points them, as does a new
+    # source while dev is on. An ad hoc --config/RICHI_CONFIG file changes only
+    # itself. The installed launcher does this, so broken sources never block it.
     from . import agent_setup
-    if args.action == "set" and (args.key == "dev" or settings.dev):
+    from .workspaces import registered_config
+    registered = not custom_config or registered_config(settings.config_file)
+    if registered and args.action == "set" and (args.key == "dev" or settings.dev):
         result["agent_skills"] = agent_setup.switch_skills(settings.dev, settings.development_source)
     else:
-        result["agent_skills"] = agent_setup.skill_links(settings.dev, settings.development_source)
+        result["agent_skills"] = agent_setup.skill_links(settings.dev, settings.development_source,
+                                                         registered=registered)
+        if not registered and args.action == "set" and result["agent_skills"]["status"] == "configured":
+            result["agent_skills"]["status"] = "skipped"
     return _emit(result, compact_json=compact_json)
 
 
