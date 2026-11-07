@@ -78,7 +78,9 @@ rollback does not roll back databases; select a compatible release.
 
 Updaters up to 1.0.1 perform their own rollback without this check. If you migrate
 a store to schema 3 and then roll back to 1.0.1, it refuses to open that store and
-changes nothing; run `richi update apply` to return to the latest release.
+changes nothing; run `richi update apply` to return to the latest release. Once
+Claude Code is connected, 1.0.1 refuses the rollback itself, because it cannot
+maintain that integration; nothing is changed.
 
 <a id="сколько-версий-хранится"></a>
 ## Version retention
