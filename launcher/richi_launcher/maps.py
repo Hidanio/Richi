@@ -16,6 +16,12 @@ from pathlib import Path
 import sys
 import time
 
+import richi_bootstrap as bootstrap
+
+# The protocol between this module and the runtime (richi.serve.MAPS_API).
+# Change it whenever a function or constant the runtime uses changes; a
+# runtime speaking another version treats this module as absent.
+API_VERSION = 1
 APPLICATION = "project-memory-map"
 # Maps from this release onwards follow the installation's current generation by
 # themselves and re-execute through the stable entry point on this signal.
@@ -26,7 +32,6 @@ PORT_RANGE = 11
 DEFAULT_PORT = 8765
 STOP_TIMEOUT = 20
 EXIT_TIMEOUT = 10
-HANDOFF_TIMEOUT = 25
 # Without an explicit request, a map waits this long after seeing another
 # current generation, so an updater that hands it off directly goes first.
 HANDOFF_GRACE = 5
@@ -34,13 +39,14 @@ HANDOFF_GRACE = 5
 GRACE_ENV = "RICHI_MAP_HANDOFF_GRACE"
 # How long the entry point may take to start before a map replaces itself.
 HANDOFF_CHECK_TIMEOUT = 15
+# How long to wait for a map asked to hand off: it notices the request within
+# a second, runs that check, closes its port and listens again on the new code.
+HANDOFF_TIMEOUT = HANDOFF_CHECK_TIMEOUT + 10
 # How long richi map waits for a registered map that is re-executing.
 RESTART_TIMEOUT = 15
 REGISTRY = "maps"
 MARKER = "handoff.json"
-LEASE_ENV = "RICHI_INSTALLATION_LEASE_FD"
-ROOT_ENV = "RICHI_INSTALLATION_ROOT"
-GENERATION_ENV = "RICHI_INSTALLATION_GENERATION"
+LEASE_ENV, ROOT_ENV, GENERATION_ENV = bootstrap.LEASE_ENV, bootstrap.ROOT_ENV, bootstrap.GENERATION_ENV
 # Set for the entry point check a map runs before it hands itself off: that
 # command must not look for maps, including the one waiting for it.
 PASSIVE_ENV = "RICHI_MAPS_PASSIVE"
@@ -332,10 +338,10 @@ def _context():
 def stable_command(argv):
     """The installation's public entry point, which selects and leases the current generation.
 
-    Returns (command, managed). Outside a managed layout the running launcher
-    is the entry point, as for an ordinary map reload.
+    Returns (command, through_entry_point). Without the installation's entry
+    point (a source checkout, an ordinary pip installation, a missing seed) the
+    running launcher is used instead, as for an ordinary map reload.
     """
-    import richi_bootstrap as bootstrap
     try:
         ctx = _context()
         if (Path(ctx["root"]) / "state.json").exists():
@@ -385,7 +391,6 @@ def handoff_problem(schema=None):
     Unlike the per-second check, this validates the state as the stable entry
     point will: the current release must be complete and able to read the store.
     """
-    import richi_bootstrap as bootstrap
     try:
         ctx = _context()
         if not (Path(ctx["root"]) / "state.json").exists():
@@ -415,11 +420,11 @@ def handoff_command(selection_arguments, arguments, environment, schema=None,
     problem = handoff_problem(schema)
     if problem is not None:
         return None, problem
-    command, managed = stable_command([*selection_arguments, *arguments])
-    if not managed:
+    command, through_entry_point = stable_command([*selection_arguments, *arguments])
+    if not through_entry_point:
         # The running launcher would only start this same generation again.
         return None, "the installation entry point is unavailable; repair the installation"
-    check, _managed = stable_command([*selection_arguments, "--version"])
+    check, _through_entry_point = stable_command([*selection_arguments, "--version"])
     child = dict(environment)
     for key in ("RICHI_ACTIVE_RUNTIME", LEASE_ENV, ROOT_ENV, GENERATION_ENV):
         child.pop(key, None)
@@ -484,6 +489,7 @@ def register(port, pid=None):
         if directory is None:
             return None
         path = directory / ("%d.json" % port)
+        # Readers use pid and restarting; port, generation and started_at help diagnostics.
         _atomic_json(path, {"format_version": 1, "port": port, "pid": pid or os.getpid(),
                             "generation": generation, "started_at": int(time.time())})
         return path
@@ -624,7 +630,7 @@ def _spawn_replacement(port, health):
     """
     import subprocess
     arguments, environment = selection(health)
-    command, _managed = stable_command([*arguments, "map", "--no-open", "--port", str(port)])
+    command, _through_entry_point = stable_command([*arguments, "map", "--no-open", "--port", str(port)])
     try:
         subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, env=environment, close_fds=True, start_new_session=True)
@@ -655,7 +661,6 @@ def reconcile(ports=(), *, replace=False, wait=True, timeout=HANDOFF_TIMEOUT):
     processes and maps attached to no storage are never touched; maps already
     on the current generation are reported as ``current``.
     """
-    import richi_bootstrap as bootstrap
     ctx = _context()
     root = Path(ctx["root"])
     if not (root / "state.json").exists():
@@ -836,6 +841,7 @@ def first_invocation(port, interactive=True):
         waiting = {_port_of(entry) for entry in maps
                    if entry.get("status") == "restart_required" and not entry.get("terminal")}
         # Written last: an interrupted command leaves the work to the next one.
+        # time and maps are for diagnostics; scanned and pending drive the hook.
         _atomic_json(marker, {"format_version": 2, "generation": generation, "time": int(time.time()),
                               "scanned": sorted(set(scanned) | {first})[-64:],
                               "pending": sorted((set(pending) - ports) | waiting), "maps": maps})

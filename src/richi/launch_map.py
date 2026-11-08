@@ -3,7 +3,6 @@
 
 import argparse
 from contextlib import contextmanager
-from http.client import HTTPException
 import json
 import os
 from pathlib import Path
@@ -16,17 +15,17 @@ import webbrowser
 from richi_launcher.config import resolve_settings, ConfigError
 from richi_launcher.runtime import LAUNCHER_ROOT, current_runtime, preflight, runtime_command, lease_fds
 from .memory import Parser, MemoryError
-from .serve import GENERATION_ENV, compatible_health, config_arguments, database_schema, worker_environment
-from urllib.request import ProxyHandler, build_opener
-
-try:
-    from richi_launcher import maps
-except ImportError:  # A development runtime paired with an older installed launcher.
-    maps = None
+# maps is None when the installed launcher has no map protocol or another one.
+from .serve import (GENERATION_ENV, compatible_health, config_arguments, database_schema, maps,
+                    read_health, url, worker_environment)
 
 
 BASE = Path(__file__).resolve().parent
-HTTP = build_opener(ProxyHandler({}))
+# richi map uses the configured port and the next ten (richi_launcher.maps.PORT_RANGE).
+PORT_RANGE = 11
+NO_MAP_CONTROL = ("Установленный richi_launcher не может останавливать карты: у него нет протокола карты "
+                  "этой версии Richi или другая его версия. Обновите ту сторону, что старше (установку "
+                  "через richi update apply или checkout), либо выполните richi config set dev false.")
 
 
 class MapRefused(RuntimeError):
@@ -35,14 +34,8 @@ class MapRefused(RuntimeError):
         self.payload = payload
 
 
-def read_health(port):
-    # Kept beside richi_launcher.maps.read_health: a development runtime must
-    # still reuse maps when it is paired with an older installed launcher.
-    try:
-        with HTTP.open("http://127.0.0.1:%d/api/health" % port, timeout=0.5) as response:
-            return json.loads(response.read(8193))
-    except (OSError, HTTPException, ValueError, AttributeError, TypeError):
-        return None
+def _ports(first_port):
+    return range(first_port, min(first_port + PORT_RANGE, 65536))
 
 
 def healthy(port, database, runtime=None, config_file=None):
@@ -66,8 +59,10 @@ def follows_itself(health):
     launcher, as for a dev switch. A map of another generation or installation
     environment keeps its code until it is replaced.
     """
-    if (health.get("installation_generation") != os.environ.get(GENERATION_ENV)
-            or health.get("launcher", str(LAUNCHER_ROOT)) != str(LAUNCHER_ROOT)):
+    if health.get("installation_generation") != os.environ.get(GENERATION_ENV):
+        return False
+    # Maps before this release do not report their launcher; the package check below covers them.
+    if health.get("launcher") is not None and health["launcher"] != str(LAUNCHER_ROOT):
         return False
     runtime = health.get("runtime")
     if not isinstance(runtime, dict):
@@ -90,10 +85,6 @@ def available(port):
             return True
         except OSError:
             return False
-
-
-def _url(port):
-    return "http://127.0.0.1:%d/" % port
 
 
 @contextmanager
@@ -122,6 +113,7 @@ def _start(port, database, config_file, runtime_selection, config_required, work
     log_path = runtime_dir / "map-server.log"
     with log_path.open("ab") as log:
         log_path.chmod(0o600)
+        written = log.tell()
         child = subprocess.Popen(
             runtime_command(runtime_selection, [*config_arguments(config_file, config_required),
                                                  "--db", str(database), "--port", str(port)],
@@ -133,9 +125,10 @@ def _start(port, database, config_file, runtime_selection, config_required, work
     deadline = time.monotonic() + 8
     while time.monotonic() < deadline and child.poll() is None:
         if healthy(port, database, runtime_selection, config_file):
-            return {"url": _url(port), "status": "started", "pid": child.pid}
+            return {"url": url(port), "status": "started", "pid": child.pid}
         time.sleep(0.1)
-    if child.poll() is None:
+    exited = child.poll() is not None
+    if not exited:
         child.terminate()
         try:
             child.wait(timeout=3)
@@ -144,8 +137,22 @@ def _start(port, database, config_file, runtime_selection, config_required, work
             child.wait()
     # A map that handed itself off concurrently may own the port now.
     if healthy(port, database, runtime_selection, config_file):
-        return {"url": _url(port), "status": "existing"}
-    raise RuntimeError("Карта не запустилась. Подробности: " + str(log_path))
+        return {"url": url(port), "status": "existing"}
+    # Only a map that exited by itself wrote why; one stopped here may have started but never answered.
+    reason = _reason(log_path, written) if exited else ": она не ответила за 8 секунд"
+    raise RuntimeError("Карта не запустилась" + reason + ". Подробности: " + str(log_path))
+
+
+def _reason(log_path, offset):
+    """The last line this map wrote to the shared log, such as why it could not listen."""
+    try:
+        with log_path.open("rb") as log:
+            log.seek(offset)
+            lines = [line.strip() for line in log.read(65536).decode("utf-8", "replace").splitlines()]
+    except OSError:
+        return ""
+    lines = [line for line in lines if line]
+    return ": " + lines[-1][:500] if lines else ""
 
 
 def _can_listen():
@@ -183,15 +190,21 @@ def _hand_off_in_place(port, health, database, config_file, runtime_selection):
         raise MapRefused(maps.refusal(problem, port, pid=health["pid"]))
     if problem is not None:
         return None
-    deadline = time.monotonic() + 15
+    # The map checks the new release before it switches; wait as long as that may take.
+    deadline, current = time.monotonic() + maps.HANDOFF_TIMEOUT, None
     while time.monotonic() < deadline:
         current = read_health(port)
         if compatible_health(current, database, runtime_selection, config_file):
-            return {"url": _url(port), "status": "restarted", "pid": current["pid"],
+            return {"url": url(port), "status": "restarted", "pid": current["pid"],
                     "previous": {"pid": health["pid"], "version": health["runtime"].get("version"),
                                  "exited": current["pid"] != health["pid"]}}
         time.sleep(0.1)
-    return None
+    if maps.is_map(current) and all(current.get(key) == health.get(key)
+                                    for key in ("pid", "runtime", "installation_generation")):
+        # It kept its version (its log says why): replacing it checks the runtime first.
+        return None
+    # It is still switching, or switched to something else: look again.
+    raise MapRefused(maps.refusal("changed", port, pid=health["pid"]))
 
 
 def _settle(port, timeout=5):
@@ -206,7 +219,7 @@ def _settle(port, timeout=5):
 def _replace(port, health, database, config_file, runtime_selection, config_required, workspace, runtime_dir):
     """Stop a verified Richi map of this storage and start this runtime on its URL."""
     if maps is None:
-        raise RuntimeError("Установленный richi_launcher не умеет останавливать карту; переустановите Richi.")
+        raise RuntimeError(NO_MAP_CONTROL)
     if not _can_listen():
         # For example a sandbox without local network: keep the working map.
         raise RuntimeError("Это окружение не может открыть локальный порт; работающая карта не остановлена.")
@@ -243,15 +256,15 @@ def launch(database, first_port, config_file=None, runtime=None, config_required
 
 def _launch_locked(database, first_port, config_file, runtime_selection, config_required, workspace,
                    restart, runtime_dir):
-    ports = range(first_port, min(first_port + 11, 65536))
-    if maps is not None and hasattr(maps, "wait_for_restarts"):
+    ports = _ports(first_port)
+    if maps is not None:
         # A map re-executing on a new version has no health for a moment.
         maps.wait_for_restarts(ports)
     transitioning, stale = [], None
     for port in ports:
         health = read_health(port)
         if not restart and compatible_health(health, database, runtime_selection, config_file):
-            return {"url": _url(port), "status": "existing"}
+            return {"url": url(port), "status": "existing"}
         if not managed_health(health, database, config_file):
             continue
         if not restart and follows_itself(health):
@@ -266,7 +279,7 @@ def _launch_locked(database, first_port, config_file, runtime_selection, config_
         while time.monotonic() < deadline:
             for port in transitioning:
                 if healthy(port, database, runtime_selection, config_file):
-                    return {"url": _url(port), "status": "existing"}
+                    return {"url": url(port), "status": "existing"}
             time.sleep(0.1)
         raise RuntimeError("Карта ещё использует другой runtime. Проверьте конфигурацию и "
                            + str(runtime_dir / "map-server.log"))
@@ -289,16 +302,15 @@ def _launch_locked(database, first_port, config_file, runtime_selection, config_
 def stop(database, first_port, config_file=None):
     """Stop this storage's map; only a process verified through its health is signalled."""
     if maps is None:
-        raise RuntimeError("Установленный richi_launcher не умеет останавливать карту; переустановите Richi.")
+        raise RuntimeError(NO_MAP_CONTROL)
     with _launch_lock(database):
-        if hasattr(maps, "wait_for_restarts"):
-            # Otherwise a map re-executing right now would be reported as not running.
-            maps.wait_for_restarts(range(first_port, min(first_port + 11, 65536)))
-        for port in range(first_port, min(first_port + 11, 65536)):
+        # Otherwise a map re-executing right now would be reported as not running.
+        maps.wait_for_restarts(_ports(first_port))
+        for port in _ports(first_port):
             health = read_health(port)
             if managed_health(health, database, config_file):
                 return maps.stop(port, health)
-        result = {"status": "not_running", "url": _url(first_port)}
+        result = {"status": "not_running", "url": url(first_port)}
         if maps.is_map(read_health(first_port)):
             result["note"] = "The map on this port serves another workspace; select that workspace to stop it"
         elif not available(first_port):
@@ -313,14 +325,15 @@ def _main(argv=None):
     parser.add_argument("--config", type=Path)
     parser.add_argument("--port", type=int)
     parser.add_argument("--no-open", action="store_true", help="Check startup without opening a browser")
-    parser.add_argument("--open", action="store_true", help="Open the browser (restart; richi map opens by default)")
+    parser.add_argument("--open", action="store_true", help="Open the browser, as restart does by default")
     args = parser.parse_args(argv)
+    # The only validation of these flags; richi map serve rejects --no-open itself.
     if args.action == "stop" and (args.open or args.no_open):
         parser.error("--open and --no-open do not apply to richi map stop")
     if args.open and args.no_open:
         parser.error("Use either --open or --no-open")
     if args.open and args.action != "restart":
-        parser.error("--open is only supported by richi map restart and richi map serve; richi map opens by default")
+        parser.error("--open is only supported by richi map serve and richi map restart; richi map opens by default")
     try:
         settings = resolve_settings(db=args.db, config_file=args.config, port=args.port)
     except ConfigError as exc:

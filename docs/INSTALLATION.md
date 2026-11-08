@@ -301,6 +301,12 @@ configuration management commands remain available. For a background map, the
 log is `runtime/map-server.log` beside the selected database; for `map serve`,
 it is in the terminal.
 
+The checkout and the installed launcher agree on a map protocol version. If the
+installed release is older or newer than the checkout in this respect, maps are
+still started and reused, but they do not follow updates and `richi map` cannot
+stop or replace them. Update whichever side is older (the installation with
+`richi update apply`, or the checkout), or run `richi config set dev false`.
+
 <a id="подключение-агента"></a>
 ## Agent integration
 

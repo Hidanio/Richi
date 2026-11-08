@@ -18,6 +18,8 @@ from richi import launch_map, memory, serve
 from richi_launcher import cli, runtime, status, update
 from richi_launcher.config import ConfigError
 
+from cli_environment import free_port
+
 
 def isolated_environment(root):
     environment = {key: value for key, value in os.environ.items()
@@ -282,9 +284,7 @@ class RuntimeLeasePropagationTests(unittest.TestCase):
                 self.fcntl.flock(candidate, self.fcntl.LOCK_EX | self.fcntl.LOCK_NB)
 
     def test_detached_map_keeps_lease_after_launcher_exits_and_passes_it_to_graph_worker(self):
-        with socket.socket() as reservation:
-            reservation.bind(("127.0.0.1", 0))
-            port = reservation.getsockname()[1]
+        port = free_port()
         children = []
         popen = subprocess.Popen
 

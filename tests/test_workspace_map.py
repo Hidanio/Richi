@@ -16,6 +16,8 @@ from urllib.parse import urlencode, urlsplit
 from richi import git_evidence, git_sources, memory, serve
 import richi_launcher
 
+from cli_environment import free_port
+
 
 @unittest.skipIf(sys.platform == "win32", "Map launch/reload targets macOS and Linux")
 class WorkspaceMapTests(unittest.TestCase):
@@ -77,9 +79,8 @@ class WorkspaceMapTests(unittest.TestCase):
 
     @staticmethod
     def free_port():
-        with socket.socket() as reservation:
-            reservation.bind(("127.0.0.1", 0))
-            return reservation.getsockname()[1]
+        # Below the ephemeral range: a client probing a port there can take it for itself.
+        return free_port()
 
     def start_foreground(self, arguments, port):
         log_path = self.root / ("server-%d.log" % port)

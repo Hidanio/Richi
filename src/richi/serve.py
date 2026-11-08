@@ -19,40 +19,70 @@ import threading
 import time
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
-from urllib.request import urlopen
 import webbrowser
 
 from richi_launcher.config import resolve_settings, ConfigError
 from richi_launcher.runtime import (LAUNCHER_ROOT, bootstrap_command, current_runtime, preflight,
                                     resolve_runtime, runtime_command, lease_fds)
-try:
-    from richi_launcher import maps
-except ImportError:  # A development runtime paired with an older installed launcher.
-    maps = None
 from .memory import Parser, MemoryError
 
 
 BASE = Path(__file__).resolve().parent
 API_VERSION = 4
-HANDOFF_CAPABILITY = "installation_handoff"
-# The part of richi_launcher.maps a map relies on to follow its installation.
-_MAPS_API = ("HANDOFF_SIGNAL", "HANDOFF_CAPABILITY", "current_generation", "handoff_command",
-             "handoff_grace", "register", "unregister", "mark_restarting")
+# The richi_launcher.maps protocol this runtime speaks (maps.API_VERSION).
+MAPS_API = 1
+# Set by the installation's bootstrap for every process it starts.
+LEASE_ENV = "RICHI_INSTALLATION_LEASE_FD"
+ROOT_ENV = "RICHI_INSTALLATION_ROOT"
+GENERATION_ENV = "RICHI_INSTALLATION_GENERATION"
+
+
+def _launcher_maps():
+    """The installed launcher's map module if it speaks this runtime's protocol, else None.
+
+    A development runtime may be paired with an older or a newer installed
+    launcher. Without the same protocol a map neither follows the installation
+    nor stops or replaces other maps; it is only started and reused, as before.
+    """
+    try:
+        from richi_launcher import maps as module
+    except ImportError:
+        return None
+    return module if getattr(module, "API_VERSION", None) == MAPS_API else None
+
+
+maps = _launcher_maps()
 
 
 def handoff_supported():
-    """This map can follow its installation: the launcher provides the handoff and the signal exists."""
-    return (maps is not None and all(hasattr(maps, name) for name in _MAPS_API)
-            and maps.HANDOFF_CAPABILITY == HANDOFF_CAPABILITY and hasattr(signal, maps.HANDOFF_SIGNAL))
+    """This map can follow its installation: the launcher speaks the protocol and the signal exists."""
+    return maps is not None and hasattr(signal, maps.HANDOFF_SIGNAL)
 
 
 # A map advertises the handoff only when it installs the signal handler: the
 # default action of that signal would terminate it.
 CAPABILITIES = (["git_source_viewer", "legacy_git_source_viewer", "standalone_runtime",
                  "runtime_selection", "runtime_reload", "workspace_selection", "tool_catalog"]
-                + ([HANDOFF_CAPABILITY] if handoff_supported() else []))
-ROOT_ENV = "RICHI_INSTALLATION_ROOT"
-GENERATION_ENV = "RICHI_INSTALLATION_GENERATION"
+                + ([maps.HANDOFF_CAPABILITY] if handoff_supported() else []))
+
+
+def url(port):
+    return "http://127.0.0.1:%d/" % port
+
+
+def read_health(port, timeout=0.5):
+    """A loopback map's health answer, or None. Never goes through a proxy.
+
+    richi_launcher.maps has its own reader: this one also works when the
+    installed launcher has no map protocol or a different one.
+    """
+    from http.client import HTTPException
+    from urllib.request import ProxyHandler, build_opener
+    try:
+        with build_opener(ProxyHandler({})).open(url(port) + "api/health", timeout=timeout) as response:
+            return json.loads(response.read(65537))
+    except (OSError, HTTPException, ValueError, AttributeError, TypeError):
+        return None
 GIT_QUERY_LIMIT = 8192
 GIT_OPERATION_TIMEOUT = 25
 GIT_WORKER_TIMEOUT = 30
@@ -281,7 +311,7 @@ def compatible_health(health, database, runtime=None, config_file=None):
             # A map on another installation generation or environment holds that
             # lease and launcher even when a development runtime is identical.
             and health.get("installation_generation") == os.environ.get(GENERATION_ENV)
-            and health.get("launcher", str(LAUNCHER_ROOT)) == str(LAUNCHER_ROOT)
+            and health.get("launcher") == str(LAUNCHER_ROOT)
             and health.get("config_file") == (str(config_file) if config_file is not None else None))
 
 
@@ -494,8 +524,8 @@ class InstallationFollower:
             return self._due()
         except Exception as exc:  # An installed launcher this map does not understand.
             self.enabled = False
-            if HANDOFF_CAPABILITY in self.capabilities:
-                self.capabilities.remove(HANDOFF_CAPABILITY)
+            if maps.HANDOFF_CAPABILITY in self.capabilities:
+                self.capabilities.remove(maps.HANDOFF_CAPABILITY)
             print("Map no longer follows installation updates (" + str(exc)[:200]
                   + "); run richi map restart after an update.", flush=True)
             return False
@@ -599,13 +629,15 @@ def _main(argv=None):
         parser.error("Database does not exist: " + str(database))
     if not 1 <= args.port <= 65535:
         parser.error("Port must be 1–65535")
-    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as conn:
-        if conn.execute("PRAGMA user_version").fetchone()[0] not in (2, 3):
-            parser.error("The map requires schema 2 or 3; run richi backup and richi migrate")
+    schema = database_schema(database)
+    if schema is None:
+        parser.error("Cannot read the database: " + str(database))
+    if schema not in (2, 3):
+        parser.error("The map requires schema 2 or 3; run richi backup and richi migrate")
     runtime = current_runtime()
     config_required = args.config is not None or "RICHI_CONFIG" in os.environ
     initial_source = source_fingerprint(runtime.package) if runtime.mode == "dev" else None
-    address = "http://127.0.0.1:%d/" % args.port
+    address = url(args.port)
     stopped, reload_requested, terminating = threading.Event(), threading.Event(), threading.Event()
     # A restart re-enters the launcher with this map's explicit storage selection.
     storage = [*config_arguments(settings.config_file, config_required), "--db", str(database)]
@@ -614,7 +646,7 @@ def _main(argv=None):
     environment.pop("RICHI_ACTIVE_RUNTIME", None)
     capabilities = list(CAPABILITIES)
     follower = handoff_signal = previous_handoff = None
-    if HANDOFF_CAPABILITY in capabilities:
+    if handoff_supported():
         follower = InstallationFollower(database, storage, serve_arguments, environment, capabilities)
         handoff_signal = getattr(signal, maps.HANDOFF_SIGNAL)
         # Install before listening: anyone who can read this map's health may
@@ -631,16 +663,11 @@ def _main(argv=None):
                                                 settings.workspace, capabilities))
     except OSError as exc:
         if args.open:
-            try:
-                with urlopen(address + "api/health", timeout=2) as response:
-                    health = json.load(response)
-                if compatible_health(health, database, runtime, settings.config_file):
-                    restore_handoff()
-                    webbrowser.open(address)
-                    print("Existing map: " + address, flush=True)
-                    return
-            except (OSError, ValueError):
-                pass
+            if compatible_health(read_health(args.port, timeout=2), database, runtime, settings.config_file):
+                restore_handoff()
+                webbrowser.open(address)
+                print("Existing map: " + address, flush=True)
+                return
         restore_handoff()
         parser.error("Cannot listen on port %d: %s. Choose another --port." % (args.port, exc))
     server.daemon_threads = False
@@ -687,7 +714,7 @@ def _main(argv=None):
         # The entry point selects and leases the current generation. Close
         # this generation's lease on exec, when its code stops running.
         command = follower.command
-        for key in ("RICHI_INSTALLATION_LEASE_FD", ROOT_ENV, GENERATION_ENV):
+        for key in (LEASE_ENV, ROOT_ENV, GENERATION_ENV):
             environment.pop(key, None)
         for descriptor in lease_fds():
             os.set_inheritable(descriptor, False)

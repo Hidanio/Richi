@@ -21,13 +21,7 @@ import richi_bootstrap
 import richi_launcher
 from richi_launcher import maps
 
-from cli_environment import cli_environment
-
-
-def free_port():
-    with socket.socket() as reservation:
-        reservation.bind(("127.0.0.1", 0))
-        return reservation.getsockname()[1]
+from cli_environment import cli_environment, free_port
 
 
 def alive(pid):
@@ -273,25 +267,38 @@ class MapControlTests(unittest.TestCase):
 
     def test_a_map_whose_launcher_cannot_hand_off_does_not_advertise_it(self):
         # A development runtime paired with an installed launcher from before
-        # the handoff: the signal's default action would terminate that map.
-        site = self.copied_launcher("0.0.2")
-        (site / "richi_launcher" / "maps.py").unlink()
+        # the handoff, or with one speaking another map protocol: the signal's
+        # default action would terminate that map.
         runner = "import sys;sys.path.insert(0,sys.argv[1]);from richi_launcher.cli import main;sys.exit(main(sys.argv[2:]))"
-        log = (self.root / "old-launcher.log").open("w")
-        self.addCleanup(log.close)
-        old = subprocess.Popen([sys.executable, "-I", "-B", "-c", runner, str(site), "--config", str(self.config),
-                                "map", "serve", "--port", str(self.port)],
-                               env=self.environment, stdout=log, stderr=log, cwd=self.root)
-        self.addCleanup(lambda: old.poll() is None and old.terminate())
-        deadline = time.monotonic() + 20
-        while not maps.is_map(self.health()):
-            self.assertIsNone(old.poll(), (self.root / "old-launcher.log").read_text())
-            self.assertLess(time.monotonic(), deadline)
-            time.sleep(0.1)
-        self.assertNotIn(maps.HANDOFF_CAPABILITY, self.health()["capabilities"])
-        self.assertEqual(self.health()["launcher"], str(site))
-        old.terminate()
-        self.assertEqual(old.wait(timeout=10), 0)
+        for variant in ("without_maps", "other_protocol"):
+            with self.subTest(variant=variant):
+                site = self.copied_launcher("0.0.2-" + variant.replace("_", "-"))
+                module = site / "richi_launcher" / "maps.py"
+                if variant == "without_maps":
+                    module.unlink()
+                else:
+                    source = module.read_text()
+                    self.assertIn("\nAPI_VERSION = 1\n", source)
+                    module.write_text(source.replace("\nAPI_VERSION = 1\n", "\nAPI_VERSION = 99\n"))
+                log_path = self.root / (variant + ".log")
+                log = log_path.open("w")
+                self.addCleanup(log.close)
+                old = subprocess.Popen([sys.executable, "-I", "-B", "-c", runner, str(site), "--config",
+                                        str(self.config), "map", "serve", "--port", str(self.port)],
+                                       env=self.environment, stdout=log, stderr=log, cwd=self.root)
+                self.addCleanup(lambda process=old: process.poll() is None and process.terminate())
+                deadline = time.monotonic() + 20
+                while not maps.is_map(self.health()):
+                    self.assertIsNone(old.poll(), log_path.read_text())
+                    self.assertLess(time.monotonic(), deadline)
+                    time.sleep(0.1)
+                self.assertNotIn(maps.HANDOFF_CAPABILITY, self.health()["capabilities"])
+                self.assertEqual(self.health()["launcher"], str(site))
+                old.terminate()
+                self.assertEqual(old.wait(timeout=10), 0)
+                while not maps.port_free(self.port):
+                    self.assertLess(time.monotonic(), deadline)
+                    time.sleep(0.05)
 
 
 class InstallationHookTests(unittest.TestCase):
@@ -447,6 +454,94 @@ class HandoffCommandTests(unittest.TestCase):
                          (None, "the installation entry point is unavailable; repair the installation"))
         with mock.patch.object(maps, "handoff_problem", return_value="release 9 is incomplete"):
             self.assertEqual(maps.handoff_command([], [], {}), (None, "release 9 is incomplete"))
+
+
+class ProtocolTests(unittest.TestCase):
+    """The runtime and the launcher agree on one map protocol, defined once on each side."""
+
+    def test_both_sides_use_the_same_names_ranges_and_version(self):
+        self.assertEqual((serve.LEASE_ENV, serve.ROOT_ENV, serve.GENERATION_ENV),
+                         (richi_bootstrap.LEASE_ENV, richi_bootstrap.ROOT_ENV, richi_bootstrap.GENERATION_ENV))
+        self.assertEqual((maps.LEASE_ENV, maps.ROOT_ENV, maps.GENERATION_ENV),
+                         (serve.LEASE_ENV, serve.ROOT_ENV, serve.GENERATION_ENV))
+        self.assertEqual(launch_map.PORT_RANGE, maps.PORT_RANGE)
+        self.assertEqual(serve.MAPS_API, maps.API_VERSION)
+        self.assertIs(serve.maps, maps)
+        self.assertIs(launch_map.maps, maps)
+        # Waiting less than a map spends on its check makes callers give up on it.
+        self.assertGreater(maps.HANDOFF_TIMEOUT, maps.HANDOFF_CHECK_TIMEOUT + 5)
+
+    def test_a_launcher_speaking_another_protocol_is_treated_as_absent(self):
+        self.assertIs(serve._launcher_maps(), maps)
+        # A launcher without the module is covered with a real map in MapControlTests.
+        with mock.patch.object(maps, "API_VERSION", serve.MAPS_API + 1):
+            self.assertIsNone(serve._launcher_maps())
+
+
+class InPlaceHandoffTests(unittest.TestCase):
+    """richi map waits for a map switching in place as long as its own check may take."""
+
+    health = {"application": maps.APPLICATION, "pid": 4242, "capabilities": [maps.HANDOFF_CAPABILITY],
+              "runtime": {"identity": "old", "version": "0.1.0"}, "installation_generation": "g1"}
+
+    def hand_off(self, answers):
+        answers, started = list(answers), time.monotonic()
+        self.addCleanup(lambda: self.assertLess(time.monotonic() - started, 5,
+                                                "The wait must come from maps.HANDOFF_TIMEOUT"))
+        patches = [mock.patch.object(maps, "HANDOFF_TIMEOUT", 0.3),
+                   mock.patch.object(maps, "running_current_generation", return_value=True),
+                   mock.patch.object(maps, "verify", return_value=("/synthetic/launcher", None)),
+                   mock.patch.object(maps, "installation_owns", return_value=True),
+                   mock.patch.object(maps, "handoff_problem", return_value=None),
+                   mock.patch.object(maps, "request_handoff", return_value=None),
+                   mock.patch.object(launch_map, "database_schema", return_value=3),
+                   mock.patch.object(launch_map, "read_health",
+                                     side_effect=lambda _port: answers.pop(0) if len(answers) > 1 else answers[0]),
+                   mock.patch.object(launch_map, "compatible_health",
+                                     side_effect=lambda health, *_args: bool(health and health.get("compatible")))]
+        for patcher in patches:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        return launch_map._hand_off_in_place(4321, self.health, Path("/synthetic/memory.sqlite3"), None, None)
+
+    def test_a_switched_map_is_reported_with_its_previous_process(self):
+        switched = dict(self.health, compatible=True, installation_generation="g2")
+        result = self.hand_off([None, switched])
+        self.assertEqual((result["status"], result["pid"], result["previous"]),
+                         ("restarted", 4242, {"pid": 4242, "version": "0.1.0", "exited": False}))
+
+    def test_a_map_that_kept_its_version_is_replaced_and_a_moving_one_rescanned(self):
+        self.assertIsNone(self.hand_off([dict(self.health)]))
+        # Each of these alone means the port no longer holds the map that was asked.
+        for moving in (None, dict(self.health, pid=4243), dict(self.health, installation_generation="g2"),
+                       dict(self.health, runtime={"identity": "new", "version": "0.1.0"})):
+            with self.subTest(moving=moving):
+                with self.assertRaises(launch_map.MapRefused) as refused:
+                    self.hand_off([moving])
+                self.assertEqual(refused.exception.payload["reason"], "changed")
+
+
+class StartFailureTests(unittest.TestCase):
+    def test_the_error_names_what_this_map_wrote_to_the_shared_log(self):
+        with tempfile.TemporaryDirectory(prefix="richi-map-log-") as temporary:
+            log = Path(temporary) / "map-server.log"
+            log.write_text("Earlier map: unrelated\n")
+            offset = log.stat().st_size
+            self.assertEqual(launch_map._reason(log, offset), "")
+            with log.open("a") as stream:
+                stream.write("Project memory map: http://127.0.0.1:1/\n\n"
+                             '{"error": "Cannot listen on port 1: [Errno 48] Address already in use."}\n')
+            self.assertEqual(launch_map._reason(log, offset),
+                             ': {"error": "Cannot listen on port 1: [Errno 48] Address already in use."}')
+            self.assertEqual(launch_map._reason(Path(temporary) / "missing.log", 0), "")
+
+    def test_only_maps_reporting_another_launcher_are_not_waited_for(self):
+        runtime = {"mode": "release", "package": str(launch_map.LAUNCHER_ROOT / "richi")}
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(serve.GENERATION_ENV, None)
+            self.assertTrue(launch_map.follows_itself({"runtime": runtime}))
+            self.assertTrue(launch_map.follows_itself({"runtime": runtime, "launcher": str(launch_map.LAUNCHER_ROOT)}))
+            self.assertFalse(launch_map.follows_itself({"runtime": runtime, "launcher": "/other/site"}))
 
 
 class LaunchRaceTests(unittest.TestCase):
