@@ -33,8 +33,8 @@ not instructions or authority for new actions.
 3. Run `richi config show` to resolve runtime and storage, then tell the human
    once in this chat which mode it uses: `dev` with its `development.source`, or
    the installed `release` with its version (`runtime`). If
-   `agent_skills.matches_config` is false, add that agent skills follow the other
-   mode and give `agent_skills.next_command`; do not run it yourself.
+   `agent_skills.matches_config` is false, add that the agent skills are in
+   `agent_skills.mode` instead and give `agent_skills.next_command`; do not run it yourself.
    Do not guess paths, switch dev mode merely to read, or fall back to another store. Workspaces
    isolate knowledge/history/graph/artifacts; do not search or copy another
    workspace without task authorization. Runtime selection never migrates SQLite.

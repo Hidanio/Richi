@@ -135,7 +135,7 @@ Details: [what dev switches](INSTALLATION.md#what-dev-switches).
 `richi setup --status` reports `skill_mode` (`release` or `dev`) and the expected
 `skill_link`. A dev link whose checkout lost its skill is `repair_required` with
 `dev_skill_error`; `richi setup --yes` then restores the release skill. An agent
-connected while dev is on follows the checkout. An existing link that already
+connected later follows the links of the agents already connected. An existing link that already
 points to exactly the managed target is adopted without `--replace-skill`; other
 existing skills still require it. Setup never edits the source checkout.
 

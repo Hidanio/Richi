@@ -39,8 +39,8 @@ description: Находи и сохраняй предыдущую работу,
 3. Выполни `richi config show`, чтобы определить runtime и хранилище, и один раз
    в этом чате сообщи человеку режим: `dev` с путём `development.source` или
    установленный `release` с его версией (поле `runtime`). Если
-   `agent_skills.matches_config` равно `false`, добавь, что skills агентов следуют
-   другому режиму, и назови `agent_skills.next_command`; сам её не выполняй.
+   `agent_skills.matches_config` равно `false`, добавь, что skills агентов работают
+   в режиме `agent_skills.mode`, и назови `agent_skills.next_command`; сам её не выполняй.
    Не угадывай пути, не переключай dev только ради чтения и не используй другое
    хранилище при ошибке.
    Workspaces изолируют знания, историю, граф и артефакты; не ищи и не копируй данные

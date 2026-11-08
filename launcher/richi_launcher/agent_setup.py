@@ -80,17 +80,24 @@ def dev_skill(source):
     return str(root)
 
 
+def _checkout(source):
+    """Return (usable dev source or None, fallback reason or None)."""
+    if source is None:
+        return None, None
+    try:
+        dev_skill(source)
+        return _source(source), None
+    except ConfigError as exc:
+        return None, str(exc) + "; using the installed release skill"
+
+
 def _desired_link(release, source):
     """Return (link target, dev source or None, fallback reason or None).
 
     A missing or invalid checkout never blocks a link to the installed release.
     """
-    if source is None:
-        return str(release), None, None
-    try:
-        return dev_skill(source), _source(source), None
-    except ConfigError as exc:
-        return str(release), None, str(exc) + "; using the installed release skill"
+    dev_source, reason = _checkout(source)
+    return (_dev_link(dev_source) if dev_source else str(release)), dev_source, reason
 
 
 def _link_target(record):
@@ -439,19 +446,19 @@ def switch_skills(dev, source):
         with installation._locked(ctx, blocking=False), installation._locked(ctx, state=True):
             files.recover(ctx)
             ops, report = _switch_operations(ctx, installation._state(ctx), source)
-            changes = [op["path"] for op in ops if op["before"] != op["after"]]
-            if changes:
+            if any(op["before"] != op["after"] for op in ops):
                 files.finish(ctx, files.begin(ctx, ops))
     except installation._InstallationBusy:
-        return {"status": "busy", "error": "An installation update is in progress; skill links were not changed",
-                "next_command": command}
+        return {"status": "busy", "error": "Another installation change (an update or setup) is in progress; "
+                "skill links were not changed", "next_command": command}
     except (ValueError, OSError, RuntimeError, KeyError, TypeError) as exc:
-        # Refusals to touch user-changed files are conflicts; anything else
-        # (unreadable metadata, I/O) is an error. Either way nothing changed.
+        # Setup refusals (a file changed by hand, metadata that needs repair, an
+        # unrecoverable journal) are conflicts; unexpected failures are errors.
+        # Either way no link moved, or the next call's recovery restores it.
         return {"status": "conflict" if isinstance(exc, ConfigError) else "error",
                 "error": str(exc), "next_command": command,
                 "recovery": "Reconcile the reported path, then rerun the command; the configuration was saved"}
-    links = [path for path in changes if Path(path).name != MANIFEST]
+    links = [item["skill"] for item in report["agents"].values() if item["changed"]]
     if missing:
         report["reason"] = missing
     return dict(report, status="changed" if links else "unchanged", changes=links)
@@ -486,15 +493,15 @@ def skill_links(dev, source, registered=True):
         agents = {agent: {"skill": record["skill"], "target": _link_target(record),
                           "mode": _mode(record)}
                   for agent, record in records.items()}
-        # The expectation mirrors switch_skills: an unusable checkout means release.
-        _, expected, reason = _desired_link("", source)
-        matches = all(record.get("dev_source") == expected for record in records.values())
     except (ValueError, OSError, RuntimeError, ImportError, KeyError, TypeError) as exc:
         return {"status": "unavailable", "reason": str(exc)}
     modes = {item["mode"] for item in agents.values()}
     result = {"status": "configured", "mode": modes.pop() if len(modes) == 1 else "mixed", "agents": agents}
     if not registered:
         return dict(result, reason=UNREGISTERED)
+    # The expectation mirrors switch_skills: an unusable checkout means release.
+    expected, reason = _checkout(source)
+    matches = all(record.get("dev_source") == expected for record in records.values())
     result["matches_config"] = matches
     if reason or missing:
         result["reason"] = reason or missing

@@ -126,8 +126,9 @@ agent call and the map) and the **managed Project Memory skill link of every
 agent connected with `richi setup`**. With dev on, each of these links points to
 `<development.source>/skills/project-memory`, so every agent reads the skill text
 that matches the code it runs. This works the same for any supported agent (for
-example `~/.agents/skills/project-memory` for Codex), including agents connected
-later. Dev does not switch the installed launcher (`launcher/`, including
+example `~/.agents/skills/project-memory` for Codex). An agent connected later
+follows the agents already connected; the first one starts on the release skill
+until the next `config set dev true`. Dev does not switch the installed launcher (`launcher/`, including
 `setup`, `update` and `config`), agent-specific integration files such as
 managed instruction blocks and hooks, or PATH blocks: they always follow the
 installed release.
@@ -145,8 +146,9 @@ reports it in `agent_skills`:
 ```
 
 `status` is `changed`, `unchanged`, `not_configured` (no `richi setup` yet),
-`skipped` (see below), `unavailable` (not a managed installation), `conflict` (a managed file was
-changed by hand), `error` or `busy` (an update holds the installation); in the
+`skipped` (see below), `unavailable` (not a managed installation), `conflict` (Richi refused: a
+managed file was changed by hand or its metadata needs repair), `error` or `busy`
+(an update or setup holds the installation); in the
 last three cases no link changed. `config set development.source` re-points the
 links while dev is on. `config show` reports where the links point and `matches_config`;
 agents state the mode at the start of each chat and point out a mismatch.
