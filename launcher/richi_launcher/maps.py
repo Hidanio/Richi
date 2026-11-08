@@ -30,11 +30,20 @@ HANDOFF_TIMEOUT = 25
 # Without an explicit request, a map waits this long after seeing another
 # current generation, so an updater that hands it off directly goes first.
 HANDOFF_GRACE = 5
+# Tests set this to decide deterministically who hands a map off.
+GRACE_ENV = "RICHI_MAP_HANDOFF_GRACE"
+# How long the entry point may take to start before a map replaces itself.
+HANDOFF_CHECK_TIMEOUT = 15
+# How long richi map waits for a registered map that is re-executing.
+RESTART_TIMEOUT = 15
 REGISTRY = "maps"
 MARKER = "handoff.json"
 LEASE_ENV = "RICHI_INSTALLATION_LEASE_FD"
 ROOT_ENV = "RICHI_INSTALLATION_ROOT"
 GENERATION_ENV = "RICHI_INSTALLATION_GENERATION"
+# Set for the entry point check a map runs before it hands itself off: that
+# command must not look for maps, including the one waiting for it.
+PASSIVE_ENV = "RICHI_MAPS_PASSIVE"
 _RUNNER_MARKER = 'os.environ["RICHI_ACTIVE_RUNTIME"] = payload'
 _BOOTSTRAP = ("import sys; sys.path.insert(0, sys.argv[1]); "
               "from richi_bootstrap import main; sys.exit(main(sys.argv[2:]))")
@@ -42,7 +51,14 @@ _BOOTSTRAP = ("import sys; sys.path.insert(0, sys.argv[1]); "
 # redirect them or keep the parent's lease or generation.
 _CHILD_UNSET = ("RICHI_ACTIVE_RUNTIME", "RICHI_CHAT_ID", "CODEX_THREAD_ID", "RICHI_DB",
                 "RICHI_DATA_DIR", "RICHI_PORT", "RICHI_WORKSPACE", "RICHI_CONFIG",
-                "RICHI_ACTIVE_CONFIG", "RICHI_ACTIVE_WORKSPACE", LEASE_ENV, ROOT_ENV, GENERATION_ENV)
+                "RICHI_ACTIVE_CONFIG", "RICHI_ACTIVE_WORKSPACE", PASSIVE_ENV,
+                LEASE_ENV, ROOT_ENV, GENERATION_ENV)
+# Options of the richi command line before a command, and of richi map, as the
+# launcher passes them to the runtime runner. Anything else is not a map.
+_GLOBAL_OPTIONS = {"--db", "--config", "--workspace", "-w", "--project-path", "--chat"}
+_GLOBAL_FLAGS = {"--compact-json"}
+_MAP_OPTIONS = {"--db", "--config", "--port"}
+_MAP_FLAGS = {"--open", "--no-open"}
 
 
 def url(port):
@@ -128,38 +144,86 @@ def process_arguments(pid):
     return None
 
 
-def process_uid(pid):
+def _process_owner(pid):
+    """(uid, has a controlling terminal) of a process; either is None if unknown."""
     if sys.platform.startswith("linux"):
         try:
-            return os.stat("/proc/%d" % pid).st_uid
+            uid = os.stat("/proc/%d" % pid).st_uid
         except OSError:
-            return None
+            return None, None
+        try:
+            # The command name is parenthesized and may contain spaces.
+            fields = Path("/proc/%d/stat" % pid).read_text().rpartition(")")[2].split()
+            return uid, int(fields[4]) != 0
+        except (OSError, IndexError, ValueError):
+            return uid, None
     import subprocess
     try:
-        result = subprocess.run(["/bin/ps", "-o", "uid=", "-p", str(pid)], stdin=subprocess.DEVNULL,
+        result = subprocess.run(["/bin/ps", "-o", "uid=,tty=", "-p", str(pid)], stdin=subprocess.DEVNULL,
                                 capture_output=True, text=True, timeout=5)
-        return int(result.stdout.strip()) if result.returncode == 0 and result.stdout.strip() else None
+        fields = result.stdout.split()
+        if result.returncode or len(fields) != 2:
+            return None, None
+        return int(fields[0]), fields[1] not in {"?", "??", "-"}
     except (OSError, ValueError, subprocess.SubprocessError):
-        return None
+        return None, None
 
 
-def runner_launcher(arguments, runtime):
-    """Launcher directory of a Richi runner serving a map with exactly this runtime."""
-    payload = json.dumps(runtime)
-    for index in range(len(arguments) - 4):
-        if (arguments[index] != "-c" or _RUNNER_MARKER not in arguments[index + 1]
-                or arguments[index + 3] != payload):
-            continue
-        action, rest = arguments[index + 4], arguments[index + 5:]
-        if action == "serve" or (action == "cli" and any(
-                rest[position:position + 2] == ["map", "serve"] for position in range(len(rest)))):
-            return arguments[index + 2]
-        return None
+def process_uid(pid):
+    return _process_owner(pid)[0]
+
+
+def _skip_options(arguments, position, options, flags):
+    """Position of the first positional argument after leading options, or None."""
+    while position < len(arguments):
+        token = arguments[position]
+        name = token.partition("=")[0]
+        if token in flags:
+            position += 1
+        elif name in options:
+            position += 1 if "=" in token else 2
+        elif "-w" in options and token.startswith("-w") and not token.startswith("--"):
+            position += 1  # -wNAME
+        elif token.startswith("-"):
+            return None
+        else:
+            return position
     return None
 
 
-def verify(health):
-    """Return (launcher directory, None) for a verified map process, else (None, reason)."""
+def _serves_map(arguments):
+    """These richi command-line arguments run the map server: richi [options] map [options] serve."""
+    position = _skip_options(arguments, 0, _GLOBAL_OPTIONS, _GLOBAL_FLAGS)
+    if position is None or arguments[position] != "map":
+        return False
+    position = _skip_options(arguments, position + 1, _MAP_OPTIONS, _MAP_FLAGS)
+    return position is not None and arguments[position] == "serve"
+
+
+def runner_launcher(arguments, runtime):
+    """Launcher directory of a Richi runner serving a map with exactly this runtime.
+
+    The runner is ``python -I -B [-X pycache_prefix=...] -c CODE LAUNCHER PAYLOAD
+    ACTION ...``; a map runs ACTION ``serve``, or ``cli`` with ``map serve``.
+    """
+    if not isinstance(arguments, list) or arguments[1:3] != ["-I", "-B"]:
+        return None
+    position = 3
+    if arguments[position:position + 1] == ["-X"] and len(arguments) > position + 1 \
+            and arguments[position + 1].startswith("pycache_prefix="):
+        position += 2
+    if (len(arguments) < position + 5 or arguments[position] != "-c"
+            or _RUNNER_MARKER not in arguments[position + 1]
+            or arguments[position + 3] != json.dumps(runtime)):
+        return None
+    action, rest = arguments[position + 4], arguments[position + 5:]
+    if action == "serve" or (action == "cli" and _serves_map(rest)):
+        return arguments[position + 2]
+    return None
+
+
+def _inspect(health):
+    """({launcher, terminal}, None) for a verified map process, else (None, reason)."""
     if not is_map(health):
         return None, "not_richi_map"
     pid = health["pid"]
@@ -170,25 +234,33 @@ def verify(health):
     except ProcessLookupError:
         return None, "process_exited"
     except PermissionError:
-        return None, "foreign_user"
+        # The same user's process in an environment that may not signal it, such as a sandbox.
+        return None, "not_permitted" if process_uid(pid) == os.getuid() else "foreign_user"
     except OSError:
         return None, "unverified_process"
-    if process_uid(pid) != os.getuid():
+    uid, terminal = _process_owner(pid)
+    if uid != os.getuid():
         return None, "foreign_user"
     arguments = process_arguments(pid)
     launcher = runner_launcher(arguments, health["runtime"]) if arguments else None
     if launcher is None:
         return None, "unverified_process"
-    return launcher, None
+    return {"launcher": launcher, "terminal": bool(terminal)}, None
+
+
+def verify(health):
+    """Return (launcher directory, None) for a verified map process, else (None, reason)."""
+    details, reason = _inspect(health)
+    return (details["launcher"], None) if details is not None else (None, reason)
 
 
 REASONS = {
     "not_richi_map": "The process on this port is not a Richi map; it was not stopped",
-    "other_workspace": "The Richi map on this port serves another database or configuration; select that workspace to stop it",
     "unverified_process": "The process reported by the map could not be verified as Richi's map; it was not stopped",
     "foreign_user": "The map process belongs to another user; it was not stopped",
+    "not_permitted": "This environment may not signal the map process (for example a sandbox); it was not stopped",
     "process_exited": "The map process exited while it was being verified",
-    "changed": "The map changed while it was being stopped; run the command again",
+    "changed": "The map changed while it was being checked; run the command again",
     "timeout": "The map did not release its port in time; it may still be finishing requests",
 }
 
@@ -232,6 +304,8 @@ def stop(port, health, timeout=STOP_TIMEOUT):
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
         pass
+    except PermissionError:
+        return refusal("not_permitted", port, pid=pid)
     deadline = time.monotonic() + timeout
     while True:
         live = read_health(port, timeout=0.2)
@@ -250,8 +324,9 @@ def stop(port, health, timeout=STOP_TIMEOUT):
 
 
 def _context():
-    import richi_bootstrap as bootstrap
-    return bootstrap.context()
+    # The same seam as the updater, so fixtures can substitute the installation.
+    from . import installation
+    return installation._context()
 
 
 def stable_command(argv):
@@ -294,6 +369,69 @@ def selection(health):
         # Only the implicit default may lack a configuration file.
         environment["RICHI_WORKSPACE"] = "default"
     return arguments + ["--db", health["database"]], environment
+
+
+def handoff_grace():
+    try:
+        value = float(os.environ.get(GRACE_ENV, HANDOFF_GRACE))
+    except ValueError:
+        return float(HANDOFF_GRACE)
+    return min(max(value, 0.0), 3600.0) if value == value else float(HANDOFF_GRACE)
+
+
+def handoff_problem(schema=None):
+    """Why a map must stay on its version instead of following the current one, or None.
+
+    Unlike the per-second check, this validates the state as the stable entry
+    point will: the current release must be complete and able to read the store.
+    """
+    import richi_bootstrap as bootstrap
+    try:
+        ctx = _context()
+        if not (Path(ctx["root"]) / "state.json").exists():
+            return None
+        state = bootstrap.read_state(ctx)
+        record = state["generations"][state["current"]]
+        site = Path(record["site"])
+        if not (site / "richi_launcher" / "cli.py").is_file() or not (site / "richi" / "memory.py").is_file():
+            return "release {} is incomplete; repair the installation".format(record.get("version"))
+        if schema is not None and schema not in bootstrap.generation_schemas(record):
+            return "release {} cannot read database schema {}".format(record.get("version"), schema)
+    except (bootstrap.InstallationError, OSError, KeyError, ValueError, TypeError) as exc:
+        return "the installation state cannot be read: " + str(exc)
+    return None
+
+
+def handoff_command(selection_arguments, arguments, environment, schema=None,
+                    timeout=HANDOFF_CHECK_TIMEOUT):
+    """(command, None) to run ``arguments`` on the current generation, or (None, problem).
+
+    A working map is replaced only after the installation's stable entry point
+    resolved the same storage selection and runtime once with that release's
+    own code (``richi --version``); the release must also be complete and
+    declare support for the store's schema.
+    """
+    import subprocess
+    problem = handoff_problem(schema)
+    if problem is not None:
+        return None, problem
+    command, managed = stable_command([*selection_arguments, *arguments])
+    if not managed:
+        # The running launcher would only start this same generation again.
+        return None, "the installation entry point is unavailable; repair the installation"
+    check, _managed = stable_command([*selection_arguments, "--version"])
+    child = dict(environment)
+    for key in ("RICHI_ACTIVE_RUNTIME", LEASE_ENV, ROOT_ENV, GENERATION_ENV):
+        child.pop(key, None)
+    child[PASSIVE_ENV] = "1"
+    try:
+        result = subprocess.run(check, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                                timeout=timeout, env=child, close_fds=True)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, "the current release did not start: " + str(exc)[:300]
+    if result.returncode:
+        return None, "the current release did not start: " + (result.stderr or result.stdout).strip()[-300:]
+    return command, None
 
 
 def _atomic_json(path, value):
@@ -353,6 +491,19 @@ def register(port, pid=None):
         return None
 
 
+def mark_restarting(path, pid=None):
+    """Keep a map's entry while it re-executes, so richi map waits instead of taking its port."""
+    if path is None:
+        return
+    entry = _read_json(Path(path))
+    if entry is None or entry.get("pid") != (pid or os.getpid()):
+        return
+    try:
+        _atomic_json(Path(path), dict(entry, restarting=int(time.time())))
+    except OSError:
+        pass
+
+
 def unregister(path, pid=None):
     if path is None:
         return
@@ -392,6 +543,32 @@ def _prune(root, port):
         pass
 
 
+def wait_for_restarts(ports, timeout=RESTART_TIMEOUT):
+    """Wait while a registered map of this installation re-executes on one of these ports.
+
+    Between closing its port and listening again on the new version a map has
+    no health; without this, richi map could take its port or move to the next.
+    """
+    root = os.environ.get(ROOT_ENV)
+    directory = _registry(root) if root else None
+    if directory is None:
+        return
+    deadline = time.monotonic() + timeout
+    for port in ports:
+        entry = _read_json(directory / ("%d.json" % port))
+        if (entry is None or type(entry.get("pid")) is not int or type(entry.get("restarting")) is not int
+                or abs(time.time() - entry["restarting"]) > 2 * timeout):
+            continue
+        while time.monotonic() < deadline and not is_map(read_health(port, timeout=0.2)):
+            try:
+                os.kill(entry["pid"], 0)
+            except ProcessLookupError:
+                break
+            except OSError:
+                pass
+            time.sleep(0.1)
+
+
 def current_generation(root):
     """The installation's current generation from its atomically replaced state."""
     state = _read_json(Path(root) / "state.json", limit=1 << 20)
@@ -423,29 +600,6 @@ def running_current_generation():
     return bool(root and generation) and current_generation(root) == generation
 
 
-def handoff_problem(schema=None):
-    """Why a map must stay on its version instead of following the current one, or None.
-
-    Unlike the per-second check, this validates the state as the stable entry
-    point will: the current release must be complete and able to read the store.
-    """
-    import richi_bootstrap as bootstrap
-    try:
-        ctx = _context()
-        if not (Path(ctx["root"]) / "state.json").exists():
-            return None
-        state = bootstrap.read_state(ctx)
-        record = state["generations"][state["current"]]
-        site = Path(record["site"])
-        if not (site / "richi_launcher" / "cli.py").is_file() or not (site / "richi" / "memory.py").is_file():
-            return "release {} is incomplete; repair the installation".format(record.get("version"))
-        if schema is not None and schema not in bootstrap.generation_schemas(record):
-            return "release {} cannot read database schema {}".format(record.get("version"), schema)
-    except (bootstrap.InstallationError, OSError, KeyError, ValueError, TypeError) as exc:
-        return "the installation state cannot be read: " + str(exc)
-    return None
-
-
 def request_handoff(port, health):
     """Ask a verified map to re-execute on the current generation; return a refusal reason or None."""
     import signal
@@ -455,29 +609,28 @@ def request_handoff(port, health):
         os.kill(health["pid"], getattr(signal, HANDOFF_SIGNAL))
     except ProcessLookupError:
         return "process_exited"
+    except PermissionError:
+        return "not_permitted"
     except OSError:
         return "unverified_process"
     return None
 
 
 def _spawn_replacement(port, health):
+    """Run richi map for this map's storage in the background; it replaces the map on its URL.
+
+    The command that found the map does not wait for it. richi map checks the
+    new runtime before it stops the old map, and reports its own errors.
+    """
     import subprocess
     arguments, environment = selection(health)
     command, _managed = stable_command([*arguments, "map", "--no-open", "--port", str(port)])
     try:
-        result = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                                timeout=90, env=environment, close_fds=True)
+        subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, env=environment, close_fds=True, start_new_session=True)
     except (OSError, subprocess.SubprocessError) as exc:
         return {"status": "failed", "error": str(exc)[:500]}
-    try:
-        payload = json.loads(result.stdout if result.returncode == 0 else result.stderr)
-    except ValueError:
-        payload = {"error": (result.stderr or result.stdout)[-500:].strip()}
-    if result.returncode or not isinstance(payload, dict):
-        return {"status": "failed", "error": str(payload.get("error") if isinstance(payload, dict) else payload)[:500]}
-    if payload.get("url") != url(port):
-        return {"status": "failed", "error": "The map started at " + str(payload.get("url"))}
-    return {"status": "restarted"}
+    return {"status": "replacing"}
 
 
 def _valid_selection(health):
@@ -487,13 +640,20 @@ def _valid_selection(health):
             and (workspace is None or isinstance(workspace, str)))
 
 
-def reconcile(ports=(), *, replace=False, timeout=HANDOFF_TIMEOUT):
+def _port_of(entry):
+    return int(entry["url"].rstrip("/").rsplit(":", 1)[1])
+
+
+def reconcile(ports=(), *, replace=False, wait=True, timeout=HANDOFF_TIMEOUT):
     """Hand off this installation's running maps that are not on its current generation.
 
     Maps from this release onwards re-execute themselves on request, keeping
-    their PID and URL. Older maps cannot; with ``replace`` they are stopped and
-    started again on the same port through the stable entry point. Maps of other
-    installations, unverifiable processes and current maps are never touched.
+    their PID and URL; with ``wait`` the call waits until they report the
+    current generation. Older maps cannot; with ``replace`` a background richi
+    map replaces each one on its port, except a map attached to a terminal,
+    which its user restarts there. Maps of other installations, unverifiable
+    processes and maps attached to no storage are never touched; maps already
+    on the current generation are reported as ``current``.
     """
     import richi_bootstrap as bootstrap
     ctx = _context()
@@ -510,50 +670,57 @@ def reconcile(ports=(), *, replace=False, timeout=HANDOFF_TIMEOUT):
         if not is_map(health):
             _prune(root, port)
             continue
-        launcher, _reason = verify(health)
-        if (launcher is None or not any(_within(launcher, path) for path in owned)
+        details, _reason = _inspect(health)
+        if (details is None or not any(_within(details["launcher"], path) for path in owned)
                 or not _valid_selection(health)):
             continue
-        if health.get("installation_generation") == current and _within(launcher, current_prefix):
+        version = health["runtime"].get("version")
+        if health.get("installation_generation") == current and _within(details["launcher"], current_prefix):
+            results.append({"url": url(port), "pid": health["pid"], "status": "current",
+                            "version": version, "generation": current})
             continue
-        entry = {"url": url(port), "pid": health["pid"], "from_version": health["runtime"].get("version"),
+        entry = {"url": url(port), "pid": health["pid"], "from_version": version,
                  "from_generation": health.get("installation_generation")}
         if HANDOFF_CAPABILITY in health["capabilities"]:
             problem = request_handoff(port, health)
-            if problem is None:
-                pending.append((port, entry))
+            if problem is None and wait:
+                pending.append(entry)
                 continue
-            entry.update(status="failed", error=REASONS[problem])
+            if problem is None:
+                entry.update(status="requested")
+            else:
+                entry.update(status="failed", error=REASONS[problem])
+        elif details["terminal"]:
+            entry.update(status="restart_required", terminal=True,
+                         error="This map predates automatic handoff and runs in a terminal; stop it there and "
+                               "start richi map serve again, or run richi map restart")
         elif replace:
             entry.update(_spawn_replacement(port, health))
         else:
             entry.update(status="restart_required",
-                         error="This map predates automatic handoff; the next richi command from a terminal or richi map replaces it")
+                         error="This map predates automatic handoff; the next richi command in a terminal "
+                               "or richi map replaces it")
         results.append(entry)
     deadline = time.monotonic() + timeout
     while pending:
-        for port, entry in list(pending):
-            health = read_health(port)
+        for entry in list(pending):
+            health = read_health(_port_of(entry))
             if is_map(health) and health.get("installation_generation") == current:
                 entry.update(status="restarted", pid=health["pid"], version=health["runtime"].get("version"),
                              generation=current)
                 results.append(entry)
-                pending.remove((port, entry))
+                pending.remove(entry)
         if not pending:
             break
         if time.monotonic() > deadline:
-            for port, entry in pending:
-                entry.update(status="pending", error="The map was asked to restart but has not reported the new "
-                                                     "version yet; see runtime/map-server.log beside its database")
+            for entry in pending:
+                entry.update(status="pending",
+                             error="The map was asked to restart but has not reported the new version yet; "
+                                   "its log (runtime/map-server.log beside its database, or the terminal "
+                                   "running it) says why")
                 results.append(entry)
             break
         time.sleep(0.1)
-    for entry in results:
-        if entry.get("status") == "restarted" and "version" not in entry:
-            health = read_health(int(entry["url"].rstrip("/").rsplit(":", 1)[1]))
-            if is_map(health):
-                entry.update(pid=health["pid"], version=health["runtime"].get("version"),
-                             generation=health.get("installation_generation"))
     return sorted(results, key=lambda item: item["url"])
 
 
@@ -582,8 +749,8 @@ def after_activation(result):
 
     Maps found in the registry or on the default ports are asked to restart on
     the activated generation; older maps there are reported. Maps elsewhere are
-    handled by the next terminal command, which reconciles once per generation,
-    or by richi map itself.
+    handled by the next terminal command, which reconciles once per generation
+    and port range, or by richi map itself.
     """
     if not isinstance(result, dict) or result.get("status") not in {"updated", "rolled_back"}:
         return result
@@ -596,7 +763,7 @@ def after_activation(result):
         result["restart_maps_required"] = True
         return result
     result["maps"] = maps
-    result["restart_maps_required"] = any(entry.get("status") != "restarted" for entry in maps)
+    result["restart_maps_required"] = any(entry.get("status") not in {"restarted", "current"} for entry in maps)
     cleanup = result.get("cleanup")
     if (any(entry.get("status") == "restarted" for entry in maps)
             and isinstance(cleanup, dict) and cleanup.get("deferred")):
@@ -613,24 +780,34 @@ def after_activation(result):
     return result
 
 
-def _settled(recorded, generation, replace):
-    return (recorded is not None and recorded.get("generation") == generation
-            and (not recorded.get("replacement_pending") or not replace))
+def _ports(value):
+    return sorted({item for item in value if type(item) is int and 1 <= item <= 65535}) \
+        if isinstance(value, list) else []
 
 
-def first_invocation(port, replace=True):
-    """Once per generation, the first command running it hands off stale maps.
+def _settled(recorded, generation, first, interactive):
+    """This generation's maps around ``first`` were handled, as far as this command may."""
+    return (recorded is not None and recorded.get("format_version") == 2
+            and recorded.get("generation") == generation and first in _ports(recorded.get("scanned"))
+            and not (interactive and _ports(recorded.get("pending"))))
+
+
+def first_invocation(port, interactive=True):
+    """Once per generation and port range, a command running it hands off stale maps.
 
     Covers activations by updaters that cannot do it themselves, such as the
-    frozen managers up to 1.1.0. The fast path reads one small file. Without
-    ``replace`` (an agent's command, possibly sandboxed) maps are only asked to
-    hand off themselves; older maps wait for a terminal command or richi map.
+    frozen managers up to 1.1.0. The fast path reads one small file and the
+    command never waits for a map: newer maps are asked to switch, older ones
+    are replaced in the background. Only an ``interactive`` command (a terminal
+    without a chat identity) starts replacements; others record them as pending
+    for the next terminal command, since agents may run sandboxed.
     """
     root, generation = os.environ.get(ROOT_ENV), os.environ.get(GENERATION_ENV)
-    if not root or not generation:
+    if not root or not generation or os.environ.get(PASSIVE_ENV) == "1":
         return
+    first = port if 1 <= port <= 65535 else DEFAULT_PORT
     marker = Path(root) / REGISTRY / MARKER
-    if _settled(_read_json(marker), generation, replace):
+    if _settled(_read_json(marker), generation, first, interactive):
         return
     if not (Path(root) / "state.json").exists() or current_generation(root) != generation:
         return
@@ -643,16 +820,24 @@ def first_invocation(port, replace=True):
         try:
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
+            return  # Another command is handling it right now.
+        recorded = _read_json(marker)
+        if _settled(recorded, generation, first, interactive):
             return
-        if _settled(_read_json(marker), generation, replace):
-            return
-        # Claim first: replacement commands are richi invocations themselves.
-        _atomic_json(marker, {"format_version": 1, "generation": generation, "status": "running",
-                              "time": int(time.time())})
-        maps = reconcile(range(port, min(port + PORT_RANGE, 65536)), replace=replace)
-        _atomic_json(marker, {"format_version": 1, "generation": generation, "status": "done",
-                              "time": int(time.time()), "maps": maps,
-                              "replacement_pending": any(entry.get("status") == "restart_required"
-                                                         for entry in maps)})
+        if recorded is None or recorded.get("format_version") != 2 or recorded.get("generation") != generation:
+            recorded = {}
+        scanned, pending = _ports(recorded.get("scanned")), _ports(recorded.get("pending"))
+        ports = set() if first in scanned else set(range(first, min(first + PORT_RANGE, 65536)))
+        if interactive:
+            ports |= set(pending)
+        maps = reconcile(ports, replace=interactive, wait=False)
+        # Older maps this command could not replace wait for a terminal command;
+        # pending ports it did not look at stay pending.
+        waiting = {_port_of(entry) for entry in maps
+                   if entry.get("status") == "restart_required" and not entry.get("terminal")}
+        # Written last: an interrupted command leaves the work to the next one.
+        _atomic_json(marker, {"format_version": 2, "generation": generation, "time": int(time.time()),
+                              "scanned": sorted(set(scanned) | {first})[-64:],
+                              "pending": sorted((set(pending) - ports) | waiting), "maps": maps})
     finally:
         os.close(descriptor)

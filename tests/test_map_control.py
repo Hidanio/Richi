@@ -3,6 +3,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
 from pathlib import Path
+import pty
 import re
 import shutil
 import signal
@@ -62,16 +63,27 @@ class ArgumentTests(unittest.TestCase):
                 "/synthetic/site", payload, action, *rest]
 
     def test_only_the_exact_runtime_runner_serving_a_map_is_recognized(self):
-        self.assertEqual(maps.runner_launcher(self.runner("serve", "--db", "/x", "--port", "1"), self.runtime),
-                         "/synthetic/site")
-        self.assertEqual(maps.runner_launcher(self.runner("cli", "--db", "/x", "map", "serve", "--port", "1"),
-                                              self.runtime), "/synthetic/site")
+        accepted = [self.runner("serve", "--db", "/x", "--port", "1"),
+                    self.runner("cli", "--db", "/x", "map", "serve", "--port", "1"),
+                    self.runner("cli", "--db", "/x", "--config", "/c", "map", "--port", "8766", "serve"),
+                    self.runner("cli", "--db=/x", "--compact-json", "-wteam", "map", "--port=1", "serve"),
+                    self.runner("cli", "--project-path", "/p", "map", "--open", "serve")]
+        development = self.runner("cli", "--db", "/x", "map", "serve")
+        development[3:3] = ["-X", "pycache_prefix=/tmp/richi-bytecode-1-2"]
+        for arguments in accepted + [development]:
+            with self.subTest(arguments=arguments):
+                self.assertEqual(maps.runner_launcher(arguments, self.runtime), "/synthetic/site")
         rejected = [self.runner("cli", "--db", "/x", "recall", "map"),
+                    self.runner("cli", "--db", "/x", "recall", "map", "serve"),
+                    self.runner("cli", "--db", "/x", "entry", "put", "map", "serve"),
                     self.runner("cli", "--db", "/x", "map", "--no-open"),
+                    self.runner("cli", "--db", "/x", "map", "stop", "serve"),
+                    self.runner("cli", "--unknown", "map", "serve"),
                     self.runner("git_worker"),
                     self.runner("serve", runtime=dict(self.runtime, identity="b" * 64)),
                     ["/bin/sleep", "60"],
-                    ["python", "-c", "print()", "/synthetic/site", json.dumps(self.runtime), "serve"]]
+                    ["python", "-c", "print()", "/synthetic/site", json.dumps(self.runtime), "serve"],
+                    ["python", "-I", "-c", self.runner("serve")[4]] + self.runner("serve")[5:]]
         for arguments in rejected:
             with self.subTest(arguments=arguments):
                 self.assertIsNone(maps.runner_launcher(arguments, self.runtime))
@@ -89,6 +101,20 @@ class ArgumentTests(unittest.TestCase):
         self.assertEqual(maps.process_arguments(child.pid)[1:],
                          ["-I", "-c", code, "/with space/path", "--port", "1"])
         self.assertEqual(maps.process_uid(child.pid), os.getuid())
+
+    @unittest.skipUnless(sys.platform == "darwin" or sys.platform.startswith("linux"), "Process terminals")
+    def test_a_map_attached_to_a_terminal_is_told_apart_from_a_background_map(self):
+        background = subprocess.Popen(["/bin/sleep", "30"], start_new_session=True)
+        self.addCleanup(background.wait)
+        self.addCleanup(background.kill)
+        pid, controller = pty.fork()
+        if pid == 0:
+            os.execv("/bin/sleep", ["/bin/sleep", "30"])
+        self.addCleanup(os.close, controller)
+        self.addCleanup(os.waitpid, pid, 0)
+        self.addCleanup(os.kill, pid, signal.SIGKILL)
+        self.assertEqual(maps._process_owner(background.pid), (os.getuid(), False))
+        self.assertEqual(maps._process_owner(pid), (os.getuid(), True))
 
 
 @unittest.skipIf(sys.platform == "win32", "Detached maps target macOS and Linux")
@@ -164,8 +190,9 @@ class MapControlTests(unittest.TestCase):
             listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             listener.bind(("127.0.0.1", self.port))
             listener.listen()
-            refused = self.map("stop", ok=False)
-            self.assertEqual((refused["status"], refused["reason"]), ("refused", "not_richi_map"))
+            # Nothing of this workspace runs there; the other program is left alone.
+            self.assertEqual(self.map("stop"), {"status": "not_running", "url": maps.url(self.port),
+                                                "note": "Another program uses this port; it was not touched"})
         forged = {"application": "project-memory-map", "pid": sleeper.pid, "database": str(self.database),
                   "config_file": str(self.config), "api_version": serve.API_VERSION,
                   "capabilities": list(serve.CAPABILITIES), "workspace": None,
@@ -179,9 +206,12 @@ class MapControlTests(unittest.TestCase):
                 worker = threading.Thread(target=server.serve_forever, daemon=True)
                 worker.start()
                 try:
-                    refused = self.map("stop", ok=False)
-                    self.assertEqual((refused["status"], refused["reason"]), ("refused", reason))
-                    if reason == "unverified_process":
+                    if reason == "other_workspace":
+                        self.assertEqual(self.map("stop")["note"], "The map on this port serves another "
+                                         "workspace; select that workspace to stop it")
+                    else:
+                        refused = self.map("stop", ok=False)
+                        self.assertEqual((refused["status"], refused["reason"]), ("refused", reason))
                         # richi map replaces stale maps only after verification too.
                         launched = self.map("--no-open", ok=False)
                         self.assertEqual(launched["reason"], "unverified_process")
@@ -225,23 +255,198 @@ class MapControlTests(unittest.TestCase):
         self.assertEqual(current["runtime"]["package"], str(Path(serve.__file__).parent))
         self.assertEqual(self.map("--no-open")["status"], "existing")
 
-    def test_handoff_signal_reexecutes_the_map_in_place(self):
+    def test_a_handoff_request_without_an_installation_change_is_ignored(self):
+        # Managed handoffs are covered by test_update_e2e; here the signal alone
+        # must neither restart nor terminate the map.
         started = self.map("--no-open")
         before = self.health()
         os.kill(started["pid"], signal.SIGUSR1)
         deadline = time.monotonic() + 20
         log = self.root / "runtime" / "map-server.log"
-        while "Restart requested; restarting map on the same URL." not in log.read_text():
+        while "Restart request ignored" not in log.read_text():
             self.assertLess(time.monotonic(), deadline, log.read_text())
             time.sleep(0.1)
-        while not maps.is_map(self.health()):
-            self.assertLess(time.monotonic(), deadline, log.read_text())
-            time.sleep(0.1)
-        after = self.health()
-        self.assertEqual(after["pid"], started["pid"])
-        self.assertEqual(after["runtime"], before["runtime"])
+        self.assertEqual(self.health(), before)
+        self.assertNotIn("restarting map", log.read_text())
         self.assertEqual(self.map("--no-open")["status"], "existing")
         self.assert_no_installation_files()
+
+    def test_a_map_whose_launcher_cannot_hand_off_does_not_advertise_it(self):
+        # A development runtime paired with an installed launcher from before
+        # the handoff: the signal's default action would terminate that map.
+        site = self.copied_launcher("0.0.2")
+        (site / "richi_launcher" / "maps.py").unlink()
+        runner = "import sys;sys.path.insert(0,sys.argv[1]);from richi_launcher.cli import main;sys.exit(main(sys.argv[2:]))"
+        log = (self.root / "old-launcher.log").open("w")
+        self.addCleanup(log.close)
+        old = subprocess.Popen([sys.executable, "-I", "-B", "-c", runner, str(site), "--config", str(self.config),
+                                "map", "serve", "--port", str(self.port)],
+                               env=self.environment, stdout=log, stderr=log, cwd=self.root)
+        self.addCleanup(lambda: old.poll() is None and old.terminate())
+        deadline = time.monotonic() + 20
+        while not maps.is_map(self.health()):
+            self.assertIsNone(old.poll(), (self.root / "old-launcher.log").read_text())
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.1)
+        self.assertNotIn(maps.HANDOFF_CAPABILITY, self.health()["capabilities"])
+        self.assertEqual(self.health()["launcher"], str(site))
+        old.terminate()
+        self.assertEqual(old.wait(timeout=10), 0)
+
+
+class InstallationHookTests(unittest.TestCase):
+    """The first command of a generation never waits for maps and starts servers only from a terminal."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="richi-map-hook-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        (self.root / "state.json").write_text(json.dumps({"current": "g2"}))
+        environment = mock.patch.dict(os.environ, {maps.ROOT_ENV: str(self.root), maps.GENERATION_ENV: "g2"})
+        environment.start()
+        self.addCleanup(environment.stop)
+        os.environ.pop(maps.PASSIVE_ENV, None)
+        self.marker = self.root / maps.REGISTRY / maps.MARKER
+
+    def run_hook(self, port, interactive, found):
+        with mock.patch.object(maps, "reconcile", return_value=found) as reconcile:
+            maps.first_invocation(port, interactive=interactive)
+        return reconcile
+
+    def test_pending_replacements_wait_for_a_terminal_and_each_range_is_scanned_once(self):
+        old = {"url": maps.url(9000), "pid": 4242, "status": "restart_required", "error": "older map"}
+        agent = self.run_hook(9000, False, [old])
+        self.assertEqual(set(agent.call_args.args[0]), set(range(9000, 9011)))
+        self.assertEqual(agent.call_args.kwargs, {"replace": False, "wait": False})
+        recorded = json.loads(self.marker.read_text())
+        self.assertEqual((recorded["generation"], recorded["scanned"], recorded["pending"]), ("g2", [9000], [9000]))
+        self.assertFalse(self.run_hook(9000, False, []).called)
+        # A terminal command for another workspace's port also takes the pending one.
+        terminal = self.run_hook(8800, True, [dict(old, status="replacing")])
+        self.assertEqual(set(terminal.call_args.args[0]), set(range(8800, 8811)) | {9000})
+        self.assertEqual(terminal.call_args.kwargs, {"replace": True, "wait": False})
+        recorded = json.loads(self.marker.read_text())
+        self.assertEqual((recorded["scanned"], recorded["pending"]), ([8800, 9000], []))
+        self.assertFalse(self.run_hook(9000, True, []).called)
+        self.assertFalse(self.run_hook(8800, True, []).called)
+
+    def test_maps_in_a_terminal_are_not_pending_and_interrupted_scans_repeat(self):
+        foreground = {"url": maps.url(9000), "pid": 4242, "status": "restart_required", "terminal": True}
+        self.run_hook(9000, False, [foreground])
+        self.assertEqual(json.loads(self.marker.read_text())["pending"], [])
+        with mock.patch.object(maps, "reconcile", side_effect=KeyboardInterrupt), \
+                self.assertRaises(KeyboardInterrupt):
+            maps.first_invocation(7000, interactive=True)
+        self.assertEqual(json.loads(self.marker.read_text())["scanned"], [9000])
+        self.assertTrue(self.run_hook(7000, True, []).called)
+
+    def test_entry_point_checks_and_other_generations_never_scan(self):
+        with mock.patch.dict(os.environ, {maps.PASSIVE_ENV: "1"}):
+            self.assertFalse(self.run_hook(9000, True, []).called)
+        with mock.patch.dict(os.environ, {maps.GENERATION_ENV: "g1"}):
+            self.assertFalse(self.run_hook(9000, True, []).called)
+        self.assertFalse(self.marker.exists())
+
+    def test_richi_map_waits_while_a_registered_map_reexecutes(self):
+        sleeper = subprocess.Popen(["/bin/sleep", "30"])
+        self.addCleanup(sleeper.wait)
+        self.addCleanup(sleeper.kill)
+        port = free_port()
+        directory = self.root / maps.REGISTRY
+        directory.mkdir()
+        entry = directory / ("%d.json" % port)
+        entry.write_text(json.dumps({"pid": sleeper.pid, "port": port, "restarting": int(time.time())}))
+        started = time.monotonic()
+        maps.wait_for_restarts([port], timeout=0.6)
+        self.assertGreaterEqual(time.monotonic() - started, 0.5)
+        sleeper.kill()
+        sleeper.wait()
+        started = time.monotonic()
+        maps.wait_for_restarts([port], timeout=5)
+        self.assertLess(time.monotonic() - started, 1)
+        entry.write_text(json.dumps({"pid": os.getpid(), "port": port}))
+        started = time.monotonic()
+        maps.wait_for_restarts([port], timeout=5)
+        self.assertLess(time.monotonic() - started, 1)
+
+
+class FollowerTests(unittest.TestCase):
+    """When a map re-executes on its installation's current generation."""
+
+    def setUp(self):
+        environment = mock.patch.dict(os.environ, {maps.ROOT_ENV: "/synthetic/root", maps.GENERATION_ENV: "g1",
+                                                   maps.GRACE_ENV: "600"})
+        environment.start()
+        self.addCleanup(environment.stop)
+        self.current = "g1"
+        patcher = mock.patch.object(maps, "current_generation", side_effect=lambda _root: self.current)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.capabilities = list(serve.CAPABILITIES)
+        self.follower = serve.InstallationFollower(Path("/synthetic/memory.sqlite3"), ["--db", "/synthetic/memory.sqlite3"],
+                                                   ["map", "serve", "--port", "1"], {}, self.capabilities)
+
+    def due(self, command=("python", "entry"), problem=None):
+        with mock.patch.object(maps, "handoff_command", return_value=(command, problem)) as prepared, \
+                mock.patch("sys.stdout"):
+            return self.follower.due(), prepared
+
+    def test_requests_follow_only_a_new_generation_after_the_entry_point_check(self):
+        self.follower.requested.set()
+        self.assertEqual(self.due()[0], False)  # Same generation: ignored.
+        self.assertFalse(self.follower.requested.is_set())
+        self.current = "g2"
+        self.assertEqual(self.due()[0], False)  # No request yet and the grace has not passed.
+        self.follower.requested.set()
+        followed, prepared = self.due()
+        self.assertTrue(followed)
+        self.assertEqual(prepared.call_args.args[:3], (["--db", "/synthetic/memory.sqlite3"],
+                                                        ["map", "serve", "--port", "1"], {}))
+        self.assertEqual((self.follower.command, self.follower.reason), (("python", "entry"), "Restart requested"))
+
+    def test_a_release_that_cannot_start_is_not_followed_and_rechecked_later(self):
+        self.current = "g2"
+        self.follower.requested.set()
+        self.assertEqual(self.due(None, "the current release did not start: boom")[0], False)
+        self.follower.requested.set()
+        followed, prepared = self.due()
+        self.assertFalse(followed)
+        self.assertFalse(prepared.called)
+        self.follower.blocked = ("g2", time.monotonic() - serve.HANDOFF_RECHECK, "old")
+        self.follower.requested.set()
+        self.assertTrue(self.due()[0])
+
+    def test_a_launcher_it_cannot_use_withdraws_the_capability(self):
+        self.current = "g2"
+        self.follower.requested.set()
+        with mock.patch.object(maps, "handoff_command", side_effect=TypeError("changed API")), \
+                mock.patch("sys.stdout"):
+            self.assertFalse(self.follower.due())
+        self.assertNotIn(maps.HANDOFF_CAPABILITY, self.capabilities)
+        self.follower.requested.set()
+        self.assertEqual(self.due()[0], False)
+
+
+class HandoffCommandTests(unittest.TestCase):
+    def check(self, code, managed=True):
+        command = [sys.executable, "-I", "-c", code]
+        with mock.patch.object(maps, "handoff_problem", return_value=None), \
+                mock.patch.object(maps, "stable_command", return_value=(command, managed)):
+            return maps.handoff_command(["--db", "/x"], ["map", "serve"],
+                                        {maps.LEASE_ENV: "7", "PATH": os.environ.get("PATH", "")})
+
+    def test_the_entry_point_must_start_the_release_before_a_map_replaces_itself(self):
+        passive = ("import os, sys; sys.exit(0 if os.environ.get('RICHI_MAPS_PASSIVE') == '1' "
+                   "and 'RICHI_INSTALLATION_LEASE_FD' not in os.environ else 4)")
+        command, problem = self.check(passive)
+        self.assertIsNone(problem)
+        self.assertEqual(command[-1], passive)
+        self.assertEqual(self.check("import sys; sys.stderr.write('broken'); sys.exit(1)"),
+                         (None, "the current release did not start: broken"))
+        self.assertEqual(self.check("pass", managed=False),
+                         (None, "the installation entry point is unavailable; repair the installation"))
+        with mock.patch.object(maps, "handoff_problem", return_value="release 9 is incomplete"):
+            self.assertEqual(maps.handoff_command([], [], {}), (None, "release 9 is incomplete"))
 
 
 class LaunchRaceTests(unittest.TestCase):

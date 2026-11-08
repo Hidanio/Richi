@@ -62,8 +62,8 @@ richi update auto disable
 
 The current and previous versions are retained; running processes keep their
 code until they finish. A running map moves to the new version on the same URL
-without manual steps; a map started by 1.1.0 or earlier is replaced by the first
-command from a terminal or by `richi map` (see [UPDATES.md](UPDATES.md)).
+without manual steps; a map started by 1.1.0 or earlier is replaced by the next
+knowledge command from a terminal or by `richi map` (see [UPDATES.md](UPDATES.md)).
 `richi map stop` and `richi map restart` manage the map explicitly. Workspace
 dev settings and databases remain unchanged. See [UPDATES.md](UPDATES.md) for checks, cleanup
 and the initial transition from an older installation.

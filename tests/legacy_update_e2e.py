@@ -13,7 +13,9 @@ DIST holds this release's wheel and its richi-release.json.
 """
 import io
 import json
+import os
 from pathlib import Path
+import pty
 import shlex
 import sqlite3
 import subprocess
@@ -33,9 +35,18 @@ BASE = "https://github.com/Hidanio/Richi/releases/"
 API = "https://api.github.com/repos/Hidanio/Richi/releases/"
 
 
-def run(command, env=None, ok=True, stdin=None, cwd=None):
-    result = subprocess.run([str(item) for item in command], env=env, input=stdin, cwd=cwd,
-                            capture_output=True, text=True, timeout=600)
+def run(command, env=None, ok=True, stdin=None, cwd=None, terminal=False):
+    controller = device = None
+    if terminal:
+        # A person at a terminal: only such a command starts replacement maps.
+        controller, device = pty.openpty()
+    try:
+        result = subprocess.run([str(item) for item in command], env=env, input=stdin, cwd=cwd,
+                                stdin=device, capture_output=True, text=True, timeout=600)
+    finally:
+        for descriptor in (controller, device):
+            if descriptor is not None:
+                os.close(descriptor)
     if ok is not None and (result.returncode == 0) != ok:
         raise AssertionError("{} -> {}\n{}\n{}".format(command, result.returncode, result.stdout, result.stderr))
     return result
@@ -115,7 +126,7 @@ def main():
             return run([python, "-I", "-B", runner, latest, "update", *args], env, ok=ok)
 
         def version():
-            return cli("--version").stdout.strip()
+            return run([richi, "--version"], env, terminal=True).stdout.strip()
 
         def setup_state(*extra):
             data = cli_json("setup", *extra, "--status")
@@ -152,12 +163,15 @@ def main():
             assert json.loads(update("apply").stdout)["status"] == "updated"
             # The frozen manager leaves its map running 1.0.1 code.
             assert health()["runtime"]["version"] == "1.0.1" and health()["pid"] == started["pid"]
-            # An agent's command may run in a sandbox: it never starts a server.
+            # An agent's command may run in a sandbox, and a script may run
+            # unattended: neither starts a server.
             cli("--chat", "legacy-chat", "project", "list")
+            cli("project", "list")
             assert health()["runtime"]["version"] == "1.0.1" and health()["pid"] == started["pid"]
-            # The first terminal command of the new generation replaces it on the same URL.
+            # The next terminal command of the new generation replaces it on the
+            # same URL in the background.
             assert version() == "Richi " + target and setup_state() == ("configured", []), setup_state()
-            replaced = map_version(target, timeout=5)
+            replaced = map_version(target)
             assert replaced["pid"] != started["pid"] and maps.process_arguments(started["pid"]) is None, replaced
             assert cli_json("map", "--no-open")["status"] == "existing"
             current = cli_json("--chat", "legacy-chat", "chat", "current")
@@ -172,8 +186,8 @@ def main():
             cli("update", "rollback")
             assert version() == "Richi " + target
             # The current manager rolled forward; the restored 1.0.1 map is replaced
-            # by the first command again, still on the same URL.
-            assert map_version(target, timeout=5)["pid"] != replaced["pid"]
+            # by the first terminal command again, still on the same URL.
+            assert map_version(target)["pid"] != replaced["pid"]
 
             # Documented edge: a schema-3 store after a rollback performed by 1.0.1.
             cli("--workspace", "alpha", "backup")

@@ -230,8 +230,11 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="richi-map-handoff-") as temporary:
             self.root = Path(temporary).resolve()
             port = int(synthetic_port())
-            # Every command addresses this ephemeral port, never a real map.
-            self.environment = cli_environment(self.root, RICHI_PORT=str(port))
+            # Every command addresses this ephemeral port, never a real map. The
+            # map never follows by itself until the last step, so each step
+            # proves who handed it off however slow the machine is.
+            self.environment = cli_environment(self.root, RICHI_PORT=str(port),
+                                               **{maps.GRACE_ENV: "3600"})
             for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
                 self.environment.pop(key, None)
             wheels = {version: self.make_wheel(version) for version in ("0.1.0", "0.2.0", "0.3.0", "0.4.0", "0.5.0")}
@@ -305,16 +308,19 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
                 assert_handed_off(rolled_back, "0.2.0", "0.3.0")
 
                 # A frozen updater activates 0.4.0 and leaves the map behind. The
-                # first command of the new generation hands it off once.
+                # first command of the new generation asks it to switch, once,
+                # without waiting for it.
                 frozen = updater("frozen", self.feed_fixture(wheels["0.4.0"], "0.4.0"), "update", "apply")
                 self.assertEqual(frozen["status"], "updated")
                 self.assertNotIn("maps", frozen)
                 self.assertEqual(health()["runtime"]["version"], "0.2.0")
                 self.console("--version")
-                self.assertEqual((health()["pid"], health()["runtime"]["version"]), (pid, "0.4.0"))
                 marker = json.loads((Path(frozen["root"]) / "maps" / "handoff.json").read_text())
-                self.assertEqual(marker["generation"], frozen["current"]["generation"])
-                self.assertEqual([(entry["status"], entry["version"]) for entry in marker["maps"]], [("restarted", "0.4.0")])
+                self.assertEqual((marker["generation"], marker["scanned"], marker["pending"]),
+                                 (frozen["current"]["generation"], [port], []))
+                self.assertEqual([(entry["status"], entry["from_version"]) for entry in marker["maps"]],
+                                 [("requested", "0.2.0")])
+                self.assertEqual(wait_for("0.4.0")["pid"], pid)
 
                 # The desktop shortcut runs richi map right after a frozen
                 # update: it asks the map to switch in place on the same URL.
@@ -326,7 +332,11 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
                 self.assertEqual((shortcut["previous"]["version"], health()["runtime"]["version"]), ("0.4.0", "0.5.0"))
 
                 # A frozen rollback runs no Richi command at all: the map notices
-                # the installation change and follows it by itself.
+                # the installation change and follows it by itself after a grace.
+                self.environment[maps.GRACE_ENV] = "1"
+                restarted = self.console_json("map", "restart", "--no-open")
+                self.assertEqual((restarted["status"], restarted["previous"]["pid"]), ("restarted", pid))
+                pid = restarted["pid"]
                 self.assertEqual(updater("frozen-rollback")["status"], "rolled_back")
                 self.assertEqual(wait_for("0.4.0")["pid"], pid)
                 self.assertEqual(self.console_json("map", "--no-open")["status"], "existing")
@@ -344,7 +354,7 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="richi-map-schema-") as temporary:
             self.root = Path(temporary).resolve()
             port = int(synthetic_port())
-            self.environment = cli_environment(self.root, RICHI_PORT=str(port))
+            self.environment = cli_environment(self.root, RICHI_PORT=str(port), **{maps.GRACE_ENV: "1"})
             for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
                 self.environment.pop(key, None)
             older, newer = self.make_wheel("0.1.0", storage_schema=2), self.make_wheel("0.2.0")
@@ -383,8 +393,9 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
                 self.assertEqual(log.read_text().count("cannot read database schema 3"), 1)
                 # Rolling forward again needs no restart.
                 forward = self.console_json("update", "rollback")
-                self.assertEqual((forward["current"]["version"], forward["maps"], forward["restart_maps_required"]),
-                                 ("0.2.0", [], False))
+                self.assertEqual((forward["current"]["version"], forward["restart_maps_required"]), ("0.2.0", False))
+                self.assertEqual([(entry["status"], entry["pid"], entry["version"]) for entry in forward["maps"]],
+                                 [("current", pid, "0.2.0")])
                 self.assertEqual(maps.read_health(port, timeout=2)["pid"], pid)
             finally:
                 current = maps.read_health(port, timeout=2)
