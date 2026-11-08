@@ -88,7 +88,8 @@ The equivalent JSON settings are:
 ```
 
 `dev` defaults to `false`. This setting applies to every command, agent and map
-using this configuration in the selected workspace. Each CLI invocation in dev
+using this configuration in the selected workspace, and moves the managed agent
+skills to the checkout ([what dev switches](#what-dev-switches)). Each CLI invocation in dev
 uses the current source; edits and branch switches immediately affect subsequent
 work. The map automatically reloads its server when Python or SQL files change.
 Refresh the browser page to load interface changes.
@@ -116,6 +117,68 @@ future dependencies must be installed in that environment.
 operation and the map check schema compatibility before replacing the runtime;
 there are no automatic migrations. For schema experiments, use a separate copy
 of the database and its associated `artifacts/git/` directory.
+
+<a id="что-переключает-dev"></a>
+### What dev switches
+
+Dev switches two things: the **runtime** (`src/richi/` for every CLI call,
+agent call and the map) and the **managed Project Memory skill link of every
+agent connected with `richi setup`**. With dev on, each of these links points to
+`<development.source>/skills/project-memory`, so every agent reads the skill text
+that matches the code it runs. This works the same for any supported agent (for
+example `~/.agents/skills/project-memory` for Codex). An agent connected later
+follows the agents already connected; the first one starts on the release skill
+until the next `config set dev true`. Dev does not switch the installed launcher (`launcher/`, including
+`setup`, `update` and `config`), agent-specific integration files such as
+managed instruction blocks and hooks, or PATH blocks: they always follow the
+installed release.
+
+Switching happens automatically. `richi config set dev true` or `false`
+re-points every managed link in one recoverable, journaled transaction and
+reports it in `agent_skills`:
+
+```json
+"agent_skills": {"status": "changed", "mode": "dev",
+                 "source": "/path/to/Richi",
+                 "target": "/path/to/Richi/skills/project-memory",
+                 "changes": ["/home/me/.agents/skills/project-memory",
+                             "/home/me/.claude/skills/project-memory"]}
+```
+
+`status` is `changed`, `unchanged`, `not_configured` (no `richi setup` yet),
+`skipped` (see below), `unavailable` (not a managed installation), `conflict` (Richi refused: a
+managed file was changed by hand or its metadata needs repair), `error` or `busy`
+(an update or setup holds the installation); in the
+last three cases no link changed. `config set development.source` re-points the
+links while dev is on. `config show` reports where the links point and `matches_config`;
+agents state the mode at the start of each chat and point out a mismatch.
+Open a new agent chat after switching; running chats may keep the loaded skill.
+
+`dev` belongs to a workspace, but skill links are user-wide: the latest
+`config set dev` in any registered workspace decides where they point. A
+configuration file outside the workspace registry, selected ad hoc with
+`--config` or `RICHI_CONFIG`, changes only its own settings: `agent_skills`
+reports `skipped` and the links stay where they are. If `config show`
+reports `"matches_config": false`, rerun `richi config set dev true` (or `false`)
+in the workspace you work in.
+
+- Links follow a checkout only if it passes the same check as the dev runtime
+  (`pyproject.toml` and `src/richi/`) and has `skills/project-memory/SKILL.md`.
+  Otherwise, and for dev without `development.source`, they point to the
+  installed release; `reason` explains why. Restoring release links with
+  `config set dev false` never depends on the checkout, even a missing or
+  broken one.
+- Skill edits in the checkout are development work, not drift.
+- A release skill edited through its link, or a managed link replaced by hand,
+  blocks the switch (`"status": "conflict"`) and is preserved. The configuration
+  is saved anyway; reconcile the reported path and rerun the command.
+- Skills not created by `richi setup` are never changed.
+- `richi update apply` and `richi update rollback` keep the links on the checkout
+  while dev is on. If the checkout lost its skill, activation restores the
+  release skill. Releases up to 1.1.0 cannot maintain checkout links: run
+  `richi config set dev false` before rolling back to one of them, otherwise it
+  refuses the rollback and changes nothing. `config set dev true` warns in
+  `agent_skills.rollback` when the previous release is one of them.
 
 ## Workspaces
 

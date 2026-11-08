@@ -4,8 +4,9 @@ Use branch names with underscores, such as `audit_fixes_bilingual_docs`, without
 the `codex/` prefix.
 
 Develop the implementation in `src/richi/` and the distributable agent skill in
-`skills/project-memory/`. Installed skills are local deployment copies; update
-and review their source here first. Use the installed `richi` CLI for all local
+`skills/project-memory/`. Installed skills are local deployment copies (with dev
+on, managed skill links point to this checkout); update and review their source
+here first. Use the installed `richi` CLI for all local
 operations; do not add wrappers for the former standalone Python scripts.
 
 The runtime targets Python 3.9+ on macOS and Linux and uses the standard library.
@@ -14,8 +15,10 @@ Install a fixed package into a dedicated virtual environment: upgrade pip with
 The installed launcher in `launcher/richi_launcher/` selects the runtime before
 importing it. Configure the checkout with
 `richi config set development.source /path/to/Richi`, then `richi config set dev true`.
-The same configuration selects development sources for CLI, agents, and map;
-`richi config set dev false` restores the installed package without changing data.
+The same configuration selects development sources for CLI, agents, and map,
+and `config set dev` also moves the managed agent skill links, which are
+user-wide; `richi config set dev false` restores the installed package and skills
+without changing data.
 Ordinary `src/richi/` edits take effect on the next CLI call and reload the running
 map. Launcher changes require reinstalling the package. Use `richi config show`
 to inspect the selected runtime. For an isolated module invocation use

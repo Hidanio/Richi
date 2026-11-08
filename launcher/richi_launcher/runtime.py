@@ -73,12 +73,12 @@ def installed_runtime():
     return describe_runtime(package)
 
 
-def resolve_runtime(settings):
-    if not settings.dev:
-        return installed_runtime()
-    source = settings.development_source
-    if source is None:
-        raise ConfigError("dev is true but development.source is not configured; use richi config set development.source PATH or richi config set dev false")
+def development_package(source):
+    """Return a checkout's runtime package; checks files only, never imports.
+
+    Managed agent skills follow a checkout only when it passes this same check.
+    """
+    source = Path(source)
     package = source / "src" / "richi"
     required = (source / "pyproject.toml", package / "__init__.py", package / "memory.py", package / "serve.py")
     try:
@@ -87,7 +87,16 @@ def resolve_runtime(settings):
         raise ConfigError("Cannot inspect development.source " + str(source) + ": " + str(exc)) from exc
     if not available:
         raise ConfigError("development.source must be a Richi checkout containing pyproject.toml and src/richi: " + str(source))
-    return describe_runtime(package, "dev", source)
+    return package
+
+
+def resolve_runtime(settings):
+    if not settings.dev:
+        return installed_runtime()
+    source = settings.development_source
+    if source is None:
+        raise ConfigError("dev is true but development.source is not configured; use richi config set development.source PATH or richi config set dev false")
+    return describe_runtime(development_package(source), "dev", source)
 
 
 def current_runtime():

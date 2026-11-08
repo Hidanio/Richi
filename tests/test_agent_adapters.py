@@ -2,7 +2,9 @@
 import contextlib
 import io
 import json
+import os
 from pathlib import Path
+import shutil
 import sys
 from types import ModuleType
 import unittest
@@ -83,6 +85,40 @@ class AgentAdapterTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
             installation._activate(self.ctx, old, "rolled_back")
         self.assertEqual((self.profile / "session.cfg").read_text(), "seed")
         self.assertIn("Synthetic release 0.1.0", (self.profile / "skills/project-memory/SKILL.md").read_text())
+
+    def test_dev_mode_moves_any_adapter_skill_without_adapter_code(self):
+        # Dev switching is shared: it moves the skill path from paths() for every
+        # configured adapter; adapter files keep following the installed release.
+        (self.site / "richi_launcher/agent_setup.py").write_text("PROTOCOL = 1\nDEV_SKILL_PROTOCOL = 1\n")
+        self.catalog(self.site, "seed")
+        self.configure()
+        self.configure("--agent", "demo")
+        checkout = self.home / "checkout"
+        shutil.copytree(Path(agent_setup.__file__).parent / "agent_skill", checkout / "skills/project-memory")
+        (checkout / "src/richi").mkdir(parents=True)
+        for name in ("pyproject.toml", "src/richi/__init__.py", "src/richi/memory.py", "src/richi/serve.py"):
+            (checkout / name).write_text("")
+        skill, dev_link = self.profile / "skills/project-memory", str(checkout / "skills/project-memory")
+        policy = (self.profile / "POLICY.md").read_bytes()
+        report = agent_setup.switch_skills(True, checkout)
+        self.assertEqual((report["status"], set(report["agents"])), ("changed", {"codex", "demo"}))
+        self.assertEqual(os.readlink(skill), dev_link)
+        self.assertEqual((self.profile / "session.cfg").read_text(), "seed")
+        status = agent_setup.command(["--agent", "demo", "--status"])
+        self.assertEqual((status["status"], status["skill_mode"]), ("configured", "dev"))
+        state = self.next_state()
+        site = Path(state["generations"][state["current"]]["site"])
+        self.catalog(site, "next")
+        (site / "richi_launcher/agent_setup.py").write_text("PROTOCOL = 1\nDEV_SKILL_PROTOCOL = 1\n")
+        with patch.object(installation, "_collect", return_value={}):
+            installation._activate(self.ctx, state, "updated")
+        self.assertEqual(os.readlink(skill), dev_link)
+        self.assertEqual((self.profile / "session.cfg").read_text(), "next")
+        agent_setup.switch_skills(False, None)
+        self.assertEqual(os.readlink(skill), str(site / "richi_launcher/agent_skill"))
+        self.assertEqual((self.profile / "POLICY.md").read_bytes(), policy)
+        record = agent_setup._load(self.ctx, "demo")
+        self.assertEqual((record["demo_data"], "dev_source" in record), ("next", False))
 
     def test_incompatible_catalogs_fail_before_writes_or_candidate_execution(self):
         self.configure("--agent", "demo")

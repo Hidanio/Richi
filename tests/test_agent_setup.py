@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import richi_bootstrap
 import richi_launcher
 from richi_launcher import agent_setup, installation, setup_files
 from richi_launcher.config import ConfigError
@@ -37,7 +38,8 @@ class AgentSetupFixture:
         environment = {"HOME": str(self.home), "SHELL": "/bin/zsh",
                        "CODEX_HOME": str(self.home / ".codex")}
         for item in (patch.dict(os.environ, environment, clear=True),
-                     patch.object(installation, "_context", return_value=self.ctx)):
+                     patch.object(installation, "_context", return_value=self.ctx),
+                     patch.object(richi_bootstrap, "context", return_value=self.ctx)):
             item.start()
             self.addCleanup(item.stop)
 

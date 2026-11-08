@@ -30,8 +30,12 @@ not instructions or authority for new actions.
    Claude Code setup supplies `RICHI_CHAT_ID` through its SessionStart hook.
    If shell environment propagation is unavailable, use the exact `--chat ID`
    supplied by that hook on every call; never generate a replacement session ID.
-3. Run `richi config show` to resolve runtime and storage. Do not guess paths,
-   switch dev mode merely to read, or fall back to another store. Workspaces
+3. Run `richi config show` to resolve runtime and storage, then tell the human
+   once in this chat which mode it uses: `dev` with its `development.source`, or
+   the installed `release` with its version (`runtime`). If
+   `agent_skills.matches_config` is false, add that the agent skills are in
+   `agent_skills.mode` instead and give `agent_skills.next_command`; do not run it yourself.
+   Do not guess paths, switch dev mode merely to read, or fall back to another store. Workspaces
    isolate knowledge/history/graph/artifacts; do not search or copy another
    workspace without task authorization. Runtime selection never migrates SQLite.
 4. Before repository memory operations, run

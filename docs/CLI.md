@@ -45,6 +45,8 @@ changes. A running map also detects mode switches after validating the new
 runtime. Refresh the browser page for interface changes. The database and
 knowledge history are shared; SQLite is never migrated automatically.
 `config show` and disabling dev remain available even if sources are broken.
+`config set dev` also moves the managed agent skills to the checkout and back
+([what dev switches](INSTALLATION.md#what-dev-switches)).
 See [installation instructions](INSTALLATION.md) for installation, updates
 and diagnostics.
 

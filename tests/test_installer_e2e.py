@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -111,6 +112,73 @@ class InstallerLifecycleTests(unittest.TestCase):
             failed = self.run_process([console, "update", "rollback"], ok=False)
             self.assertIn("edited", failed.stderr)
             self.assertEqual(self.run_process([console, "--version"]).stdout.strip(), "Richi 0.3.0")
+
+    def test_dev_mode_moves_managed_skills_through_update_rollback_and_recovery(self):
+        with tempfile.TemporaryDirectory(prefix="richi-dev-skills-") as temporary:
+            self.root = Path(temporary).resolve()
+            home = self.root / "cli-home"
+            self.environment = cli_environment(self.root, SHELL="/bin/zsh")
+            for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
+                self.environment.pop(key, None)
+            wheels = {v: self.make_wheel(v) for v in ("0.1.0", "0.2.0")}
+            feeds = {v: self.feed_fixture(w, v) for v, w in wheels.items()}
+            archive = self.root / "richi-installer.pyz"
+            repository = Path(__file__).resolve().parents[1]
+            self.run_process([sys.executable, repository / "scripts/build_installer.py", wheels["0.1.0"],
+                              "--output", archive])
+            configured = json.loads(self.run_process([
+                sys.executable, "-I", archive, "--yes", "--no-path", "--wheel", wheels["0.1.0"],
+                "--manifest", self.root / "0.1.0-manifest.json"]).stdout)
+            console, python = home / ".local/bin/richi", Path(configured["prefix"]) / "bin/python"
+            self.run_process([console, "setup", "--agent", "claude", "--yes", "--no-path"])
+            codex, claude = home / ".agents/skills/project-memory", home / ".claude/skills/project-memory"
+            protected = {path: path.read_bytes() for path in (
+                home / ".codex/AGENTS.md", home / ".claude/CLAUDE.md", home / ".claude/settings.json")}
+            # A synthetic Richi checkout: runtime sources and the canonical skill.
+            checkout = self.root / "checkout"
+            shutil.copytree(Path(lifecycle.richi.__file__).resolve().parent, checkout / "src/richi",
+                            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+            (checkout / "src/richi/__init__.py").write_text('__version__ = "dev-checkout"\n')
+            shutil.copyfile(repository / "pyproject.toml", checkout / "pyproject.toml")
+            shutil.copytree(repository / "skills/project-memory", checkout / "skills/project-memory")
+            dev_link = str(checkout / "skills/project-memory")
+
+            def config(*arguments):
+                return json.loads(self.run_process([console, "config", *arguments]).stdout)
+
+            def status(agent):
+                return json.loads(self.run_process([console, "setup", "--agent", agent, "--status"]).stdout)
+
+            release = os.readlink(codex)
+            self.assertEqual(config("set", "development.source", checkout)["agent_skills"]["mode"], "release")
+            enabled = config("set", "dev", "true")
+            self.assertEqual((enabled["runtime"]["mode"], enabled["agent_skills"]["status"]), ("dev", "changed"))
+            self.assertEqual(sorted(enabled["agent_skills"]["changes"]), sorted([str(codex), str(claude)]))
+            self.assertEqual((os.readlink(codex), os.readlink(claude)), (dev_link, dev_link))
+            self.assertEqual(self.run_process([console, "--version"]).stdout.strip(), "Richi dev-checkout")
+            for agent in ("codex", "claude"):
+                self.assertEqual((status(agent)["status"], status(agent)["skill_mode"]), ("configured", "dev"))
+            offline = self.root / "offline.py"
+            offline.write_text(lifecycle._OFFLINE_COMMAND)
+            updated = json.loads(self.run_process([python, "-I", offline, feeds["0.2.0"], "update", "apply"]).stdout)
+            self.assertEqual(updated["agent_skills"]["claude"]["mode"], "dev")
+            self.assertEqual((os.readlink(codex), os.readlink(claude)), (dev_link, dev_link))
+            self.assertIn("v0.2.0", status("codex")["generation"])
+            # The rollback target's manager (also dev-capable) keeps the checkout.
+            self.run_process([console, "update", "rollback"])
+            self.assertEqual((os.readlink(codex), os.readlink(claude)), (dev_link, dev_link))
+            self.assertEqual(status("claude")["status"], "configured")
+            # Disabling dev restores release skills even without the checkout.
+            checkout.rename(self.root / "moved-checkout")
+            self.run_process([console, "--version"], ok=False)
+            disabled = config("set", "dev", "false")
+            self.assertEqual((disabled["runtime"]["mode"], disabled["agent_skills"]["mode"]), ("release", "release"))
+            self.assertEqual((os.readlink(codex), os.readlink(claude)), (release, release))
+            self.assertEqual(self.run_process([console, "--version"]).stdout.strip(), "Richi 0.1.0")
+            for agent in ("codex", "claude"):
+                self.assertEqual((status(agent)["status"], status(agent)["skill_mode"]), ("configured", "release"))
+            for path, data in protected.items():
+                self.assertEqual(path.read_bytes(), data, str(path))
 
 
 if __name__ == "__main__":
