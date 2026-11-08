@@ -7,9 +7,11 @@ import io
 import json
 from pathlib import Path
 import re
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 import venv
@@ -28,6 +30,37 @@ import json
 from richi_launcher import chats, workspaces
 print(json.dumps([str(workspaces._registry_path()), str(chats._registry_path())]))
 """
+
+
+class RefusedConnections:
+    """Counts connections refused by a port, as a browser polling a map would see them.
+
+    A map that hands its listening socket over never refuses one; connections
+    made while it re-executes wait in its backlog for the new code.
+    """
+
+    def __init__(self, port):
+        self.port, self.count, self.attempts = port, 0, 0
+        self.stopped = threading.Event()
+        self.thread = threading.Thread(target=self.run, daemon=True)
+
+    def run(self):
+        while not self.stopped.wait(0.1):
+            self.attempts += 1
+            try:
+                socket.create_connection(("127.0.0.1", self.port), timeout=1).close()
+            except ConnectionRefusedError:
+                self.count += 1
+            except OSError:
+                pass
+
+    def __enter__(self):
+        self.thread.start()
+        return self
+
+    def __exit__(self, *_exception):
+        self.stopped.set()
+        self.thread.join()
 
 
 class RegistryPathTests(unittest.TestCase):
@@ -285,9 +318,13 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
                 self.assertEqual(health()["installation_generation"], "seed")
                 # An unmanaged installation writes nothing to its data directory.
                 self.assertEqual(list(self.root.rglob("installations")), [])
-                applied = updater("offline", self.feed_fixture(wheels["0.2.0"], "0.2.0"), "update", "apply")
+                with RefusedConnections(port) as refused:
+                    applied = updater("offline", self.feed_fixture(wheels["0.2.0"], "0.2.0"), "update", "apply")
                 self.assertEqual(applied["status"], "updated")
                 current = assert_handed_off(applied, "0.2.0", "0.1.0")
+                # The new code took over the listening socket: no connection was refused.
+                self.assertIn("Took over the listening socket", map_log())
+                self.assertEqual((refused.count, refused.attempts > 0), (0, True))
                 self.assertEqual(current["installation_generation"], applied["current"]["generation"])
                 # Once managed, the map registers, so updaters find it on any port.
                 registry = Path(applied["root"]) / "maps" / ("%d.json" % port)
@@ -326,9 +363,11 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
                 # update: it asks the map to switch in place on the same URL.
                 self.assertEqual(updater("frozen", self.feed_fixture(wheels["0.5.0"], "0.5.0"),
                                          "update", "apply")["status"], "updated")
-                shortcut = self.console_json("map", "--no-open")
+                with RefusedConnections(port) as refused:
+                    shortcut = self.console_json("map", "--no-open")
                 self.assertEqual((shortcut["status"], shortcut["url"], shortcut["pid"]),
                                  ("restarted", maps.url(port), pid))
+                self.assertEqual(refused.count, 0)
                 self.assertEqual((shortcut["previous"]["version"], health()["runtime"]["version"]), ("0.4.0", "0.5.0"))
 
                 # A frozen rollback runs no Richi command at all: the map notices

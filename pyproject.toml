@@ -27,7 +27,7 @@ Repository = "https://github.com/Hidanio/Richi"
 richi = "richi_bootstrap:main"
 
 [tool.setuptools]
-packages = ["richi", "richi_launcher"]
+packages = ["richi", "richi_launcher", "richi_launcher.maps"]
 py-modules = ["richi_bootstrap"]
 package-dir = {"" = "launcher", richi = "src/richi", richi_launcher = "launcher/richi_launcher"}
 

@@ -224,7 +224,10 @@ def main():
         finally:
             current = health()
             if maps.is_map(current):
-                maps.stop(port, current)
+                try:
+                    maps.stop(port, current)
+                except maps.Refused:
+                    pass  # Best effort: the synthetic home is removed next.
     print("Legacy 1.0.1 in-place update passed for Richi " + target)
 
 if __name__ == "__main__":

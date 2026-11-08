@@ -135,7 +135,10 @@ change.
 
 - A map started by this release or later re-executes itself on the newly current
   version, keeping its process and URL; a foreground `richi map serve` stays in
-  its terminal. Right after activation the updater asks the maps it finds to do
+  its terminal. If that version is this release or later too, it takes over the
+  map's listening socket, so connections made during the switch wait for it
+  instead of failing; a switch to 1.1.0 or earlier closes the port for a moment.
+  Right after activation the updater asks the maps it finds to do
   so: those registered by a managed installation and those on the default ports
   (8765 and the next ten, or from `RICHI_PORT`). It waits for them and reports
   them in its JSON result as `maps`, one entry per map with `url`, `pid`,
@@ -154,8 +157,8 @@ change.
   version, for example a rollback performed by 1.1.0 or earlier, the map
   notices it and follows by itself about five seconds later.
 - Before it follows, a map starts the newly current release once through the
-  installation's entry point with its own storage selection (`richi --version`),
-  and checks that the release is complete and declares support for the map's
+  installation's entry point with its own storage selection (`richi --version`,
+  which also tells whether that release takes over the socket), and checks that the release is complete and declares support for the map's
   database schema. Otherwise the map stays on its version, logs the reason once
   and tries again later. This happens, for example, after 1.0.1 rolls itself back
   while the store is at schema 3: 1.0.1 cannot open that store, so the newer map

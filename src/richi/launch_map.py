@@ -23,15 +23,19 @@ from .serve import (GENERATION_ENV, compatible_health, config_arguments, databas
 BASE = Path(__file__).resolve().parent
 # richi map uses the configured port and the next ten (richi_launcher.maps.PORT_RANGE).
 PORT_RANGE = 11
+RESTARTING = ("Карта на %s перезапускается дольше обычного: она завершает запросы или новая версия "
+              "ещё стартует. Повторите команду через несколько секунд.")
 NO_MAP_CONTROL = ("Установленный richi_launcher не может останавливать карты: у него нет протокола карты "
                   "этой версии Richi или другая его версия. Обновите ту сторону, что старше (установку "
                   "через richi update apply или checkout), либо выполните richi config set dev false.")
 
 
-class MapRefused(RuntimeError):
-    def __init__(self, payload):
-        super().__init__(payload["error"])
-        self.payload = payload
+class _NoMapControl(Exception):
+    """Stands in for maps.Refused without the map protocol, where no map is signalled."""
+
+
+# A map that was not signalled or stopped; its as_dict() is the command's answer.
+MapRefused = maps.Refused if maps is not None else _NoMapControl
 
 
 def _ports(first_port):
@@ -165,10 +169,6 @@ def _can_listen():
         return False
 
 
-# A map that hands itself off or exits between verification and the signal.
-RETRYABLE = {"changed", "process_exited"}
-
-
 def _hand_off_in_place(port, health, database, config_file, runtime_selection):
     """Ask a map of this installation to re-execute on the current version, keeping its PID.
 
@@ -179,16 +179,16 @@ def _hand_off_in_place(port, health, database, config_file, runtime_selection):
     if (maps is None or maps.HANDOFF_CAPABILITY not in health.get("capabilities", [])
             or not maps.running_current_generation()):
         return None
-    launcher, _reason = maps.verify(health)
-    if launcher is None or not maps.installation_owns(launcher):
+    verified, _unverified = maps.inspect(health)
+    if verified is None or not maps.installation_owns(verified.launcher):
         return None
     if maps.handoff_problem(database_schema(database)) is not None:
         # The map would refuse to follow; replacing it checks the runtime first.
         return None
-    problem = maps.request_handoff(port, health)
-    if problem in RETRYABLE:
-        raise MapRefused(maps.refusal(problem, port, pid=health["pid"]))
-    if problem is not None:
+    reason = maps.request_handoff(port, health)
+    if reason in maps.RETRYABLE:
+        raise MapRefused(reason, port, health["pid"])
+    if reason is not None:
         return None
     # The map checks the new release before it switches; wait as long as that may take.
     deadline, current = time.monotonic() + maps.HANDOFF_TIMEOUT, None
@@ -204,7 +204,7 @@ def _hand_off_in_place(port, health, database, config_file, runtime_selection):
         # It kept its version (its log says why): replacing it checks the runtime first.
         return None
     # It is still switching, or switched to something else: look again.
-    raise MapRefused(maps.refusal("changed", port, pid=health["pid"]))
+    raise MapRefused(maps.Reason.CHANGED, port, health["pid"])
 
 
 def _settle(port, timeout=5):
@@ -232,11 +232,9 @@ def _replace(port, health, database, config_file, runtime_selection, config_requ
         raise RuntimeError("Новая версия карты не прошла проверку; работающая карта не остановлена: "
                            + str(exc)) from exc
     stopped = maps.stop(port, health)
-    if stopped["status"] != "stopped":
-        raise MapRefused(stopped)
     result = _start(port, database, config_file, runtime_selection, config_required, workspace, runtime_dir)
     result["status"] = "restarted"
-    result["previous"] = {"pid": stopped["pid"], "version": stopped["version"], "exited": stopped["exited"]}
+    result["previous"] = {"pid": stopped.pid, "version": stopped.version, "exited": stopped.exited}
     return result
 
 
@@ -249,17 +247,16 @@ def launch(database, first_port, config_file=None, runtime=None, config_required
                 return _launch_locked(database, first_port, config_file, runtime_selection, config_required,
                                       workspace, restart, runtime_dir)
             except MapRefused as exc:
-                if exc.payload.get("reason") not in RETRYABLE or attempt == 2:
+                if not exc.retryable or attempt == 2:
                     raise
-                _settle(int(exc.payload["url"].rstrip("/").rsplit(":", 1)[1]))
+                _settle(exc.port)
 
 
 def _launch_locked(database, first_port, config_file, runtime_selection, config_required, workspace,
                    restart, runtime_dir):
     ports = _ports(first_port)
-    if maps is not None:
-        # A map re-executing on a new version has no health for a moment.
-        maps.wait_for_restarts(ports)
+    # A map re-executing on a new version has no health for a moment.
+    restarting = maps.wait_for_restarts(ports) if maps is not None else []
     transitioning, stale = [], None
     for port in ports:
         health = read_health(port)
@@ -293,6 +290,12 @@ def _launch_locked(database, first_port, config_file, runtime_selection, config_
                 return handed_off
         return _replace(stale[0], stale[1], database, config_file, runtime_selection,
                         config_required, workspace, runtime_dir)
+    if restarting:
+        # Not back yet and its storage is unknown: it may be this one, so no second map.
+        raise RuntimeError(RESTARTING % url(restarting[0]))
+    if maps is not None and maps.wait_for_restarts(ports, timeout=0):
+        # A map began to restart while this scan looked at its port: look again.
+        raise MapRefused(maps.Reason.CHANGED, first_port)
     port = next((port for port in ports if available(port)), None)
     if port is None:
         raise RuntimeError("Не найден свободный локальный порт для карты.")
@@ -305,11 +308,13 @@ def stop(database, first_port, config_file=None):
         raise RuntimeError(NO_MAP_CONTROL)
     with _launch_lock(database):
         # Otherwise a map re-executing right now would be reported as not running.
-        maps.wait_for_restarts(_ports(first_port))
+        restarting = maps.wait_for_restarts(_ports(first_port))
         for port in _ports(first_port):
             health = read_health(port)
             if managed_health(health, database, config_file):
-                return maps.stop(port, health)
+                return maps.stop(port, health).as_dict()
+        if restarting:
+            raise RuntimeError(RESTARTING % url(restarting[0]))
         result = {"status": "not_running", "url": url(first_port)}
         if maps.is_map(read_health(first_port)):
             result["note"] = "The map on this port serves another workspace; select that workspace to stop it"
@@ -345,10 +350,8 @@ def _main(argv=None):
         parser.error("Port must be 1–65535")
     try:
         if args.action == "stop":
-            result = stop(database, args.port, settings.config_file)
-            refused = result["status"] == "refused"
-            print(json.dumps(result, ensure_ascii=False), file=sys.stderr if refused else sys.stdout)
-            return 1 if refused else 0
+            print(json.dumps(stop(database, args.port, settings.config_file), ensure_ascii=False))
+            return 0
         result = launch(database, args.port, settings.config_file, current_runtime(),
                         config_required=args.config is not None or "RICHI_CONFIG" in os.environ,
                         workspace=settings.workspace, restart=args.action == "restart")
@@ -357,7 +360,7 @@ def _main(argv=None):
         print(json.dumps(result, ensure_ascii=False))
         return 0
     except MapRefused as exc:
-        print(json.dumps(exc.payload, ensure_ascii=False), file=sys.stderr)
+        print(json.dumps(exc.as_dict(), ensure_ascii=False), file=sys.stderr)
         return 1
     except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)

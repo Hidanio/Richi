@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import selectors
 import signal
+import socket
 from socketserver import TCPServer
 import sqlite3
 import subprocess
@@ -30,11 +31,23 @@ from .memory import Parser, MemoryError
 BASE = Path(__file__).resolve().parent
 API_VERSION = 4
 # The richi_launcher.maps protocol this runtime speaks (maps.API_VERSION).
-MAPS_API = 1
+MAPS_API = 2
 # Set by the installation's bootstrap for every process it starts.
 LEASE_ENV = "RICHI_INSTALLATION_LEASE_FD"
 ROOT_ENV = "RICHI_INSTALLATION_ROOT"
 GENERATION_ENV = "RICHI_INSTALLATION_GENERATION"
+# Between two map processes when one hands itself off (richi_launcher.maps).
+# Answering the check the old map runs first (richi --version), the runtime
+# that will serve names what it takes over; given LISTEN_FD, the old map keeps
+# its listening socket open across exec and names it in LISTEN_FD_ENV.
+PROBE_ANSWER = "richi-map-handoff:"
+LISTEN_FD = "listen_fd"
+LISTEN_FD_ENV = "RICHI_MAP_LISTEN_FD"
+HANDOFF_FEATURES = (LISTEN_FD,)
+
+
+def answer_probe():
+    print(PROBE_ANSWER, *HANDOFF_FEATURES, file=sys.stderr, flush=True)
 
 
 def _launcher_maps():
@@ -92,13 +105,73 @@ GRAPH_WORKER_OUTPUT_LIMIT = 32 * 1024 * 1024
 
 
 class LoopbackHTTPServer(ThreadingHTTPServer):
-    """Bind the local viewer without a reverse DNS lookup during startup."""
+    """Bind the local viewer without a reverse DNS lookup during startup.
+
+    With ``listener`` it serves a socket that is already bound and listening:
+    the one the previous process of this map left open for it.
+    """
+
+    # Connections that arrive while a map re-executes wait here.
+    request_queue_size = 64
+
+    def __init__(self, address, handler, listener=None):
+        self.listener = listener
+        super().__init__(address, handler)
+
+    def handle_error(self, request, client_address):
+        # A client that gave up, for example while the map re-executed and its
+        # connection waited in the backlog, is not an error of the map.
+        if isinstance(sys.exc_info()[1], ConnectionError):
+            return
+        super().handle_error(request, client_address)
 
     def server_bind(self):
-        # HTTPServer.server_bind calls getfqdn(), which can block for tens of
-        # seconds on macOS. The viewer uses a numeric loopback address only.
-        TCPServer.server_bind(self)
+        if self.listener is not None:
+            self.socket.close()
+            self.socket = self.listener
+            self.server_address = self.socket.getsockname()
+        else:
+            # HTTPServer.server_bind calls getfqdn(), which can block for tens of
+            # seconds on macOS. The viewer uses a numeric loopback address only.
+            TCPServer.server_bind(self)
         self.server_name, self.server_port = self.server_address[:2]
+
+
+def inherited_listener(port):
+    """The listening socket the previous process of this map left open, or None.
+
+    Only a loopback TCP socket listening on this port is taken over; anything
+    else under that descriptor is left alone and the port is bound as usual.
+    """
+    value = os.environ.pop(LISTEN_FD_ENV, None)
+    if value is None or not value.isdigit():
+        return None
+    try:
+        listener = socket.socket(fileno=int(value))
+    except OSError:
+        return None  # Nothing was inherited, for example a launcher closed it.
+    try:
+        if (listener.family == socket.AF_INET and listener.type == socket.SOCK_STREAM
+                and listener.getsockname() == ("127.0.0.1", port) and _accepting(listener)):
+            listener.set_inheritable(False)
+            return listener
+    except OSError:
+        pass
+    listener.detach()
+    return None
+
+
+def _accepting(sock):
+    """The socket listens for connections (or, where that is unknown, is not connected)."""
+    try:
+        return bool(sock.getsockopt(socket.SOL_SOCKET, socket.SO_ACCEPTCONN))
+    except (AttributeError, OSError):
+        pass  # macOS does not report SO_ACCEPTCONN.
+    try:
+        sock.getpeername()
+    except OSError:
+        return True
+    return False
 
 
 class GitRequestError(ValueError):
@@ -513,7 +586,17 @@ class InstallationFollower:
         self.requested = threading.Event()
         self.grace = maps.handoff_grace()
         self.enabled = True
-        self.changed_since = self.blocked = self.command = self.reason = None
+        self.changed_since = self.blocked = self.handoff = self.target = self.reason = None
+
+    def takes_listener(self):
+        """The runtime this map hands itself off to takes over its listening socket.
+
+        That runtime answered the check for the generation that is still
+        current; after another change the entry point would start a runtime
+        nobody asked, which may not know the socket and could not bind its port.
+        """
+        return (self.handoff is not None and LISTEN_FD in self.handoff.features
+                and maps.current_generation(self.root) == self.target)
 
     def due(self):
         """True once the entry point command for the current generation is prepared."""
@@ -547,25 +630,26 @@ class InstallationFollower:
             return False
         if self.blocked is not None and self.blocked[0] == current and now - self.blocked[1] < HANDOFF_RECHECK:
             return False
-        command, problem = maps.handoff_command(self.selection, self.arguments, self.environment,
+        handoff, problem = maps.handoff_command(self.selection, self.arguments, self.environment,
                                                 database_schema(self.database))
         if problem is not None:
             if self.blocked is None or self.blocked[2] != problem:
                 print("Map keeps its version instead of restarting: " + problem, flush=True)
             self.blocked = (current, now, problem)
             return False
-        self.command = command
+        self.handoff, self.target = handoff, current
         self.reason = "Restart requested" if requested else "Installation changed"
         return True
 
 
 def watch_runtime(server, runtime, original, database, config_file, config_required,
-                  stopped, reload_requested, follower=None):
+                  stopped, reload_requested, follower=None, on_restart=None):
     """Switch this server only after its selected runtime passes a read-only check.
 
     With a ``follower`` the map also follows its installation (see
     InstallationFollower). Before shutting the server down for a restart the
-    watcher marks it stopped, so a later SIGTERM ends the map instead.
+    watcher calls ``on_restart`` and marks it stopped, so a later SIGTERM ends
+    the map instead.
     """
     pending = last_error = None
 
@@ -579,6 +663,8 @@ def watch_runtime(server, runtime, original, database, config_file, config_requi
     def restart(message):
         if stopped.is_set():
             return
+        if on_restart is not None:
+            on_restart()
         print(message + "; restarting map on the same URL.", flush=True)
         reload_requested.set()
         stopped.set()
@@ -613,6 +699,14 @@ def watch_runtime(server, runtime, original, database, config_file, config_requi
         return restart("Runtime changed")
 
 
+def _keep_listening(server):
+    """A descriptor that keeps the server's socket listening after server_close(), or None."""
+    try:
+        return os.dup(server.fileno())
+    except OSError:
+        return None
+
+
 def _main(argv=None):
     parser = Parser(description=__doc__)
     parser.add_argument("--db", type=Path)
@@ -634,6 +728,8 @@ def _main(argv=None):
         parser.error("Cannot read the database: " + str(database))
     if schema not in (2, 3):
         parser.error("The map requires schema 2 or 3; run richi backup and richi migrate")
+    # Taken before anything copies the environment: no child may see it.
+    listener = inherited_listener(args.port)
     runtime = current_runtime()
     config_required = args.config is not None or "RICHI_CONFIG" in os.environ
     initial_source = source_fingerprint(runtime.package) if runtime.mode == "dev" else None
@@ -660,7 +756,8 @@ def _main(argv=None):
     try:
         server = LoopbackHTTPServer(("127.0.0.1", args.port),
                                     handler_for(database, settings.config_file, runtime, config_required,
-                                                settings.workspace, capabilities))
+                                                settings.workspace, capabilities),
+                                    listener=listener)
     except OSError as exc:
         if args.open:
             if compatible_health(read_health(args.port, timeout=2), database, runtime, settings.config_file):
@@ -672,14 +769,27 @@ def _main(argv=None):
         parser.error("Cannot listen on port %d: %s. Choose another --port." % (args.port, exc))
     server.daemon_threads = False
     registration = maps.register(args.port) if follower is not None else None
+
+    def announce_restart():
+        # Before the port goes silent: from here until the new code answers,
+        # richi map waits for this map instead of starting another one.
+        nonlocal registration
+        if follower is None:
+            return
+        if registration is None:
+            # Started before the installation became managed: no entry yet.
+            registration = maps.register(args.port)
+        maps.mark_restarting(registration)
     print("Project memory map: " + address, flush=True)
+    if listener is not None:
+        print("Took over the listening socket of the previous map process.", flush=True)
     print("Local read-only viewer. Press Ctrl+C to stop.", flush=True)
     if args.open:
         webbrowser.open(address)
     watcher = threading.Thread(target=watch_runtime,
                                args=(server, runtime, initial_source, database,
                                      settings.config_file, config_required, stopped, reload_requested,
-                                     follower),
+                                     follower, announce_restart),
                                daemon=False)
 
     def terminate(_signum, _frame):
@@ -696,6 +806,10 @@ def _main(argv=None):
         terminating.set()
     finally:
         stopped.set()
+        # The port keeps listening across exec, so connections wait for the new
+        # code; only a map richi map knows to wait for (its entry) does that.
+        kept = (_keep_listening(server) if reload_requested.is_set() and not terminating.is_set()
+                and registration is not None and follower.takes_listener() else None)
         server.server_close()
         # A transition preflight owns a bounded child process (15 seconds).
         # Let it reap that child before this process exits.
@@ -703,6 +817,8 @@ def _main(argv=None):
         signal.signal(signal.SIGTERM, previous_sigterm)
         restarting = reload_requested.is_set() and not terminating.is_set()
         if not restarting:
+            if kept is not None:
+                os.close(kept)
             if registration is not None:
                 maps.unregister(registration)
             restore_handoff()
@@ -710,19 +826,21 @@ def _main(argv=None):
         return
     # Replace this process, preserving its PID and URL. No supervisor or old
     # server is left running; --open is intentionally not repeated.
-    if follower is not None and follower.command is not None:
+    if follower is not None and follower.handoff is not None:
         # The entry point selects and leases the current generation. Close
         # this generation's lease on exec, when its code stops running.
-        command = follower.command
+        command = follower.handoff.command
         for key in (LEASE_ENV, ROOT_ENV, GENERATION_ENV):
             environment.pop(key, None)
         for descriptor in lease_fds():
             os.set_inheritable(descriptor, False)
+        if kept is not None and follower.takes_listener():
+            os.set_inheritable(kept, True)
+            environment[LISTEN_FD_ENV] = str(kept)
+        elif kept is not None:
+            os.close(kept)  # The installation changed again while requests finished.
     else:
         command = bootstrap_command([*storage, *serve_arguments])
-    if registration is not None:
-        # The entry stays while the port is closed, so richi map waits for it.
-        maps.mark_restarting(registration)
     if handoff_signal is not None:
         # A late request must not terminate the process before the new map
         # installs its handler; an ignored signal stays ignored across exec.

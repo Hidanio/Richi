@@ -4,10 +4,30 @@ The launcher owns recovery-command parsing independently of the selected runtime
 Command builders receive only argument types, never the storage module.
 """
 import argparse
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
 from . import compact, graph
+
+# Set by a running map that checks this runtime before handing itself off to
+# it (richi_launcher.maps.PROBE_ENV). --version then also names what this
+# runtime's map server takes over, and fails if that server cannot be imported.
+MAP_PROBE_ENV = "RICHI_MAP_PROBE"
+
+
+class _Version(argparse.Action):
+    def __init__(self, option_strings, version, dest=argparse.SUPPRESS, default=argparse.SUPPRESS,
+                 help="show program's version number and exit"):
+        super().__init__(option_strings=option_strings, dest=dest, default=default, nargs=0, help=help)
+        self.version = version
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if os.environ.get(MAP_PROBE_ENV) == "1":
+            from .serve import answer_probe
+            answer_probe()
+        print(self.version, flush=True)
+        parser.exit()
 
 
 def build_parser(parser_class, *, limit, positive_int, scan_depth):
@@ -21,7 +41,7 @@ def build_parser(parser_class, *, limit, positive_int, scan_depth):
     cli.add_argument("--compact-json", action="store_true",
                      help="Print compact JSON and fit response budgets in that format (place before command)")
     from . import __version__
-    cli.add_argument("--version", action="version", version="Richi " + __version__)
+    cli.add_argument("--version", action=_Version, version="Richi " + __version__)
     commands = cli.add_subparsers(dest="command", required=True)
     agents = commands.add_parser("agents", help="Find and connect local AI agents")
     agents.add_argument("--status", action="store_true")
