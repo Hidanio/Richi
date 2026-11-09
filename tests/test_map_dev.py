@@ -16,6 +16,8 @@ from richi import memory, serve
 import richi_launcher
 from richi_launcher.runtime import current_runtime, describe_runtime
 
+from cli_environment import free_port
+
 
 class MapDevelopmentTests(unittest.TestCase):
     def test_compatibility_requires_runtime_mode_source_version_and_config(self):
@@ -23,7 +25,7 @@ class MapDevelopmentTests(unittest.TestCase):
         runtime = current_runtime()
         health = {"application": "project-memory-map", "database": str(database),
                   "api_version": serve.API_VERSION, "capabilities": serve.CAPABILITIES,
-                  "runtime": runtime.as_dict(), "config_file": None}
+                  "runtime": runtime.as_dict(), "config_file": None, "launcher": str(serve.LAUNCHER_ROOT)}
         self.assertTrue(serve.compatible_health(health, database, runtime))
         for key, value in (("mode", "dev"), ("package", "/other/package"),
                            ("version", "99.0.0"), ("identity", "different"),
@@ -32,6 +34,10 @@ class MapDevelopmentTests(unittest.TestCase):
             with self.subTest(key=key):
                 self.assertFalse(serve.compatible_health(changed, database, runtime))
         self.assertFalse(serve.compatible_health(health, database, runtime, Path("/another/config.json")))
+        # Another installation's launcher, or a map that does not report one.
+        self.assertFalse(serve.compatible_health(dict(health, launcher="/other/site"), database, runtime))
+        self.assertFalse(serve.compatible_health({key: value for key, value in health.items() if key != "launcher"},
+                                                 database, runtime))
 
     @staticmethod
     def copied_installation(root):
@@ -92,9 +98,7 @@ class MapDevelopmentTests(unittest.TestCase):
             database = root / "memory.sqlite3"
             with memory.connect(database, create=True) as connection:
                 memory.initialize(connection, database)
-            with socket.socket() as reservation:
-                reservation.bind(("127.0.0.1", 0))
-                port = reservation.getsockname()[1]
+            port = free_port()
             environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_") and key != "CODEX_THREAD_ID"}
             environment.update(HOME=str(root / "home"), XDG_CONFIG_HOME=str(root / "config"),
                                XDG_DATA_HOME=str(root / "data"))
@@ -149,9 +153,7 @@ class MapDevelopmentTests(unittest.TestCase):
                                           "development": {"source": str(checkout)}}))
             with memory.connect(database, create=True) as connection:
                 memory.initialize(connection, database)
-            with socket.socket() as reservation:
-                reservation.bind(("127.0.0.1", 0))
-                port = reservation.getsockname()[1]
+            port = free_port()
             environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_") and key != "CODEX_THREAD_ID"}
             bad_config = root / "broken.json"
             bad_config.write_text("not JSON")

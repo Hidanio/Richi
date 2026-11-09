@@ -128,12 +128,114 @@ environments or edit version pointers.
 <a id="работающая-карта-и-первоначальный-переход"></a>
 ## Running maps and the initial transition
 
-New CLI invocations use the new version immediately. A running map keeps its
-version until restarted, including child operations and dev reloads. After an
-update, restart its process and run `richi map`. For a foreground map, press
-`Ctrl+C` and start it again. For a background map, stop the Richi-owned process
-whose PID is reported by `/api/health`, then run `richi map` again. The updater
-does not terminate unrelated or unknown processes.
+New CLI invocations use the new version immediately. A running map follows the
+installation as well; no manual step is needed after `update apply`, automatic
+installation or `update rollback`. Refresh an open browser tab: the URL does not
+change.
+
+- A map started by this release or later re-executes itself on the newly current
+  version, keeping its process and URL; a foreground `richi map serve` stays in
+  its terminal. If that version is this release or later too, it takes over the
+  map's listening socket, so connections made during the switch wait for it
+  instead of failing; a switch to 1.1.0 or earlier closes the port for a moment.
+  Right after activation the updater asks the maps it finds to do
+  so: those registered by a managed installation and those on the default ports
+  (8765 and the next ten, or from `RICHI_PORT`). It waits for them and reports
+  them in its JSON result as `maps`, one entry per map with `url`, `pid` and
+  `status`:
+  - `restarted`, with `from_version` and `version`: the map now runs the
+    activated version;
+  - `current`, with `version`: it already did, for example because it followed
+    by itself;
+  - `restart_required`, with `from_version` and `error`: an older map, see below;
+  - `pending` or `failed`, with `from_version` and `error`: the map was asked
+    and has not switched, for example because it keeps its version (next item).
+
+  Activation results also carry `restart_maps_required`, which is `true` while a
+  found map still runs an older version. If looking for maps fails, the update
+  stays committed; `maps` is then empty, `maps_error` explains why and
+  `restart_maps_required` is `true`. Other update commands (`check`, `status`,
+  `cleanup`) do not report maps. If an older manager changes the current
+  version, for example a rollback performed by 1.1.0 or earlier, the map
+  notices it and follows by itself about five seconds later.
+- Before it follows, a map starts the newly current release once through the
+  installation's entry point with its own storage selection (`richi --version`,
+  which also tells whether that release takes over the socket), and checks that the release is complete and declares support for the map's
+  database schema. Otherwise the map stays on its version, logs the reason once
+  and tries again later. This happens, for example, after 1.0.1 rolls itself back
+  while the store is at schema 3: 1.0.1 cannot open that store, so the newer map
+  keeps serving it until the installation changes again. A restart request while
+  the map already runs the current version is ignored.
+- A map started by 1.1.0 or earlier cannot follow. After an update by such a
+  manager, the first knowledge command that runs the new version, for example
+  `richi --version` or `richi project list`, looks for maps once: those the
+  installation has registered and the ports `richi map` would use for that
+  command's workspace (the configured port and the next ten). `status`, `chat`,
+  `config`, `workspace`, `use`, `update`, `setup`, `agents` and `map` do not
+  look. The command never waits for a map: newer maps are asked to switch, and
+  an older map is stopped and started again on the new version on the same port
+  in the background. Only a command from a terminal without a chat identity
+  starts such a replacement. A command from an agent (it has a chat identity and
+  may run in a sandbox), a script or a scheduler only asks newer maps to switch;
+  the next terminal command, or `richi map`, replaces older maps. An older map
+  that itself runs in a terminal (`richi map serve`) is not replaced this way:
+  stop it there and start it again, or run `richi map restart`. Each port range
+  is looked at once per version, so a command for another workspace's port
+  looks at that range too.
+- `richi map` keeps its workspace's map current on the same URL. It asks a map of
+  the same installation to switch in place; it replaces a map started by 1.1.0 or
+  earlier, or one from another installation environment. While a map is
+  restarting it waits for it instead of taking its port. A desktop shortcut
+  that runs `richi map` therefore always opens the current version. The new
+  version is checked first, and a map is never stopped where no local port can
+  be opened. If two installations serve the same store, the one whose
+  `richi map` ran last owns the map.
+
+To stop or restart the selected workspace's map explicitly:
+
+```sh
+richi map stop
+richi map restart
+richi map restart --no-open
+```
+
+`stop` reports `stopped` (with `pid`, `version` and whether the process has
+`exited`) or `not_running`. When the first port is used by another workspace's
+map or by another program, `not_running` carries a `note`; neither is touched.
+If this workspace's map cannot be stopped, `stop` reports, with exit code 1,
+`refused` with a `reason`: `unverified_process`, `foreign_user`,
+`not_permitted` (this environment may not signal or inspect the process, for
+example a sandbox), `process_exited`, `changed` (the map kept changing while it
+was checked, for example during a restart; run the command again) or `timeout`.
+`restart` stops the map and starts the current version on the same URL, or
+starts one if none is running; like `richi map` it opens the browser unless
+`--no-open` is given.
+
+A map is identified only through its `/api/health` answer: the application, the
+process ID it reports and its runtime. Before any signal, and before the storage
+it reports is used to start a replacement, Richi checks that this process belongs
+to the current user, runs Richi's map server with exactly that runtime and itself
+listens on the port that answered. Unrelated programs, unverifiable processes,
+answers naming another map's process and other workspaces' maps are never
+stopped. `richi map` and `richi map serve --open` reuse or open a running map
+only after the same check, so another local user cannot pass off a page of their
+own as this workspace's map. Such an answer is neither opened nor joined by a
+second map: `richi map` reports `refused` with a `reason` such as
+`unverified_process`, and `richi map serve --open` reports that it cannot listen
+on the port. Where the environment may not inspect processes (for example a
+sandbox), a copy cannot be told apart, so `richi map` refuses with
+`not_permitted`; run it from a terminal. Only a development checkout whose
+installed launcher speaks another map protocol ([map](INSTALLATION.md#map))
+reuses a matching map unchecked, since it cannot check or stop maps at all. Stopping sends `SIGTERM` only: the map closes its port and exits.
+Handoff requests use `SIGUSR1` and only reach maps that advertise the
+`installation_handoff` capability. A map keeps the lease on its old version until
+that code stops running, so cleanup never removes code still in use; versions
+released by a handoff are removed by the updater right away or by the next
+`update cleanup`. A handoff reads no workspace data beyond what the map itself
+reads (to check schema support, the map reads its store's schema number); the
+updater still opens no database and reads no workspace configuration. The
+registry of running maps lives in `maps/` beside the installation state and
+exists only once the installation is managed.
 
 To transition from an older installation without this updater, install the new
 wheel once in the original dedicated Python environment and restart all old
@@ -214,7 +316,8 @@ result.
 ## Safeguards for automatic installation
 
 `--install` uses the same verified wheel and atomic installation as `update apply`.
-Restart an open map manually to update its installed runtime. A candidate that
+Running maps follow the installed version as after `update apply`; they restart
+themselves, so the background job never becomes their parent. A candidate that
 fails verification is blocked until a newer version or an explicit re-enable.
 Concurrent attempts are serialized; a manual operation has priority over a
 waiting background installation.

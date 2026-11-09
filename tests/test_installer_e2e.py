@@ -9,7 +9,7 @@ import sys
 import tempfile
 import unittest
 
-from cli_environment import cli_environment
+from cli_environment import cli_environment, synthetic_port
 import test_update_e2e as lifecycle
 
 
@@ -22,7 +22,8 @@ class InstallerLifecycleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="richi-setup-lifecycle-") as temporary:
             self.root = Path(temporary).resolve()
             home = self.root / "cli-home"
-            self.environment = cli_environment(self.root, SHELL="/bin/zsh")
+            # After an update the first command looks for maps on its port.
+            self.environment = cli_environment(self.root, SHELL="/bin/zsh", RICHI_PORT=synthetic_port())
             for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
                 self.environment.pop(key, None)
             instructions = home / ".codex/AGENTS.md"
@@ -117,7 +118,8 @@ class InstallerLifecycleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="richi-dev-skills-") as temporary:
             self.root = Path(temporary).resolve()
             home = self.root / "cli-home"
-            self.environment = cli_environment(self.root, SHELL="/bin/zsh")
+            # Updates and the first command after them look for maps on this port range.
+            self.environment = cli_environment(self.root, SHELL="/bin/zsh", RICHI_PORT=synthetic_port())
             for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
                 self.environment.pop(key, None)
             wheels = {v: self.make_wheel(v) for v in ("0.1.0", "0.2.0")}

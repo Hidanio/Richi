@@ -4,34 +4,52 @@ Builds the 1.0.1 wheel and installer from git tag v1.0.1, installs them into a
 synthetic home and drives the commands a 1.0.1 user runs: its own update check
 and apply (only GitHub transport and scheduler registration are replaced, as in
 test_update_e2e), rollback through the original environment's console, Codex and
-Claude Code setup. Needs git history with tags and the `build` package.
+Claude Code setup. A map started on 1.0.1 must serve the current runtime on the
+same URL after each change, without manual steps. Needs git history with tags
+and the `build` package.
 
 Usage: python tests/legacy_update_e2e.py DIST
 DIST holds this release's wheel and its richi-release.json.
 """
 import io
 import json
+import os
 from pathlib import Path
+import pty
 import shlex
 import sqlite3
 import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
-from cli_environment import cli_environment  # noqa: E402
+from cli_environment import cli_environment, synthetic_port  # noqa: E402
 import test_update_e2e  # noqa: E402
+from richi_launcher import maps  # noqa: E402
 
 LEGACY_TAG = "v1.0.1"
 BASE = "https://github.com/Hidanio/Richi/releases/"
 API = "https://api.github.com/repos/Hidanio/Richi/releases/"
 
 
-def run(command, env=None, ok=True, stdin=None, cwd=None):
-    result = subprocess.run([str(item) for item in command], env=env, input=stdin, cwd=cwd,
-                            capture_output=True, text=True, timeout=600)
+def run(command, env=None, ok=True, stdin=None, cwd=None, terminal=False):
+    controller = device = None
+    if terminal:
+        # A person at a terminal: only such a command starts replacement maps.
+        controller, device = pty.openpty()
+    try:
+        # Other commands get no terminal even when this script runs in one: they
+        # stand for agents and scripts, which must not start replacement maps.
+        result = subprocess.run([str(item) for item in command], env=env, input=stdin, cwd=cwd,
+                                stdin=device if terminal else None if stdin is not None else subprocess.DEVNULL,
+                                capture_output=True, text=True, timeout=600)
+    finally:
+        for descriptor in (controller, device):
+            if descriptor is not None:
+                os.close(descriptor)
     if ok is not None and (result.returncode == 0) != ok:
         raise AssertionError("{} -> {}\n{}\n{}".format(command, result.returncode, result.stdout, result.stderr))
     return result
@@ -80,7 +98,9 @@ def main():
     with tempfile.TemporaryDirectory(prefix="richi-legacy-update-") as directory:
         root = Path(directory).resolve()
         legacy = build_legacy(root)
-        env = cli_environment(root, SHELL="/bin/zsh")
+        port = int(synthetic_port())
+        # Every map command addresses this ephemeral port, never a real map.
+        env = cli_environment(root, SHELL="/bin/zsh", RICHI_PORT=str(port))
         for key in [key for key in env if key.startswith("CLAUDE") or key in {"PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"}]:
             env.pop(key)
         home = Path(env["HOME"])
@@ -109,7 +129,7 @@ def main():
             return run([python, "-I", "-B", runner, latest, "update", *args], env, ok=ok)
 
         def version():
-            return cli("--version").stdout.strip()
+            return run([richi, "--version"], env, terminal=True).stdout.strip()
 
         def setup_state(*extra):
             data = cli_json("setup", *extra, "--status")
@@ -119,55 +139,99 @@ def main():
             with sqlite3.connect("file:" + database + "?mode=ro", uri=True) as conn:
                 return conn.execute("PRAGMA user_version").fetchone()[0]
 
-        assert version() == "Richi 1.0.1" and setup_state() == ("configured", [])
-        cli("init")
-        alpha = cli_json("workspace", "create", "alpha")
-        cli("--workspace", "alpha", "init")
-        cli("--chat", "legacy-chat", "chat", "bind", "alpha")
-        assert schema(alpha["database"]) == 2
+        def health():
+            return maps.read_health(port, timeout=2)
 
-        checked = json.loads(update("check").stdout)
-        assert checked["status"] == "update_available" and checked["release"]["version"] == target, checked
-        assert json.loads(update("apply").stdout)["status"] == "updated"
-        assert version() == "Richi " + target and setup_state() == ("configured", []), setup_state()
-        current = cli_json("--chat", "legacy-chat", "chat", "current")
-        assert current["workspace"] == "alpha" and schema(alpha["database"]) == 2, current
+        def map_version(expected, timeout=30):
+            deadline = time.monotonic() + timeout
+            while True:
+                current = health()
+                if maps.is_map(current) and current["runtime"]["version"] == expected:
+                    return current
+                assert time.monotonic() < deadline, "Map did not reach {}: {}".format(expected, current)
+                time.sleep(0.1)
 
-        # The user's rollback: the original environment's 1.0.1 bootstrap picks the manager.
-        cli("update", "rollback")
-        assert version() == "Richi 1.0.1"
-        cli("--workspace", "alpha", "check")
-        cli("update", "rollback")
-        assert version() == "Richi " + target
+        try:
+            assert version() == "Richi 1.0.1" and setup_state() == ("configured", [])
+            cli("init")
+            started = cli_json("map", "--no-open")
+            assert started["url"] == maps.url(port) and map_version("1.0.1")["pid"] == started["pid"], started
+            alpha = cli_json("workspace", "create", "alpha")
+            cli("--workspace", "alpha", "init")
+            cli("--chat", "legacy-chat", "chat", "bind", "alpha")
+            assert schema(alpha["database"]) == 2
 
-        # Documented edge: a schema-3 store after a rollback performed by 1.0.1.
-        cli("--workspace", "alpha", "backup")
-        assert cli_json("--workspace", "alpha", "migrate")["schema_version"] == 3
-        cli("update", "rollback")
-        assert version() == "Richi 1.0.1"
-        refused = cli("--workspace", "alpha", "check", ok=False)
-        assert "Unsupported schema version 3" in refused.stdout + refused.stderr, refused.stderr
-        assert schema(alpha["database"]) == 3
-        assert json.loads(update("apply").stdout)["status"] == "updated"
-        assert version() == "Richi " + target and cli_json("--workspace", "alpha", "check")["status"] == "ok"
+            checked = json.loads(update("check").stdout)
+            assert checked["status"] == "update_available" and checked["release"]["version"] == target, checked
+            assert json.loads(update("apply").stdout)["status"] == "updated"
+            # The frozen manager leaves its map running 1.0.1 code.
+            assert health()["runtime"]["version"] == "1.0.1" and health()["pid"] == started["pid"]
+            # An agent's command may run in a sandbox, and a script may run
+            # unattended: neither starts a server.
+            cli("--chat", "legacy-chat", "project", "list")
+            cli("project", "list")
+            assert health()["runtime"]["version"] == "1.0.1" and health()["pid"] == started["pid"]
+            # The next terminal command of the new generation replaces it on the
+            # same URL in the background.
+            assert version() == "Richi " + target and setup_state() == ("configured", []), setup_state()
+            replaced = map_version(target)
+            assert replaced["pid"] != started["pid"] and maps.process_arguments(started["pid"]) is None, replaced
+            assert cli_json("map", "--no-open")["status"] == "existing"
+            current = cli_json("--chat", "legacy-chat", "chat", "current")
+            assert current["workspace"] == "alpha" and schema(alpha["database"]) == 2, current
 
-        cli("setup", "--agent", "claude", "--yes", "--no-path")
-        assert setup_state("--agent", "claude") == ("configured", []) and setup_state() == ("configured", [])
-        starts = json.loads((profile / "settings.json").read_text())["hooks"]["SessionStart"]
-        assert foreign in starts and len(starts) == 2
-        command = [item for item in starts if item != foreign][0]["hooks"][0]["command"]
-        env_file = root / "claude-env"
-        run(shlex.split(command), dict(env, CLAUDE_ENV_FILE=str(env_file)),
-            stdin=json.dumps({"hook_event_name": "SessionStart", "session_id": "legacy-session"}))
-        assert env_file.read_text() == "export RICHI_CHAT_ID=claude:legacy-session\n"
+            # The user's rollback: the original environment's 1.0.1 bootstrap picks the manager.
+            cli("update", "rollback")
+            assert version() == "Richi 1.0.1"
+            # No current code runs the rollback: the map follows the installation itself.
+            assert map_version("1.0.1")["pid"] == replaced["pid"]
+            cli("--workspace", "alpha", "check")
+            cli("update", "rollback")
+            assert version() == "Richi " + target
+            # The current manager rolled forward; the restored 1.0.1 map is replaced
+            # by the first terminal command again, still on the same URL.
+            assert map_version(target)["pid"] != replaced["pid"]
 
-        # 1.0.1 cannot maintain Claude Code, so it refuses the rollback and changes nothing.
-        settings = (profile / "settings.json").read_bytes()
-        cli("update", "rollback", ok=False)
-        assert version() == "Richi " + target and (profile / "settings.json").read_bytes() == settings
-        assert setup_state() == ("configured", []) and setup_state("--agent", "claude") == ("configured", [])
+            # Documented edge: a schema-3 store after a rollback performed by 1.0.1.
+            cli("--workspace", "alpha", "backup")
+            assert cli_json("--workspace", "alpha", "migrate")["schema_version"] == 3
+            cli("update", "rollback")
+            assert version() == "Richi 1.0.1"
+            assert map_version("1.0.1")["pid"]
+            refused = cli("--workspace", "alpha", "check", ok=False)
+            assert "Unsupported schema version 3" in refused.stdout + refused.stderr, refused.stderr
+            assert schema(alpha["database"]) == 3
+            assert json.loads(update("apply").stdout)["status"] == "updated"
+            assert version() == "Richi " + target and cli_json("--workspace", "alpha", "check")["status"] == "ok"
+            map_version(target)
+
+            cli("setup", "--agent", "claude", "--yes", "--no-path")
+            assert setup_state("--agent", "claude") == ("configured", []) and setup_state() == ("configured", [])
+            starts = json.loads((profile / "settings.json").read_text())["hooks"]["SessionStart"]
+            assert foreign in starts and len(starts) == 2
+            command = [item for item in starts if item != foreign][0]["hooks"][0]["command"]
+            env_file = root / "claude-env"
+            run(shlex.split(command), dict(env, CLAUDE_ENV_FILE=str(env_file)),
+                stdin=json.dumps({"hook_event_name": "SessionStart", "session_id": "legacy-session"}))
+            assert env_file.read_text() == "export RICHI_CHAT_ID=claude:legacy-session\n"
+
+            # 1.0.1 cannot maintain Claude Code, so it refuses the rollback and changes nothing.
+            settings = (profile / "settings.json").read_bytes()
+            cli("update", "rollback", ok=False)
+            assert version() == "Richi " + target and (profile / "settings.json").read_bytes() == settings
+            assert setup_state() == ("configured", []) and setup_state("--agent", "claude") == ("configured", [])
+            final = map_version(target)
+            stopped = cli_json("map", "stop")
+            assert (stopped["status"], stopped["pid"], stopped["exited"]) == ("stopped", final["pid"], True), stopped
+            assert maps.port_free(port) and cli_json("map", "stop")["status"] == "not_running"
+        finally:
+            current = health()
+            if maps.is_map(current):
+                try:
+                    maps.stop(port, current)
+                except maps.Refused:
+                    pass  # Best effort: the synthetic home is removed next.
     print("Legacy 1.0.1 in-place update passed for Richi " + target)
-
 
 if __name__ == "__main__":
     main()

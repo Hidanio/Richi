@@ -497,5 +497,15 @@ def run():
             return _finish(ctx, pending, "candidate_failed", version=version, error=exc,
                            quarantine={"version": version, "wheel_sha256": checksum, "reason": _error(exc)})
         outcome = result["status"]
-        return _finish(ctx, pending, "up_to_date" if outcome == "already_current" else outcome,
-                       version=version, retry=outcome == "busy", append=outcome != "busy")
+        finished = _finish(ctx, pending, "up_to_date" if outcome == "already_current" else outcome,
+                           version=version, retry=outcome == "busy", append=outcome != "busy")
+        if outcome == "updated":
+            # Maps re-execute themselves in their own sessions: a scheduler job
+            # never becomes the parent of a long-running map.
+            from . import maps
+            handed_off = maps.after_activation(result)
+            finished.update(maps=handed_off.get("maps", []),
+                            restart_maps_required=handed_off.get("restart_maps_required", True))
+            if "maps_error" in handed_off:
+                finished["maps_error"] = handed_off["maps_error"]
+        return finished

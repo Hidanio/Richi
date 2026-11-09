@@ -81,6 +81,26 @@ def _wants_help(arguments):
     return "--help" in options or "-h" in options
 
 
+def _interactive(chat_id):
+    """A person at a terminal, not an agent, script or scheduler."""
+    try:
+        return chat_id is None and sys.stdin is not None and sys.stdin.isatty()
+    except (OSError, ValueError):
+        return False
+
+
+def _hand_off_maps(port, interactive):
+    """Once per installation generation and port range; never prevents the requested command."""
+    try:
+        from .maps import first_invocation
+        first_invocation(port, interactive=interactive)
+    except KeyboardInterrupt:
+        # The person cancelled the command; the next one hands the maps off.
+        raise SystemExit(130)
+    except Exception:
+        pass
+
+
 def _emit(result, *, compact_json=False):
     print(json.dumps(result, ensure_ascii=False, indent=None if compact_json else 2,
                      separators=(",", ":") if compact_json else None))
@@ -290,6 +310,12 @@ def main(argv=None):
         selectors = pin_chat(chat_id, selectors)
         settings = resolve_settings(**selectors)
         selected = resolve_runtime(settings)
+        if command != "map" and "RICHI_INSTALLATION_GENERATION" in os.environ:
+            # A frozen updater cannot hand off maps; the first command of the
+            # new generation does, without waiting for them. richi map replaces
+            # its own map itself. Only a terminal command starts a server here:
+            # agents may be sandboxed and scripts may run unattended.
+            _hand_off_maps(settings.port, _interactive(chat_id))
         # Pin the resolution before entering mutable code. In particular, strip
         # map-local storage options: they must not override this selected store.
         arguments = ["--db", str(settings.database)]

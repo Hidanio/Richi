@@ -17,7 +17,7 @@ import unittest
 from richi_launcher.runtime import bootstrap_command
 from richi.launch_map import read_health
 
-from cli_environment import cli_environment
+from cli_environment import cli_environment, free_port
 
 
 
@@ -30,9 +30,7 @@ class LauncherTests(unittest.TestCase):
         self.config.write_text(json.dumps({"database": str(self.db), "dev": False}))
         subprocess.run(bootstrap_command(["--config", str(self.config), "init"]),
                        capture_output=True, check=True, env=cli_environment(self.db.parent))
-        with socket.socket() as sock:
-            sock.bind(("127.0.0.1", 0))
-            self.port = sock.getsockname()[1]
+        self.port = free_port()
         self.children = []
         self.addCleanup(self.stop_children)
 

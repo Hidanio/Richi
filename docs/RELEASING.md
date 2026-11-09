@@ -107,6 +107,9 @@ Every protocol-1 release keeps them able to update in place:
   protocol-1 installations must update.
 - `tests/legacy_update_e2e.py` builds 1.0.1 from its tag and updates it to the
   candidate in place; the test and release workflows run it before publication.
+  A map started on 1.0.1 must serve the candidate on the same URL after the
+  update and after rollbacks by either manager, without manual steps: frozen
+  managers cannot hand maps off, so the candidate itself must.
 
 The wheel bundles the entire canonical `skills/project-memory/` directory.
 `build_installer.py` creates a deterministic stdlib-only `richi-installer.pyz`

@@ -6,7 +6,6 @@ import json
 import os
 from pathlib import Path
 import signal
-import socket
 import sqlite3
 import subprocess
 import sys
@@ -17,6 +16,8 @@ from unittest import mock
 from urllib.parse import urlsplit
 
 from richi import memory, serve
+
+from cli_environment import free_port
 
 
 @unittest.skipIf(sys.platform == "win32", "Detached launcher currently uses flock")
@@ -29,9 +30,7 @@ class MapConfigTests(unittest.TestCase):
             config.write_text("{}", encoding="utf-8")
             with memory.connect(database, create=True) as connection:
                 memory.initialize(connection, database)
-            with socket.socket() as reservation:
-                reservation.bind(("127.0.0.1", 0))
-                port = reservation.getsockname()[1]
+            port = free_port()
             connect = sqlite3.connect
             schema_connections = []
 
@@ -79,6 +78,9 @@ class MapConfigTests(unittest.TestCase):
             bad_config = root / "invalid.json"
             bad_config.write_text("this deliberately is not JSON")
             environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_") and key != "CODEX_THREAD_ID"}
+            # Running maps register in their installation's data directory.
+            environment.update(HOME=str(root / "home"), XDG_CONFIG_HOME=str(root / "config"),
+                               XDG_DATA_HOME=str(root / "data"))
             environment["RICHI_CONFIG"] = str(bad_config)
             command = [sys.executable, "-B", "-m", "richi", "--config", str(good_config)]
             initialized = subprocess.run(command + ["init"], capture_output=True, text=True,
@@ -88,9 +90,7 @@ class MapConfigTests(unittest.TestCase):
                                     input=json.dumps({"id": "demo", "name": "Demo"}),
                                     capture_output=True, text=True, timeout=10, env=environment)
             self.assertEqual(seeded.returncode, 0, seeded.stderr)
-            with socket.socket() as reservation:
-                reservation.bind(("127.0.0.1", 0))
-                port = reservation.getsockname()[1]
+            port = free_port()
             child_pid = None
             try:
                 launched = subprocess.run(command + ["map", "--no-open", "--port", str(port)],
