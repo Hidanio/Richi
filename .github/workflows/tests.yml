@@ -11,6 +11,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         python: ['3.9', '3.12']
+        # setup-python has no Python 3.9 for the Ubuntu 26.04 image behind ubuntu-latest.
+        exclude:
+          - os: ubuntu-latest
+            python: '3.9'
+        include:
+          - os: ubuntu-24.04
+            python: '3.9'
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +33,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # Python 3.9, which setup-python lacks on the Ubuntu 26.04 image behind ubuntu-latest.
+        os: [ubuntu-24.04, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
