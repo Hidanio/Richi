@@ -1,6 +1,7 @@
 """Punisher behavior against disposable databases; never the user's live memory."""
 
 from argparse import Namespace
+from contextlib import closing
 import json
 from pathlib import Path
 import sqlite3
@@ -58,7 +59,7 @@ class PunisherTests(unittest.TestCase):
     def report(self, **changes):
         args = dict(project=None, limit=200, max_chars=100000, stale_days=180, as_of="2026-10-01")
         args.update(changes)
-        with sqlite3.connect(self.db.as_uri() + "?mode=ro", uri=True) as conn:
+        with closing(sqlite3.connect(self.db.as_uri() + "?mode=ro", uri=True)) as conn, conn:
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA query_only = ON")
             conn.execute("BEGIN")

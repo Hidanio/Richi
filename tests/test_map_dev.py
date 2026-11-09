@@ -1,4 +1,5 @@
 """Real runtime switching and reload with disposable installed/dev packages."""
+from contextlib import closing
 import http.client
 import json
 import os
@@ -70,7 +71,7 @@ class MapDevelopmentTests(unittest.TestCase):
             database = root / "memory.sqlite3"
             config = root / "config.json"
             config.write_text(json.dumps({"database": str(database), "dev": False}))
-            with memory.connect(database, create=True) as connection:
+            with closing(memory.connect(database, create=True)) as connection, connection:
                 memory.initialize(connection, database)
             server = serve.LoopbackHTTPServer(("127.0.0.1", 0),
                 serve.handler_for(database, config, runtime, config_required=True))
@@ -96,7 +97,7 @@ class MapDevelopmentTests(unittest.TestCase):
             root = Path(temporary).resolve()
             installed, checkout, _package = self.copied_installation(root)
             database = root / "memory.sqlite3"
-            with memory.connect(database, create=True) as connection:
+            with closing(memory.connect(database, create=True)) as connection, connection:
                 memory.initialize(connection, database)
             port = free_port()
             environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_") and key != "CODEX_THREAD_ID"}
@@ -151,7 +152,7 @@ class MapDevelopmentTests(unittest.TestCase):
             config = root / "settings.json"
             config.write_text(json.dumps({"database": str(database), "dev": False,
                                           "development": {"source": str(checkout)}}))
-            with memory.connect(database, create=True) as connection:
+            with closing(memory.connect(database, create=True)) as connection, connection:
                 memory.initialize(connection, database)
             port = free_port()
             environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_") and key != "CODEX_THREAD_ID"}

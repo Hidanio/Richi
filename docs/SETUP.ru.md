@@ -167,7 +167,7 @@ python3 -I richi-installer.pyz --yes --wheel richi-X.Y.Z-py3-none-any.whl --mani
 или проверенный путь `richi update apply --version X.Y.Z`. Параметр `--version`
 онлайн-установщика закрепляет версию wheel, а не загрузку bootstrap. Перед
 публикацией release workflow проверяет точные wheel и установщик на Python
-3.9/3.12 и macOS/Linux; см. [RELEASING.md](RELEASING.ru.md).
+3.9, 3.12, 3.13 и 3.14 в macOS и Linux; см. [RELEASING.md](RELEASING.ru.md).
 
 <a id="backups-recovery-and-removal"></a>
 ## Резервные копии, восстановление и удаление

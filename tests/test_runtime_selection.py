@@ -1,4 +1,5 @@
 """Exercise the stable launcher against fixed and development package copies."""
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -157,7 +158,7 @@ class RuntimeSelectionTests(unittest.TestCase):
         artifact.write_bytes(b"historical source bytes\n")
 
         def snapshot():
-            with sqlite3.connect(self.database.as_uri() + "?mode=ro", uri=True) as connection:
+            with closing(sqlite3.connect(self.database.as_uri() + "?mode=ro", uri=True)) as connection, connection:
                 schema = connection.execute("PRAGMA user_version").fetchone()[0]
                 contents = tuple(connection.iterdump())
             return (schema, contents, hashlib.sha256(self.database.read_bytes()).hexdigest(),

@@ -148,7 +148,7 @@ For focused runs, pass `-p test_punisher.py` or `-p test_card_maintenance.py`
 to unittest discover. Test subprocesses use existing `cli_environment`:
 temporary home/registry/store and no ambient chat IDs. User runtime and dev
 config are not switched. The [CI](../.github/workflows/tests.yml) matrix covers
-macOS/Linux, Python 3.9 and 3.12.
+macOS/Linux, Python 3.9, 3.12, 3.13 and 3.14.
 
 The workflow creates children with create-only CAS and verifies them, then edges
 and search; the parent is shortened last with the original `expected_updated_at`.

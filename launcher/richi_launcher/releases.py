@@ -172,6 +172,10 @@ def _stream_response(url, limit, publish, asset=False):
                 if not publish(block):
                     return size
     except HTTPError as exc:
+        # The chained error keeps only its code; release the error response
+        # now instead of when the garbage collector reaches the exception.
+        if exc.fp is not None:
+            exc.close()
         if exc.code == 404:
             raise _ReleaseNotFound("No published stable Richi release was found") from exc
         error_type = TransientReleaseError if exc.code in {408, 429} or 500 <= exc.code <= 599 else ConfigError

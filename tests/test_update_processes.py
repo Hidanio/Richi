@@ -1,5 +1,5 @@
 """Update routing and real runtime children keep installation leases intact."""
-from contextlib import ExitStack, redirect_stderr, redirect_stdout
+from contextlib import ExitStack, closing, redirect_stderr, redirect_stdout
 import http.client
 from http.server import BaseHTTPRequestHandler
 import io
@@ -256,7 +256,7 @@ class RuntimeLeasePropagationTests(unittest.TestCase):
             encoding="utf-8")
         self.runtime = runtime.describe_runtime(package, "dev", checkout)
         self.database = self.root / "memory.sqlite3"
-        with memory.connect(self.database, create=True) as connection:
+        with closing(memory.connect(self.database, create=True)) as connection, connection:
             memory.initialize(connection, self.database)
         self.config = self.root / "config.json"
         self.config.write_text(json.dumps({"database": str(self.database), "dev": True,

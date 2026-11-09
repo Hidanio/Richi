@@ -5,6 +5,7 @@ This isolates old/new index implementations inside one source runtime, not two
 installed packages. The full project benchmark measures installed endpoints.
 """
 import argparse
+from contextlib import closing
 import hashlib
 import json
 from pathlib import Path
@@ -48,13 +49,13 @@ def main():
         root = Path(directory)
         seed = root / 'seed/memory.sqlite3'
         ev.worker_main({'action': 'seed', 'database': str(seed), 'corpus': data})
-        with sqlite3.connect(seed) as source_conn:
+        with closing(sqlite3.connect(seed)) as source_conn:
             source_conn.execute('VACUUM')
         modules, connections = {'v1': old, 'v2': search_index}, {}
         try:
             for name, module in modules.items():
                 path = root / (name + '.sqlite3')
-                with sqlite3.connect(seed) as origin, sqlite3.connect(path) as target:
+                with closing(sqlite3.connect(seed)) as origin, closing(sqlite3.connect(path)) as target:
                     origin.backup(target)
                 conn = memory.connect(path)
                 connections[name] = conn

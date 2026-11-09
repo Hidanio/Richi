@@ -143,7 +143,7 @@ python3 -m venv "$CARDS_VENV"
 `-p test_card_maintenance.py` у unittest discover. Тестовые subprocess используют
 существующий `cli_environment`: временные home/registry/store, без ambient chat
 IDs. Пользовательский runtime и dev config не переключаются. Матрица
-[CI](../.github/workflows/tests.yml): macOS/Linux, Python 3.9 и 3.12.
+[CI](../.github/workflows/tests.yml): macOS/Linux, Python 3.9, 3.12, 3.13 и 3.14.
 
 Workflow создаёт детей с create-only CAS, проверяет их, затем рёбра и поиск;
 родитель сокращается последним с исходным `expected_updated_at`. Тесты

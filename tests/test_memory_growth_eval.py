@@ -1,5 +1,6 @@
 """Independent checks for the synthetic growth measurement harness."""
 
+from contextlib import closing
 import copy
 from argparse import Namespace
 import hashlib
@@ -300,7 +301,7 @@ class MemoryGrowthEvalTests(unittest.TestCase):
         for revisions in (0, 2):
             database = self.root / ("history-proof-" + str(revisions)) / "synthetic.sqlite3"
             self.runner.seed(database, corpus, revisions, history_target=self.fixture["generator"]["history_target"])
-            with memory.connect(database, readonly=True) as connection:
+            with closing(memory.connect(database, readonly=True)) as connection, connection:
                 records = {}
                 for family in ("entry", "entity", "edge"):
                     for expected in corpus[family]:

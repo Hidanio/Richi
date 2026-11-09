@@ -153,8 +153,8 @@ Offline mode uses ensurepip without an online pip upgrade. Repeating the same
 initial wheel is idempotent; a different wheel requires a new prefix or the
 verified `richi update apply --version X.Y.Z` path. Online installer `--version`
 pins the wheel version, not the bootstrap download. The release workflow tests
-the exact wheel and installer on Python 3.9/3.12, macOS/Linux before publishing;
-see [RELEASING.md](RELEASING.md).
+the exact wheel and installer on Python 3.9, 3.12, 3.13 and 3.14, macOS/Linux
+before publishing; see [RELEASING.md](RELEASING.md).
 
 <a id="резервные-копии-восстановление-и-удаление"></a>
 ## Backups, recovery and removal

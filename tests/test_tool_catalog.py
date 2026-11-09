@@ -1,5 +1,6 @@
 """Tool usage navigation on synthetic stores, independently of graph-export caps."""
 
+from contextlib import closing
 import http.client
 import json
 import sqlite3
@@ -108,7 +109,7 @@ class ToolCatalogTests(unittest.TestCase):
 
     def test_unsourced_usage_and_unsourced_parent_are_not_evidence(self):
         self.populate()
-        with sqlite3.connect(str(self.db)) as conn:
+        with closing(sqlite3.connect(str(self.db))) as conn, conn:
             conn.execute("UPDATE graph_edges SET sources = '[]' WHERE id IN ('trace-run', 'scenario-task')")
         tool = self.tool()
         self.assertEqual(tool["record_count"], 1)
@@ -211,7 +212,7 @@ class ToolCatalogTests(unittest.TestCase):
 
     def test_unrelated_entries_do_not_turn_usage_navigation_into_full_scans(self):
         self.populate()
-        with sqlite3.connect(str(self.db)) as conn:
+        with closing(sqlite3.connect(str(self.db))) as conn, conn:
             conn.execute("""
                 WITH RECURSIVE numbers(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM numbers WHERE n < 10000)
                 INSERT INTO entries(id,kind,title,summary,knowledge_state,created_at,updated_at)

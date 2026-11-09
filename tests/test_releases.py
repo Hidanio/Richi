@@ -171,6 +171,21 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaises(ConfigError):
                 releases.fetch_release(VERSION)
 
+    def test_http_error_responses_are_closed_before_reporting(self):
+        # An unclosed error response would linger until garbage collection and
+        # emit a ResourceWarning on Python 3.14 at an unpredictable moment.
+        for code in (403, 404, 503):
+            body = io.BytesIO(b"error page")
+            opener = mock.Mock()
+            opener.open.side_effect = HTTPError(releases._API + "latest", code, "error", {}, body)
+            with self.subTest(code=code), mock.patch.object(releases, "build_opener", return_value=opener):
+                if code == 404:
+                    self.assertIsNone(releases.fetch_release())
+                else:
+                    with self.assertRaises(ConfigError):
+                        releases.fetch_release()
+                self.assertTrue(body.closed)
+
     def test_missing_manifest_does_not_look_like_no_release(self):
         opener = mock.Mock()
         opener.open.side_effect = [Response(json.dumps(feed()).encode(), releases._API + "latest"),

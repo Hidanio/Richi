@@ -1,4 +1,5 @@
 """Explicit source watches detect drift without treating it as semantic truth."""
+from contextlib import closing
 import copy
 import hashlib
 import json
@@ -258,7 +259,7 @@ class SourceWatchTests(unittest.TestCase):
 
     def test_schema_one_is_observed_without_migration(self):
         legacy = self.root / "legacy.sqlite3"
-        with sqlite3.connect(legacy) as conn:
+        with closing(sqlite3.connect(legacy)) as conn, conn:
             conn.executescript((BASE / "schema.sql").read_text())
             conn.execute("PRAGMA user_version = 1")
         conn = memory.connect(legacy)
