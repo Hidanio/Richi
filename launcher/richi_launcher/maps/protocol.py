@@ -81,7 +81,7 @@ _MESSAGES = {
     Reason.UNVERIFIED_PROCESS: "The process reported by the map could not be verified as Richi's map; "
                                "it was not stopped",
     Reason.FOREIGN_USER: "The map process belongs to another user; it was not stopped",
-    Reason.NOT_PERMITTED: "This environment may not signal the map process (for example a sandbox); "
+    Reason.NOT_PERMITTED: "This environment may not signal or inspect the map process (for example a sandbox); "
                           "it was not stopped",
     Reason.PROCESS_EXITED: "The map process exited while it was being verified",
     Reason.CHANGED: "The map changed while it was being checked; run the command again",

@@ -122,7 +122,8 @@ def scan(ports=()):
         if not is_map(health):
             registry.prune(root, port)
             continue
-        verified, _reason = inspect(health)
+        # Only then does the answer, including the storage it names, come from that map.
+        verified, _reason = inspect(health, port)
         if (verified is None or not any(within(verified.launcher, path) for path in owned)
                 or not _valid_selection(health)):
             continue

@@ -141,10 +141,12 @@ change.
   Right after activation the updater asks the maps it finds to do
   so: those registered by a managed installation and those on the default ports
   (8765 and the next ten, or from `RICHI_PORT`). It waits for them and reports
-  them in its JSON result as `maps`, one entry per map with `url`, `pid`,
-  `status` and `version`:
-  - `restarted`, with `from_version`: the map now runs the activated version;
-  - `current`: it already did, for example because it followed by itself;
+  them in its JSON result as `maps`, one entry per map with `url`, `pid` and
+  `status`:
+  - `restarted`, with `from_version` and `version`: the map now runs the
+    activated version;
+  - `current`, with `version`: it already did, for example because it followed
+    by itself;
   - `restart_required`, with `from_version` and `error`: an older map, see below;
   - `pending` or `failed`, with `from_version` and `error`: the map was asked
     and has not switched, for example because it keeps its version (next item).
@@ -202,17 +204,20 @@ richi map restart --no-open
 map or by another program, `not_running` carries a `note`; neither is touched.
 If this workspace's map cannot be stopped, `stop` reports, with exit code 1,
 `refused` with a `reason`: `unverified_process`, `foreign_user`,
-`not_permitted` (this environment may not signal the process, for example a
-sandbox), `process_exited`, `changed` (the map changed meanwhile; run the
-command again) or `timeout`. `restart` stops the map and starts the current
-version on the same URL, or starts one if none is running; like `richi map` it
-opens the browser unless `--no-open` is given.
+`not_permitted` (this environment may not signal or inspect the process, for
+example a sandbox), `process_exited`, `changed` (the map kept changing while it
+was checked, for example during a restart; run the command again) or `timeout`.
+`restart` stops the map and starts the current version on the same URL, or
+starts one if none is running; like `richi map` it opens the browser unless
+`--no-open` is given.
 
 A map is identified only through its `/api/health` answer: the application, the
-process ID it reports and its runtime. Before any signal, Richi checks that this
-process belongs to the current user and runs Richi's map server with exactly that
-runtime. Unrelated programs, unverifiable processes and other workspaces' maps are
-never stopped. Stopping sends `SIGTERM` only: the map closes its port and exits.
+process ID it reports and its runtime. Before any signal, and before the storage
+it reports is used to start a replacement, Richi checks that this process belongs
+to the current user, runs Richi's map server with exactly that runtime and itself
+listens on the port that answered. Unrelated programs, unverifiable processes,
+answers naming another map's process and other workspaces' maps are never
+stopped. Stopping sends `SIGTERM` only: the map closes its port and exits.
 Handoff requests use `SIGUSR1` and only reach maps that advertise the
 `installation_handoff` capability. A map keeps the lease on its old version until
 that code stops running, so cleanup never removes code still in use; versions

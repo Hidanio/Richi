@@ -506,4 +506,6 @@ def run():
             handed_off = maps.after_activation(result)
             finished.update(maps=handed_off.get("maps", []),
                             restart_maps_required=handed_off.get("restart_maps_required", True))
+            if "maps_error" in handed_off:
+                finished["maps_error"] = handed_off["maps_error"]
         return finished

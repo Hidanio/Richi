@@ -41,8 +41,11 @@ def run(command, env=None, ok=True, stdin=None, cwd=None, terminal=False):
         # A person at a terminal: only such a command starts replacement maps.
         controller, device = pty.openpty()
     try:
+        # Other commands get no terminal even when this script runs in one: they
+        # stand for agents and scripts, which must not start replacement maps.
         result = subprocess.run([str(item) for item in command], env=env, input=stdin, cwd=cwd,
-                                stdin=device, capture_output=True, text=True, timeout=600)
+                                stdin=device if terminal else None if stdin is not None else subprocess.DEVNULL,
+                                capture_output=True, text=True, timeout=600)
     finally:
         for descriptor in (controller, device):
             if descriptor is not None:

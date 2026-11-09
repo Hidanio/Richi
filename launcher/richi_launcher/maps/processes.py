@@ -90,6 +90,77 @@ def process_uid(pid):
     return process_owner(pid)[0]
 
 
+def _loopback_listeners(table, port):
+    """Socket inodes listening on 127.0.0.1:port in a /proc/net/tcp table."""
+    import socket
+    import struct
+    inodes = set()
+    for line in table.splitlines()[1:]:
+        fields = line.split()
+        # sl local_address rem_address st ... uid timeout inode; 0A is LISTEN.
+        if len(fields) < 10 or fields[3] != "0A":
+            continue
+        address, _, local_port = fields[1].partition(":")
+        try:
+            # The kernel prints the address as a native-endian 32-bit number.
+            if (int(local_port, 16) == port and len(address) == 8
+                    and socket.inet_ntoa(struct.pack("=I", int(address, 16))) == "127.0.0.1"):
+                inodes.add("socket:[%s]" % fields[9])
+        except (ValueError, struct.error):
+            continue
+    return inodes
+
+
+def _linux_listens(pid, port, proc="/proc"):
+    try:
+        # This process's network namespace, where the health answer came from:
+        # a socket of the same port in another namespace is a different listener.
+        inodes = _loopback_listeners(Path(proc, "self", "net", "tcp").read_text(encoding="ascii"), port)
+        if not inodes:
+            return False
+        descriptors = Path(proc, str(pid), "fd")
+        denied = False
+        for name in os.listdir(descriptors):
+            try:
+                if os.readlink(descriptors / name) in inodes:
+                    return True
+            except PermissionError:
+                denied = True  # For example a Landlock sandbox around this process.
+            except OSError:
+                continue
+    except PermissionError:
+        return None
+    except (OSError, UnicodeError):
+        return False
+    return None if denied else False
+
+
+def _darwin_listens(pid, port):
+    import subprocess
+    try:
+        result = subprocess.run(["/usr/sbin/lsof", "-a", "-n", "-P", "-w", "-p", str(pid),
+                                 "-iTCP@127.0.0.1:%d" % port, "-sTCP:LISTEN", "-Fp"],
+                                stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0 and "p%d" % pid in result.stdout.split()
+
+
+def listens(pid, port):
+    """Whether the process holds the TCP socket listening on 127.0.0.1:port here.
+
+    Whoever listens on a port answers its health, so this ties an answer to
+    the process it names: another listener cannot borrow a real map's PID.
+    False when it does not or that cannot be shown; None when this
+    environment may not look at the process's descriptors.
+    """
+    if sys.platform.startswith("linux"):
+        return _linux_listens(pid, port)
+    if sys.platform == "darwin":
+        return _darwin_listens(pid, port)
+    return False
+
+
 def _skip_options(arguments, position, options, flags):
     """Position of the first positional argument after leading options, or None."""
     while position < len(arguments):

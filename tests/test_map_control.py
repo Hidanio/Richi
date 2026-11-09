@@ -8,6 +8,7 @@ import re
 import shutil
 import signal
 import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -88,12 +89,17 @@ class ArgumentTests(unittest.TestCase):
         child = subprocess.Popen([sys.executable, "-I", "-c", code, "/with space/path", "--port", "1"])
         self.addCleanup(child.wait)
         self.addCleanup(child.kill)
+        expected = ["-I", "-c", code, "/with space/path", "--port", "1"]
         deadline = time.monotonic() + 5
-        while maps.process_arguments(child.pid) is None or "-c" not in maps.process_arguments(child.pid):
-            self.assertLess(time.monotonic(), deadline)
+        while True:
+            # Until the child executes Python its arguments are the parent's, and
+            # a framework Python on macOS re-executes itself once more at start;
+            # meanwhile its arguments cannot be read at all.
+            arguments = maps.process_arguments(child.pid)
+            if arguments is not None and arguments[1:] == expected:
+                break
+            self.assertLess(time.monotonic(), deadline, arguments)
             time.sleep(0.05)
-        self.assertEqual(maps.process_arguments(child.pid)[1:],
-                         ["-I", "-c", code, "/with space/path", "--port", "1"])
         self.assertEqual(maps.process_uid(child.pid), os.getuid())
 
     @unittest.skipUnless(sys.platform == "darwin" or sys.platform.startswith("linux"), "Process terminals")
@@ -108,7 +114,57 @@ class ArgumentTests(unittest.TestCase):
         self.addCleanup(os.waitpid, pid, 0)
         self.addCleanup(os.kill, pid, signal.SIGKILL)
         self.assertEqual(maps.process_owner(background.pid), (os.getuid(), False))
-        self.assertEqual(maps.process_owner(pid), (os.getuid(), True))
+        deadline = time.monotonic() + 5
+        # The child acquires its controlling terminal only after fork returns here.
+        while maps.process_owner(pid) != (os.getuid(), True):
+            self.assertLess(time.monotonic(), deadline, maps.process_owner(pid))
+            time.sleep(0.05)
+
+    @unittest.skipUnless(sys.platform == "darwin" or sys.platform.startswith("linux"), "Process sockets")
+    def test_only_the_process_holding_the_listening_socket_listens_on_its_port(self):
+        sleeper = subprocess.Popen(["/bin/sleep", "30"])
+        self.addCleanup(sleeper.wait)
+        self.addCleanup(sleeper.kill)
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            listener.listen()
+            port = listener.getsockname()[1]
+            self.assertTrue(maps.listens(os.getpid(), port))
+            self.assertFalse(maps.listens(sleeper.pid, port))
+            with socket.create_connection(("127.0.0.1", port)) as client:
+                # A connected socket on a port is not a listener there.
+                self.assertFalse(maps.listens(os.getpid(), client.getsockname()[1]))
+        self.assertFalse(maps.listens(os.getpid(), port))
+
+    def test_linux_listeners_are_matched_by_address_state_and_descriptor(self):
+        def address(host, port):
+            return "%08X:%04X" % (struct.unpack("=I", socket.inet_aton(host))[0], port)
+        def table(rows):
+            return ("  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+                    + "".join("%4d: %s 00000000:0000 %s 00000000:00000000 00:00000000 00000000  1000        0 %d 1 0\n"
+                              % (index, local, state, inode) for index, (local, state, inode) in enumerate(rows)))
+        with tempfile.TemporaryDirectory(prefix="richi-proc-") as temporary:
+            proc = Path(temporary)
+            for directory in ("self/net", "77/net", "77/fd"):
+                (proc / directory).mkdir(parents=True)
+            # The table of the namespace this process reads health in.
+            (proc / "self" / "net" / "tcp").write_text(table([
+                (address("127.0.0.1", 8765), "0A", 111), (address("0.0.0.0", 8766), "0A", 222),
+                (address("127.0.0.1", 8767), "01", 333), (address("127.0.0.1", 8768), "0A", 444)]))
+            # The map's own namespace may differ: its listener on 8770 is not the one answering here.
+            (proc / "77" / "net" / "tcp").write_text(table([(address("127.0.0.1", 8770), "0A", 555)]))
+            for descriptor, target in (("3", "socket:[111]"), ("4", "socket:[222]"), ("5", "socket:[333]"),
+                                       ("6", "/dev/null"), ("7", "socket:[555]")):
+                os.symlink(target, proc / "77" / "fd" / descriptor)
+            listens = maps.processes._linux_listens
+            self.assertTrue(listens(77, 8765, proc=str(proc)))
+            for port in (8766, 8767, 8768, 8769, 8770):
+                with self.subTest(port=port):  # Any address, connected, another holder, absent, other namespace.
+                    self.assertFalse(listens(77, port, proc=str(proc)))
+            self.assertFalse(listens(78, 8765, proc=str(proc)))
+            # A sandbox may forbid reading another process's descriptors: unknown, not "no".
+            with mock.patch.object(maps.processes.os, "readlink", side_effect=PermissionError):
+                self.assertIsNone(listens(77, 8765, proc=str(proc)))
 
 
 @unittest.skipIf(sys.platform == "win32", "Detached maps target macOS and Linux")
@@ -216,6 +272,52 @@ class MapControlTests(unittest.TestCase):
                     worker.join(timeout=5)
                 self.assertIsNone(sleeper.poll())
         self.assertIsNone(sleeper.poll(), "A process named only by forged health must survive")
+
+    def serve_forged(self, port, payload):
+        server = HTTPServer(("127.0.0.1", port), type("Handler", (ForgedHealth,), {"payload": payload}))
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        self.addCleanup(worker.join, 5)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+
+    def test_an_answer_naming_another_maps_process_is_neither_signalled_nor_followed(self):
+        # Another local user can copy a real map's health answer, which names its
+        # PID and runtime, and serve it from a port of their own.
+        started = self.map("--no-open")
+        real = self.health()
+        forged_port = free_port()
+        while abs(forged_port - self.port) < maps.PORT_RANGE:
+            forged_port = free_port()
+        self.serve_forged(forged_port, real)
+        verified, _reason = maps.inspect(real, self.port)
+        self.assertIsNotNone(verified)
+        self.assertEqual(maps.inspect(real, forged_port), (None, maps.Reason.UNVERIFIED_PROCESS))
+        with mock.patch.object(maps.control, "listens", return_value=None):
+            # This environment may not look at the map's sockets, for example a sandbox.
+            self.assertEqual(maps.inspect(real, self.port), (None, maps.Reason.NOT_PERMITTED))
+        with self.assertRaises(maps.Refused) as refused:
+            maps.stop(forged_port, real)
+        self.assertEqual(refused.exception.reason, maps.Reason.UNVERIFIED_PROCESS)
+        result = self.run_cli("map", "stop", "--port", str(forged_port), ok=False)
+        self.assertEqual((result["status"], result["reason"]), ("refused", "unverified_process"))
+        # Nor may its storage selection start a replacement: scanning both ports
+        # finds only the map that listens on its own.
+        evil = dict(real, database=str(self.root / "other" / "memory.sqlite3"),
+                    config_file=str(self.root / "other" / "config.json"))
+        other_port = forged_port + 1  # free_port reserved a whole range
+        self.serve_forged(other_port, evil)
+        state = self.root / "installation"
+        state.mkdir()
+        (state / "state.json").write_text("{}")
+        with mock.patch.object(maps.reconcile, "context", return_value={"root": str(state)}), \
+                mock.patch.object(maps.reconcile.bootstrap, "read_state",
+                                  return_value={"current": "g2", "generations": {"g2": {"prefix": "/synthetic"}}}), \
+                mock.patch.object(maps.reconcile, "environments", return_value=(Path(verified.launcher),)):
+            self.assertEqual([found.port for found in maps.reconcile.scan([self.port, forged_port, other_port]).maps],
+                             [self.port])
+        self.assertEqual(self.health()["pid"], started["pid"])
+        self.assertEqual(self.map("stop")["status"], "stopped")
 
     def copied_launcher(self, version):
         site = self.root / ("site-" + version)

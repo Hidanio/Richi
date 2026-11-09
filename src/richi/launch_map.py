@@ -179,7 +179,7 @@ def _hand_off_in_place(port, health, database, config_file, runtime_selection):
     if (maps is None or maps.HANDOFF_CAPABILITY not in health.get("capabilities", [])
             or not maps.running_current_generation()):
         return None
-    verified, _unverified = maps.inspect(health)
+    verified, _unverified = maps.inspect(health, port)
     if verified is None or not maps.installation_owns(verified.launcher):
         return None
     if maps.handoff_problem(database_schema(database)) is not None:
@@ -307,20 +307,31 @@ def stop(database, first_port, config_file=None):
     if maps is None:
         raise RuntimeError(NO_MAP_CONTROL)
     with _launch_lock(database):
-        # Otherwise a map re-executing right now would be reported as not running.
-        restarting = maps.wait_for_restarts(_ports(first_port))
-        for port in _ports(first_port):
-            health = read_health(port)
-            if managed_health(health, database, config_file):
-                return maps.stop(port, health).as_dict()
-        if restarting:
-            raise RuntimeError(RESTARTING % url(restarting[0]))
-        result = {"status": "not_running", "url": url(first_port)}
-        if maps.is_map(read_health(first_port)):
-            result["note"] = "The map on this port serves another workspace; select that workspace to stop it"
-        elif not available(first_port):
-            result["note"] = "Another program uses this port; it was not touched"
-        return result
+        for attempt in range(3):
+            try:
+                return _stop_locked(database, first_port, config_file)
+            except MapRefused as exc:
+                # The map changed while it was checked, for example it began to re-execute.
+                if not exc.retryable or attempt == 2:
+                    raise
+                _settle(exc.port)
+
+
+def _stop_locked(database, first_port, config_file):
+    # Otherwise a map re-executing right now would be reported as not running.
+    restarting = maps.wait_for_restarts(_ports(first_port))
+    for port in _ports(first_port):
+        health = read_health(port)
+        if managed_health(health, database, config_file):
+            return maps.stop(port, health).as_dict()
+    if restarting:
+        raise RuntimeError(RESTARTING % url(restarting[0]))
+    result = {"status": "not_running", "url": url(first_port)}
+    if maps.is_map(read_health(first_port)):
+        result["note"] = "The map on this port serves another workspace; select that workspace to stop it"
+    elif not available(first_port):
+        result["note"] = "Another program uses this port; it was not touched"
+    return result
 
 
 def _main(argv=None):

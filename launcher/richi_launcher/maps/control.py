@@ -5,7 +5,7 @@ import signal
 import time
 from typing import NamedTuple
 
-from .processes import process_arguments, process_owner, process_uid, runner_launcher, runs_map
+from .processes import listens, process_arguments, process_owner, process_uid, runner_launcher, runs_map
 from .protocol import APPLICATION, EXIT_TIMEOUT, HANDOFF_SIGNAL, RETRYABLE, STOP_TIMEOUT, Reason
 
 
@@ -78,12 +78,14 @@ class Stopped(NamedTuple):
                 "exited": self.exited}
 
 
-def inspect(health):
-    """(Verified, None) for this user's map process with exactly this runtime, else (None, Reason).
+def inspect(health, port):
+    """(Verified, None) for this user's map serving this port with exactly this runtime, else (None, Reason).
 
-    The health answer names the PID; the process must belong to this user and
-    run Richi's runtime runner with the reported runtime payload, so an
-    unrelated listener, a forged answer or a reused PID is never trusted.
+    The health answer names the PID; the process must belong to this user,
+    run Richi's runtime runner with the reported runtime payload and itself
+    hold the loopback socket listening on the port that answered. So an
+    unrelated listener, an answer naming another map's PID, a forged answer
+    or a reused PID is never trusted, and neither is the storage it reports.
     """
     if not is_map(health):
         return None, Reason.NOT_RICHI_MAP
@@ -105,6 +107,11 @@ def inspect(health):
     arguments = process_arguments(pid)
     launcher = runner_launcher(arguments, health["runtime"]) if arguments else None
     if launcher is None:
+        return None, Reason.UNVERIFIED_PROCESS
+    listening = listens(pid, port)
+    if listening is None:
+        return None, Reason.NOT_PERMITTED
+    if not listening:
         return None, Reason.UNVERIFIED_PROCESS
     return Verified(launcher, bool(terminal)), None
 
@@ -131,9 +138,12 @@ def stop(port, health, timeout=STOP_TIMEOUT):
     descriptor, so it is released only when that process exits. Never
     escalates to SIGKILL.
     """
-    verified, reason = inspect(health)
+    verified, reason = inspect(health, port)
     pid = health.get("pid") if isinstance(health, dict) else None
     if verified is None:
+        if reason is Reason.UNVERIFIED_PROCESS and is_map(health) and not _same_process(port, health):
+            # It answers differently now, for example while it re-executes: look again.
+            reason = Reason.CHANGED
         raise Refused(reason, port, pid)
     # The answer must still come from the same verified process right before signalling.
     if not _same_process(port, health) or not runs_map(pid, health["runtime"]):

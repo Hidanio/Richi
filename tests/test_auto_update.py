@@ -442,6 +442,14 @@ class AutoUpdateTests(unittest.TestCase):
         installation.apply_release.side_effect = self.apply
         self.assertEqual(auto_update.run()["status"], "updated")
 
+    def test_an_installation_reports_why_running_maps_were_not_handed_off(self):
+        from richi_launcher import maps
+        auto_update.enable(auto_install=True)
+        with patch.object(maps.reconcile, "hand_off", side_effect=OSError("synthetic map search failure")):
+            result = auto_update.run()
+        self.assertEqual((result["status"], result["maps"], result["restart_maps_required"], result["maps_error"]),
+                         ("updated", [], True, "synthetic map search failure"))
+
     def test_bad_candidate_quarantined_until_newer_release_or_explicit_enable(self):
         auto_update.enable(auto_install=True)
         installation.apply_release.side_effect = ConfigError("self-check failed")

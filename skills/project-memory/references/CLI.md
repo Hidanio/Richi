@@ -265,7 +265,8 @@ workspace's map or another program uses the port) or `refused` with a `reason`
 (exit code 1); `richi map restart` stops the map and starts the current
 version on the same URL, opening the browser unless `--no-open` is given. Only a
 process verified through `/api/health` as this user's Richi map with the reported
-runtime is ever stopped; other programs on the port are left alone. Details:
+runtime, listening on that port itself, is ever stopped; other programs on the
+port are left alone. Details:
 [UPDATES.md](../../../docs/UPDATES.md#работающая-карта-и-первоначальный-переход).
 
 The initial view shows projects. Map search finds titles, descriptions, tags and aliases of loaded objects; selecting an object reveals its neighborhood within 1–3 hops. Nodes can be dragged, and the mouse changes zoom and position. A node card shows the full summary, work state, verification date and sources. An edge card shows direction, meaning, provenance and evidence. Hypotheses and superseded knowledge are enabled separately. Record membership in a project comes automatically from `project_ids`; it does not prove an effect on service behavior.

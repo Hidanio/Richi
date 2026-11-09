@@ -5,12 +5,14 @@ How a running map follows its installation
 
 Identity. A map is identified only through its loopback ``/api/health``
 answer: application name, PID, runtime payload, storage selection,
-installation generation, launcher and capabilities. Before any signal the
-process with that PID must belong to this user and run Richi's runtime runner
-with exactly that payload (``control.inspect``), so an unrelated listener, a
-forged answer or a reused PID is never signalled. Only SIGTERM (stop) and the
-handoff signal are ever sent. Nothing here opens a knowledge store or reads a
-workspace configuration.
+installation generation, launcher and capabilities. Before any signal, and
+before its storage selection is used to start a replacement, the process with
+that PID must belong to this user, run Richi's runtime runner with exactly that
+payload and hold the socket listening on the port that answered
+(``control.inspect``), so an unrelated listener, a forged answer, one naming
+another map's PID or a reused PID is never signalled or followed. Only SIGTERM
+(stop) and the handoff signal are ever sent. Nothing here opens a knowledge
+store or reads a workspace configuration.
 
 The map (``richi.serve``). A map advertises HANDOFF_CAPABILITY only when it
 installed the HANDOFF_SIGNAL handler, which needs this package at the
@@ -56,7 +58,7 @@ from . import control, handoff, processes, protocol, reconcile, registry
 from .control import Refused, Stopped, Verified, inspect, is_map, port_free, read_health, request_handoff, stop, url
 from .handoff import (Handoff, handoff_command, handoff_grace, handoff_problem, installation_owns,
                       running_current_generation, stable_command)
-from .processes import process_arguments, process_owner, process_uid, runner_launcher
+from .processes import listens, process_arguments, process_owner, process_uid, runner_launcher
 from .protocol import (API_VERSION, APPLICATION, DEFAULT_PORT, GENERATION_ENV, GRACE_ENV, HANDOFF_CAPABILITY,
                        HANDOFF_CHECK_TIMEOUT, HANDOFF_GRACE, HANDOFF_SIGNAL, HANDOFF_TIMEOUT, LEASE_ENV,
                        LISTEN_FD, LISTEN_FD_ENV, MARKER, PASSIVE_ENV, PORT_RANGE, PROBE_ANSWER, PROBE_ENV,
