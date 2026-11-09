@@ -6,7 +6,7 @@ import richi_bootstrap as bootstrap
 # The protocol between this package and the runtime (richi.serve.MAPS_API).
 # Change it whenever a function or constant the runtime uses changes; a
 # runtime speaking another version treats this package as absent.
-API_VERSION = 2
+API_VERSION = 3
 APPLICATION = "project-memory-map"
 # Maps from this release onwards follow the installation's current generation by
 # themselves and re-execute through the stable entry point on this signal.
@@ -77,12 +77,12 @@ class Reason(Enum):
 
 
 _MESSAGES = {
-    Reason.NOT_RICHI_MAP: "The process on this port is not a Richi map; it was not stopped",
+    Reason.NOT_RICHI_MAP: "The process on this port is not a Richi map; it was left alone",
     Reason.UNVERIFIED_PROCESS: "The process reported by the map could not be verified as Richi's map; "
-                               "it was not stopped",
-    Reason.FOREIGN_USER: "The map process belongs to another user; it was not stopped",
+                               "it was left alone",
+    Reason.FOREIGN_USER: "The map process belongs to another user; it was left alone",
     Reason.NOT_PERMITTED: "This environment may not signal or inspect the map process (for example a sandbox); "
-                          "it was not stopped",
+                          "it was left alone",
     Reason.PROCESS_EXITED: "The map process exited while it was being verified",
     Reason.CHANGED: "The map changed while it was being checked; run the command again",
     Reason.TIMEOUT: "The map did not release its port in time; it may still be finishing requests",

@@ -10,9 +10,10 @@ before its storage selection is used to start a replacement, the process with
 that PID must belong to this user, run Richi's runtime runner with exactly that
 payload and hold the socket listening on the port that answered
 (``control.inspect``), so an unrelated listener, a forged answer, one naming
-another map's PID or a reused PID is never signalled or followed. Only SIGTERM
-(stop) and the handoff signal are ever sent. Nothing here opens a knowledge
-store or reads a workspace configuration.
+another map's PID or a reused PID is never signalled or followed; ``richi map``
+also reuses a map only after this check (``richi.serve.foreign_answer``). Only
+SIGTERM (stop) and the handoff signal are ever sent. Nothing here opens a
+knowledge store or reads a workspace configuration.
 
 The map (``richi.serve``). A map advertises HANDOFF_CAPABILITY only when it
 installed the HANDOFF_SIGNAL handler, which needs this package at the
@@ -55,7 +56,8 @@ and so does the next terminal command unless such a map runs in a terminal of
 its own, which is left to its user.
 """
 from . import control, handoff, processes, protocol, reconcile, registry
-from .control import Refused, Stopped, Verified, inspect, is_map, port_free, read_health, request_handoff, stop, url
+from .control import (Refused, Stopped, Verified, inspect, is_map, port_free, read_health, request_handoff, stop,
+                      url, verify)
 from .handoff import (Handoff, handoff_command, handoff_grace, handoff_problem, installation_owns,
                       running_current_generation, stable_command)
 from .processes import listens, process_arguments, process_owner, process_uid, runner_launcher

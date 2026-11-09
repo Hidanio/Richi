@@ -290,18 +290,28 @@ class RuntimeLeasePropagationTests(unittest.TestCase):
 
         def remember_child(*arguments, **options):
             child = popen(*arguments, **options)
-            children.append(child)
+            command = arguments[0] if arguments else options["args"]
+            # Only map servers: verifying the started map may run ps and lsof.
+            if "serve" in command:
+                children.append(child)
             return child
 
+        def reap():
+            # A failed assertion must not leave a detached map running.
+            for started in children:
+                if started.poll() is None:
+                    started.kill()
+                    started.wait(timeout=5)
+        self.addCleanup(reap)
         # Keep the actual Popen handle so the test can reap its detached child.
         with mock.patch.object(launch_map.subprocess, "Popen", side_effect=remember_child):
             launched = launch_map.launch(self.database, port, self.config, self.runtime,
                                          config_required=True)
-        self.assertEqual(launched["status"], "started")
-        self.assertEqual(len(children), 1)
+        self.assertEqual(len(children), 1, children)
         child = children[0]
-        self.assertEqual(child.pid, launched["pid"])
         try:
+            self.assertEqual(launched["status"], "started")
+            self.assertEqual(child.pid, launched["pid"])
             # The detached server is now the sole holder, just as after the
             # short-lived `richi map` launcher exits during a release update.
             self.lease.close()

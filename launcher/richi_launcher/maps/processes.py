@@ -138,7 +138,8 @@ def _linux_listens(pid, port, proc="/proc"):
 def _darwin_listens(pid, port):
     import subprocess
     try:
-        result = subprocess.run(["/usr/sbin/lsof", "-a", "-n", "-P", "-w", "-p", str(pid),
+        # -b: never block on a file the process has open (for example on a stale network mount).
+        result = subprocess.run(["/usr/sbin/lsof", "-a", "-b", "-n", "-P", "-w", "-p", str(pid),
                                  "-iTCP@127.0.0.1:%d" % port, "-sTCP:LISTEN", "-Fp"],
                                 stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.SubprocessError):

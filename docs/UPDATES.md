@@ -217,7 +217,16 @@ it reports is used to start a replacement, Richi checks that this process belong
 to the current user, runs Richi's map server with exactly that runtime and itself
 listens on the port that answered. Unrelated programs, unverifiable processes,
 answers naming another map's process and other workspaces' maps are never
-stopped. Stopping sends `SIGTERM` only: the map closes its port and exits.
+stopped. `richi map` and `richi map serve --open` reuse or open a running map
+only after the same check, so another local user cannot pass off a page of their
+own as this workspace's map. Such an answer is neither opened nor joined by a
+second map: `richi map` reports `refused` with a `reason` such as
+`unverified_process`, and `richi map serve --open` reports that it cannot listen
+on the port. Where the environment may not inspect processes (for example a
+sandbox), a copy cannot be told apart, so `richi map` refuses with
+`not_permitted`; run it from a terminal. Only a development checkout whose
+installed launcher speaks another map protocol ([map](INSTALLATION.md#map))
+reuses a matching map unchecked, since it cannot check or stop maps at all. Stopping sends `SIGTERM` only: the map closes its port and exits.
 Handoff requests use `SIGUSR1` and only reach maps that advertise the
 `installation_handoff` capability. A map keeps the lease on its old version until
 that code stops running, so cleanup never removes code still in use; versions

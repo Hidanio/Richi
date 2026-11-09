@@ -27,7 +27,7 @@ def read_health(port, timeout=0.5):
 def is_map(health):
     """A loopback answer that claims to be a Richi map; proves nothing about its PID."""
     return (isinstance(health, dict) and health.get("application") == APPLICATION
-            and type(health.get("pid")) is int and health["pid"] > 1
+            and type(health.get("pid")) is int and 1 < health["pid"] <= 0x7FFFFFFF
             and isinstance(health.get("runtime"), dict)
             and isinstance(health["runtime"].get("identity"), str)
             and isinstance(health.get("capabilities"), list))
@@ -121,6 +121,19 @@ def _same_process(port, health):
     return is_map(current) and current["pid"] == health["pid"] and current["runtime"] == health["runtime"]
 
 
+def verify(port, health):
+    """inspect() for an answer just read on this port; CHANGED when the port no longer gives it.
+
+    A map that answered and then began to re-execute fails verification
+    meanwhile (its socket is closed or its arguments are not the runner's yet);
+    looking again finds what replaced it.
+    """
+    verified, reason = inspect(health, port)
+    if reason is Reason.UNVERIFIED_PROCESS and is_map(health) and not _same_process(port, health):
+        reason = Reason.CHANGED
+    return verified, reason
+
+
 def _alive_as(pid, runtime):
     try:
         os.kill(pid, 0)
@@ -138,12 +151,9 @@ def stop(port, health, timeout=STOP_TIMEOUT):
     descriptor, so it is released only when that process exits. Never
     escalates to SIGKILL.
     """
-    verified, reason = inspect(health, port)
+    verified, reason = verify(port, health)
     pid = health.get("pid") if isinstance(health, dict) else None
     if verified is None:
-        if reason is Reason.UNVERIFIED_PROCESS and is_map(health) and not _same_process(port, health):
-            # It answers differently now, for example while it re-executes: look again.
-            reason = Reason.CHANGED
         raise Refused(reason, port, pid)
     # The answer must still come from the same verified process right before signalling.
     if not _same_process(port, health) or not runs_map(pid, health["runtime"]):

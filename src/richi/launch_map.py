@@ -16,8 +16,8 @@ from richi_launcher.config import resolve_settings, ConfigError
 from richi_launcher.runtime import LAUNCHER_ROOT, current_runtime, preflight, runtime_command, lease_fds
 from .memory import Parser, MemoryError
 # maps is None when the installed launcher has no map protocol or another one.
-from .serve import (GENERATION_ENV, compatible_health, config_arguments, database_schema, maps,
-                    read_health, url, worker_environment)
+from .serve import (GENERATION_ENV, compatible_health, config_arguments, database_schema, foreign_answer,
+                    maps, read_health, url, worker_environment)
 
 
 BASE = Path(__file__).resolve().parent
@@ -43,7 +43,9 @@ def _ports(first_port):
 
 
 def healthy(port, database, runtime=None, config_file=None):
-    return compatible_health(read_health(port), database, runtime, config_file)
+    """This storage's map on this runtime answers on the port, and it is this user's map serving it."""
+    health = read_health(port)
+    return compatible_health(health, database, runtime, config_file) and foreign_answer(port, health) is None
 
 
 def managed_health(health, database, config_file):
@@ -194,7 +196,8 @@ def _hand_off_in_place(port, health, database, config_file, runtime_selection):
     deadline, current = time.monotonic() + maps.HANDOFF_TIMEOUT, None
     while time.monotonic() < deadline:
         current = read_health(port)
-        if compatible_health(current, database, runtime_selection, config_file):
+        if (compatible_health(current, database, runtime_selection, config_file)
+                and foreign_answer(port, current) is None):
             return {"url": url(port), "status": "restarted", "pid": current["pid"],
                     "previous": {"pid": health["pid"], "version": health["runtime"].get("version"),
                                  "exited": current["pid"] != health["pid"]}}
@@ -257,11 +260,16 @@ def _launch_locked(database, first_port, config_file, runtime_selection, config_
     ports = _ports(first_port)
     # A map re-executing on a new version has no health for a moment.
     restarting = maps.wait_for_restarts(ports) if maps is not None else []
-    transitioning, stale = [], None
+    transitioning, stale, foreign = [], None, None
     for port in ports:
         health = read_health(port)
         if not restart and compatible_health(health, database, runtime_selection, config_file):
-            return {"url": url(port), "status": "existing"}
+            reason = foreign_answer(port, health)
+            if reason is None:
+                return {"url": url(port), "status": "existing"}
+            # It claims to be this map but is not this user's map on that port.
+            foreign = foreign or MapRefused(reason, port, health.get("pid"))
+            continue
         if not managed_health(health, database, config_file):
             continue
         if not restart and follows_itself(health):
@@ -290,6 +298,9 @@ def _launch_locked(database, first_port, config_file, runtime_selection, config_
                 return handed_off
         return _replace(stale[0], stale[1], database, config_file, runtime_selection,
                         config_required, workspace, runtime_dir)
+    if foreign is not None:
+        # Neither reused nor signalled, and no second map beside what may be a real one.
+        raise foreign
     if restarting:
         # Not back yet and its storage is unknown: it may be this one, so no second map.
         raise RuntimeError(RESTARTING % url(restarting[0]))

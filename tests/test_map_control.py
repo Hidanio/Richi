@@ -6,6 +6,7 @@ from pathlib import Path
 import pty
 import re
 import shutil
+import shlex
 import signal
 import socket
 import struct
@@ -301,6 +302,30 @@ class MapControlTests(unittest.TestCase):
         self.assertEqual(refused.exception.reason, maps.Reason.UNVERIFIED_PROCESS)
         result = self.run_cli("map", "stop", "--port", str(forged_port), ok=False)
         self.assertEqual((result["status"], result["reason"]), ("refused", "unverified_process"))
+        # Nor is it reused or opened as this workspace's map, while the real one still is.
+        launched = self.run_cli("map", "--no-open", "--port", str(forged_port), ok=False)
+        self.assertEqual((launched["status"], launched["reason"]), ("refused", "unverified_process"))
+        self.assertEqual(self.map("--no-open"), {"url": maps.url(self.port), "status": "existing"})
+        opened = self.root / "opened.txt"
+        # Never the real browser: the command records the URL and always succeeds,
+        # so webbrowser does not fall back to the next browser.
+        script = 'echo "$0" >> ' + shlex.quote(str(opened)) + "; exit 0"
+        browser = dict(self.environment, BROWSER="/bin/sh -c " + shlex.quote(script) + " %s")
+        for port, ok in ((forged_port, False), (self.port, True)):
+            with self.subTest(serve_open=port):
+                served = subprocess.run(self.command + ["map", "serve", "--open", "--port", str(port)],
+                                        capture_output=True, text=True, timeout=60, env=browser, cwd=self.root)
+                self.assertEqual(served.returncode == 0, ok, served.stdout + served.stderr)
+        self.assertEqual(opened.read_text().split(), [maps.url(self.port)])
+        with mock.patch.object(maps.control, "listens", return_value=None):
+            # Where processes may not be inspected a copy cannot be told apart: refused too.
+            self.assertEqual(serve.foreign_answer(self.port, real), maps.Reason.NOT_PERMITTED)
+        self.assertEqual(serve.foreign_answer(forged_port, real), maps.Reason.UNVERIFIED_PROCESS)
+        self.assertIsNone(serve.foreign_answer(self.port, real))
+        # An answer the port no longer gives, as from a map that began to
+        # re-execute, is looked at again rather than refused.
+        earlier = dict(real, runtime=dict(real["runtime"], identity="0" * 64))
+        self.assertEqual(maps.verify(self.port, earlier), (None, maps.Reason.CHANGED))
         # Nor may its storage selection start a replacement: scanning both ports
         # finds only the map that listens on its own.
         evil = dict(real, database=str(self.root / "other" / "memory.sqlite3"),
@@ -514,6 +539,8 @@ class RestartingRefusalTests(unittest.TestCase):
                                   side_effect=lambda _ports, timeout=None: list(quick) if timeout == 0 else restarting),
                 mock.patch.object(launch_map, "read_health", side_effect=lambda port: answers.get(port)),
                 mock.patch.object(launch_map, "compatible_health", side_effect=lambda health, *_a: health is not None),
+                # The synthetic answer stands for this user's map on that port.
+                mock.patch.object(launch_map, "foreign_answer", return_value=None),
                 mock.patch.object(launch_map, "managed_health", side_effect=lambda health, *_a: health is not None)]
 
     def run_with(self, patches, call):
@@ -868,7 +895,8 @@ class InPlaceHandoffTests(unittest.TestCase):
                    mock.patch.object(launch_map, "read_health",
                                      side_effect=lambda _port: answers.pop(0) if len(answers) > 1 else answers[0]),
                    mock.patch.object(launch_map, "compatible_health",
-                                     side_effect=lambda health, *_args: bool(health and health.get("compatible")))]
+                                     side_effect=lambda health, *_args: bool(health and health.get("compatible"))),
+                   mock.patch.object(launch_map, "foreign_answer", return_value=None)]
         for patcher in patches:
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -934,12 +962,32 @@ class LaunchRaceTests(unittest.TestCase):
             self.assertEqual(scanned.call_count, 2)
             settled.assert_called_once_with(4321)
             self.assertIs(launch_map.MapRefused, maps.Refused)
-            for reason in (maps.Reason.UNVERIFIED_PROCESS, maps.Reason.FOREIGN_USER):
+            for reason in (maps.Reason.UNVERIFIED_PROCESS, maps.Reason.FOREIGN_USER, maps.Reason.NOT_PERMITTED):
                 with self.subTest(reason=reason):
                     failing = maps.Refused(reason, 4321, 99999)
                     with mock.patch.object(launch_map, "_launch_locked", side_effect=failing), \
                             self.assertRaises(launch_map.MapRefused):
                         launch_map.launch(database, 4321, runtime=mock.sentinel.runtime)
+
+    def test_an_answer_naming_no_process_is_refused_without_starting_a_map(self):
+        with tempfile.TemporaryDirectory(prefix="richi-map-nopid-") as temporary:
+            database = Path(temporary) / "memory.sqlite3"
+            database.write_bytes(b"")
+            missing = {"application": maps.APPLICATION, "runtime": {"identity": "x"}, "capabilities": []}
+            # A PID no process can have: os.kill would overflow.
+            for answer in (missing, dict(missing, pid=2 ** 31)):
+                with self.subTest(pid=answer.get("pid")), \
+                        mock.patch.object(maps, "wait_for_restarts", return_value=[]), \
+                        mock.patch.object(launch_map, "read_health",
+                                          side_effect=lambda port, answer=answer: answer if port == 4321 else None), \
+                        mock.patch.object(launch_map, "compatible_health",
+                                          side_effect=lambda health, *_a, answer=answer: health is answer), \
+                        mock.patch.object(launch_map, "_start") as start, \
+                        self.assertRaises(launch_map.MapRefused) as refused:
+                    launch_map.launch(database, 4321, runtime=mock.sentinel.runtime)
+                self.assertEqual((refused.exception.reason, refused.exception.pid),
+                                 (maps.Reason.NOT_RICHI_MAP, answer.get("pid")))
+                self.assertFalse(start.called)
 
 
 if __name__ == "__main__":

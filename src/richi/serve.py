@@ -31,7 +31,7 @@ from .memory import Parser, MemoryError
 BASE = Path(__file__).resolve().parent
 API_VERSION = 4
 # The richi_launcher.maps protocol this runtime speaks (maps.API_VERSION).
-MAPS_API = 2
+MAPS_API = 3
 # Set by the installation's bootstrap for every process it starts.
 LEASE_ENV = "RICHI_INSTALLATION_LEASE_FD"
 ROOT_ENV = "RICHI_INSTALLATION_ROOT"
@@ -96,6 +96,26 @@ def read_health(port, timeout=0.5):
             return json.loads(response.read(65537))
     except (OSError, HTTPException, ValueError, AttributeError, TypeError):
         return None
+
+
+def foreign_answer(port, health):
+    """Why this map answer on the port may not be taken for this user's map serving it, or None.
+
+    Another local user can copy a map's health answer, PID included, and serve
+    it from a port of their own, so a matching answer is reused or opened only
+    when its process belongs to this user, runs Richi's map server and listens
+    on that port itself. Where that cannot be checked, for example in a
+    sandbox, the copy cannot be told apart and the answer is refused as well
+    (not_permitted); a map that began to re-execute is CHANGED. Without the
+    installed launcher's map control nothing can be checked or stopped, and
+    the answer is taken as it is.
+    """
+    if maps is None:
+        return None
+    _verified, reason = maps.verify(port, health)
+    return reason
+
+
 GIT_QUERY_LIMIT = 8192
 GIT_OPERATION_TIMEOUT = 25
 GIT_WORKER_TIMEOUT = 30
@@ -759,14 +779,20 @@ def _main(argv=None):
                                                 settings.workspace, capabilities),
                                     listener=listener)
     except OSError as exc:
+        problem = str(exc)
         if args.open:
-            if compatible_health(read_health(args.port, timeout=2), database, runtime, settings.config_file):
-                restore_handoff()
-                webbrowser.open(address)
-                print("Existing map: " + address, flush=True)
-                return
+            existing = read_health(args.port, timeout=2)
+            if compatible_health(existing, database, runtime, settings.config_file):
+                refused = foreign_answer(args.port, existing)
+                if refused is None:
+                    restore_handoff()
+                    webbrowser.open(address)
+                    print("Existing map: " + address, flush=True)
+                    return
+                problem = ("the map answering there could not be verified as this user's map ("
+                           + refused.value + "); it was left alone")
         restore_handoff()
-        parser.error("Cannot listen on port %d: %s. Choose another --port." % (args.port, exc))
+        parser.error("Cannot listen on port %d: %s. Choose another --port." % (args.port, problem))
     server.daemon_threads = False
     registration = maps.register(args.port) if follower is not None else None
 
