@@ -171,8 +171,14 @@ def _load(ctx, agent="codex"):
 
 def _manifest_op(ctx, records):
     path = Path(ctx["root"]) / MANIFEST
-    record = records["codex"] if set(records) == {"codex"} else {
-        "format_version": 2, "original_prefix": ctx["original_prefix"], "agents": records}
+    if set(records) == {"codex"}:
+        # Format 1 keeps the shape 1.0.1 writes, adapter 1 implied: after a
+        # rollback, 1.0.1 compares this file with its own record and would
+        # report any extra field as drift.
+        record = {key: value for key, value in records["codex"].items()
+                  if not (key == "adapter_version" and value == 1)}
+    else:
+        record = {"format_version": 2, "original_prefix": ctx["original_prefix"], "agents": records}
     after = files.file_value((json.dumps(record, sort_keys=True, indent=2) + "\n").encode())
     before = files.snapshot(path)
     # Preserve exact bytes when the records did not change, including a 1.0.1

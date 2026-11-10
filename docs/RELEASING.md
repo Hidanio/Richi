@@ -106,6 +106,9 @@ Every protocol-1 release keeps them able to update in place:
   `richi-release-2.json`): protocol-1 updaters select `richi-release.json` by exact
   name and ignore other assets. Keep publishing a protocol-1 manifest while
   protocol-1 installations must update.
+- A Codex-only agent setup record (format 1) keeps exactly the fields 1.0.1 writes,
+  with adapter 1 implied. After a rollback, 1.0.1 plans its own record again and
+  reports any other field as drift, so `setup --status` would say `repair_required`.
 - `tests/update_matrix_e2e.py` updates every published release to the candidate in
   place. Its sources are the stable `vX.Y.Z` tags from `v1.0.1` below the candidate's
   version, so a new tag joins the matrix without edits. Each source is built from its
