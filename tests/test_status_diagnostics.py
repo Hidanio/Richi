@@ -1,4 +1,5 @@
 """Synthetic, read-only workspace status and registered-path diagnostics."""
+from contextlib import closing
 from pathlib import Path
 import hashlib
 import os
@@ -220,7 +221,7 @@ class StatusDiagnosticsTests(unittest.TestCase):
 
     def test_schema_one_supported_unknown_schema_not_migrated(self):
         for version, expected in ((1, "ready"), (2, "ready"), (3, "ready"), (99, "unsupported_schema")):
-            with sqlite3.connect(str(self.db)) as conn:
+            with closing(sqlite3.connect(str(self.db))) as conn, conn:
                 conn.execute("PRAGMA user_version = {}".format(version))
             digest = hashlib.sha256(self.db.read_bytes()).hexdigest()
             report = status.inspect(self.db, self.root, all_projects=True)

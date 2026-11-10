@@ -1,4 +1,5 @@
 """Stop, restart and replace running maps without signalling unverified processes."""
+from contextlib import closing
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
@@ -774,7 +775,7 @@ class RestartSequenceTests(unittest.TestCase):
         self.database = self.root / "memory.sqlite3"
         self.config = self.root / "config.json"
         self.config.write_text("{}", encoding="utf-8")
-        with memory.connect(self.database, create=True) as connection:
+        with closing(memory.connect(self.database, create=True)) as connection, connection:
             memory.initialize(connection, self.database)
         installation = self.root / "installation"
         installation.mkdir()

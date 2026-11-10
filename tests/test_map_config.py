@@ -1,5 +1,5 @@
 """Explicit configuration must survive both detached map and graph workers."""
-from contextlib import redirect_stdout
+from contextlib import closing, redirect_stdout
 import http.client
 import io
 import json
@@ -28,7 +28,7 @@ class MapConfigTests(unittest.TestCase):
             database = root / "memory.sqlite3"
             config = root / "config.json"
             config.write_text("{}", encoding="utf-8")
-            with memory.connect(database, create=True) as connection:
+            with closing(memory.connect(database, create=True)) as connection, connection:
                 memory.initialize(connection, database)
             port = free_port()
             connect = sqlite3.connect

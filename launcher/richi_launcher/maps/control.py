@@ -16,10 +16,17 @@ def url(port):
 def read_health(port, timeout=0.5):
     """A loopback map's health answer, or None. Never goes through a proxy."""
     from http.client import HTTPException
+    from urllib.error import HTTPError
     from urllib.request import ProxyHandler, build_opener
     try:
         with build_opener(ProxyHandler({})).open(url(port) + "api/health", timeout=timeout) as response:
             return json.loads(response.read(65537))
+    except HTTPError as exc:
+        # Another service answered with an error page. Close its response
+        # explicitly; the exception's finalizer warns about it on Python 3.14.
+        if exc.fp is not None:
+            exc.close()
+        return None
     except (OSError, HTTPException, ValueError, AttributeError, TypeError):
         return None
 

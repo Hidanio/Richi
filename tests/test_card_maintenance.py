@@ -5,6 +5,7 @@ Run ``python tests/test_card_maintenance.py --report`` for a disposable-store
 measurement. This is fixture-specific test orchestration, not a split command.
 No personal store, workspace, network, source-file or Git reads are involved.
 """
+from contextlib import closing
 import copy
 import json
 from pathlib import Path
@@ -155,7 +156,7 @@ class CardMaintenanceTests(unittest.TestCase):
         self.assertFalse(any(edge["from_ref"] == "entry:" + self.parent_id for edge in explicit))
 
     def database_snapshot(self):
-        with sqlite3.connect(str(self.db)) as connection:
+        with closing(sqlite3.connect(str(self.db))) as connection, connection:
             return list(connection.iterdump())
 
     def test_preserves_predeclared_search_oracle_provenance_states_and_history(self):

@@ -1,4 +1,5 @@
 """Installed CLI contracts for explicit indexing and composed read filters."""
+from contextlib import closing
 import json
 from pathlib import Path
 import sqlite3
@@ -45,7 +46,7 @@ class IndexedCliTests(unittest.TestCase):
         self.cli("entry", "put", "--json", "-", payload=value)
 
     def authoritative_rows(self):
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             names = [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
                      if row[0] in {"entries", "entry_projects", "entry_history", "entry_events", "projects", "relations",
                                    "entities", "entity_history", "graph_edges", "edge_history", "graph_nodes"}]

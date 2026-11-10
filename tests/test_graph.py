@@ -1,4 +1,5 @@
 """Graph migration, provenance, concurrency protection, and loopback integration."""
+from contextlib import closing
 import http.client
 import json
 from pathlib import Path
@@ -61,7 +62,7 @@ class GraphTests(unittest.TestCase):
 
     def test_v1_migration_preserves_all_records_fts_and_history(self):
         self.db = Path(self.temp.name) / "legacy.sqlite3"
-        with sqlite3.connect(str(self.db)) as conn:
+        with closing(sqlite3.connect(str(self.db))) as conn, conn:
             conn.executescript((BASE / "schema.sql").read_text())
             conn.executescript(memory.FTS_SQL)
             conn.execute("INSERT INTO metadata VALUES ('search_backend', 'fts5')")
@@ -70,13 +71,13 @@ class GraphTests(unittest.TestCase):
         self.put("entry", self.entry("old", event_id="initial-write"))
         self.put("entry", self.entry("old", summary="FTSneedlepersist", event_id="changed-write"))
         tables = ["projects", "entries", "entry_projects", "relations", "entry_history", "entry_events", "metadata"]
-        with sqlite3.connect(str(self.db)) as conn:
+        with closing(sqlite3.connect(str(self.db))) as conn, conn:
             before = {t: conn.execute("SELECT * FROM " + t).fetchall() for t in tables}
         self.cli("init", ok=False)
         self.cli("graph", "export", ok=False)
         self.assertEqual(self.cli("migrate")["status"], "migrated")
         self.assertEqual(self.cli("migrate")["status"], "existing")
-        with sqlite3.connect(str(self.db)) as conn:
+        with closing(sqlite3.connect(str(self.db))) as conn, conn:
             after = {t: conn.execute("SELECT * FROM " + t).fetchall() for t in tables}
             self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 3)
         self.assertEqual(before, after)
@@ -87,14 +88,14 @@ class GraphTests(unittest.TestCase):
 
     def test_migration_rolls_back_on_partial_schema_collision(self):
         self.db = Path(self.temp.name) / "broken.sqlite3"
-        with sqlite3.connect(str(self.db)) as conn:
+        with closing(sqlite3.connect(str(self.db))) as conn, conn:
             conn.executescript((BASE / "schema.sql").read_text())
             conn.execute("INSERT INTO metadata VALUES ('search_backend', 'scan')")
             conn.execute("PRAGMA user_version = 1")
             conn.execute("CREATE TABLE graph_nodes (valuable TEXT)")
             conn.execute("INSERT INTO graph_nodes VALUES ('keep')")
         self.cli("migrate", ok=False)
-        with sqlite3.connect(str(self.db)) as conn:
+        with closing(sqlite3.connect(str(self.db))) as conn, conn:
             self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 1)
             self.assertEqual(conn.execute("SELECT * FROM graph_nodes").fetchall(), [("keep",)])
             self.assertFalse(conn.execute("SELECT name FROM sqlite_master WHERE name='entities'").fetchall())
@@ -151,7 +152,7 @@ class GraphTests(unittest.TestCase):
         self.cli("edge", "get", "atomic", ok=False)
         self.put("entity", self.entity(id="no-source", sources=[]), ok=False)
         self.put("edge", self.edge(id="no-source", sources=[]), ok=False)
-        with sqlite3.connect(str(self.db)) as conn:
+        with closing(sqlite3.connect(str(self.db))) as conn, conn:
             for table in ("entity_history", "edge_history"):
                 with self.assertRaises(sqlite3.IntegrityError):
                     conn.execute("DELETE FROM " + table)

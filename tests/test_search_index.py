@@ -1,5 +1,6 @@
 """Derived index contracts against disposable public fixtures, never live memory."""
 
+from contextlib import closing
 import json
 from pathlib import Path
 import sqlite3
@@ -88,7 +89,7 @@ class SearchIndexTests(unittest.TestCase):
         self.assertEqual(self.conn.execute("SELECT count(*) FROM " + search_index.KEYS +
                                            " WHERE instr(key, 'provenanceonlyneedle') > 0").fetchone()[0], 0)
         self.assertNotIn("provenanceonlyneedle", json.dumps(result))
-        with memory.connect(self.path, readonly=True) as readonly:
+        with closing(memory.connect(self.path, readonly=True)) as readonly, readonly:
             self.assertEqual(self.candidates("entry", "SEARCH ALIAS", readonly), {"note"})
             self.assertEqual(search_index.status(readonly)["keys"], result["keys"])
 
@@ -158,7 +159,7 @@ class SearchIndexTests(unittest.TestCase):
         self.build()
         # Separate stock sqlite connection: persistent triggers need no Python
         # functions and an older CLI can still write to schema version 2.
-        with sqlite3.connect(str(self.path)) as old_writer:
+        with closing(sqlite3.connect(str(self.path))) as old_writer, old_writer:
             old_writer.execute("UPDATE entries SET aliases = ? WHERE id = 'old-entry'", ('["After alias"]',))
             old_writer.execute("UPDATE entities SET title = 'Afterterm' WHERE id = 'old-entity'")
         self.insert("entity", "new-entity", title="Newterm")
@@ -270,7 +271,7 @@ class SearchIndexTests(unittest.TestCase):
         self.build()
         self.conn.execute("UPDATE metadata SET value = '999' WHERE key = ?", (search_index.VERSION_KEY,))
         before = self.snapshot(["sqlite_master", "metadata", search_index.KEYS])
-        with memory.connect(self.path, readonly=True) as readonly:
+        with closing(memory.connect(self.path, readonly=True)) as readonly, readonly:
             self.assertIsNone(self.candidates("entry", "one", readonly))
             self.assertEqual(search_index.status(readonly)["status"], "unsupported")
         with memory.transaction(self.conn), self.assertRaises(memory.MemoryError):

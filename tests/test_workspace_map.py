@@ -1,4 +1,5 @@
 """Real maps keep their workspace while another CLI selects a different default."""
+from contextlib import closing
 import http.client
 import json
 import os
@@ -126,7 +127,7 @@ class WorkspaceMapTests(unittest.TestCase):
         (repository / "code.txt").write_text(name + " captured worktree\n")
         captured = git_evidence.capture(repository, "shared", "code.txt", worktree=True,
                                          artifact_dir=git_sources._artifacts(database))
-        with memory.connect(database) as connection:
+        with closing(memory.connect(database)) as connection, connection:
             memory.project_put(connection, {"id": "shared", "name": name + " project", "repo_path": str(repository)})
             memory.entry_put(connection, {"id": "task:same", "kind": "experiment", "title": name + " experiment",
                 "summary": name + " isolated knowledge", "project_ids": ["shared"], "sources": [captured],
@@ -202,7 +203,7 @@ class WorkspaceMapTests(unittest.TestCase):
 
     def test_missing_default_config_stays_pinned_after_workspace_use(self):
         database = self.root / "default-memory.sqlite3"
-        with memory.connect(database, create=True) as connection:
+        with closing(memory.connect(database, create=True)) as connection, connection:
             memory.initialize(connection, database)
             memory.project_put(connection, {"id": "default-only", "name": "Default memory"})
         port = self.free_port()

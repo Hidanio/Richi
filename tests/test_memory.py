@@ -1,5 +1,6 @@
 """Integration tests use isolated databases; never touch the user's knowledge store."""
 import concurrent.futures
+from contextlib import closing
 import json
 import sqlite3
 import subprocess
@@ -166,10 +167,10 @@ class MemoryIntegrationTests(unittest.TestCase):
         self.run_cli("check")
 
     def test_future_database_schema_is_not_silently_downgraded(self):
-        with sqlite3.connect(str(self.db)) as connection:
+        with closing(sqlite3.connect(str(self.db))) as connection, connection:
             connection.execute("PRAGMA user_version = 999;")
         self.run_cli("init", ok=False)
-        with sqlite3.connect(str(self.db)) as connection:
+        with closing(sqlite3.connect(str(self.db))) as connection, connection:
             self.assertEqual(connection.execute("PRAGMA user_version;").fetchone()[0], 999)
 
     def test_stale_update_cannot_overwrite_concurrent_findings(self):

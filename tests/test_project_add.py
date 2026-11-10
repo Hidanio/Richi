@@ -1,5 +1,5 @@
 """Workspace-local registration must not copy knowledge or overwrite another project."""
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import closing, redirect_stdout, redirect_stderr
 import io
 import json
 from pathlib import Path
@@ -39,7 +39,7 @@ class ProjectAddTests(unittest.TestCase):
             self.assertEqual(result["status"], "created")
             self.assertEqual(result["project"]["repo_path"], str(self.repo))
             self.assertEqual(result["database"], str(config.parent / "memory.sqlite3"))
-        with memory.connect(self.configs[0].parent / "memory.sqlite3") as connection:
+        with closing(memory.connect(self.configs[0].parent / "memory.sqlite3")) as connection, connection:
             memory.entry_put(connection, {"id": "note:alpha", "kind": "note", "title": "Only alpha",
                 "summary": "Workspace-specific knowledge", "project_ids": ["shared"],
                 "knowledge_state": "confirmed"})
@@ -60,7 +60,7 @@ class ProjectAddTests(unittest.TestCase):
         config = self.configs[0]
         loop = self.root / "old-loop"
         loop.symlink_to(loop)
-        with memory.connect(config.parent / "memory.sqlite3") as connection:
+        with closing(memory.connect(config.parent / "memory.sqlite3")) as connection, connection:
             memory.project_put(connection, {"id": "historical", "name": "Historical",
                                             "repo_path": str(loop)})
         result = self.command(config, "project", "add", self.repo, "--id", "new-project")

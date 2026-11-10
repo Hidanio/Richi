@@ -11,6 +11,7 @@ and the `build` package.
 Usage: python tests/legacy_update_e2e.py DIST
 DIST holds this release's wheel and its richi-release.json.
 """
+from contextlib import closing
 import io
 import json
 import os
@@ -61,7 +62,12 @@ def build_legacy(work):
                              capture_output=True, check=True).stdout
     source = work / "legacy-source"
     with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
-        tar.extractall(source)
+        # Choose the "data" filter (the 3.14 default) explicitly where it
+        # exists, so 3.12/3.13 do not warn; Python 3.9.6 predates filters.
+        if hasattr(tarfile, "data_filter"):
+            tar.extractall(source, filter="data")
+        else:
+            tar.extractall(source)
     dist = work / "legacy-dist"
     run([sys.executable, "-m", "build", "--wheel", "--outdir", dist, source])
     wheel = next(dist.glob("richi-1.0.1-py3-none-any.whl"))
@@ -136,7 +142,7 @@ def main():
             return data["status"], data.get("changes", [])
 
         def schema(database):
-            with sqlite3.connect("file:" + database + "?mode=ro", uri=True) as conn:
+            with closing(sqlite3.connect("file:" + database + "?mode=ro", uri=True)) as conn, conn:
                 return conn.execute("PRAGMA user_version").fetchone()[0]
 
         def health():

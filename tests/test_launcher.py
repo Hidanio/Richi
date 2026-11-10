@@ -1,6 +1,7 @@
 """Exercise real launcher processes with disposable databases and local ports."""
 from concurrent.futures import ThreadPoolExecutor
 import http.client
+import io
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import os
@@ -13,7 +14,10 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest import mock
+from urllib.error import HTTPError
 
+from richi_launcher import maps
 from richi_launcher.runtime import bootstrap_command
 from richi.launch_map import read_health
 
@@ -142,6 +146,21 @@ class LauncherTests(unittest.TestCase):
     def test_api4_flat_runtime_is_not_reused_even_for_the_same_database(self):
         self.assert_old_server_kept(api_version=4,
                                    capabilities=["git_source_viewer", "legacy_git_source_viewer"])
+
+
+class ReadHealthTests(unittest.TestCase):
+    def test_error_response_from_another_service_is_closed(self):
+        # Another HTTP service on the port answers with an error page; its
+        # response must be closed explicitly, not left to a finalizer. The
+        # runtime and the launcher each have their own reader.
+        for reader in (read_health, maps.read_health):
+            body = io.BytesIO(b"not found")
+            opener = mock.Mock()
+            opener.open.side_effect = HTTPError("http://127.0.0.1:9/api/health", 404, "Not Found", {}, body)
+            with self.subTest(reader=reader.__module__), \
+                    mock.patch("urllib.request.build_opener", return_value=opener):
+                self.assertIsNone(reader(9))
+                self.assertTrue(body.closed)
 
 
 if __name__ == "__main__":

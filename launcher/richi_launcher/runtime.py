@@ -138,8 +138,9 @@ try:
         print(json.dumps(inspect(**json.loads(arguments[0])), ensure_ascii=False))
         result = 0
     elif action == "preflight":
+        from contextlib import closing
         from richi import memory, serve
-        with memory.connect(pathlib.Path(arguments[0]), readonly=True) as connection:
+        with closing(memory.connect(pathlib.Path(arguments[0]), readonly=True)) as connection:
             memory.backend(connection)
             if connection.execute("PRAGMA user_version").fetchone()[0] not in (2, 3):
                 raise ValueError("The map requires schema 2 or 3; no migration was attempted")

@@ -10,11 +10,12 @@ excluded. There is no PyPI publication or separate update server.
 To prepare a release, update both `[project].version` in `pyproject.toml` and
 `__version__` in `src/richi/__init__.py`, review and merge the change, then push
 the matching `vX.Y.Z` tag. Pushing a tag starts `.github/workflows/release.yml`.
-The workflow builds one wheel and tests that artifact on Python 3.9 and 3.12,
-on Linux and macOS, including the public recall evaluation. Only after every
-matrix job passes does it create a GitHub draft with the wheel, manifest and installer
-attached, then publish it. A failed upload leaves a draft, which is invisible
-to the updater; inspect or remove that draft before retrying publication.
+The workflow builds one wheel and tests that artifact on Python 3.9, 3.12,
+3.13 and 3.14 on Linux and macOS, including the public recall evaluation.
+Only after every matrix job passes does it create a GitHub draft with the
+wheel, manifest and installer attached, then publish it. A failed upload leaves
+a draft, which is invisible to the updater; inspect or remove that draft before
+retrying publication.
 Published versions must not be replaced: corrections get a new version and tag.
 
 Do not publish an empty release with GitHub's **New release** button while the
