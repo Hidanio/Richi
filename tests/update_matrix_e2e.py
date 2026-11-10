@@ -30,6 +30,7 @@ the running Python first. Needs the git tags (a full clone) and the `build`
 package; building a tag fetches its build backend.
 """
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from functools import partial
 import io
@@ -309,11 +310,15 @@ class Home:
         self.schema = store_schema(self.store)
 
     def observe(self):
-        return knowledge({name: json.loads(self.cli("--chat", CHAT, *query).stdout) for name, query in QUERIES.items()})
+        """Every query through the chat; they only read, so they run side by side."""
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            answers = pool.map(lambda query: json.loads(self.cli("--chat", CHAT, *query).stdout), QUERIES.values())
+            return knowledge(dict(zip(QUERIES, answers)))
 
     def verify(self, release):
         """The active release, its agents, the chat binding and unchanged knowledge."""
-        assert self.version() == "Richi " + release.version, (self.name, self.version(), release.version)
+        active = self.version()
+        assert active == "Richi " + release.version, (self.name, active, release.version)
         for agent in self.agents:
             assert self.setup_status(agent) == ("configured", []), (self.name, agent, self.setup_status(agent))
         if "claude" in self.agents:
@@ -393,7 +398,12 @@ class Home:
                 self.map = self.assert_map(before)
                 return
             after = self.wait_for_map(release.version)
-            assert after["pid"] != before["pid"] and maps.process_arguments(before["pid"]) is None, (before, after)
+            assert after["pid"] != before["pid"], (before, after)
+            # The replaced process may still be exiting after its port closed.
+            deadline = time.monotonic() + MAP_TIMEOUT
+            while maps.process_arguments(before["pid"]) is not None:
+                assert time.monotonic() < deadline, (self.name, "the replaced map did not exit", before)
+                time.sleep(0.1)
         if release.hands_off_maps:
             assert self.json("map", "--no-open")["status"] == "existing"
         self.map = after
@@ -421,6 +431,7 @@ class Home:
             elif maps.port_free(self.port):
                 return
             time.sleep(0.2)
+        print("{}: port {} is still busy after cleanup: {}".format(self.name, self.port, self.health()), flush=True)
 
     def activated(self, release, before):
         """Checks after `release` became current; `before` holds the store's files."""

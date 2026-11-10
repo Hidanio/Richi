@@ -263,7 +263,10 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
         # reads such a record as adapter 1 and keeps writing that shape.
         self.configure()
         path = self.root / agent_setup.MANIFEST
-        self.assertNotIn("adapter_version", json.loads(path.read_text()))
+        # Exactly the fields 1.0.1 writes; any other one is drift to 1.0.1.
+        self.assertEqual(set(json.loads(path.read_text())), {
+            "format_version", "original_prefix", "skill", "skill_target", "skill_hashes", "command",
+            "instructions", "block_sha256", "profiles", "path_block_sha256", "generation"})
         status = agent_setup.command(["--status"])
         self.assertEqual((status["status"], status["changes"], status["adapter_version"]), ("configured", [], 1))
         command = Path(status["command"])
