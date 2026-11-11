@@ -11,7 +11,9 @@ GROUPS = {
     'write': 'Save knowledge with provenance and optimistic concurrency.',
     'maintenance': 'Inspect storage and explicitly maintain derived structures.',
 }
-# id, group, effect, task-oriented summary, canonical detailed guide.
+# id, group, effect, task-oriented summary, canonical detailed guide: a NAME.md
+# under skills/project-memory/references, which is also the command's help page
+# guide (cli_help.decorate).
 COMMANDS = (
     ('discover', 'search', 'read', 'Find small candidate cards; supports composed --where.', 'RETRIEVAL_TOOLS.md'),
     ('fetch', 'search', 'read', 'Fetch up to 32 exact refs; whole records, explicit missing/oversize/continuation.', 'RETRIEVAL_TOOLS.md'),
@@ -22,7 +24,7 @@ COMMANDS = (
     ('query exists', 'analysis', 'read', 'Answer whether a matching current record exists; stop at first hit.', 'QUERY_TOOLS.md'),
     ('query facets', 'analysis', 'read', 'Compute exact grouped counts; bounded top groups, NULL preserved.', 'QUERY_TOOLS.md'),
     ('query select', 'analysis', 'read', 'Return selected scalar metadata with stable ref pagination; fetch for evidence.', 'QUERY_TOOLS.md'),
-    ('punisher', 'analysis', 'read', 'Inspect stale, conflicting or oversized knowledge; report review candidates.', 'MEMORY_AUDIT.md'),
+    ('punisher', 'analysis', 'read', 'Inspect stale, conflicting or oversized knowledge; report review candidates.', 'DIAGNOSTICS.md'),
     ('graph neighbors', 'graph', 'read', 'Read explicit neighbors; compact/full views and bounded graph context.', 'NEIGHBORS.md'),
     ('graph export', 'graph', 'read', 'Export the explicit knowledge graph.', 'GRAPH.md'),
     ('tools list', 'graph', 'read', 'Browse tools with their evidenced project applications and related tasks.', 'TOOLS.md'),
@@ -49,12 +51,37 @@ COMMANDS = (
     ('check', 'maintenance', 'read', 'Check SQLite integrity and foreign keys.', 'DIAGNOSTICS.md'),
     ('backup', 'maintenance', 'write', 'Write a consistent database backup; copy captured Git artifacts separately.', 'CLI.md'),
 )
+# Commands deliberately left out of the catalog, with the reason. A group
+# covers all of its subcommands. scripts/check_cli_docs.py requires every
+# command to be either cataloged or listed here.
+UNCATALOGED = {
+    'agents': 'Installation-wide agent integration that people run.',
+    'setup': 'Installation-wide agent integration that people run.',
+    'update': 'Installation-wide releases that people install or roll back.',
+    'workspace': 'People choose workspaces; agents follow the selection procedure in SKILL.md.',
+    'use': 'Changes the terminal default, which a chat must never do.',
+    'chat': 'Chat binding is the SKILL.md procedure that precedes any catalog lookup.',
+    'config': 'Runtime and storage resolution is part of the SKILL.md selection procedure.',
+    'status': 'Selection and path diagnostics, described in WORKSPACES.md.',
+    'project': 'Registration and membership checks are part of the SKILL.md selection procedure.',
+    'init': 'Creates a store once per workspace, after the selection procedure.',
+    'migrate': 'Explicit schema upgrade after a backup; never automatic.',
+    'map': 'Interactive browser view for people.',
+    'help': 'Plain-text pages for people; agents read capabilities describe.',
+    'capabilities': 'The catalog itself.',
+    'context': 'Older full-output project view; recall is the preferred entry point.',
+    'entry read': 'Bounded card view; entry get and fetch are the cataloged reads.',
+    'relation': 'Project-to-project relations described in CLI.md; record links use edge put.',
+    'sources snapshot': 'Drift manifests for diagnostics, described in DIAGNOSTICS.md.',
+    'sources check': 'Drift manifests for diagnostics, described in DIAGNOSTICS.md.',
+}
 
 
 def add_commands(commands, api):
-    actions = commands.add_parser('capabilities', help='Discover built-in operations without reading all manuals').add_subparsers(dest='action', required=True)
+    actions = commands.add_parser('capabilities', help='Command catalog for AI agents, grouped by task').add_subparsers(dest='action', required=True)
     listing = actions.add_parser('list', help='List small capability groups; select a group for its commands')
-    listing.add_argument('--group', choices=tuple(GROUPS) + ('all',))
+    listing.add_argument('--group', choices=tuple(GROUPS) + ('all',), metavar='GROUP',
+                         help='Show the operations of one group (' + ', '.join(GROUPS) + '), or all')
     detail = actions.add_parser('describe', help='Read the current syntax for one exact command ID')
     detail.add_argument('id', help='Exact ID from list, quoted when it contains spaces')
 
@@ -69,7 +96,8 @@ def _parser(root, identity, api):
     return parser
 
 
-def run(args, api):
+def run(args, api, root=None):
+    """root: the already built parser tree of this invocation, if any."""
     if args.action == 'list':
         group = args.group
         if group is None:
@@ -86,10 +114,17 @@ def run(args, api):
     if args.action == 'describe':
         row = next((row for row in COMMANDS if row[0] == args.id), None)
         if row is None:
-            raise api.MemoryError('Unknown capability ID; use capabilities list --group GROUP')
-        parser = _parser(api.parser(), row[0], api)
+            from . import cli_help
+            raise api.MemoryError('Unknown capability ID; use capabilities list --group GROUP'
+                                  + cli_help.correction(args.id, [row[0] for row in COMMANDS]))
+        from . import cli_help
+        root = cli_help.decorate(root or api.parser())
+        parser = _parser(root, row[0], api)
+        # Only the contract: usage, summary and options. The page's prose and
+        # examples are for people (richi help); the guide holds the details.
+        syntax = cli_help.style.syntax(parser) if cli_help.style is not None else parser.format_help()
         return {'view': 'capability', 'id': row[0], 'group': row[1], 'effect': row[2],
-                'summary': row[3], 'syntax': parser.format_help(),
+                'summary': row[3], 'syntax': syntax,
                 'guide': 'references/' + row[4],
                 'context': 'Use the bound workspace and --project-path guard for repository operations. Writes require task authorization.'}
     raise api.MemoryError('Unknown capabilities action')

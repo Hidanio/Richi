@@ -1,5 +1,6 @@
 """Update routing and real runtime children keep installation leases intact."""
 from contextlib import ExitStack, closing, redirect_stderr, redirect_stdout
+import gc
 import http.client
 from http.server import BaseHTTPRequestHandler
 import io
@@ -73,6 +74,9 @@ class UpdateCliRoutingTests(unittest.TestCase):
 
     def command(self, *arguments, ok=True):
         output, errors = io.StringIO(), io.StringIO()
+        # Python 3.13+ warns about a database another test left open when it
+        # is collected; collect now, so the warning never lands in errors.
+        gc.collect()
         with redirect_stdout(output), redirect_stderr(errors):
             code = cli.main(list(arguments))
         self.assertEqual(code, 0 if ok else 1, output.getvalue() + errors.getvalue())

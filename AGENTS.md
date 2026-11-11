@@ -24,13 +24,24 @@ map. Launcher changes require reinstalling the package. Use `richi config show`
 to inspect the selected runtime. For an isolated module invocation use
 `python -I -m richi` with the installation's Python.
 
-Run `python -m unittest discover -s tests -v` and
-`python evals/evaluate_recall.py`. Run installed-package checks in a disposable
-virtual environment with the current checkout installed normally, so they test
-the proposed version rather than a previous fixed installation. Tests and public
-evaluations use disposable stores and synthetic repositories; they must not
-depend on personal memory. Test schema changes against a copy: selecting a
-runtime never migrates SQLite automatically.
+Run `python scripts/check_cli_docs.py`,
+`python -m unittest discover -s tests -v` and `python evals/evaluate_recall.py`.
+CI fails unless every command, subcommand and option has help text and a page
+that renders, every command has a runnable example and a guide whose English
+and Russian versions show it in code, every top-level command is in one
+`richi help` group, and every command is in the agent catalog or in
+`capabilities.UNCATALOGED` with a reason. Documented `richi ...` lines must
+parse, and `richi help` and `capabilities describe` references must exist.
+Launcher commands are declared only by the launcher; the runtime lists them in
+`cli_parser.LAUNCHER_COMMANDS`. A dev runtime formats help with the installed
+launcher's `help_format`: list each name it uses in `cli_help.NEEDS`, and raise
+`API` for a changed behavior or signature. Run
+installed-package checks in a disposable virtual environment with the current
+checkout installed normally, so they test the proposed version rather than a
+previous fixed installation. Tests and public evaluations use disposable stores
+and synthetic repositories; they must not depend on personal memory. Test
+schema changes against a copy: selecting a runtime never migrates SQLite
+automatically.
 
 For authorized work with an existing knowledge store, use the project-memory
 skill and inspect `richi config show` to resolve its location. Search relevant

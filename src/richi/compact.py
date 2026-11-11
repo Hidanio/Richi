@@ -17,6 +17,9 @@ def max_chars(value):
     return number
 
 
+max_chars.bounds = (2000, 100000)
+
+
 def excerpt(text, limit):
     if len(text) <= limit:
         return text, False

@@ -24,6 +24,15 @@ VERSION = "1.2.3"
 BASE = "https://github.com/Hidanio/Richi/releases/"
 
 
+def http_error(test, url, code, message):
+    """An HTTPError that TEST closes. Python 3.14 warns about an unclosed one
+    when it is collected, which may happen inside another test's captured
+    stderr; an explicit body lets Python 3.9 close it too."""
+    error = HTTPError(url, code, message, {}, io.BytesIO())
+    test.addCleanup(error.close)
+    return error
+
+
 def wheel_bytes(version=VERSION, extra=None, metadata=None):
     output = io.BytesIO()
     info = "richi-" + VERSION + ".dist-info/"
@@ -157,7 +166,7 @@ class ReleaseTests(unittest.TestCase):
 
     def test_network_errors_become_config_errors(self):
         for error in (URLError("offline"), TimeoutError("timed out"), IncompleteRead(b"part"),
-                      HTTPError(releases._API + "latest", 403, "rate limit", {}, None)):
+                      http_error(self, releases._API + "latest", 403, "rate limit")):
             opener = mock.Mock()
             opener.open.side_effect = error
             with mock.patch.object(releases, "build_opener", return_value=opener), self.assertRaises(ConfigError):
@@ -165,7 +174,7 @@ class ReleaseTests(unittest.TestCase):
 
     def test_no_latest_release_is_normal_but_unknown_explicit_version_is_an_error(self):
         opener = mock.Mock()
-        opener.open.side_effect = HTTPError(releases._API + "latest", 404, "not found", {}, None)
+        opener.open.side_effect = http_error(self, releases._API + "latest", 404, "not found")
         with mock.patch.object(releases, "build_opener", return_value=opener):
             self.assertIsNone(releases.fetch_release())
             with self.assertRaises(ConfigError):
@@ -189,7 +198,7 @@ class ReleaseTests(unittest.TestCase):
     def test_missing_manifest_does_not_look_like_no_release(self):
         opener = mock.Mock()
         opener.open.side_effect = [Response(json.dumps(feed()).encode(), releases._API + "latest"),
-                                  HTTPError("manifest", 404, "not found", {}, None)]
+                                  http_error(self, "manifest", 404, "not found")]
         with mock.patch.object(releases, "build_opener", return_value=opener), self.assertRaises(ConfigError):
             releases.fetch_release()
 

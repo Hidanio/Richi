@@ -2,15 +2,16 @@
 
 
 def add_commands(commands, api):
-    discover_cmd = commands.add_parser("discover", help="Find small routing cards, then fetch selected full records")
-    discover_cmd.add_argument("query")
-    discover_cmd.add_argument("--project")
+    from .cli_parser import BOOST, QUESTION
+    discover_cmd = commands.add_parser("discover", help="Find small candidate cards, then fetch the chosen records")
+    discover_cmd.add_argument("query", help=QUESTION)
+    discover_cmd.add_argument("--project", help=BOOST)
     discover_cmd.add_argument("--where", help="Strict composed metadata filter before shortlist and graph additions")
     discover_cmd.add_argument("--limit", type=api.limit, default=8)
     discover_cmd.add_argument("--max-chars", type=api.compact.max_chars, default=8000)
     discover_cmd.add_argument("--include-hypotheses", action="store_true")
     discover_cmd.add_argument("--include-superseded", action="store_true")
-    fetch_cmd = commands.add_parser("fetch", help="Read whole current records in one bounded snapshot")
+    fetch_cmd = commands.add_parser("fetch", help="Read up to 32 whole records by exact reference")
     fetch_cmd.add_argument("--ref", dest="refs", action="append", required=True,
                            help="Exact entry:<id>, entity:<id>, edge:<id> or project:<id>; repeatable, at most 32 unique refs")
     fetch_cmd.add_argument("--offset", type=int, default=0,

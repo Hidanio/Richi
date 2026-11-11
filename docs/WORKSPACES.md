@@ -40,6 +40,7 @@ richi use default
 richi use
 ```
 
+`richi workspace use work` is the same as `richi use work`.
 Switching changes the default workspace for subsequent commands. It does not stop
 running operations or maps. A workspace name is required in a noninteractive
 environment: Richi does not try to read a menu choice from an agent's input JSON.

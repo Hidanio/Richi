@@ -237,7 +237,7 @@ def run(conn, args, api):
 
 
 def add_commands(commands, limit):
-    actions = commands.add_parser("tools", help="Browse tools and their recorded project/task applications").add_subparsers(dest="action", required=True)
+    actions = commands.add_parser("tools", help="Browse tools with their projects, scenarios and tasks").add_subparsers(dest="action", required=True)
     listing = actions.add_parser("list", help="Read the tool catalog with explicit usage")
     listing.add_argument("--limit", type=limit, default=100)
     detail = actions.add_parser("get", help="Read one tool with its projects and related tasks")

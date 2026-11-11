@@ -110,13 +110,19 @@ def current_chat(chat_id):
             "next_commands": ([] if bound else ["richi chat bind --current", "richi chat bind NAME"])}
 
 
+def storage_override_error(overrides):
+    """The error of a chat that names storage of its own: OVERRIDES are the
+    options and variables to remove."""
+    return ChatError("Chat workspaces use registered storage; remove/unset " + ", ".join(overrides),
+                     "chat_storage_override", selectors=overrides)
+
+
 def reject_storage_overrides(selectors):
     overrides = [flag for key, flag in (("config_file", "--config"), ("db", "--db"))
                  if selectors.get(key) is not None]
     overrides.extend(key for key in _STORAGE_ENV if key in os.environ)
     if overrides:
-        raise ChatError("Chat workspaces use registered storage; remove/unset " + ", ".join(overrides),
-                        "chat_storage_override", selectors=overrides)
+        raise storage_override_error(overrides)
 
 
 def bind_chat(chat_id, workspace=None, current=False, replace=False):

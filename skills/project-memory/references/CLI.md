@@ -45,7 +45,7 @@ For another database, put `--db` **before** the command:
 richi --db '/путь с пробелами/память.sqlite3' init
 ```
 
-All results are JSON on stdout; errors are JSON on stderr with a nonzero exit code; a missing tool from `tools get` adds `"code": "not_found"`. `--help` prints plain text. For `put/upsert`, `--json` accepts a UTF-8 file or `-` for stdin. An import accepts one object or an array of up to 1000 objects and runs atomically: an error in one object rolls back the entire batch. Duplicate IDs within a batch are forbidden; the maximum input size is 10 million characters. Git `sources --json` commands accept a single-source file, without stdin.
+All results are JSON on stdout; errors are JSON on stderr with a nonzero exit code; a missing tool from `tools get` adds `"code": "not_found"`. `--help` and `richi help COMMAND` print plain text; mistakes that the argument parser catches (an unknown command or option, a missing or malformed value, options that a usage line separates with `|`, `--workspace` with `--config`, an argument that a run without a terminal needs) add `"code": "usage_error"` and `"help"` naming that page; every other error keeps its own code or has none, for example a reference, a field name, a date or a `--where` expression that a command checks itself, `--check-limit` without `--check-sources`, `--db` with a workspace that keeps its own storage, or a malformed chat ID (`invalid_chat_id`). In a chat that has no workspace yet, any mistake in a knowledge command is `chat_workspace_required`, because the runtime that parses it is not chosen yet; launcher commands such as `workspace`, `chat` and `config` still get `usage_error`. For `put/upsert`, `--json` accepts a UTF-8 file or `-` for stdin. An import accepts one object or an array of up to 1000 objects and runs atomically: an error in one object rolls back the entire batch. Duplicate IDs within a batch are forbidden; the maximum input size is 10 million characters. In `sources attach/show/history/diff --json FILE`, the file holds one captured source; stdin is not accepted.
 
 <a id="компактный-json-для-ии-и-скриптов"></a>
 
@@ -105,6 +105,27 @@ sources and selection reasons. Optional `--check-sources` compares the bytes
 of Git sources from selected cards with the target: up to 12 attempts by default,
 with separate coverage and omission reasons. Without `--base` and `--check-sources`,
 Git is not invoked. Examples and limits are in [BRIEF.md](BRIEF.md).
+
+<a id="каталог-команд-для-агентов"></a>
+
+## Command catalog for agents
+
+`capabilities` finds an operation without loading every reference. The list shows
+small groups; a group shows its operations with their read/write effect; describe
+returns one operation's contract from the live parser (usage, summary, arguments
+and options) and the reference that explains it. It opens no knowledge database,
+but like the knowledge commands it runs in the chat's bound workspace: bind the
+chat first.
+
+```sh
+richi capabilities list
+richi capabilities list --group search
+richi capabilities describe "query count"
+```
+
+People usually prefer `richi help COMMAND`, which adds a description, examples,
+related pages and a link to that reference. Selection, setup, the map and other
+commands outside the catalog are covered by SKILL.md and the other references.
 
 <a id="проекты"></a>
 

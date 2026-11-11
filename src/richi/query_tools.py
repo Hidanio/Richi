@@ -10,11 +10,15 @@ DEFAULT_FIELDS = 'ref,kind,title,knowledge_state,work_state,verified_at'
 
 
 def add_commands(commands, api):
-    actions = commands.add_parser('query', help='Exact counts, existence, groups and metadata pages; no raw SQL').add_subparsers(dest='action', required=True)
-    for name in ('count', 'exists', 'facets', 'select'):
-        command = actions.add_parser(name)
-        command.add_argument('--family', choices=('entry', 'entity', 'all'), default='entry')
-        command.add_argument('--project', help='Strict justified project membership')
+    actions = commands.add_parser('query', help='Exact counts, existence, grouped counts and metadata pages').add_subparsers(dest='action', required=True)
+    for name, summary in (('count', 'Count every matching record exactly'),
+                          ('exists', 'Report whether any matching record exists'),
+                          ('facets', 'Count matching records grouped by fields'),
+                          ('select', 'List chosen metadata fields, page by page')):
+        command = actions.add_parser(name, help=summary)
+        command.add_argument('--family', choices=('entry', 'entity', 'all'), default='entry',
+                             help='Record family to cover (default: %(default)s)')
+        command.add_argument('--project', help='Only records of this project (strict, justified membership)')
         command.add_argument('--where', help='Composed metadata predicate; same grammar as recall --where')
         command.add_argument('--include-hypotheses', action='store_true')
         command.add_argument('--include-superseded', action='store_true')
@@ -22,8 +26,8 @@ def add_commands(commands, api):
         if name in ('facets', 'select'):
             command.add_argument('--limit', type=api.limit, default=20)
         if name == 'facets':
-            command.add_argument('--by', action='append', required=True, choices=GROUP_FIELDS,
-                                 help='Group by up to three scalar fields; repeatable')
+            command.add_argument('--by', action='append', required=True, choices=GROUP_FIELDS, metavar='FIELD',
+                                 help='Group by up to three of ' + ', '.join(GROUP_FIELDS) + '; repeatable')
         if name == 'select':
             command.add_argument('--fields', default=DEFAULT_FIELDS,
                                  help='Comma-separated scalar fields; ref is always included. Full evidence: fetch.')
@@ -100,7 +104,9 @@ def _fields(value, api):
     for field in value.split(','):
         field = field.strip()
         if field not in ('ref',) + SCALARS:
-            raise api.MemoryError('Unknown query field: ' + field + '; use scalar metadata or fetch whole records')
+            from . import cli_help
+            raise api.MemoryError('Unknown query field: ' + field + '; use scalar metadata or fetch whole records'
+                                  + cli_help.correction(field, ('ref',) + SCALARS))
         if field not in fields:
             fields.append(field)
     return fields

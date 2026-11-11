@@ -71,6 +71,11 @@ to return to the installed version. Both modes share settings and the knowledge
 database within the selected workspace. Launcher changes still require
 reinstallation. See the [installation guide](docs/INSTALLATION.md).
 
+Run `richi` for a short overview of the most common commands, `richi help` for
+every command grouped by purpose, and `richi help COMMAND` for a command's options
+and examples; `richi help start` walks through the first steps. See
+[built-in help](docs/CLI.md#справка).
+
 For a new installation, `init` creates an empty database in the user data
 directory, outside the source checkout. Examples do not preload an encyclopedia:
 users or agents add knowledge as they work. Richi does not read chats, issue
