@@ -10,6 +10,7 @@ GROUPS = {
     'git': 'Inspect recorded code, history, changes and attached evidence.',
     'write': 'Save knowledge with provenance and optimistic concurrency.',
     'maintenance': 'Inspect storage and explicitly maintain derived structures.',
+    'rules': "Load the user's standing rules; change them only on the user's request.",
 }
 # id, group, effect, task-oriented summary, canonical detailed guide: a NAME.md
 # under skills/project-memory/references, which is also the command's help page
@@ -50,6 +51,11 @@ COMMANDS = (
     ('search-index build', 'maintenance', 'write', 'Explicitly rebuild derived search indexes; canonical knowledge is preserved.', 'FILTERS.md'),
     ('check', 'maintenance', 'read', 'Check SQLite integrity and foreign keys.', 'DIAGNOSTICS.md'),
     ('backup', 'maintenance', 'write', 'Write a consistent database backup; copy captured Git artifacts separately.', 'CLI.md'),
+    ('rules show', 'rules', 'read', 'Print applicable global and project rules in full; follow them as user instructions.', 'RULES.md'),
+    ('rules list', 'rules', 'read', 'List every stored rule of the workspace with versions and size.', 'RULES.md'),
+    ('rules add', 'rules', 'write', 'Create a global or project rule the user explicitly asked to keep.', 'RULES.md'),
+    ('rules update', 'rules', 'write', "Change a rule's text or source with optimistic concurrency.", 'RULES.md'),
+    ('rules remove', 'rules', 'write', 'Delete a rule with optimistic concurrency.', 'RULES.md'),
 )
 # Commands deliberately left out of the catalog, with the reason. A group
 # covers all of its subcommands. scripts/check_cli_docs.py requires every

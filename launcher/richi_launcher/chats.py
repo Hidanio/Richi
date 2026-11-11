@@ -13,6 +13,9 @@ _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}\Z")
 _MAX_BYTES = 4 * 1024 * 1024
 _MAX_CHATS = 10000
 _STORAGE_ENV = ("RICHI_CONFIG", "RICHI_DB", "RICHI_DATA_DIR")
+# A bound chat loads the user's standing rules next: global ones outside a
+# repository, plus the project's own inside one.
+RULES_COMMANDS = ["richi rules show", "richi --project-path PATH rules show"]
 
 
 class ChatError(ConfigError):
@@ -107,7 +110,7 @@ def current_chat(chat_id):
             "workspace": workspace, "cli_current": current,
             "cli_default": registry["current"],
             "workspaces": sorted(registry["workspaces"], key=lambda name: (name != "default", name)),
-            "next_commands": ([] if bound else ["richi chat bind --current", "richi chat bind NAME"])}
+            "next_commands": (list(RULES_COMMANDS) if bound else ["richi chat bind --current", "richi chat bind NAME"])}
 
 
 def storage_override_error(overrides):
@@ -161,7 +164,7 @@ def bind_chat(chat_id, workspace=None, current=False, replace=False):
     return {"chat_id": chat_id, "detected": True, "bound": True, "workspace": workspace,
             "changed": changed, "replaced": previous is not None and changed,
             "config_file": str(settings.config_file), "database": str(settings.database),
-            "data_dir": str(settings.data_dir)}
+            "data_dir": str(settings.data_dir), "next_commands": list(RULES_COMMANDS)}
 
 
 def pin_chat(chat_id, selectors, metadata=False):

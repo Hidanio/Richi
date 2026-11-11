@@ -20,6 +20,8 @@ that context together with sources and the conditions under which knowledge appl
 - [Tools](docs/TOOLS.md), practical recipes, configurations and linked project tasks.
 - Explicit links between knowledge, components and projects.
 - Source references and code revisions that support conclusions.
+- [Standing rules](skills/project-memory/references/RULES.md) the user sets for a
+  workspace or one project; agents load them in every chat and follow them.
 
 The implementation uses SQLite, text search, a relationship graph, an interactive
 map and Git sources with history and revision comparison. Source checks help

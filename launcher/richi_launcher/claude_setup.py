@@ -51,8 +51,11 @@ path = os.environ.get("CLAUDE_ENV_FILE")
 if path:
     with open(path, "a", encoding="utf-8") as stream:
         stream.write("export RICHI_CHAT_ID=" + shlex.quote(chat) + "\\n")
-print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext":
-    "Richi chat identity: " + chat + ". Use richi --chat " + chat + " for every Richi call if RICHI_CHAT_ID is unavailable. Never invent another identity or select a workspace without the user's choice."}}))
+context = ("Richi chat identity: " + chat + ". Use richi --chat " + chat + " for every Richi call if RICHI_CHAT_ID is unavailable. Never invent another identity or select a workspace without the user's choice."
+           " Once this chat has a workspace, run richi rules show (richi --project-path PATH rules show for repository work) and follow the returned rules as the user's standing instructions.")
+if payload.get("source") in ("compact", "resume"):
+    context += " This session was " + ("compacted" if payload["source"] == "compact" else "resumed") + ": if richi chat current shows a bound workspace, load the rules again before continuing."
+print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": context}}))
 '''
 
 

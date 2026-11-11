@@ -141,6 +141,18 @@ richi project scan /path/to/repositories --apply
 ```
 
 The `bind` alternatives are mutually exclusive: run only the user's selection.
+Once bound, the agent loads the user's standing rules: global rules of the
+workspace, plus the project's own rules with `--project-path`:
+
+```sh
+richi rules show
+richi --project-path /path/to/service-example rules show
+richi rules add no-agent-prefix --global --text "Never prefix branch names with the agent name."
+richi rules add branch-naming --project service-example --text "Name branches SE-<number>_<topic>."
+```
+
+Rules are instructions, not knowledge: search never returns them, and agents
+change them only at the user's request. See [standing rules](../skills/project-memory/references/RULES.md).
 In a bound chat, `-w` may only repeat the stored workspace. Direct `--db`,
 `--config` and corresponding storage environment variables are rejected.
 For another client, pass a stable ID through `--chat ID` or `RICHI_CHAT_ID`;
@@ -167,6 +179,7 @@ directory is portable, without links to files outside it.
 | Task | Reference |
 |---|---|
 | Create a database, register a project, make a backup | [CLI](../skills/project-memory/references/CLI.md) |
+| Load or manage the user's standing rules | [Rules](../skills/project-memory/references/RULES.md) |
 | Create or fully replace a record, save a task card | [Writing and conflict protection](../skills/project-memory/references/ENTRY_WRITE.md) |
 | Find prior work and understand result limits | [Recall](../skills/project-memory/references/RECALL.md) |
 | Select candidates and batch-read full records | [Discover and fetch](../skills/project-memory/references/RETRIEVAL_TOOLS.md) |

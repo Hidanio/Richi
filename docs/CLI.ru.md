@@ -145,6 +145,18 @@ richi project scan /path/to/repositories --apply
 ```
 
 Варианты `bind` взаимоисключающие: выполните только выбранный пользователем.
+После привязки агент загружает постоянные правила пользователя: глобальные правила
+workspace, а с `--project-path` — ещё и правила проекта:
+
+```sh
+richi rules show
+richi --project-path /path/to/service-example rules show
+richi rules add no-agent-prefix --global --text "Never prefix branch names with the agent name."
+richi rules add branch-naming --project service-example --text "Name branches SE-<number>_<topic>."
+```
+
+Правила — это инструкции, а не знания: поиск их не возвращает, а агенты меняют их
+только по просьбе пользователя. Подробнее: [постоянные правила](../skills/project-memory/references/RULES.ru.md).
 В привязанном чате `-w` может только повторять сохранённую область. Прямые
 `--db`, `--config` и соответствующие переменные хранилища отклоняются.
 Для другого клиента передавайте устойчивый ID через `--chat ID` или `RICHI_CHAT_ID`;
@@ -171,6 +183,7 @@ richi status --projects --limit 50
 | Задача | Справочник |
 |---|---|
 | Создать базу, зарегистрировать проект, сделать backup | [CLI](../skills/project-memory/references/CLI.ru.md) |
+| Загрузить или изменить постоянные правила пользователя | [Правила](../skills/project-memory/references/RULES.ru.md) |
 | Создать или полностью обновить запись, сохранить task-карточку | [Запись и защита от конфликтов](../skills/project-memory/references/ENTRY_WRITE.ru.md) |
 | Найти прошлую работу и разобрать ограничения выдачи | [Recall](../skills/project-memory/references/RECALL.ru.md) |
 | Выбрать кандидатов и пакетно прочитать полные записи | [Discover и fetch](../skills/project-memory/references/RETRIEVAL_TOOLS.ru.md) |

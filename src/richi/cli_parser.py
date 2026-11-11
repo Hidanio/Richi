@@ -129,8 +129,9 @@ def build_parser(parser_class, *, limit, positive_int, scan_depth, bounded):
     commands.add_parser("backup", help="Write a verified copy of the knowledge database").add_argument(
         "--output", metavar="FILE", help="New file for the copy (default: backups/ next to the database)")
     commands.add_parser("check", help="Verify database integrity, schema and foreign keys")
-    from . import retrieval_tools, storage, query_tools, capabilities
+    from . import retrieval_tools, storage, query_tools, capabilities, rules
     capabilities.add_commands(commands, argument_types)
+    rules.add_commands(commands, argument_types)
     query_tools.add_commands(commands, argument_types)
     retrieval_tools.add_commands(commands, argument_types)
     storage.add_commands(commands, argument_types)

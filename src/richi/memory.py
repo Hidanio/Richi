@@ -828,8 +828,10 @@ def run(args, cli=None):
     storage_apply = (args.command == "storage" and args.action == "optimize"
                      and args.apply)
     building_index = args.command == "search-index" and args.action == "build"
+    from . import rules
+    writing_rules = rules.writes(args)
     project_path = getattr(args, "project_path", None)
-    writing = args.command in {"init", "migrate"} or getattr(args, "action", None) in {"put", "upsert"} or source_attach or adding_project or applying_scan or storage_apply or building_index
+    writing = args.command in {"init", "migrate"} or getattr(args, "action", None) in {"put", "upsert"} or source_attach or adding_project or applying_scan or storage_apply or building_index or writing_rules
     conn = connect(database, create=args.command == "init", readonly=not writing)
     try:
         if args.command == "init":
@@ -851,10 +853,12 @@ def run(args, cli=None):
             return storage.run(conn, args, sys.modules[__name__], database)
         writing = getattr(args, "action", None) in {"put", "upsert"}
         items = payload(args.json) if writing else None
-        with transaction(conn, write=writing or source_attach or adding_project or applying_scan or building_index):
+        checked_project = None
+        with transaction(conn, write=writing or source_attach or adding_project or applying_scan or building_index or writing_rules):
             if project_path is not None:
                 from .projects import ensure_project_context
                 project = ensure_project_context(conn, project_path, expected_id=getattr(args, "project", None))
+                checked_project = project["id"]
                 if writing and args.command == "entry":
                     for item in items:
                         if project["id"] not in (item.get("project_ids") or []):
@@ -863,6 +867,9 @@ def run(args, cli=None):
                     for item in items:
                         if project["id"] not in (item.get("from_project"), item.get("to_project")):
                             raise MemoryError("Relation must include checked project " + project["id"])
+            if args.command == "rules":
+                return rules.run(conn, args, sys.modules[__name__], workspace=settings.workspace,
+                                 checked_project=checked_project)
             if scanning:
                 from .projects import project_scan
                 result = project_scan(conn, args.path, apply=args.apply, max_depth=args.max_depth)
