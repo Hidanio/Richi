@@ -1,4 +1,5 @@
 """Release transactions and process leases use only disposable environments."""
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -530,6 +531,41 @@ class InstallationTests(unittest.TestCase):
                 self.apply("0.3.0")
         self.assertEqual((self.root / "state.json").read_bytes(), before)
         self.assertEqual(list((self.root / "versions").iterdir()), [Path(first["current"]["prefix"])])
+
+
+class ReleaseCompilationTests(unittest.TestCase):
+    """Compiling a staged release, on a synthetic package tree (the lifecycle tests stage real wheels)."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="richi-compile-test-")
+        self.addCleanup(temporary.cleanup)
+        # Data directories can contain spaces and regular expression syntax.
+        self.site = Path(temporary.name).resolve() / "Application Support" / "a+b (c) [d" / "site-packages"
+        for name, text in {"richi/__init__.py": '__version__ = "0.2.0"\n', "richi/memory.py": "SCHEMA = 3\n",
+                           "richi_launcher/__init__.py": "", "richi_launcher/maps/__init__.py": "",
+                           "richi_launcher/agent_skill/SKILL.md": "name: project-memory\n",
+                           "richi_launcher/agent_skill/scripts/helper.py": "print('skill script')\n",
+                           "richi_bootstrap.py": "BOOTSTRAP_PROTOCOL = 1\n"}.items():
+            (self.site / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.site / name).write_text(text, encoding="utf-8")
+
+    def test_modules_get_hash_checked_bytecode_and_the_skill_stays_as_published(self):
+        installation._compile(sys.executable, self.site)
+        for name in ("richi/__init__.py", "richi/memory.py", "richi_launcher/__init__.py",
+                     "richi_launcher/maps/__init__.py", "richi_bootstrap.py"):
+            source = self.site / name
+            compiled = source.parent / "__pycache__" / (source.stem + "." + sys.implementation.cache_tag + ".pyc")
+            # PEP 552 header: magic number, flags 0b11 (checked hash), source hash.
+            self.assertEqual(compiled.read_bytes()[:16], importlib.util.MAGIC_NUMBER + b"\x03\x00\x00\x00"
+                             + importlib.util.source_hash(source.read_bytes()), name)
+        skill = self.site / "richi_launcher" / "agent_skill"
+        self.assertEqual(sorted(path.relative_to(skill).as_posix() for path in skill.rglob("*")),
+                         ["SKILL.md", "scripts", "scripts/helper.py"])
+
+    def test_a_module_that_does_not_compile_refuses_the_release(self):
+        (self.site / "richi_launcher" / "broken.py").write_text("def broken(:\n", encoding="utf-8")
+        with self.assertRaisesRegex(ConfigError, r"Release compilation failed.*broken\.py"):
+            installation._compile(sys.executable, self.site)
 
 
 if __name__ == "__main__":

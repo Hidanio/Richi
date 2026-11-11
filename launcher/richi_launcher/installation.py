@@ -10,6 +10,7 @@ import importlib.metadata
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -255,6 +256,22 @@ def _run(command, label):
     return result.stdout
 
 
+def _compile(python, site):
+    # Byte-compile once while staging. Runs use -I -B: -B still reads these
+    # files but never writes, so no process changes a staged release, and -I
+    # (here too) keeps them beside their sources even where an interpreter
+    # redirects bytecode by default (Apple's Python 3.9). Checked hashes bind
+    # each file to its verified source bytes, not to file times: a changed
+    # source is compiled in memory instead of loading stale code. The bundled
+    # skill is data that agent setup links and hashes, so it stays as
+    # published. Warnings are ignored, as pip does; errors refuse the release.
+    skill = re.escape(str(site / "richi_launcher" / "agent_skill") + "/")
+    _run([python, "-I", "-B", "-W", "ignore", "-m", "compileall", "-q", "-f",
+          "--invalidation-mode", "checked-hash", "-x", "^" + skill,
+          str(site / "richi"), str(site / "richi_launcher"), str(site / "richi_bootstrap.py")],
+         "Release compilation")
+
+
 def _stage(ctx, generation, wheel, manifest):
     prefix = Path(ctx["root"]) / "versions" / generation
     prefix.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -272,6 +289,7 @@ def _stage(ctx, generation, wheel, manifest):
         raise ConfigError("Original Python interpreter cannot belong to a collectible Richi release")
     _run([str(stable_python), "-I", "-B", "-m", "venv", "--symlinks", str(prefix)], "Release environment creation")
     python = str(prefix / "bin" / "python")
+    # Without pip's compilation: _compile writes hash-checked bytecode and fails on errors.
     _run([python, "-I", "-B", "-m", "pip", "--isolated", "--disable-pip-version-check", "--no-input",
           "install", "--no-index", "--no-deps", "--no-cache-dir", "--no-compile", str(wheel)], "Release installation")
     try:
@@ -286,6 +304,7 @@ def _stage(ctx, generation, wheel, manifest):
     site = Path(report["site"])
     if not site.is_relative_to(prefix):
         raise ConfigError("Release self-check returned a package directory outside its environment")
+    _compile(python, site)
     return {"kind": "release", "prefix": str(prefix), "site": str(site), "version": manifest["version"],
             "wheel_sha256": manifest["wheel"]["sha256"], "installed_at": int(time.time()),
             "database_schemas": list(report["database_schemas"])}

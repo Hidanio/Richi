@@ -3,6 +3,7 @@
 import base64
 import csv
 import hashlib
+import importlib.util
 import io
 import json
 from pathlib import Path
@@ -143,6 +144,15 @@ from richi_launcher import installation
 print(json.dumps(installation.rollback()))
 '''
 
+# A script in the bundled skill: agents run it, Richi never imports it.
+_SKILL_SCRIPT = {"richi_launcher/agent_skill/scripts/synthetic_helper.py": b"print('synthetic skill script')\n"}
+
+
+def _compiled_path(source):
+    # Not cache_from_source: some interpreters (Apple's Python 3.9) redirect it
+    # outside isolated mode, while staging and every run use -I.
+    return source.parent / "__pycache__" / (source.stem + "." + sys.implementation.cache_tag + ".pyc")
+
 
 @unittest.skipUnless(sys.platform in {"darwin", "linux"}, "Managed updater supports macOS/Linux")
 class UpdateWheelLifecycleTests(unittest.TestCase):
@@ -160,7 +170,7 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
     def console_json(self, *arguments):
         return json.loads(self.console(*arguments).stdout)
 
-    def make_wheel(self, version, *, storage_schema=None):
+    def make_wheel(self, version, *, storage_schema=None, extra=None):
         files = {}
         for package in (richi, richi_launcher):
             directory = Path(package.__file__).resolve().parent
@@ -177,6 +187,7 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             self.assertIn("SCHEMA = 3\n", memory)
             files["richi/memory.py"] = memory.replace("SCHEMA = 3\n", "SCHEMA = %d\n" % storage_schema, 1).encode()
         files["richi_bootstrap.py"] = Path(richi_bootstrap.__file__).read_bytes()
+        files.update(extra or {})
         info = "richi-" + version + ".dist-info/"
         files[info + "METADATA"] = ("Metadata-Version: 2.1\nName: richi\nVersion: " + version
                                      + "\nRequires-Python: >=3.9\n\n").encode()
@@ -223,6 +234,49 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
         response_path.write_text(json.dumps(responses), encoding="utf-8")
         return response_path
 
+    def assert_compiled(self, site):
+        """The staged release carries bytecode of every module, compiled once for this interpreter.
+
+        Each file is bound to the exact bytes of its source, and compiling only
+        added files: everything the wheel recorded keeps its hash. The bundled
+        skill, given a script by the wheels here, stays as published.
+        """
+        site = Path(site)
+        skill = site / "richi_launcher" / "agent_skill"
+        sources = [site / "richi_bootstrap.py"] + [path for name in ("richi", "richi_launcher")
+                                                   for path in sorted((site / name).rglob("*.py"))
+                                                   if skill not in path.parents]
+        self.assertIn(site / "richi_launcher" / "maps" / "__init__.py", sources)
+        for source in sources:
+            compiled = _compiled_path(source)
+            # PEP 552 header: magic number, flags 0b11 (checked hash), source hash.
+            self.assertEqual(compiled.read_bytes()[:16], importlib.util.MAGIC_NUMBER + b"\x03\x00\x00\x00"
+                             + importlib.util.source_hash(source.read_bytes()), compiled)
+        with (next(site.glob("richi-*.dist-info")) / "RECORD").open(newline="", encoding="utf-8") as stream:
+            recorded = {name: digest for name, digest, _size in csv.reader(stream) if digest}
+        for name, digest in recorded.items():
+            actual = base64.urlsafe_b64encode(hashlib.sha256((site / name).read_bytes()).digest()).rstrip(b"=")
+            self.assertEqual(digest, "sha256=" + actual.decode(), name)
+        unrecorded = {path for path in [*(site / "richi").rglob("*"), *(site / "richi_launcher").rglob("*"),
+                                        *(site / "__pycache__").glob("richi_bootstrap.*")]
+                      if path.is_file() and path.relative_to(site).as_posix() not in recorded}
+        self.assertEqual(unrecorded, {_compiled_path(source) for source in sources})
+        self.assertTrue(list(skill.rglob("*.py")))
+        self.assertEqual([path for path in skill.rglob("*") if path.name == "__pycache__" or path.suffix == ".pyc"], [])
+
+    def assert_runs_compiled(self, record):
+        """The release's interpreter, run as every Richi process runs it, loads that bytecode."""
+        site = Path(record["site"])
+        sources = {"richi_bootstrap": site / "richi_bootstrap.py", "richi.memory": site / "richi/memory.py",
+                   "richi_launcher.cli": site / "richi_launcher/cli.py",
+                   "richi_launcher.maps": site / "richi_launcher/maps/__init__.py"}
+        loaded = self.run_process([Path(record["prefix"]) / "bin/python", "-I", "-B", "-v", "-c",
+                                   "import " + ", ".join(sources)]).stderr
+        for source in sources.values():
+            self.assertIn("# {} matches {}\n".format(_compiled_path(source), source), loaded)
+        # Compiling a source instead would report the source path itself.
+        self.assertNotIn("# code object from " + str(site / "richi"), loaded)
+
     def assert_public_version(self, version):
         # Alpha intentionally has broken dev sources. Explicit default checks
         # the installed release while preserving the selected workspace/dev flag.
@@ -258,6 +312,44 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             refused = self.run_process([self.python, "-I", "-B", runner, feed, "update", "rollback"], ok=False)
             self.assertIn("drops database schema support for 3", refused.stdout + refused.stderr)
             self.assert_public_version("0.2.0")
+
+    def test_release_that_does_not_compile_is_refused_without_a_trace(self):
+        with tempfile.TemporaryDirectory(prefix="richi-uncompilable-release-") as temporary:
+            self.root = Path(temporary).resolve()
+            self.environment = cli_environment(self.root, RICHI_PORT=synthetic_port())
+            for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
+                self.environment.pop(key, None)
+            seed = self.root / "seed"
+            venv.EnvBuilder(with_pip=True, symlinks=True).create(str(seed))
+            self.python, self.console_path = seed / "bin/python", seed / "bin/richi"
+            self.run_process([self.python, "-I", "-B", "-m", "pip", "--isolated", "--disable-pip-version-check",
+                              "install", "--no-index", "--no-deps", "--no-cache-dir", "--no-compile",
+                              self.make_wheel("0.1.0")])
+            root = Path(json.loads(self.run_process([self.python, "-I", "-B", "-c",
+                "import json, richi_bootstrap; print(json.dumps(richi_bootstrap.context()))"]).stdout)["root"])
+            runner = self.root / "offline_update.py"
+            runner.write_text(_OFFLINE_COMMAND, encoding="utf-8")
+            # The self-check imports only the main modules; compiling reads every one.
+            broken = self.make_wheel("0.2.0", extra={"richi_launcher/synthetic_broken.py": b"def broken(:\n"})
+            refused = self.run_process([self.python, "-I", "-B", runner, self.feed_fixture(broken, "0.2.0"),
+                                        "update", "apply"], ok=False)
+            self.assertIn("Release compilation failed", refused.stderr)
+            self.assertIn("synthetic_broken.py", refused.stderr)
+            self.assertFalse((root / "state.json").exists())
+            self.assertEqual(list((root / "versions").iterdir()), [])
+            self.assert_public_version("0.1.0")
+            # A release that compiles installs next, and rollback returns to the seed.
+            fixed = self.make_wheel("0.2.0", extra=_SKILL_SCRIPT)
+            updated = json.loads(self.run_process([self.python, "-I", "-B", runner, self.feed_fixture(fixed, "0.2.0"),
+                                                   "update", "apply"]).stdout)
+            self.assertEqual(updated["status"], "updated", updated)
+            self.assert_compiled(updated["current"]["site"])
+            self.assert_runs_compiled(updated["current"])
+            self.assert_public_version("0.2.0")
+            rolled_back = self.console_json("update", "rollback")
+            self.assertEqual((rolled_back["status"], rolled_back["current"]["generation"]), ("rolled_back", "seed"))
+            self.assert_public_version("0.1.0")
+            self.assert_compiled(rolled_back["previous"]["site"])
 
     def test_running_map_follows_every_activation_on_the_same_url(self):
         with tempfile.TemporaryDirectory(prefix="richi-map-handoff-") as temporary:
@@ -448,7 +540,8 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             self.environment = cli_environment(self.root, RICHI_PORT=synthetic_port())
             for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
                 self.environment.pop(key, None)
-            wheels = {version: self.make_wheel(version) for version in ("0.1.0", "0.2.0", "0.3.0", "0.4.0")}
+            wheels = {version: self.make_wheel(version, extra=_SKILL_SCRIPT)
+                      for version in ("0.1.0", "0.2.0", "0.3.0", "0.4.0")}
             seed = self.root / "seed"
             venv.EnvBuilder(with_pip=True, symlinks=True).create(str(seed))
             self.python = seed / "bin/python"
@@ -542,6 +635,7 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
                     self.assertEqual(result["cleanup"]["failures"], [])
                 self.assertEqual(result["current"]["version"], version)
                 results.append(result)
+                self.assert_compiled(result["current"]["site"])
                 self.assert_public_version(version)
                 if version != "0.2.0":
                     self.assertFalse((Path(context["site"]) / "richi_launcher").exists())
@@ -552,18 +646,26 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             self.assertEqual(last["retired"], [])
             self.assertFalse(Path(results[0]["current"]["prefix"]).exists())
             self.assertEqual(len(list((Path(context["root"]) / "versions").iterdir())), 2)
+            self.assert_runs_compiled(last["current"])
             # Destroy current launcher imports. The unchanged original bootstrap
             # must route rollback through the previous healthy generation.
             broken_cli = Path(last["current"]["site"]) / "richi_launcher/cli.py"
+            compiled_cli = _compiled_path(broken_cli).read_bytes()
+            generation_files = sorted(Path(last["current"]["prefix"]).rglob("*"))
             broken_cli.write_text("raise RuntimeError('synthetic broken current launcher')\n", encoding="utf-8")
             broken = self.console("--workspace", "default", "--version", ok=False)
+            # The changed source ran instead of its bytecode, and -B kept the
+            # release unwritten: nothing replaced that bytecode or joined it.
             self.assertIn("synthetic broken current launcher", broken.stderr)
+            self.assertEqual(_compiled_path(broken_cli).read_bytes(), compiled_cli)
+            self.assertEqual(sorted(Path(last["current"]["prefix"]).rglob("*")), generation_files)
             recovered = self.console("--compact-json", "--chat=wheel-lifecycle", "update", "rollback")
             rollback = json.loads(recovered.stdout)
             self.assertEqual(recovered.stdout, json.dumps(rollback, ensure_ascii=False,
                                                          separators=(",", ":")) + "\n")
             self.assertEqual(rollback["status"], "rolled_back")
             self.assertEqual(rollback["current"]["version"], "0.3.0")
+            self.assert_compiled(rollback["current"]["site"])
             self.assert_public_version("0.3.0")
             paused = self.console_json("update", "auto", "run")
             self.assertEqual(paused["status"], "paused")

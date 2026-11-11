@@ -36,7 +36,10 @@ Releases up to 1.1.0 cannot maintain checkout skill links: run
 The updater checks the version, launcher protocol, supported schemas, wheel size
 and SHA256, then creates a separate environment for the candidate. Installation
 uses only the verified wheel, without downloading dependencies from PyPI. A
-separate process checks candidate imports and version before activation. After
+separate process checks candidate imports and version before activation.
+Updaters after 1.1.0 then compile the candidate's modules to bytecode once, so
+commands do not recompile them at every start; a release that fails to compile
+is refused. Versions installed by updates run without writing bytecode. After
 successful checks, the current-version pointer changes atomically. A failed
 candidate is removed; the current version stays in place.
 
