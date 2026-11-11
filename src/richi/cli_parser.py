@@ -97,6 +97,9 @@ def build_parser(parser_class, *, limit, positive_int, scan_depth):
     map_cmd.add_argument("--port", help="Loopback HTTP port")
     map_cmd.add_argument("--no-open", action="store_true", help="Launch or restart without opening a browser")
     map_cmd.add_argument("--open", action="store_true", help="Open the browser (serve and restart)")
+    mcp_cmd = commands.add_parser("mcp", help="Serve the knowledge tools to an MCP client over standard input and output")
+    mcp_cmd.add_argument("--tools", choices=("core", "all"), default="core",
+                         help="Tools to list: the everyday ones with generic tools for the rest, or one per command (default: %(default)s)")
     commands.add_parser("init")
     for name, action in (("project", "upsert"), ("entry", "put"), ("relation", "put")):
         group = commands.add_parser(name).add_subparsers(dest="action", required=True)

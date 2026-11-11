@@ -714,6 +714,12 @@ def main(argv=None):
                 raise MemoryError("--project-path is not supported by map; use project check before opening the workspace map")
             from .cli import run_map
             return run_map(args)
+        if args.command == "mcp":
+            # The server opens no store and belongs to no project: each tool call names its chat.
+            if args.project_path is not None:
+                raise MemoryError("--project-path belongs to a tool call, not to the server; pass project_path with the call")
+            from . import mcp_server
+            return mcp_server.main(args)
         with output.json_mode(compact=args.compact_json):
             result = run(args)
             sys.stdout.write(output.rendered(result))
