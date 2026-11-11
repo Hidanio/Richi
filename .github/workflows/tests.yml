@@ -29,12 +29,21 @@ jobs:
       - run: python evals/evaluate_recall.py
 
   legacy-update:
-    # Installed 1.0.1 updaters are frozen; this branch must stay installable by them.
+    # Installed updaters are frozen; every published release must update to this
+    # branch in place, directly and through each intermediate release. The oldest
+    # and newest supported Python here; the release workflow also runs the others.
     strategy:
       fail-fast: false
       matrix:
-        # Python 3.9, which setup-python lacks on the Ubuntu 26.04 image behind ubuntu-latest.
-        os: [ubuntu-24.04, macos-latest]
+        os: [ubuntu-latest, macos-latest]
+        python: ['3.9', '3.14']
+        # setup-python has no Python 3.9 for the Ubuntu 26.04 image behind ubuntu-latest.
+        exclude:
+          - os: ubuntu-latest
+            python: '3.9'
+        include:
+          - os: ubuntu-24.04
+            python: '3.9'
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -42,9 +51,9 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: ${{ matrix.python }}
       - run: python -m pip install build
       - run: python -m build --wheel --outdir dist
       - run: python -m pip install --no-deps dist/*.whl
       - run: python scripts/release_manifest.py dist/*.whl
-      - run: python tests/legacy_update_e2e.py dist
+      - run: python tests/update_matrix_e2e.py dist

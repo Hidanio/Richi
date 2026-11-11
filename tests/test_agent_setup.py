@@ -257,16 +257,18 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
             self.assertIn("Synthetic release 0.1.0", skill.read_text())
         self.assertEqual((self.home / ".codex/AGENTS.md").read_bytes(), instruction)
 
-    def test_legacy_record_without_adapter_version_is_configured_and_upgraded(self):
-        # 1.0.1 wrote format-1 records without adapter_version, and its manager
-        # activates the next release, so the new launcher meets that shape.
+    def test_codex_record_keeps_the_shape_that_1_0_1_compares(self):
+        # 1.0.1 writes format-1 records without adapter_version and, after a
+        # rollback, reports any other byte in this file as drift. The launcher
+        # reads such a record as adapter 1 and keeps writing that shape.
         self.configure()
         path = self.root / agent_setup.MANIFEST
-        record = json.loads(path.read_text())
-        self.assertEqual(record.pop("adapter_version"), 1)
-        path.write_text(json.dumps(record, sort_keys=True, indent=2) + "\n")
+        # Exactly the fields 1.0.1 writes; any other one is drift to 1.0.1.
+        self.assertEqual(set(json.loads(path.read_text())), {
+            "format_version", "original_prefix", "skill", "skill_target", "skill_hashes", "command",
+            "instructions", "block_sha256", "profiles", "path_block_sha256", "generation"})
         status = agent_setup.command(["--status"])
-        self.assertEqual((status["status"], status["changes"]), ("configured", []))
+        self.assertEqual((status["status"], status["changes"], status["adapter_version"]), ("configured", [], 1))
         command = Path(status["command"])
         target = os.readlink(command)
         command.unlink()
@@ -275,7 +277,20 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
         command.symlink_to(target)
         with patch.object(installation, "_collect", return_value={}):
             installation._activate(self.ctx, self.next_state(), "updated")
-        self.assertEqual(json.loads(path.read_text())["adapter_version"], 1)
+        self.assertNotIn("adapter_version", json.loads(path.read_text()))
+        self.assertEqual(agent_setup.command(["--status"])["changes"], [])
+
+    def test_codex_record_written_by_1_1_0_returns_to_the_1_0_1_shape(self):
+        # 1.1.0 stored adapter_version 1 explicitly; 1.0.1 then reported its
+        # setup as repair_required after a rollback.
+        self.configure()
+        path = self.root / agent_setup.MANIFEST
+        path.write_text(json.dumps(dict(json.loads(path.read_text()), adapter_version=1),
+                                   sort_keys=True, indent=2) + "\n")
+        self.assertEqual(agent_setup.command(["--status"])["status"], "configured")
+        with patch.object(installation, "_collect", return_value={}):
+            installation._activate(self.ctx, self.next_state(), "updated")
+        self.assertNotIn("adapter_version", json.loads(path.read_text()))
         self.assertEqual(agent_setup.command(["--status"])["changes"], [])
 
     def test_failed_state_commit_restores_skill_and_keeps_old_runtime(self):

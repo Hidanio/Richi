@@ -90,7 +90,10 @@ at schema 3 (migrated, or created by `init` on 1.1.0 or later) and you roll back
 connected, 1.0.1 refuses the rollback itself, because it cannot maintain that
 integration. If automatic installation was enabled, that refused rollback leaves it
 paused; resume it with `richi update auto enable --install`. Later releases restore
-the previous pause state when a rollback fails.
+the previous pause state when a rollback fails. After a rollback to 1.0.1 from a setup
+that 1.1.0 wrote last, `richi setup --status` may report Codex as `repair_required`
+although it works; `richi setup --yes` rewrites the record. Releases after 1.1.0
+write records that 1.0.1 accepts.
 
 <a id="updater-protocols"></a>
 ## Updater protocols
