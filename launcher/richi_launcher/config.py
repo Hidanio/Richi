@@ -38,12 +38,19 @@ class Settings:
                                              if self.development_source is not None else None)}}
 
 
-def _path(value, label, base=None, resolve_links=True):
+def _path_text(value, label):
+    """VALUE as the text of a path. Only its form is checked, a nonempty path
+    without NUL bytes; what it names is not looked at."""
     if not isinstance(value, (str, os.PathLike)):
         raise ConfigError(label + " must be a nonempty path")
     raw = os.fspath(value)
     if not isinstance(raw, str) or not raw.strip() or "\x00" in raw:
         raise ConfigError(label + " must be a nonempty path without NUL bytes")
+    return raw
+
+
+def _path(value, label, base=None, resolve_links=True):
+    raw = _path_text(value, label)
     try:
         path = Path(raw).expanduser()
         if not path.is_absolute():
@@ -149,6 +156,13 @@ def _load(path, required):
     return _validate_config(_read_config(path, required), path)
 
 
+def isolated_storage(workspace, overrides):
+    """The error of a named workspace given other storage: OVERRIDES are the
+    options and variables to remove."""
+    return ConfigError("Workspace " + workspace + " has isolated storage; unset/remove "
+                       + ", ".join(overrides) + " or use an explicit --config")
+
+
 def resolve_settings(db=None, config_file=None, port=None, workspace=None, config_required=None):
     """Resolve settings without writes, checkout inspection, imports, or database access."""
     _, platform_data = _platform_dirs()
@@ -158,8 +172,7 @@ def resolve_settings(db=None, config_file=None, port=None, workspace=None, confi
         overrides = (["--db"] if db is not None else []) + [
             key for key in ("RICHI_DB", "RICHI_DATA_DIR") if key in os.environ]
         if overrides:
-            raise ConfigError("Workspace " + selected_workspace + " has isolated storage; unset/remove "
-                              + ", ".join(overrides) + " or use an explicit --config")
+            raise isolated_storage(selected_workspace, overrides)
     if config_required is not None:
         if type(config_required) is not bool:
             raise ConfigError("config_required must be a boolean")

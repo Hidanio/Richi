@@ -14,6 +14,8 @@ from .config import ConfigError, _load, _path, _platform_dirs, _unique_object
 
 
 _NAME = re.compile(r"[a-z][a-z0-9_-]{0,47}\Z")
+# An explicit config replaces workspace selection, so the two never combine.
+WITH_CONFIG = "--workspace and --config cannot be combined"
 
 
 def _name(value):
@@ -84,7 +86,7 @@ def choose_config(workspace=None, config_file=None):
     current workspace. The default config remains optional.
     """
     if workspace is not None and config_file is not None:
-        raise ConfigError("--workspace and --config cannot be combined")
+        raise ConfigError(WITH_CONFIG)
     if config_file is not None:
         return _path(config_file, "config file"), True, None
     if workspace is None and "RICHI_CONFIG" in os.environ:

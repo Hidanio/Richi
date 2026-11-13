@@ -15,9 +15,62 @@ precede the subcommand:
 ```sh
 richi --db /path/to/memory.sqlite3 recall 'локальный кеш'
 richi --config /path/to/config.json check
-richi --help
-richi sources --help
 ```
+
+<a id="справка"></a>
+## Built-in help
+
+`richi` without arguments prints a short overview of the most common commands.
+The complete reference is built into the CLI and never opens a knowledge store:
+
+```sh
+richi help                    # every command, grouped by purpose
+richi help recall             # one command: description, options, examples
+richi help sources capture    # a subcommand; same as richi sources capture --help
+richi help topics             # topics shared by many commands
+richi help filters            # the --where grammar
+```
+
+Topics: `richi help start` (first steps), `richi help records` (record types,
+references, knowledge states, safe updates), `richi help filters`, `richi help
+output` (JSON, errors, exit codes, budgets) and `richi help environment`
+(variables and default locations). Each command page ends with examples,
+related pages and a link to its detailed guide, plus the path of a local copy
+when one is installed, so pages can be read offline.
+
+A mistyped command, option or topic name, or a mistyped value from a fixed
+list of choices, gets a suggestion. A mistake that the argument parser catches
+(an unknown command or option, a missing or malformed value, options that a
+usage line separates with `|`, such as `[--target REF | --worktree]`,
+`--workspace` with `--config`, or an argument that a run without a terminal
+needs) uses `"code": "usage_error"` and names the page that explains the
+command in `"help"`:
+
+```json
+{"error": "'stauts' is not a richi command. Did you mean 'status'? See 'richi help'.", "code": "usage_error", "help": "richi help"}
+```
+
+Every other error keeps its own `"code"` or has none, for example a reference,
+a field name, a date or a `--where` expression that a command checks itself,
+`--check-limit` without `--check-sources`, `--db` with a workspace that keeps
+its own storage, or a malformed chat ID (`"code": "invalid_chat_id"`).
+
+In an agent chat that is not bound yet, any mistake in a knowledge command, a
+mistyped name as well as an unknown option or a missing or malformed value, is
+reported as a missing binding (`"code": "chat_workspace_required"`): until the
+chat chooses its workspace, the launcher cannot hand the arguments to the
+selected runtime, which parses them. Launcher commands such as `workspace`,
+`chat` and `config` still get `usage_error` and suggestions.
+
+Help needs no chat binding. In an agent chat it is printed by the installed
+release, so new help from a development checkout appears there after the
+package is reinstalled. In a terminal the selected runtime prints it; when the
+selection itself is broken, for example by an unknown `RICHI_WORKSPACE`, the
+installed release prints it instead, so `richi help environment` still explains
+the variables. The pages of the launcher commands (`agents`, `setup`, `update`,
+`status`, `workspace`, `use`, `chat` and `config`) always come from the
+installed launcher, which also runs these commands, so their changes appear
+only after the package is reinstalled.
 
 Agents can add global `--compact-json` before the subcommand:
 `richi --compact-json recall 'локальный кеш'`. Successful stdout JSON omits

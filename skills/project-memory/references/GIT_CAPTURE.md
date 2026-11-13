@@ -58,6 +58,17 @@ outside the repo. Partial/promisor repositories are rejected to avoid lazy fetch
 Keep artifacts outside source checkouts; SQLite backup alone does not include
 `artifacts/git/` or repository objects required to reopen historical evidence.
 
+Check whether attached evidence still matches the code: a record against `HEAD`,
+or every record with Git evidence from a repository against the working copy of
+its registered checkout; add `--repo` for a linked worktree. Nothing is fetched or
+updated.
+
+```sh
+richi sources git-check --ref entry:task:ABC-123
+richi sources git-check --project service-example --worktree
+richi sources git-check --project service-example --worktree --repo /path/to/worktree
+```
+
 For historical browsing, `git-check`, diff and related knowledge read [GIT.md](GIT.md).
 Capture's project-path selection is specific to capture: Git-reading commands
 such as `git-check`, `diff` and `impact` require explicit `--repo` to select a

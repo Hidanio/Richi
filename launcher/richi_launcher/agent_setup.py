@@ -524,18 +524,33 @@ def recover_pending():
         files.recover(ctx)
 
 
-def command(argv):
+def setup_parser():
     from .cli import Parser
-    from . import installation
-    parser = Parser(prog="richi setup", description="Connect Richi to a supported agent; preserve existing instructions")
+    from .help_format import document
+    parser = Parser(prog="richi setup")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--yes", action="store_true", help="Apply the displayed setup without an interactive confirmation")
     mode.add_argument("--dry-run", action="store_true", help="Validate and display planned changes without writing")
     mode.add_argument("--status", action="store_true", help="Inspect the installed integration without writing")
-    parser.add_argument("--agent", choices=tuple(agent_adapters.AGENTS), default="codex")
+    parser.add_argument("--agent", choices=tuple(agent_adapters.AGENTS), default="codex",
+                        help="Agent to connect (default: %(default)s)")
     parser.add_argument("--replace-skill", action="store_true", help="Back up an existing skill outside skill discovery before replacing its directory or link")
     parser.add_argument("--no-path", action="store_true", help="Do not add PATH instructions to shell profiles on first setup")
-    args = parser.parse_args(argv)
+    return document(parser, "Connect this installation to an AI agent.", """
+        Installs the project-memory skill and global instructions for the current OS
+        user, so every new chat of that agent can use Richi. Existing instructions
+        are preserved and changed files are backed up. Without --yes an
+        interactive terminal asks for confirmation; preview with --dry-run first.
+        Setup is installation-wide: workspace and storage options are rejected.""",
+                    examples=(("Preview, then apply for Codex", ("richi setup --dry-run", "richi setup --yes")),
+                              ("Connect Claude Code", "richi setup --agent claude --yes"),
+                              ("Is the integration intact?", "richi setup --status --agent claude")),
+                    see=("agents", "start"), guide="docs/SETUP.md")
+
+
+def command(argv):
+    from . import installation
+    args = setup_parser().parse_args(argv)
     ctx = installation._context()
     if args.status:
         record = _load(ctx, args.agent)
@@ -568,14 +583,18 @@ def command(argv):
     if args.dry_run:
         return result
     if not args.yes and changed:
-        print(json.dumps(result, indent=2), file=sys.stderr)
         try:
             with open("/dev/tty", "r+") as terminal:
+                # The plan is shown to someone who can answer; without a
+                # terminal stderr holds only the error object.
+                print(json.dumps(result, indent=2), file=sys.stderr)
                 terminal.write("Connect Richi to " + args.agent + " for this user? [y/N] ")
                 terminal.flush()
                 accepted = terminal.readline().strip().lower() in {"y", "yes"}
         except OSError:
-            raise ConfigError("Setup needs a terminal or explicit --yes; use --dry-run to inspect the plan")
+            from .cli import usage
+            raise usage("Setup needs a terminal or explicit --yes; use --dry-run to inspect the plan.",
+                        "richi help setup")
         if not accepted:
             return dict(result, status="cancelled")
     with installation._locked(ctx), installation._locked(ctx, state=True):
@@ -591,13 +610,24 @@ def command(argv):
     return dict(result, status="configured")
 
 
+def agents_parser():
+    from .cli import Parser
+    from .help_format import document
+    parser = Parser(prog="richi agents")
+    parser.add_argument("--status", action="store_true", help="Only list agents and their state; change nothing")
+    return document(parser, "Find local AI agents and connect one.", """
+        Lists supported agents, whether each is detected on this machine and
+        whether Richi is connected to it. In an interactive terminal it then offers
+        a numbered menu that runs richi setup for the chosen agent.""",
+                    examples=(("Choose an agent from a menu", "richi agents"),
+                              ("Scripts and agents: list only", "richi agents --status")),
+                    see=("setup",), guide="docs/SETUP.md")
+
+
 def agents_command(argv):
     """Explicit discovery/menu; never runs on ordinary CLI calls."""
-    from .cli import Parser
     from . import installation
-    parser = Parser(prog="richi agents", description="Find and connect local AI agents")
-    parser.add_argument("--status", action="store_true", help="List agents without changing files")
-    args = parser.parse_args(argv)
+    args = agents_parser().parse_args(argv)
     while True:
         records = _records(installation._context())
         items = []
@@ -622,7 +652,9 @@ def agents_command(argv):
                 terminal.flush()
                 choice = terminal.readline().strip()
         except OSError as exc:
-            raise ConfigError("Use richi agents --status to list agents, then richi setup --agent NAME --yes without a terminal") from exc
+            from .cli import usage
+            raise usage("Use richi agents --status to list agents, then richi setup --agent NAME --yes "
+                        "without a terminal.", "richi help agents") from exc
         if choice == str(len(items) + 1):
             continue
         if choice in (str(index) for index in range(1, len(items) + 1)):

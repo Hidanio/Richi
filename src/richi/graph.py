@@ -320,25 +320,34 @@ def depth(value):
     return result
 
 
+depth.bounds = (1, 3)
+
+
 def add_commands(commands, limit):
-    commands.add_parser("migrate")
-    for name in ("entity", "edge"):
-        group = commands.add_parser(name).add_subparsers(dest="action", required=True)
-        group.add_parser("put").add_argument("--json", required=True)
-        read = group.add_parser("get")
-        read.add_argument("id")
-        read.add_argument("--history", action="store_true", help="Include full revision history")
-    graph = commands.add_parser("graph").add_subparsers(dest="action", required=True)
-    full = graph.add_parser("export")
-    full.add_argument("--project")
-    neighbors = graph.add_parser("neighbors")
-    neighbors.add_argument("ref")
-    neighbors.add_argument("--depth", type=depth, default=1)
-    neighbors.add_argument("--limit", type=limit, default=200)
-    neighbors.add_argument("--view", choices=("full", "compact"), default="full")
+    commands.add_parser("migrate", help="Upgrade an older store's schema in place (back up first)")
+    for name, summary, example in (
+            ("entity", "Read or write graph entities (components, concepts, tools...)", "concept:connection-pool"),
+            ("edge", "Read or write explicit, sourced links between records", "cache-uses-redis")):
+        group = commands.add_parser(name, help=summary).add_subparsers(dest="action", required=True)
+        group.add_parser("put", help="Create or replace " + name + " records from JSON").add_argument(
+            "--json", required=True, metavar="FILE")
+        read = group.add_parser("get", help="Read one whole " + name + " by ID")
+        read.add_argument("id", help=name.capitalize() + " ID, for example " + example)
+        read.add_argument("--history", action="store_true")
+    graph = commands.add_parser("graph", help="Read a record's neighborhood or export the whole graph").add_subparsers(
+        dest="action", required=True)
+    full = graph.add_parser("export", help="Export the explicit knowledge graph as JSON")
+    full.add_argument("--project", help="Only records connected to this project")
+    neighbors = graph.add_parser("neighbors", help="Read records linked to one record, up to three hops")
+    neighbors.add_argument("ref", help="Start record: project:<id>, entry:<id> or entity:<id>")
+    neighbors.add_argument("--depth", type=depth, default=1, help="Link hops to follow, 1-3 (default: %(default)s)")
+    neighbors.add_argument("--limit", type=limit, default=200,
+                           help="Maximum nodes including the start record, 1-200 (default: %(default)s)")
+    neighbors.add_argument("--view", choices=("full", "compact"), default="full",
+                           help="full returns whole records; compact fits --max-chars (default: %(default)s)")
     from . import compact
     neighbors.add_argument("--max-chars", type=compact.max_chars,
-                           help="Rendered JSON budget; requires --view compact (default: 16000)")
+                           help="Rendered JSON budget, 2000-100000; requires --view compact (default: 16000)")
     for command in (full, neighbors):
         command.add_argument("--include-hypotheses", action="store_true")
         command.add_argument("--include-superseded", action="store_true")

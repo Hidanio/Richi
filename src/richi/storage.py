@@ -273,14 +273,14 @@ def _optimize(conn, args, api, database):
 
 
 def add_commands(commands, api):
-    parser = commands.add_parser("storage", help="Observe workspace storage or explicitly maintain indexes")
+    parser = commands.add_parser("storage", help="Measure storage use; optionally maintain indexes")
     actions = parser.add_subparsers(dest="action", required=True)
     stats = actions.add_parser("stats", help="Read-only storage size and growth inputs")
     stats.add_argument("--deep", action="store_true", help="Scan text bytes and optional dbstat page attribution")
     stats.add_argument("--files", action="store_true", help="Bounded inventory of known workspace directories")
     stats.add_argument("--max-chars", type=max_chars, default=8000)
     optimize = actions.add_parser("optimize", help="Show a plan; --apply backs up then maintains indexes")
-    optimize.add_argument("--apply", action="store_true")
+    optimize.add_argument("--apply", action="store_true", help="Make a verified backup, then maintain indexes")
     optimize.add_argument("--max-chars", type=max_chars, default=8000)
 
 

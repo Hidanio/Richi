@@ -1,14 +1,12 @@
 """Capability IDs resolve to the real parser without opening personal storage."""
-import argparse
-from contextlib import redirect_stdout
-from io import StringIO
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from richi import capabilities, memory
+from richi import capabilities, cli_help, memory
+from richi_launcher import help_format
 
 
 class CapabilitiesTests(unittest.TestCase):
@@ -27,24 +25,15 @@ class CapabilitiesTests(unittest.TestCase):
         self.assertCountEqual(grouped, [row["id"] for row in operations])
         self.assertTrue(all(row["effect"] in {"read", "write", "conditional"} for row in operations))
 
-    def test_every_catalog_id_resolves_and_describes_actual_parser_syntax(self):
-        root = memory.parser()
-        listing = capabilities.run(SimpleNamespace(action="list", group="all"), memory)
-        for operation in listing["operations"]:
-            with self.subTest(identity=operation["id"]):
-                current = root
-                for token in operation["id"].split():
-                    actions = [action for action in current._actions if isinstance(action, argparse._SubParsersAction)]
-                    self.assertEqual(len(actions), 1)
-                    self.assertIn(token, actions[0].choices)
-                    current = actions[0].choices[token]
-                result = capabilities.run(SimpleNamespace(action="describe", id=operation["id"]), memory)
-                self.assertEqual(result["syntax"], current.format_help())
-                self.assertEqual(result["effect"], operation["effect"])
-                self.assertTrue(result["guide"].startswith("references/"))
-                with redirect_stdout(StringIO()), self.assertRaises(SystemExit) as exit_context:
-                    root.parse_args(operation["id"].split() + ["--help"])
-                self.assertEqual(exit_context.exception.code, 0)
+    def test_describe_returns_the_contract_of_the_live_parser(self):
+        # scripts/check_cli_docs.py checks that every ID names a command.
+        root = cli_help.decorate(memory.parser())
+        for identity, _, effect, _, guide in capabilities.COMMANDS:
+            with self.subTest(identity=identity):
+                result = capabilities.run(SimpleNamespace(action="describe", id=identity), memory)
+                self.assertEqual(result["syntax"], help_format.syntax(help_format.find(root, identity.split(), None)))
+                self.assertNotIn("examples:", result["syntax"])
+                self.assertEqual((result["effect"], result["guide"]), (effect, "references/" + guide))
 
     def test_describe_exposes_real_filters_and_pagination_options(self):
         for identity, options in (("discover", ["--where", "--max-chars"]),

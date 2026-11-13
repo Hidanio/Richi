@@ -1,4 +1,5 @@
 """Background policy uses isolated installation metadata, never user workspaces."""
+import io
 import json
 import os
 from pathlib import Path
@@ -183,12 +184,12 @@ class AutoUpdateTests(unittest.TestCase):
         self.assertIsNone(auto_update.notice())
 
     def test_chat_current_carries_notice_only_when_present(self):
-        from richi_launcher import cli
+        from richi_launcher import workspace_commands
         for pending in (None, {"status": "update_available", "version": "0.2.0"}):
             with self.subTest(pending=pending), patch.object(auto_update, "notice", return_value=pending), \
-                    patch.object(cli, "current_chat", return_value={"chat_id": "c", "bound": True}), \
+                    patch.object(workspace_commands, "current_chat", return_value={"chat_id": "c", "bound": True}), \
                     patch("builtins.print") as printed:
-                cli.chat_command(["current"], {}, "c")
+                workspace_commands.chat_command(["current"], {}, "c")
             result = json.loads(printed.call_args[0][0])
             self.assertEqual(result.get("update"), pending)
 
@@ -709,10 +710,17 @@ class AutoUpdateTests(unittest.TestCase):
 class TransientReleaseTests(unittest.TestCase):
     def test_http_and_transport_failures_are_classified(self):
         url = "https://api.github.com/repos/Hidanio/Richi/releases/latest"
+
+        def http_error(code, message):
+            # Python 3.14 warns about an unclosed HTTPError when it is collected,
+            # maybe inside another test's captured stderr; with a body 3.9 closes it too.
+            error = HTTPError(url, code, message, {}, io.BytesIO())
+            self.addCleanup(error.close)
+            return error
         for error, expected in ((URLError("offline"), releases.TransientReleaseError),
-                (HTTPError(url, 429, "rate limit", {}, None), releases.TransientReleaseError),
-                (HTTPError(url, 503, "unavailable", {}, None), releases.TransientReleaseError),
-                (HTTPError(url, 403, "forbidden", {}, None), ConfigError)):
+                (http_error(429, "rate limit"), releases.TransientReleaseError),
+                (http_error(503, "unavailable"), releases.TransientReleaseError),
+                (http_error(403, "forbidden"), ConfigError)):
             with self.subTest(error=error), patch.object(releases, "build_opener") as opener:
                 opener.return_value.open.side_effect = error
                 with self.assertRaises(expected) as caught:

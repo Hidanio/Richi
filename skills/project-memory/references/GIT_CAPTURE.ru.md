@@ -64,6 +64,17 @@ Capture поддерживает обычные файлы до 8 MiB, но не
 Храни артефакты вне исходного checkout; SQLite backup сам по себе не содержит
 `artifacts/git/` или объекты репозитория, нужные для повторного чтения исторических свидетельств.
 
+Проверить, совпадают ли прикреплённые свидетельства с кодом: одну запись с `HEAD`
+или все записи со свидетельствами из репозитория с рабочей копией его
+зарегистрированного checkout; для связанного worktree добавь `--repo`. Ничего не
+скачивается и не обновляется.
+
+```sh
+richi sources git-check --ref entry:task:ABC-123
+richi sources git-check --project service-example --worktree
+richi sources git-check --project service-example --worktree --repo /path/to/worktree
+```
+
 Для исторического просмотра, `git-check`, diff и связанных знаний прочитай [GIT.ru.md](GIT.ru.md).
 Выбор по project-path специфичен для capture: команды чтения Git,
 например `git-check`, `diff` и `impact`, требуют явный `--repo` для выбора

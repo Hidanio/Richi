@@ -53,9 +53,43 @@ python3 -m venv "$richi_test_venv"
 . "$richi_test_venv/bin/activate"
 python -m pip install --upgrade pip
 python -m pip install .
+python scripts/check_cli_docs.py
 python -m unittest discover -s tests -v
 python evals/evaluate_recall.py
 ```
+
+`scripts/check_cli_docs.py` reads the real parsers, so a new command, subcommand
+or option is checked without registering it. CI fails until the command has:
+
+- `help=` on its declaration and on each of its arguments and options;
+- a page in `richi help` that renders and has an example that runs it
+  (`DETAILS` in `src/richi/cli_help.py`, or `document()` for launcher commands);
+- a guide (`guide=` on the page or its group) whose English and Russian versions
+  show the command in code, as `richi COMMAND ...` or a span such as `` `sources show` ``;
+- a place in one `richi help` group (top-level commands only);
+- an entry in the agent catalog (`capabilities.COMMANDS`) or, with a reason, in
+  `capabilities.UNCATALOGED`. A catalog guide is a `NAME.md` skill reference and
+  is also the guide of the command's page.
+
+Every `richi ...` line in a shell code block, fenced or indented and also inside
+a list item or a block quote, must parse with the current CLI and be accepted
+with its global options. Every inline `` `richi ...` `` must name a real command,
+real options, valid values and global options that the command accepts, and
+`richi help ...` and `capabilities describe ...` must name existing pages and
+catalog entries. This holds for the Markdown files of the repository root,
+`docs/`, `evals/` and `skills/`, and for every guide that a page links. Dated
+reports (file names that end in `-YYYY-MM-DD` or `_EVAL`) record the CLI as it
+was and are not checked. The script prints each problem with the rule it breaks and how to fix
+it.
+
+A launcher command is declared once, by the launcher; the runtime lists it in
+`LAUNCHER_COMMANDS` of `src/richi/cli_parser.py` with its page's summary. A
+development runtime formats help with the installed launcher's
+`richi_launcher/help_format.py`. List every name of it that the runtime uses in
+`NEEDS` of `src/richi/cli_help.py` (a test checks the list), and raise `API`
+for a changed behavior or signature. A launcher that lacks a needed name or has
+another `API` then gets plain argparse help until the package is reinstalled,
+instead of failing.
 
 After source edits, run `python -m pip install --force-reinstall .` before
 repeating the full test suite and evaluation. Direct Python imports and package

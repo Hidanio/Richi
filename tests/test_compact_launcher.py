@@ -11,7 +11,7 @@ from unittest import mock
 
 from richi import memory
 import richi_bootstrap
-from richi_launcher import cli
+from richi_launcher import cli, workspace_commands
 from richi_launcher.runtime import bootstrap_command
 
 from cli_environment import cli_environment
@@ -55,7 +55,7 @@ class CompactLauncherTests(unittest.TestCase):
 
     def test_early_workspace_command_does_not_receive_a_storage_selector(self):
         value = {"current": "default", "workspaces": [{"name": "default", "label": "Работа"}]}
-        with mock.patch.object(cli, "list_workspaces", return_value=value):
+        with mock.patch.object(workspace_commands, "list_workspaces", return_value=value):
             compact, error = self.invoke(["--compact-json", "workspace", "list"])
             pretty, _ = self.invoke(["workspace", "list"])
         self.assertEqual(error, "")
@@ -64,7 +64,7 @@ class CompactLauncherTests(unittest.TestCase):
 
     def test_early_chat_bind_preserves_binding_arguments(self):
         value = {"chat_id": "synthetic", "workspace": "alpha", "bound": True}
-        with mock.patch.object(cli, "bind_chat", return_value=value) as bind:
+        with mock.patch.object(workspace_commands, "bind_chat", return_value=value) as bind:
             text, error = self.invoke(["--compact-json", "--chat", "synthetic", "chat", "bind", "--current"])
         self.assertEqual(error, "")
         self.assert_compact(text, value)
@@ -72,7 +72,7 @@ class CompactLauncherTests(unittest.TestCase):
 
     def test_compact_flag_does_not_bypass_chat_global_workspace_guard(self):
         with mock.patch.object(cli, "current_chat", return_value={"workspace": "alpha"}), \
-                mock.patch.object(cli, "use_workspace") as use:
+                mock.patch.object(workspace_commands, "use_workspace") as use:
             stdout, stderr = self.invoke(["--compact-json", "--chat", "synthetic", "use", "beta"], expected=1)
         self.assertEqual(stdout, "")
         self.assertEqual(json.loads(stderr)["code"], "chat_global_use_forbidden")
@@ -119,15 +119,20 @@ class CompactLauncherTests(unittest.TestCase):
 
     def test_chat_help_keeps_fixed_runtime_and_text_output(self):
         selected = object()
-        with mock.patch.object(cli, "installed_runtime", return_value=selected), \
-                mock.patch.object(cli, "runtime_command", return_value=["/synthetic/python"]) as command, \
-                mock.patch.object(cli.os, "execve", side_effect=SystemExit(0)) as execute, \
-                mock.patch.object(cli, "pin_chat", side_effect=AssertionError("help must not require binding")), \
-                mock.patch.object(cli, "resolve_settings", side_effect=AssertionError("help must not resolve dev")):
-            with self.assertRaises(SystemExit):
-                cli.main(["--compact-json", "--chat", "synthetic", "--help"])
-        command.assert_called_once_with(selected, ["--help"])
-        execute.assert_called_once()
+        for argv, forwarded in ((["--compact-json", "--chat", "synthetic", "--help"], ["--help"]),
+                                (["--chat", "synthetic"], []),
+                                (["--chat", "synthetic", "help"], ["help"]),
+                                (["--chat", "synthetic", "help", "sources", "capture"], ["help", "sources", "capture"])):
+            with self.subTest(argv=argv), \
+                    mock.patch.object(cli, "installed_runtime", return_value=selected), \
+                    mock.patch.object(cli, "runtime_command", return_value=["/synthetic/python"]) as command, \
+                    mock.patch.object(cli.os, "execve", side_effect=SystemExit(0)) as execute, \
+                    mock.patch.object(cli, "pin_chat", side_effect=AssertionError("help must not require binding")), \
+                    mock.patch.object(cli, "resolve_settings", side_effect=AssertionError("help must not resolve dev")):
+                with self.assertRaises(SystemExit):
+                    cli.main(argv)
+                command.assert_called_once_with(selected, forwarded)
+                execute.assert_called_once()
 
 
 class CompactLauncherInstalledTests(unittest.TestCase):

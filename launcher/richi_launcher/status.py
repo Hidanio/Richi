@@ -1,4 +1,5 @@
 """Stable, read-only context report before or after choosing a workspace."""
+import argparse
 import json
 import os
 from pathlib import Path
@@ -14,18 +15,23 @@ MAX_OUTPUT = 1024 * 1024
 
 
 def _limit(value):
+    """Argument type of --limit; help pages print its bounds."""
     try:
         number = int(value)
     except ValueError as exc:
-        raise ConfigError("--limit must be an integer between 1 and 200") from exc
+        raise argparse.ArgumentTypeError("limit must be an integer between 1 and 200") from exc
     if not 1 <= number <= 200:
-        raise ConfigError("--limit must be between 1 and 200")
+        raise argparse.ArgumentTypeError("limit must be between 1 and 200")
     return number
+
+
+_limit.bounds = (1, 200)
 
 
 def _project_id(value):
     if not value.strip() or len(value) > 200 or any(ord(ch) < 32 for ch in value):
-        raise ConfigError("--project must be a nonempty ID of at most 200 characters without control characters")
+        raise argparse.ArgumentTypeError("project must be a nonempty ID of at most 200 characters "
+                                         "without control characters")
     return value
 
 
@@ -66,13 +72,29 @@ def _worker(runtime, arguments):
     return report
 
 
-def command(argv, selectors, chat_id, project_path=None):
+def parser():
     from .cli import Parser
-    parser = Parser(prog="richi status", description="Read workspace, runtime and project-path diagnostics without changing settings or knowledge")
-    parser.add_argument("--projects", action="store_true", help="Also inspect registered project paths")
-    parser.add_argument("--project", type=_project_id, help="Expected project ID for --project-path or the current directory")
-    parser.add_argument("--limit", type=_limit, default=50, help="Maximum returned project details (1–200, default 50)")
-    args = parser.parse_args(argv)
+    from .help_format import document
+    parser = Parser(prog="richi status")
+    parser.add_argument("--projects", action="store_true", help="Also check every registered project path")
+    parser.add_argument("--project", type=_project_id, metavar="ID", help="Expected project ID for --project-path or the current directory")
+    parser.add_argument("--limit", type=_limit, default=50, metavar="N", help="Maximum returned project details, 1-200 (default: 50)")
+    return document(parser, "Diagnose the chat binding, workspace, runtime and project paths.", """
+        A read-only report: which workspace this chat or terminal uses, where its
+        store lives, which code runs, whether the database opens, and whether the
+        current directory (or --project-path) belongs to a registered project.
+        Exit code 0 means a report was produced; read its status, issues and
+        next_actions. An unbound chat gets selection_required without any database
+        access.""",
+                    examples=(("", "richi status"),
+                              ("Is this checkout the expected project?",
+                               "richi --project-path /path/to/service status --project service"),
+                              ("Check all registered repositories", "richi status --projects --limit 50")),
+                    see=("project check", "config show", "workspace"), guide="WORKSPACES.md")
+
+
+def command(argv, selectors, chat_id, project_path=None):
+    args = parser().parse_args(argv)
     state = current_chat(chat_id)
     report = {"schema_version": 1, "read_only": True, "status": "ok",
               "chat": {key: state[key] for key in ("chat_id", "detected", "bound", "workspace")},

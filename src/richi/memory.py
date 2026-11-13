@@ -61,12 +61,37 @@ END
 
 
 class MemoryError(Exception):
+    """An error reported as {"error": message, "code": code}; an error with
+    more fields keeps the whole JSON payload in details, as the launcher's
+    errors do."""
     code = None
 
 
 class NotFoundError(MemoryError):
     """The requested object is absent from the selected knowledge states."""
     code = "not_found"
+
+
+class UsageError(MemoryError):
+    """Invalid command-line arguments; names the help page for the command."""
+    code = "usage_error"
+
+    def __init__(self, message, target=None):
+        super().__init__(message)
+        self.details = dict({"error": message, "code": self.code}, **({"help": target} if target else {}))
+
+
+def usage(message, target):
+    """A UsageError whose message ends with the help page to read."""
+    message = message.rstrip()
+    if not message.endswith((".", "?", "!")):
+        message += "."
+    return UsageError(message + " See '" + target + "'.", target)
+
+
+def _help_target(prog):
+    """The `richi help ...` page of a parser, without help presentation."""
+    return " ".join(["richi", "help"] + prog.split()[1:])
 
 
 def now():
@@ -538,16 +563,116 @@ class Parser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         kwargs["allow_abbrev"] = False
         super().__init__(*args, **kwargs)
+        # Python 3.14 colors help in a terminal; a page reads the same everywhere.
+        self.color = False
 
     def error(self, message):
         raise MemoryError(message)
 
 
-def limit(value):
-    number = int(value)
-    if not 1 <= number <= 200:
-        raise argparse.ArgumentTypeError("limit must be between 1 and 200")
-    return number
+class CommandParser(Parser):
+    """Parsers of the richi command tree: corrections, usage errors that name
+    a help page, and help pages composed only when one is printed.
+
+    Help presentation is never loaded for a valid command: errors and help
+    import it on demand.
+    """
+    root = None  # the tree's root parser; cli_parser.build_parser sets it per tree
+
+    def add_argument(self, *args, **kwargs):
+        action = super().add_argument(*args, **kwargs)
+        # Errors name positionals as help pages do: QUERY, not query.
+        if not action.option_strings and action.metavar is None and action.choices is None:
+            action.metavar = action.dest.upper()
+        return action
+
+    def add_subparsers(self, **kwargs):
+        kwargs.setdefault("metavar", "COMMAND")
+        return super().add_subparsers(**kwargs)
+
+    def parse_args(self, args=None, namespace=None):
+        args = list(sys.argv[1:] if args is None else args)
+        namespace, extras = self.parse_known_args(args, namespace)
+        if not extras:
+            return namespace
+        root = type(self).root or self
+        # Unknown options before the command are mistyped global options.
+        leading = _leading(self, args) if self is root else []
+        from .cli_parser import LAUNCHER_COMMANDS
+        if not leading and getattr(namespace, "command", None) in LAUNCHER_COMMANDS:
+            # Arguments of a launcher command are the launcher's to parse;
+            # run() refuses the command whatever they are.
+            namespace.arguments = list(namespace.arguments or ()) + extras
+            return namespace
+        from .cli_help import style
+        if style is None:
+            raise usage("unrecognized arguments: " + " ".join(leading or extras), _help_target(self.prog))
+        if leading:
+            self.error(style.unrecognized(self, leading))
+        # Report leftovers on the command they were given to, so the error
+        # names its page and suggests one of its options; a global option is
+        # suggested only where that command accepts it.
+        parser = style.selected(self, namespace)
+        options = [name for action in root._actions for name in action.option_strings]
+        rules = global_option_rules(parser.prog.split()[1:], apply=getattr(namespace, "apply", False))
+        parser.error(style.unrecognized(parser, extras, options, [option for option in options if option not in rules]))
+
+    def _check_value(self, action, value):
+        if action.choices is not None and value not in action.choices:
+            from .cli_help import style
+            error = style.choice_error(self, action, value) if style is not None else None
+            if error is not None:
+                raise error
+        super()._check_value(action, value)
+
+    def format_help(self):
+        from . import cli_help
+        cli_help.decorate(type(self).root or self)
+        if cli_help.style is not None:
+            cli_help.style.finish(self)
+        return super().format_help()
+
+    def error(self, message):
+        from .cli_help import style
+        if style is None:
+            raise usage(message, _help_target(self.prog))
+        raise UsageError(*style.usage_message(self, message))
+
+
+def _leading(parser, argv):
+    """Unknown options of ARGV before its command word."""
+    options = parser._option_string_actions
+    unknown = []
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+        if token == "--" or token == "-" or not token.startswith("-"):
+            break
+        action = options.get(token.split("=", 1)[0])
+        if action is None and not token.startswith("--") and token[:2] in options:
+            index += 1  # -wNAME carries its value
+        elif action is None:
+            unknown.append(token)
+            index += 1
+        else:
+            index += 2 if action.nargs != 0 and "=" not in token else 1
+    return unknown
+
+
+def bounded(low, high, label):
+    """An integer argument type that accepts LOW to HIGH; help pages print its
+    bounds, so the documented range cannot drift from the checked one."""
+    def parse(value):
+        number = int(value)
+        if not low <= number <= high:
+            raise argparse.ArgumentTypeError("%s must be between %d and %d" % (label, low, high))
+        return number
+    parse.__name__ = label.replace("-", "_")
+    parse.bounds = (low, high)
+    return parse
+
+
+limit = bounded(1, 200, "limit")
 
 
 def positive_int(value):
@@ -557,27 +682,58 @@ def positive_int(value):
     return number
 
 
-def scan_depth(value):
-    number = int(value)
-    if not 0 <= number <= 20:
-        raise argparse.ArgumentTypeError("max-depth must be between 0 and 20")
-    return number
+scan_depth = bounded(0, 20, "max-depth")
 
 
 def parser():
     from .cli_parser import build_parser
-    return build_parser(Parser, limit=limit, positive_int=positive_int, scan_depth=scan_depth)
+    return build_parser(CommandParser, limit=limit, positive_int=positive_int, scan_depth=scan_depth,
+                        bounded=bounded)
 
 
-def run(args):
+def global_option_rules(path, apply=False):
+    """{global option: why the command PATH rejects it}; apply is whether
+    --apply is given. Argument errors and the documentation validator use the
+    same rules."""
+    command, action = (list(path) + [None, None])[:2]
+    rules = {}
+    if command == "map":
+        rules["--compact-json"] = "--compact-json is for JSON commands, not map."
+        rules["--project-path"] = ("--project-path is not supported by map; use project check before opening "
+                                   "the workspace map.")
+    elif command in {"init", "migrate", "backup"} or (command == "project" and action in {"add", "scan"}):
+        rules["--project-path"] = ("--project-path is for existing project operations; omit it for "
+                                   "initialization, registration or a workspace backup.")
+    elif command == "project" and action == "upsert":
+        rules["--project-path"] = "Use project upsert without --project-path for deliberate registration changes."
+    elif command == "storage" and action == "optimize" and apply:
+        rules["--project-path"] = "Storage optimization affects the whole workspace; omit --project-path."
+    return rules
+
+
+def check_global_options(args):
+    """Reject global options that the parsed command does not accept."""
+    # map's positional action is a mode, not a subcommand.
+    action = getattr(args, "action", None) if args.command != "map" else None
+    path = [args.command] + ([action] if action else [])
+    given = {"--compact-json": args.compact_json, "--project-path": getattr(args, "project_path", None) is not None}
+    for option, message in global_option_rules(path, apply=getattr(args, "apply", False)).items():
+        if given[option]:
+            raise usage(message, "richi help " + " ".join(path))
+
+
+def run(args, cli=None):
+    """Run a parsed knowledge command; cli is the parser tree that parsed it."""
     if args.command == "capabilities":
         from . import capabilities
-        return capabilities.run(args, sys.modules[__name__])
+        return capabilities.run(args, sys.modules[__name__], cli)
+    from .cli_parser import LAUNCHER_COMMANDS
+    if args.command in LAUNCHER_COMMANDS:
+        raise MemoryError("Use the installed richi " + args.command + " command")
+    check_global_options(args)
     from richi_launcher.config import resolve_settings
     settings = resolve_settings(db=args.db, config_file=getattr(args, "config", None),
                                 workspace=getattr(args, "workspace", None))
-    if args.command in {"config", "workspace", "use", "chat", "status", "update", "setup"}:
-        raise MemoryError("Use the installed richi " + args.command + " command")
     database = settings.database
     new_file = not database.exists()
     source_attach = args.command == "sources" and getattr(args, "action", None) == "attach"
@@ -588,10 +744,6 @@ def run(args):
                      and args.apply)
     building_index = args.command == "search-index" and args.action == "build"
     project_path = getattr(args, "project_path", None)
-    if storage_apply and project_path is not None:
-        raise MemoryError("Storage optimization affects the whole workspace; omit --project-path")
-    if project_path is not None and (args.command in {"init", "migrate", "backup"} or adding_project or scanning):
-        raise MemoryError("--project-path is for existing project operations; omit it for initialization, registration or a workspace backup")
     writing = args.command in {"init", "migrate"} or getattr(args, "action", None) in {"put", "upsert"} or source_attach or adding_project or applying_scan or storage_apply or building_index
     conn = connect(database, create=args.command == "init", readonly=not writing)
     try:
@@ -626,8 +778,6 @@ def run(args):
                     for item in items:
                         if project["id"] not in (item.get("from_project"), item.get("to_project")):
                             raise MemoryError("Relation must include checked project " + project["id"])
-                if writing and args.command == "project":
-                    raise MemoryError("Use project upsert without --project-path for deliberate registration changes")
             if scanning:
                 from .projects import project_scan
                 result = project_scan(conn, args.path, apply=args.apply, max_depth=args.max_depth)
@@ -706,22 +856,32 @@ def run(args):
 
 def main(argv=None):
     try:
-        args = parser().parse_args(argv)
+        cli = parser()
+        args = cli.parse_args(argv)
+        if args.command in (None, "help"):
+            # Help is plain text and never opens a store.
+            from . import cli_help
+            if args.command is None:
+                text = cli_help.overview(cli)
+            else:
+                def refuse(message, target):
+                    raise usage(message, target)
+                text = cli_help.page(cli, args.topic, refuse)
+            sys.stdout.write(text)
+            return 0
         if args.command == "map":
-            if args.compact_json:
-                raise MemoryError("--compact-json is for JSON commands, not map")
-            if args.project_path is not None:
-                raise MemoryError("--project-path is not supported by map; use project check before opening the workspace map")
+            check_global_options(args)
             from .cli import run_map
             return run_map(args)
         with output.json_mode(compact=args.compact_json):
-            result = run(args)
+            result = run(args, cli)
             sys.stdout.write(output.rendered(result))
         return 0
     except (MemoryError, sqlite3.Error, OSError, ValueError) as exc:
         payload = {"error": str(exc)}
         if isinstance(exc, MemoryError) and exc.code:
             payload["code"] = exc.code
+        payload.update(getattr(exc, "details", None) or {})
         print(json.dumps(payload, ensure_ascii=False), file=sys.stderr)
         return 1
 

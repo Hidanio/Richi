@@ -260,3 +260,6 @@ a report was emitted, not a health assertion. Argument, selector and configurati
 exit 1. `status` reads projects/schema metadata only; it does not replace knowledge `check`
 or requested `punisher` maintenance. Continue using `--project-path` on knowledge operations
 to recheck membership in their transaction.
+
+`richi check` verifies SQLite integrity, foreign keys and the schema version of the
+selected store and exits nonzero on a problem; it reads only and does not judge content.
