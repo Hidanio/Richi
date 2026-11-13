@@ -73,14 +73,22 @@ or option is checked without registering it. CI fails until the command has:
 
 Every `richi ...` line in a shell code block, fenced or indented and also inside
 a list item or a block quote, must parse with the current CLI and be accepted
-with its global options. Every inline `` `richi ...` `` must name a real command,
-real options, valid values and global options that the command accepts, and
-`richi help ...` and `capabilities describe ...` must name existing pages and
-catalog entries. This holds for the Markdown files of the repository root,
-`docs/`, `evals/` and `skills/`, and for every guide that a page links. Dated
-reports (file names that end in `-YYYY-MM-DD` or `_EVAL`) record the CLI as it
-was and are not checked. The script prints each problem with the rule it breaks and how to fix
-it.
+with its global options. Inline code that names a command, with or without
+`richi` (`` `richi recall ...` ``, `` `sources show --ref REF` ``), must name a
+real command, its real arguments and options, global options that the command
+accepts and values from fixed lists; `config set` values are checked as the CLI
+checks them, other types and ranges only in shell code blocks. Each later
+`richi` command on a line or in a span, after a shell operator such as `|` or
+`&&`, is checked too, and `richi help ...` and `capabilities describe ...` must
+name existing pages and catalog entries. Only block lines that start with
+`richi` are parsed, and a guide shows a command only where it is checked:
+`richi` after `cd DIR &&` on a block line, after `python -m` or in a shell
+comment is neither checked nor counted. This holds for the Markdown files of
+the repository root, `docs/`, `evals/` and `skills/`, and for every guide that
+a page links. Dated reports (file names that end in `-YYYY-MM-DD` or `_EVAL`)
+record the CLI as it was and are not checked. The docstring of
+`scripts/check_cli_docs.py` lists every rule, and the script prints each problem
+with the rule it breaks and how to fix it.
 
 A launcher command is declared once, by the launcher; the runtime lists it in
 `LAUNCHER_COMMANDS` of `src/richi/cli_parser.py` with its page's summary. A

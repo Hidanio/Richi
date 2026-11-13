@@ -134,7 +134,9 @@ follows the agents already connected; the first one starts on the release skill
 until the next `config set dev true`. Dev does not switch the installed launcher (`launcher/`, including
 `setup`, `update` and `config`), agent-specific integration files such as
 managed instruction blocks and hooks, or PATH blocks: they always follow the
-installed release.
+installed release. In an agent chat, help pages (`richi help`, `--help`) and
+`--version` also come from the installed release; check help edits with
+`python scripts/check_cli_docs.py`, the tests, or a terminal without a chat ID.
 
 Switching happens automatically. `richi config set dev true` or `false`
 re-points every managed link in one recoverable, journaled transaction and

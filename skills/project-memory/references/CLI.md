@@ -45,7 +45,7 @@ For another database, put `--db` **before** the command:
 richi --db '/путь с пробелами/память.sqlite3' init
 ```
 
-All results are JSON on stdout; errors are JSON on stderr with a nonzero exit code; a missing tool from `tools get` adds `"code": "not_found"`. `--help` and `richi help COMMAND` print plain text; mistakes that the argument parser catches (an unknown command or option, a missing or malformed value, options that a usage line separates with `|`, `--workspace` with `--config`, an argument that a run without a terminal needs) add `"code": "usage_error"` and `"help"` naming that page; every other error keeps its own code or has none, for example a reference, a field name, a date or a `--where` expression that a command checks itself, `--check-limit` without `--check-sources`, `--db` with a workspace that keeps its own storage, or a malformed chat ID (`invalid_chat_id`). In a chat that has no workspace yet, any mistake in a knowledge command is `chat_workspace_required`, because the runtime that parses it is not chosen yet; launcher commands such as `workspace`, `chat` and `config` still get `usage_error`. For `put/upsert`, `--json` accepts a UTF-8 file or `-` for stdin. An import accepts one object or an array of up to 1000 objects and runs atomically: an error in one object rolls back the entire batch. Duplicate IDs within a batch are forbidden; the maximum input size is 10 million characters. In `sources attach/show/history/diff --json FILE`, the file holds one captured source; stdin is not accepted.
+All results are JSON on stdout; errors are JSON on stderr with a nonzero exit code; a missing tool from `tools get` adds `"code": "not_found"`. `--help` and `richi help COMMAND` print plain text; mistakes that the argument parser catches (an unknown command or option, a missing or malformed value, options that a usage line separates with `|`, `--workspace` with `--config`, an argument that a run without a terminal needs) add `"code": "usage_error"` and `"help"` naming that page; so does a global option that the command does not take (for example `--project-path` with `init`, `--compact-json` with `map`, storage options with `chat` or `agents`), with the page of that command; every other error keeps its own code or has none, for example a reference, a field name, a date or a `--where` expression that a command checks itself, `--check-limit` without `--check-sources`, a storage option that the command takes but the selected workspace refuses (`--db` with a workspace that keeps its own storage), or a malformed chat ID (`invalid_chat_id`). In a chat that has no workspace yet, a mistake that the runtime parses outside help is `chat_workspace_required`, because that runtime is not chosen yet; the launcher checks some mistakes first and reports them as `usage_error` even then: those in its own commands (such as `workspace`, `chat` and `config`), a mistyped launcher command or `help`, and mistakes in the global options before the command (a mistyped one, a missing value, the form of `-w`, `--db` and `--config`, `--workspace` with `--config`, `--project-path` with `map`) or in the `--port`, `--db` and `--config` options of `map`. For `put/upsert`, `--json` accepts a UTF-8 file or `-` for stdin. An import accepts one object or an array of up to 1000 objects and runs atomically: an error in one object rolls back the entire batch. Duplicate IDs within a batch are forbidden; the maximum input size is 10 million characters. In `sources attach/show/history/diff --json FILE`, the file holds one captured source; stdin is not accepted.
 
 <a id="компактный-json-для-ии-и-скриптов"></a>
 
@@ -277,10 +277,12 @@ installation or `update rollback` it continues on the new version at the same
 URL, so refreshing the browser tab is enough. The update result lists such maps
 in `maps`. A map started by 1.1.0 or earlier is replaced in the background by the
 next knowledge command run from a terminal after the update, such as
-`richi --version`. An agent's command (one with a chat identity) and a command
-without a terminal never start a server, so do not tell the user that your
-command restarted their map. `richi map` keeps its workspace's map on the
-current version at the same URL, so a shortcut running `richi map` always works.
+`richi project list`; `richi --version` replaces it too unless a setup or
+activation is waiting for recovery. An agent's command (one with a chat
+identity) and a command without a terminal never start a server, so do not tell
+the user that your command restarted their map. `richi map` keeps its
+workspace's map on the current version at the same URL, so a shortcut running
+`richi map` always works.
 `richi map stop` reports `stopped`, `not_running` (with a `note` when another
 workspace's map or another program uses the port) or `refused` with a `reason`
 (exit code 1); `richi map restart` stops the map and starts the current

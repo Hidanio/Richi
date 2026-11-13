@@ -14,36 +14,48 @@ Rules (the name in brackets prefixes each reported problem):
                 no command like a topic); shared option texts and
                 placeholders (COMMON_HELP, METAVARS) name options that exist
   [examples]    every command without subcommands has an example that runs
-                it; every example, every command line of a help topic and of
-                `richi help` and the bare `richi` overview parses
+                it, also after a shell operator; every example, every command
+                line of a help topic and of `richi help` and the bare `richi`
+                overview parses
   [guide]       every command page links a guide in this repository, and the
                 guide exists in English and Russian (NAME.ru.md)
-  [mention]     both languages of that guide show the command in code:
-                `richi [global options] COMMAND ...` or, for a subcommand,
-                a code span that starts with its full path; the guide of
-                `richi help` shows `help TOPIC` for every help topic
+  [mention]     both languages of that guide show the command in code, read
+                as [docs] reads it: `richi [global options] COMMAND ...` in
+                a code span or on a shell block line that starts with richi,
+                also after a shell operator, or, for a subcommand, a code
+                span that starts with its full path; the guide of `richi help`
+                shows every help topic the same way, as `help TOPIC`. A shell
+                comment shows nothing, and neither does richi inside another
+                command (`python -m richi ...`) or a block line that starts
+                otherwise (`cd DIR && richi ...`)
   [catalog]     every command is in the agent catalog (richi capabilities) or
                 in capabilities.UNCATALOGED with a reason; a catalog guide is
                 a skill reference that exists, shows its command and is also
                 the guide of the command's page
   [overview]    every top-level command is in exactly one group of `richi help`
   [links]       DETAILS entries name runtime pages and use only known fields;
-                "see also" lines and `richi help ...` in help text name real
-                pages or topics
+                "see also" lines and `richi help ...` in help text, read as
+                a page shows it, name real pages or topics
   [mirror]      the runtime lists exactly the launcher's commands, with the
                 summaries of their pages, and declares exactly the global
                 options the launcher consumes, each taking a value on both
                 sides or on neither; no runtime command looks like a mistyped
-                launcher command
+                launcher command or `help`
   [docs]        every `richi ...` line of a shell code block (fenced or
                 indented, also inside a list item or block quote) parses and
-                is accepted with its global options; inline code naming a
-                command (`richi recall ...`, `sources show --ref`) uses real
-                commands, options and values, and global options the command
-                accepts; `richi help ...` and `capabilities describe ...` name
-                real pages and catalog entries. Dated reports (file names that
-                end in -YYYY-MM-DD or _EVAL) record the CLI as it was and are
-                not checked.
+                is accepted with its global options, and so is each richi
+                command after a shell operator (|, ||, &&, ; or &) on it;
+                inline code naming a command (`richi recall ...`, or without
+                richi `sources show --ref REF`), and each richi command after
+                a shell operator in it, uses real commands, arguments and
+                options, global options the command accepts, values from
+                fixed lists and `config set` values the CLI accepts (other
+                types and ranges are checked only in shell code blocks);
+                `richi help ...` and `capabilities describe ...` name real
+                pages and catalog entries. A block line that does not start
+                with richi, as `cd DIR && richi ...`, is not parsed. Dated
+                reports (file names that end in -YYYY-MM-DD or _EVAL) record
+                the CLI as it was and are not checked.
   [translation] every Markdown page has its .ru.md counterpart and back
 
 The documentation is the Markdown of the repository root, docs/, evals/ and
@@ -59,6 +71,7 @@ from collections import namedtuple
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 import io
+from itertools import groupby
 from pathlib import Path
 import re
 import shlex
@@ -77,20 +90,30 @@ FIXES = {
     "examples": "add or correct examples: DETAILS, EXAMPLES, OVERVIEW_COMMANDS, HELP_EXAMPLE or TOPICS in "
                 "src/richi/cli_help.py, document() in launcher/richi_launcher/",
     "guide": "set guide= on the page or its group; NAME.md is a skill reference, docs/NAME.md a repository file",
-    "mention": "show the command, or `richi help TOPIC` for a topic, in a code block or span of its guide, "
-               "in English and Russian",
+    "mention": "show the command, or `richi help TOPIC` for a topic, in its guide in English and Russian: "
+               "in a code span or on a shell block line that starts with richi",
     "catalog": "add the command to capabilities.COMMANDS or, with a reason, to capabilities.UNCATALOGED; "
                "a catalog guide is a skill reference and the page's guide",
     "overview": "list each top-level command in exactly one of cli_help.GROUPS",
     "links": "point DETAILS keys, see= and richi help references at existing pages or topics; "
              "DETAILS entries take only about, examples, see and guide",
     "mirror": "keep richi.cli_parser.LAUNCHER_COMMANDS and the runtime's global options equal to the launcher's "
-              "(GLOBAL_OPTIONS, GLOBAL_FLAGS)",
+              "(GLOBAL_OPTIONS, GLOBAL_FLAGS), and name runtime commands unlike launcher commands and help",
     "docs": "update the command line to the current syntax (richi help COMMAND)",
     "translation": "add the missing English or Russian page",
 }
-SHELL_OPERATORS = frozenset({"<", ">", ">>", "2>", "|", "||", "&&", ";", "&"})
-PLACEHOLDER = re.compile(r"^\[?(\.\.\.|…|[A-Z][A-Z0-9_|.-]*)\]?(\.\.\.)?$")
+# What shell operators are made of: |, ||, &&, ; and & end a command; <, >,
+# >>, >&, &> and << (a heredoc) redirect it.
+SHELL_OPERATORS = "|&;<>"
+# A placeholder in angle brackets, as in entry:<id>. sh would read it as two
+# redirections, but documentation does not redirect as in <in>out.
+ANGLED = r"<[^\s<>]+>"
+# What _commands rewrites before it splits a line: quoted and escaped text,
+# which the shell reads literally, stays; an angled placeholder is quoted to
+# stay a word; the file descriptor number of a redirection, a word of digits
+# as in 2>&1, is dropped.
+SHELL_TEXT = re.compile(r"""'[^']*'|"(?:\\.|[^"\\])*"|\\.|(?P<angled>%s)|(?P<blank>^|\s)[0-9]+(?=[<>])""" % ANGLED)
+PLACEHOLDER = re.compile(r"^\[?(\.\.\.|…|[A-Z][A-Z0-9_|.-]*|%s)\]?(\.\.\.)?$" % ANGLED)
 FENCE = re.compile(r"(`{3,}|~{3,})\s*([^\s]*)")
 CLOSING = re.compile(r" {0,3}(`{3,}|~{3,})\s*$")
 LIST_ITEM = re.compile(r"([-+*]|[0-9]{1,9}[.)])( +|$)")
@@ -99,7 +122,8 @@ THEMATIC = re.compile(r"([-*_])(?: *\1){2,} *$")
 SETEXT = re.compile(r"(=+|-+) *$")
 QUOTE = re.compile(r" {0,3}> ?")
 PUNCTUATION = frozenset("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")  # what a backslash escapes
-HELP_REFERENCE = re.compile(r"\brichi help((?: [a-z][a-z0-9-]*)+)")
+# A following `richi` starts the next reference.
+HELP_REFERENCE = re.compile(r"\brichi help((?: (?!richi\b)[a-z][a-z0-9-]*)+)")
 HELP_OPTION = "'richi help' takes command and topic names, not options such as %s"
 # Words that may follow "richi help" in prose without naming a page.
 PROSE = frozenset({"to", "for", "and", "or", "with", "as", "is", "in", "on", "lists", "shows", "prints",
@@ -120,6 +144,7 @@ class Sources:
     runtime: argparse.ArgumentParser  # the documented runtime parser tree
     launcher: dict                    # {command: parser} of the launcher
     launcher_commands: frozenset      # richi_launcher.cli.LAUNCHER_COMMANDS
+    help_commands: frozenset          # richi_launcher.cli.HELP_COMMANDS
     stubs: dict                       # the runtime's {launcher command: list summary}
     global_options: dict              # richi_launcher.cli.GLOBAL_OPTIONS
     catalog: tuple
@@ -135,6 +160,7 @@ class Sources:
     metavars: dict                    # cli_help.METAVARS
     common_help: dict                 # cli_help.COMMON_HELP
     launcher_policy: object           # (argv, placeholder) -> why the launcher rejects its global options
+    config_arguments: object          # argv after `richi config` -> raises for arguments main() rejects
     runtime_policy: object            # parsed namespace -> raises for rejected global options
     runtime_rules: object             # (command path, apply) -> {global option: why it is rejected}
 
@@ -143,17 +169,19 @@ def current(root=ROOT):
     """The parsers, catalog and help tables of the imported packages, and the
     documentation of this checkout."""
     from richi import capabilities, cli_help, cli_parser, memory
-    from richi_launcher import cli, help_format
+    from richi_launcher import cli, help_format, workspace_commands
     return Sources(
         root=Path(root), runtime=cli_help.decorate(memory.parser()), launcher=cli.launcher_parsers(),
-        launcher_commands=frozenset(cli.LAUNCHER_COMMANDS), stubs=dict(cli_parser.LAUNCHER_COMMANDS),
+        launcher_commands=frozenset(cli.LAUNCHER_COMMANDS), help_commands=frozenset(cli.HELP_COMMANDS),
+        stubs=dict(cli_parser.LAUNCHER_COMMANDS),
         global_options=dict(cli.GLOBAL_OPTIONS), catalog=tuple(capabilities.COMMANDS),
         uncataloged=dict(capabilities.UNCATALOGED), groups=tuple(cli_help.GROUPS), details=dict(cli_help.DETAILS),
         topics=dict(cli_help.TOPICS), examples=tuple(cli_help.EXAMPLES),
         overview=tuple(cli_help.OVERVIEW_COMMANDS) + (cli_help.HELP_EXAMPLE,), style=help_format, help=cli_help,
         global_flags=frozenset(cli.GLOBAL_FLAGS), metavars=dict(cli_help.METAVARS),
         common_help=dict(cli_help.COMMON_HELP), launcher_policy=cli.global_option_error,
-        runtime_policy=memory.check_global_options, runtime_rules=memory.global_option_rules)
+        config_arguments=workspace_commands.config_arguments, runtime_policy=memory.check_global_options,
+        runtime_rules=memory.global_option_rules)
 
 
 def pages(sources):
@@ -202,20 +230,49 @@ def _comment(line):
     return len(line)
 
 
-def _tokens(line):
-    line = line[:_comment(line)]
+def _commands(line):
+    """The words of each command of a shell line: a command ends at |, ||,
+    &&, ; or &, and loses its redirections (2>&1, >file, <file, <<EOF) with
+    their targets; a placeholder such as <id> is a word."""
+    def rewrite(match):
+        if match.group("angled"):
+            return shlex.quote(match.group())
+        # A descriptor number belongs to its redirection, not to the arguments.
+        return match.group() if match.group("blank") is None else match.group("blank")
+
+    line = SHELL_TEXT.sub(rewrite, line[:_comment(line)])
+    lexer = shlex.shlex(line, posix=True, punctuation_chars=SHELL_OPERATORS)
+    lexer.whitespace_split, lexer.commenters = True, ""
     try:
-        tokens = shlex.split(line)
+        tokens = list(lexer)
     except ValueError:
         tokens = line.split()
-    for index, token in enumerate(tokens):
-        if token in SHELL_OPERATORS or token.startswith("<<"):
-            return tokens[:index]
-    return tokens
+    commands, target = [[]], False
+    for token in tokens:
+        if target:
+            target = False  # The file, descriptor or heredoc delimiter of a redirection.
+        elif not token or token.strip(SHELL_OPERATORS):  # A word, also an empty quoted one.
+            commands[-1].append(token)
+        elif "<" in token or ">" in token:
+            target = True
+        else:
+            commands.append([])
+    return [words for words in commands if words]
+
+
+def _span(text):
+    """The words of each command of an inline code span: read like a shell
+    line, without the brackets and parentheses of usage lines, as in
+    [--limit N] and (--ref REF | --json FILE). Parentheses that pair up
+    within a word, as in $(pwd), are its own."""
+    def usage(word):
+        word = word.strip("[]")
+        return word if word.count("(") == word.count(")") else word.strip("()")
+    return [[usage(word) for word in words] for words in _commands(text)]
 
 
 def _placeholder(token):
-    """NAME, [ARGS...], "COMMAND ID" or ... stand for anything."""
+    """NAME, <name>, [ARGS...], "COMMAND ID" or ... stand for anything."""
     return bool(token.split()) and all(PLACEHOLDER.match(part) for part in token.split())
 
 
@@ -276,8 +333,13 @@ def _parse_error(argv, sources):
             if error:
                 return error
             if words and words[0] in sources.launcher:
-                # The launcher strips global options before its own parser.
-                sources.launcher[words[0]].parse_args(words[1:])
+                # The launcher strips global options before its own parser;
+                # config's values are checked with the CLI's own function,
+                # unless a placeholder stands for any of them.
+                if words[0] == "config" and not any(map(_placeholder, words[1:])):
+                    sources.config_arguments(words[1:])
+                else:
+                    sources.launcher[words[0]].parse_args(words[1:])
             else:
                 sources.runtime_policy(sources.runtime.parse_args(argv))
     except SystemExit as exc:
@@ -330,7 +392,7 @@ def _help_target(words, sources, strict=True):
                 return None
             if commands is None:
                 return "%s has no subcommands" % _label(path)
-            return "'%s' is not a %s command" % (word, _label(path))
+            return str(sources.style.choice_error(parser, commands, word))
         parser, path = commands.choices[word], path + (word,)
     return None
 
@@ -347,26 +409,33 @@ def _target_error(path, rest, sources):
 
 
 def invoked(line, sources):
-    """Command path that a complete `richi ...` line runs, or None; a help
+    """Command paths that the richi commands of a complete line run; a help
     request runs nothing."""
-    tokens = _tokens(line)
-    if not tokens or tokens[0] != "richi" or _asks_help(tokens):
-        return None
-    argv = tokens[1:]
-    return _resolve(argv[_after_globals(argv, _global_options(sources)):], sources)[0]
+    paths = []
+    for tokens in _commands(line):
+        if tokens[0] == "richi" and not _asks_help(tokens):
+            argv = tokens[1:]
+            paths.append(_resolve(argv[_after_globals(argv, _global_options(sources)):], sources)[0])
+    return paths
 
 
 def check_line(line, sources):
-    """Error of a complete command line, or None."""
-    tokens = _tokens(line)
-    if not tokens or tokens[0] != "richi":
+    """Error of a complete command line, or None; each richi command after
+    a shell operator on it is checked too."""
+    commands = _commands(line)
+    if not commands or commands[0][0] != "richi":
         return "does not start with richi"
-    argv = tokens[1:]
-    error = _parse_error(argv, sources)
-    if error:
-        return error
-    path, _, rest = _resolve(argv[_after_globals(argv, _global_options(sources)):], sources)
-    return _target_error(path, rest, sources)
+    for tokens in commands:
+        if tokens[0] != "richi":
+            continue
+        argv = tokens[1:]
+        error = _parse_error(argv, sources)
+        if not error:
+            path, _, rest = _resolve(argv[_after_globals(argv, _global_options(sources)):], sources)
+            error = _target_error(path, rest, sources)
+        if error:
+            return error
+    return None
 
 
 def _choice_error(parser, action, value, sources):
@@ -376,9 +445,10 @@ def _choice_error(parser, action, value, sources):
     return str(error) if error is not None else None
 
 
-def _arguments_error(parser, path, rest, sources):
+def _arguments_error(parser, path, rest, sources, strict):
     """Unknown or misplaced options and invalid values in the arguments of an
-    inline span; omitted arguments are fine."""
+    inline span; omitted arguments are fine. A word that no argument takes is
+    refused if strict, and may be prose otherwise."""
     globals_ = _global_options(sources)
     options = {name: action for action in parser._actions for name in action.option_strings}
     positionals = [action for action in parser._actions
@@ -413,22 +483,45 @@ def _arguments_error(parser, path, rest, sources):
                 break  # The words that follow are its own, as `richi help` reads them.
             if action.nargs not in ("*", "+"):
                 position += 1
+        elif strict and not _placeholder(token):
+            return "%s takes no argument %s" % (_label(path), token)
         index += 1
     return None
 
 
 def check_mention(text, sources):
-    """Error of an inline code span that names a command, or None.
+    """Error of an inline code span that names a command, or None; each
+    richi command after a shell operator (|, ||, &&, ; or &) in it is
+    checked too.
 
-    `richi ...` must name real commands, options and values; arguments may be
-    left out, placeholders (NAME, ...) stand for anything, and `a/b` names
-    several subcommands. A span without richi counts as a command when it
-    starts with a command followed by an argument, one of its subcommands or
-    an option, like `sources show --ref REF`; a filter such as
-    `project = 'x'` does not.
+    `richi ...` may name only real commands, options and arguments, with
+    values from fixed lists and `config set` values that the CLI accepts
+    (other types and ranges are checked only in shell code blocks);
+    arguments may be left out, placeholders (NAME, <name>, ...) stand for
+    anything, brackets and parentheses mark optional arguments and required
+    groups as in usage lines (`[--limit N]`, `(--ref REF | --json FILE)`),
+    and `a/b` names several subcommands. As in the shell, | ends a command,
+    so of the alternatives `a|b` only a is checked. A span without richi
+    counts as a command when it starts with a command followed by an
+    argument, one of its subcommands or an option, like `sources show --ref
+    REF`, and prose may follow its arguments. After a group command, a word
+    that is no subcommand counts when an option follows, when it looks like
+    a command and a placeholder follows it (`project discover ROOT`) or when
+    it nearly spells one (`sources git-chek`), while a filter such as
+    `project = 'x'` does not; so only a stale subcommand with no option, no
+    placeholder and no near miss cannot be told from prose.
     """
-    tokens = _tokens(text)
-    prefixed = bool(tokens) and tokens[0] == "richi"
+    commands = _span(text)
+    for tokens in commands[:1] + [tokens for tokens in commands[1:] if tokens[0] == "richi"]:
+        error = _mention_error(tokens, sources)
+        if error:
+            return error
+    return None
+
+
+def _mention_error(tokens, sources):
+    """check_mention() of the words of one command."""
+    prefixed = tokens[0] == "richi"
     words = tokens[1:] if prefixed else tokens
     given, start = [], 0
     if prefixed:
@@ -448,11 +541,14 @@ def check_mention(text, sources):
         return sources.launcher_policy(argv, _placeholder) if given else None
     parser = _top(words[0], sources)
     if parser is None:
-        return "'%s' is not a richi command" % words[0] if prefixed else None
+        top = sources.style.subcommands(sources.runtime)
+        return str(sources.style.choice_error(sources.runtime, top, words[0])) if prefixed else None
 
     def error_of(parser, path, rest, argv):
-        """Arguments, pages and catalog entries, then the global options."""
-        return (_arguments_error(parser, path, rest, sources) or _target_error(path, rest, sources)
+        """Arguments, pages, catalog entries and config values, then the
+        global options."""
+        return (_arguments_error(parser, path, rest, sources, prefixed) or _target_error(path, rest, sources)
+                or _config_error(path, rest, sources)
                 or (_globals_error(argv, given, path, rest, sources, _asks_help(tokens)) if given else None))
 
     path, rest = (words[0],), words[1:]
@@ -461,10 +557,17 @@ def check_mention(text, sources):
             break
         choices = sources.style.subcommands(parser).choices
         names = rest[0].split("/")
-        if not all(name in choices for name in names):
-            if not prefixed and len(path) == 1 and not any(name in choices for name in names):
+        unknown = [name for name in names if name not in choices]
+        if unknown:
+            # Without richi, words that are neither a subcommand nor close to
+            # one (a subcommand is its own suggestion) and have no option after
+            # them are prose, as in `project = 'x'`, unless a placeholder
+            # follows a word that looks like a command, as in `chat attach NAME`.
+            if not prefixed and len(path) == 1 and not any(word.startswith("--") for word in rest) \
+                    and not any(sources.style.suggestions(name, choices) for name in names) \
+                    and not (re.match(r"[a-z][a-z0-9-]*$", rest[0]) and any(map(_placeholder, rest[1:2]))):
                 return None
-            return "'%s' is not a %s command" % (rest[0], _label(path))
+            return str(sources.style.choice_error(parser, sources.style.subcommands(parser), unknown[0]))
         if len(names) > 1:
             # Each subcommand is checked as if the span named it alone.
             position = len(argv) - len(rest)
@@ -487,6 +590,19 @@ def _globals_error(argv, given, path, rest, sources, help_request=False):
         if option in options:
             return message
     return None
+
+
+def _config_error(path, rest, sources):
+    """Why `richi config set` would refuse the key and value that a span
+    shows, or None: either may be left out or a placeholder, and help needs
+    no valid value."""
+    # The key and the value with a `--` before either, after which every word
+    # is a value.
+    argv = rest[:3] if "--" in rest[:2] else rest[:2]
+    shown = [word for word in argv if word != "--"]
+    if path != ("config", "set") or len(shown) < 2 or _asks_help(rest) or any(map(_placeholder, shown)):
+        return None
+    return _parse_error(["config", "set"] + argv, sources)
 
 
 # Markdown ------------------------------------------------------------------
@@ -698,19 +814,31 @@ def _variants(words):
     return [words]
 
 
+def _parsed(kind, fragment):
+    """Whether [docs] parses a fragment of code(): every inline span, but of
+    a shell code block only a line that starts with richi."""
+    return kind == "inline" or fragment.startswith("richi ")
+
+
 def shown(text, sources):
-    """Command paths a Markdown page shows in code."""
+    """Command paths a Markdown page shows in code, read as [docs] reads it:
+    the richi commands of a code span or of a shell block line that starts
+    with richi, also after a shell operator, and the subcommand path that a
+    span starts with. A shell comment, a block line that starts otherwise and
+    richi inside another command, as in `python -m richi`, show none."""
     globals_ = _global_options(sources)
     found = set()
-    for _, fragment, _ in code(text):
-        words = fragment.split()
+    for kind, fragment, _ in code(text):
+        if not _parsed(kind, fragment):
+            continue
+        commands = _span(fragment) if kind == "inline" else _commands(fragment)
         # A subcommand may be named on its own: `project scan ROOT`.
-        for variant in _variants(words):
+        for variant in _variants(commands[0] if commands else []):
             for size in range(2, min(len(variant), 4) + 1):
                 found.add(tuple(variant[:size]))
-        for index, word in enumerate(words):
-            if word == "richi":
-                rest = words[index + 1:]
+        for words in commands:
+            if words[0] == "richi":
+                rest = words[1:]
                 for variant in _variants(rest[_after_globals(rest, globals_):]):
                     for size in range(1, min(len(variant), 4) + 1):
                         found.add(tuple(variant[:size]))
@@ -749,11 +877,32 @@ def _topic_texts(sources):
             if isinstance(entry, tuple) and len(entry) == 2 and isinstance(entry[1], str)}
 
 
-def _texts(page):
-    """Help text of a page: its summary, description and argument help."""
+def _example(line):
+    """Whether a line of help text is an example: an indented command line."""
+    return line.startswith(" ") and line.strip().startswith("richi ")
+
+
+def _lines(text, sources):
+    """TEXT line by line as a reader reads it, laid out by
+    help_format.paragraphs(): prose as one line, though the page or its
+    source wraps it, also in a block that keeps its layout (a list, a
+    table), and each example on its own."""
+    for block in sources.style.paragraphs(text).split("\n\n"):
+        for example, lines in groupby(block.splitlines(), _example):
+            yield from lines if example else [" ".join(" ".join(lines).split())]
+
+
+def _refilled(parser):
+    """The help of each argument of a parser as one line: argparse refills it."""
+    return [" ".join(action.help.split()) for action in parser._actions if action.help]
+
+
+def _texts(page, sources):
+    """Help text of a page line by line as a reader reads it: its summary,
+    description and argument help."""
     parts = page.parts
     texts = [parts.summary, parts.about] if parts is not None else [page.parser.description]
-    return [text for text in texts + [action.help for action in page.parser._actions] if text]
+    return [line for text in texts if text for line in _lines(text, sources)] + _refilled(page.parser)
 
 
 # Rules ---------------------------------------------------------------------
@@ -839,7 +988,7 @@ def check(sources):
         for _, lines in (parts.examples if parts is not None else ()):
             examples.extend((lines,) if isinstance(lines, str) else lines)
         passed = examples_of(label, examples)
-        if _leaf(page, sources) and not any(invoked(line, sources) == path for line in passed):
+        if _leaf(page, sources) and not any(path in invoked(line, sources) for line in passed):
             report("examples", label, "no example runs this command")
         guide = parts.guide if parts is not None else None
         if guide is None:
@@ -858,11 +1007,15 @@ def check(sources):
         render("richi help " + name, lambda name=name: sources.help.topic(name, sources.topics))
         if not (isinstance(entry, tuple) and len(entry) == 2 and all(isinstance(part, str) for part in entry)):
             report("help", "richi help " + name, "the TOPICS entry is not a (summary, text) pair of strings")
-    # richi help reads `topics` and the topic names before command names.
+    # The launcher answers `richi help NAME` for its own commands first; the
+    # runtime reads `topics` and the topic names before its command names.
     commands = sources.style.subcommands(sources.runtime).choices
     for name in sorted(({"topics"} | set(sources.topics)) & set(commands)):
-        report("help", _label((name,)), "richi help %s shows %s instead of this page"
-               % (name, "the list of help topics" if name == "topics" else "a help topic"))
+        topic = "the list of help topics" if name == "topics" else "a help topic"
+        if name in sources.launcher:
+            report("help", "richi help " + name, "the launcher's %s page hides %s" % (name, topic))
+        else:
+            report("help", _label((name,)), "richi help %s shows %s instead of this page" % (name, topic))
     if "topics" in sources.topics:
         report("help", "richi help topics", "the list of help topics hides this topic")
     examples_of("richi help", [line for _, line in sources.examples])
@@ -871,17 +1024,16 @@ def check(sources):
     # reported above.
     for name, body in _topic_texts(sources).items():
         for line in textwrap.dedent(body).splitlines():
-            if line.startswith(" ") and line.strip().startswith("richi "):
+            if _example(line):
                 error = check_line(line.strip(), sources)
                 if error:
                     report("examples", "richi help " + name, "`%s` fails: %s" % (line.strip(), error))
     guide = found.get(("help",))
     if guide is not None and guide.parts is not None and guide.parts.guide:
         for file in guide_files(guide.parts.guide, "richi help"):
-            fragments = [fragment for _, fragment, _ in code(text(file) or "")]
             for name in sources.topics:
                 # As a page name, so a removed topic is a stale `richi help NAME`.
-                if not any(re.search(r"\bhelp %s\b" % re.escape(name), fragment) for fragment in fragments):
+                if not shows(file, ("help", name)):
                     report("mention", "richi help " + name,
                            "%s never shows it in code" % file.relative_to(sources.root))
 
@@ -941,12 +1093,13 @@ def check(sources):
         for field in sorted(set(detail) - DETAIL_FIELDS):
             report("links", "DETAILS " + key, "has unknown field '%s' (expected %s)"
                    % (field, ", ".join(sorted(DETAIL_FIELDS))))
-    referring = [(_label(path), _texts(page)) for path, page in found.items()]
-    referring += [("richi help " + name, [body]) for name, body in _topic_texts(sources).items()]
-    referring.append(("richi", [action.help for action in sources.runtime._actions if action.help]))
-    for subject, strings in referring:
-        for string in strings:
-            for match in HELP_REFERENCE.finditer(string):
+    referring = [(_label(path), _texts(page, sources)) for path, page in found.items()]
+    # A topic prints as written: its paragraphs read like those of a page.
+    referring += [("richi help " + name, _lines(body, sources)) for name, body in _topic_texts(sources).items()]
+    referring.append(("richi", _refilled(sources.runtime)))
+    for subject, lines in referring:
+        for line in lines:
+            for match in HELP_REFERENCE.finditer(line):
                 words = match.group(1).split()
                 if words[0] in PROSE and _help_target(words[:1], sources):
                     continue  # Prose about richi help itself.
@@ -955,7 +1108,7 @@ def check(sources):
                     report("links", subject, "help text refers to richi help %s: %s" % (words[0], error))
     for path, page in found.items():
         for target in (page.parts.see if page.parts is not None else ()):
-            if target not in names and target not in sources.topics:
+            if target != "topics" and target not in names and target not in sources.topics:
                 report("links", _label(path), "see also names unknown page '%s'" % target)
 
     # mirror
@@ -987,11 +1140,14 @@ def check(sources):
     for option in sorted((declared & set(sources.global_options)) & (flags ^ set(sources.global_flags))):
         report("mirror", "richi", "global option %s takes %s in the runtime but %s in the launcher"
                % ((option,) + (("no value", "a value") if option in flags else ("a value", "none"))))
-    for name in sorted(set(top.choices) - set(sources.stubs)):
-        close = sources.style.suggestions(name, sorted(sources.launcher_commands))
+    # An unbound chat corrects a near miss of these instead of asking for a binding.
+    corrected = set(sources.launcher_commands) | {name for name in sources.help_commands
+                                                  if name and not name.startswith("-")}
+    for name in sorted(set(top.choices) - set(sources.stubs) - corrected):
+        close = sources.style.suggestions(name, sorted(corrected))
         if close:
-            report("mirror", _label((name,)), "looks like launcher command '%s'; an unbound chat would "
-                   "report it as a mistyped one" % close[0])
+            report("mirror", _label((name,)), "looks like '%s'; an unbound chat would report it as a mistyped "
+                   "one" % close[0])
 
     # docs, translation
     for file in markdown_files(sources.root, sources):
@@ -1004,12 +1160,9 @@ def check(sources):
         if historical(file):
             continue
         for kind, fragment, line in code(text(file)):
-            if kind == "block" and fragment.startswith("richi "):
-                error = check_line(fragment, sources)
-            elif kind == "inline":
-                error = check_mention(fragment, sources)
-            else:
+            if not _parsed(kind, fragment):
                 continue
+            error = check_mention(fragment, sources) if kind == "inline" else check_line(fragment, sources)
             if error:
                 report("docs", str(relative), "line %d: `%s`: %s" % (line, fragment, error))
     return problems

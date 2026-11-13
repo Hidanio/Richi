@@ -1,8 +1,9 @@
 """Additive knowledge graph API. All calls use the caller's SQLite transaction."""
 
-import argparse
 from collections import deque
 import json
+
+from . import compact
 
 
 ENTITY_KINDS = {"pull_request", "metric", "component", "concept", "document", "jira", "tool"}
@@ -313,14 +314,7 @@ def export(conn, args, api):
                       "selection": "neighbors" if is_neighbors else "connected_component" if root else "all", "knowledge_states": states}}
 
 
-def depth(value):
-    result = int(value)
-    if not 1 <= result <= 3:
-        raise argparse.ArgumentTypeError("depth must be between 1 and 3")
-    return result
-
-
-depth.bounds = (1, 3)
+depth = compact.bounded(1, 3, "depth")
 
 
 def add_commands(commands, limit):
@@ -345,7 +339,6 @@ def add_commands(commands, limit):
                            help="Maximum nodes including the start record, 1-200 (default: %(default)s)")
     neighbors.add_argument("--view", choices=("full", "compact"), default="full",
                            help="full returns whole records; compact fits --max-chars (default: %(default)s)")
-    from . import compact
     neighbors.add_argument("--max-chars", type=compact.max_chars,
                            help="Rendered JSON budget, 2000-100000; requires --view compact (default: 16000)")
     for command in (full, neighbors):

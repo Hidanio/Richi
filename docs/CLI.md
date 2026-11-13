@@ -50,17 +50,27 @@ command in `"help"`:
 {"error": "'stauts' is not a richi command. Did you mean 'status'? See 'richi help'.", "code": "usage_error", "help": "richi help"}
 ```
 
-Every other error keeps its own `"code"` or has none, for example a reference,
-a field name, a date or a `--where` expression that a command checks itself,
-`--check-limit` without `--check-sources`, `--db` with a workspace that keeps
-its own storage, or a malformed chat ID (`"code": "invalid_chat_id"`).
+A global option that the command does not take also uses `usage_error`, for
+example `--project-path` with `init`, `--compact-json` with `map`, or storage
+options with `chat` or `agents`; `"help"` then names that command's page. Every
+other error keeps its own `"code"` or has none, for example a reference, a
+field name, a date or a `--where` expression that a command checks itself,
+`--check-limit` without `--check-sources`, a storage option that the command
+takes but the selected workspace refuses (`--db` with a workspace that keeps
+its own storage), or a malformed chat ID (`"code": "invalid_chat_id"`).
 
-In an agent chat that is not bound yet, any mistake in a knowledge command, a
-mistyped name as well as an unknown option or a missing or malformed value, is
-reported as a missing binding (`"code": "chat_workspace_required"`): until the
-chat chooses its workspace, the launcher cannot hand the arguments to the
-selected runtime, which parses them. Launcher commands such as `workspace`,
-`chat` and `config` still get `usage_error` and suggestions.
+In an agent chat that is not bound yet, a mistake that the runtime parses
+outside help, such as a mistyped knowledge command, an unknown option or a
+missing or malformed value, is reported as a missing binding
+(`"code": "chat_workspace_required"`): until the chat chooses its workspace,
+the launcher cannot hand the arguments to the selected runtime, which parses
+them. The launcher checks some mistakes itself before the binding and reports
+them as `usage_error` even then: those in its own commands (such as
+`workspace`, `chat` and `config`), a mistyped launcher command or `help`, and
+mistakes in the global options before the command (a mistyped one, a missing
+value, the form of `-w`, `--db` and `--config`, `--workspace` with `--config`,
+`--project-path` with `map`) or in the `--port`, `--db` and `--config` options
+of `map`.
 
 Help needs no chat binding. In an agent chat it is printed by the installed
 release, so new help from a development checkout appears there after the

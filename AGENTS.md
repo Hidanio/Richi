@@ -20,7 +20,11 @@ and `config set dev` also moves the managed agent skill links, which are
 user-wide; `richi config set dev false` restores the installed package and skills
 without changing data.
 Ordinary `src/richi/` edits take effect on the next CLI call and reload the running
-map. Launcher changes require reinstalling the package. Use `richi config show`
+map. In an agent chat, help pages (`richi help`, `--help`) and `--version` come
+from the installed release; check help edits with
+`python scripts/check_cli_docs.py` and the tests, or ask the human to view them
+in a terminal without a chat ID.
+Launcher changes require reinstalling the package. Use `richi config show`
 to inspect the selected runtime. For an isolated module invocation use
 `python -I -m richi` with the installation's Python.
 

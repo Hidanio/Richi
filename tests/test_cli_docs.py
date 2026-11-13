@@ -214,6 +214,26 @@ class PageTests(unittest.TestCase):
         self.assertIn(("examples", "no example runs this command"), problems)
         self.assertTrue(any(rule == "examples" and "--everything" in message for rule, message in problems))
 
+    def test_examples_and_mentions_are_read_as_their_lines_are_checked(self):
+        # A command after a shell operator, even an unspaced one, runs and is
+        # shown too; a span may show usage brackets before the command. What
+        # [docs] does not check shows no command: a shell comment, a block
+        # line that does not start with richi and richi inside another command.
+        checkout = Checkout(self)
+        checkout.replace(checkout.add_command("frobnicate"),
+                         examples=(("", "richi init && richi frobnicate --level 2"),))
+        guide = checkout.guide("frobnicate")
+        checkout.write(guide, "Run `richi [--compact-json] frobnicate [--level N]`.\n")
+        checkout.write(ru(guide), "```sh\nrichi init;richi frobnicate --level 2\n```\n")
+        self.assertEqual(about(checkout.problems(), "richi frobnicate"), set())
+        for text in ("```sh\nrichi init  # then richi frobnicate\n```\n",
+                     "```sh\ncd /repo && richi frobnicate --level 2\n```\n",
+                     "Run `python -I -m richi frobnicate --level 2`.\n"):
+            with self.subTest(text=text):
+                checkout.write(ru(guide), text)
+                self.assertEqual(about(checkout.problems(), "richi frobnicate"),
+                                 {("mention", "%s never shows it in code" % ru(guide))})
+
     def test_a_help_request_does_not_run_the_command_and_leaves_pages_intact(self):
         checkout = Checkout(self)
         checkout.replace(checkout.add_command("frobnicate"), examples=(("", "richi frobnicate --help"),))
@@ -244,10 +264,12 @@ class PageTests(unittest.TestCase):
                                     for rule, message in about(problems, subject)), about(problems, subject))
 
     def test_help_reaches_every_page_and_topic(self):
-        # richi help reads `topics` and the topic names before command names.
+        # The launcher answers `richi help NAME` for its own commands first; the
+        # runtime reads `topics` and the topic names before its command names.
         checkout = Checkout(self)
         entry = next(iter(checkout.sources.topics.values()))
-        checkout.sources.topics.update(frobnicate=entry, topics=entry)
+        launcher = sorted(checkout.sources.launcher)[0]
+        checkout.sources.topics.update({"frobnicate": entry, "topics": entry, launcher: entry})
         checkout.add_command("frobnicate")
         checkout.add_command("topics")
         problems = checkout.problems()
@@ -256,6 +278,14 @@ class PageTests(unittest.TestCase):
         self.assertIn(("help", "richi help topics shows the list of help topics instead of this page"),
                       about(problems, "richi topics"))
         self.assertIn(("help", "the list of help topics hides this topic"), about(problems, "richi help topics"))
+        self.assertIn(("help", "the launcher's %s page hides a help topic" % launcher),
+                      about(problems, "richi help " + launcher))
+        self.assertNotIn("help", {rule for rule, _ in about(problems, "richi " + launcher)})
+        # A command named `topics` is hidden without a topic of that name too.
+        checkout = Checkout(self)
+        checkout.add_command("topics")
+        self.assertEqual(about(checkout.problems(), "richi topics"),
+                         {("help", "richi help topics shows the list of help topics instead of this page")})
 
     def test_topics_are_pairs_of_a_summary_and_a_text(self):
         checkout = Checkout(self)
@@ -300,17 +330,41 @@ class PageTests(unittest.TestCase):
 
     def test_details_see_also_and_help_references_name_real_pages(self):
         checkout = Checkout(self)
-        checkout.replace(checkout.add_command("frobnicate"), see=("help", "toolz"),
-                         about="Compare with richi help toolz. People prefer richi help to browse.")
+        # `topics` is the page that lists the help topics. Prose reads whole
+        # up to the end of its paragraph, though the page or its source wraps
+        # it, also in a block that keeps its layout, where only an indented
+        # command line is an example and reads on its own, and a reference
+        # ends where the next one starts.
+        checkout.replace(checkout.add_command("frobnicate"), see=("help", "toolz", "topics"), about="""
+            Compare with richi help toolz. People prefer richi help to browse. Then
+            read richi
+            help fliters, or richi help records and richi help filtrs. For example:
+
+              richi help
+              richi help records
+              richi help filtres
+
+            1. List the pages, then see richi
+               help fliterz:
+                 richi help
+               then read one.
+
+            richi help lists the pages; then see richi
+            help recrods:
+              richi help records
+
+            Start with richi help
+
+            then pick a page.""")
         details = checkout.sources.details
         key = next(iter(details))
         details["frob frob"] = {}
         details["config show"] = {}
         details[key] = dict(details[key], exampels=())
         problems = checkout.problems()
-        self.assertEqual(about(problems, "richi frobnicate"), {
-            ("links", "see also names unknown page 'toolz'"),
-            ("links", "help text refers to richi help toolz: 'richi help toolz' names no command or help topic")})
+        self.assertEqual(about(problems, "richi frobnicate"), {("links", "see also names unknown page 'toolz'")} | {
+            ("links", "help text refers to richi help %s: 'richi help %s' names no command or help topic" % (word, word))
+            for word in ("toolz", "fliters", "filtrs", "filtres", "fliterz", "recrods")})
         self.assertEqual(about(problems, "DETAILS frob frob"), {("links", "is not a runtime command page")})
         self.assertEqual(about(problems, "DETAILS config show"), {("links", "is not a runtime command page")})
         self.assertEqual(about(problems, "DETAILS " + key),
@@ -318,17 +372,25 @@ class PageTests(unittest.TestCase):
 
     def test_help_references_in_topics_global_options_and_arguments_name_real_pages(self):
         checkout = Checkout(self)
-        name = next(iter(checkout.sources.topics))
-        summary, body = checkout.sources.topics[name]
-        checkout.sources.topics[name] = (summary, body + "\nAlso read richi help recrds first.\n")
+        name, wrapped = list(checkout.sources.topics)[:2]
+        # A topic prints as written and reads as the help text of a page does,
+        # and the help of global options and arguments reads whole: argparse
+        # refills it.
+        for topic, text in ((name, "\nAlso read richi help recrds first.\n"),
+                            (wrapped, "\nRead richi\nhelp tpics.\n\nupdates:\n  put replaces a record; see richi\n"
+                                      "  help fliters. List the pages with\n    richi help\n  then read one.\n")):
+            summary, body = checkout.sources.topics[topic]
+            checkout.sources.topics[topic] = (summary, body + text)
         option = next(action for action in checkout.sources.runtime._actions if action.option_strings)
-        option.help = "See richi help dbs"
-        checkout.add_command("frobnicate").add_argument("--mode", help="See richi help modez")
+        option.help = "See richi\n    help dbs"
+        checkout.add_command("frobnicate").add_argument("--mode", help="See richi\n    help modez")
         problems = checkout.problems()
-        for subject, word in (("richi help " + name, "recrds"), ("richi", "dbs"), ("richi frobnicate", "modez")):
+        for subject, words in (("richi help " + name, ("recrds",)), ("richi help " + wrapped, ("tpics", "fliters")),
+                               ("richi", ("dbs",)), ("richi frobnicate", ("modez",))):
             with self.subTest(subject=subject):
-                self.assertIn(("links", "help text refers to richi help %s: 'richi help %s' names no command or "
-                                        "help topic" % (word, word)), about(problems, subject))
+                self.assertEqual(about(problems, subject), {
+                    ("links", "help text refers to richi help %s: 'richi help %s' names no command or help topic"
+                     % (word, word)) for word in words})
 
     def test_shared_option_tables_name_existing_options(self):
         checkout = Checkout(self)
@@ -389,9 +451,14 @@ class PageTests(unittest.TestCase):
             ("mention", guide + " never shows it in code"), ("mention", ru(guide) + " never shows it in code")})
         self.assertEqual(about(checkout("Read `richi help\nfrobbing` first.\n", "Сначала `richi help frobbing`.\n"),
                                "richi help frobbing"), set())
-        # A bare topic name is not a page.
-        self.assertEqual(about(checkout("Read `frobbing` first.\n", "Сначала `richi help frobbing`.\n"),
-                               "richi help frobbing"), {("mention", guide + " never shows it in code")})
+        # A bare topic name is not a page, and `help TOPIC` counts only where
+        # a command would: not in a shell comment or on a block line that
+        # does not start with richi.
+        for english in ("Read `frobbing` first.\n", "```sh\nrichi help topics  # then richi help frobbing\n```\n",
+                        "```sh\ncd /repo && richi help frobbing\n```\n"):
+            with self.subTest(english=english):
+                self.assertEqual(about(checkout(english, "Сначала `richi help frobbing`.\n"), "richi help frobbing"),
+                                 {("mention", guide + " never shows it in code")})
         # A removed topic leaves a stale page name.
         self.assertTrue(any("'richi help frobbing' names no command or help topic" in message
                             for _, message in about(checkout("Read `richi help frobbing` first.\n", "", topic=False),
@@ -491,13 +558,19 @@ class MirrorTests(unittest.TestCase):
             ("mirror", "global option %s takes a value in the runtime but none in the launcher" % value),
             ("mirror", "GLOBAL_FLAGS names --verbose, which GLOBAL_OPTIONS lacks")})
 
-    def test_no_runtime_command_looks_like_a_mistyped_launcher_command(self):
+    def test_no_runtime_command_looks_like_a_mistyped_launcher_command_or_help(self):
         checkout = Checkout(self)
         name = sorted(checkout.sources.launcher_commands)[0] + "s"
-        checkout.add_command(name)
-        self.assertEqual(about(checkout.problems(), "richi " + name), {
-            ("mirror", "looks like launcher command '%s'; an unbound chat would report it as a mistyped one"
-             % name[:-1])})
+        # The words of HELP_COMMANDS count, its options do not.
+        checkout.sources.help_commands |= {"assist"}
+        for added in (name, "helpp", "asist", "version"):
+            checkout.add_command(added)
+        problems = checkout.problems()
+        for added, close in ((name, name[:-1]), ("helpp", "help"), ("asist", "assist")):
+            with self.subTest(command=added):
+                self.assertEqual(about(problems, "richi " + added), {
+                    ("mirror", "looks like '%s'; an unbound chat would report it as a mistyped one" % close)})
+        self.assertEqual(about(problems, "richi version"), set())
 
     def test_launcher_commands_and_parsers_agree(self):
         checkout = Checkout(self)
@@ -671,22 +744,51 @@ class MarkdownTests(unittest.TestCase):
                      "richi --chat", "richi --project-path", "richi -w",
                      "richi frobs one REF --json FILE", "richi frobs one -- -odd-ref", "richi help COMMAND",
                      "richi [GLOBAL OPTIONS] COMMAND [ARGS...]", 'richi capabilities describe "COMMAND ID"',
-                     "richi frobs one REF --view VIEW", "richi frobs deep MODE"):
+                     "richi frobs one REF --view VIEW", "richi frobs deep MODE", "richi frobs one REF --view <view>"):
             with self.subTest(text=text):
                 self.assertIsNone(validator.check_mention(text, sources))
-        self.assertEqual(validator.check_mention("richi frbos one", sources), "'frbos' is not a richi command")
+        self.assertEqual(validator.check_mention("richi frbos one", sources),
+                         "'frbos' is not a richi command. Did you mean 'frobs'?")
+
+    def test_richi_spans_show_no_word_that_no_argument_takes(self):
+        sources = self.synthetic()
+        # Placeholders stand for anything, brackets and parentheses mark
+        # optional arguments and required groups as in usage lines, and
+        # without richi a span may go on in prose.
+        for text in ("richi frobs one REF NAME", "richi frobs two ...", "richi frobs two <x>", "frobs two now",
+                     "richi frobs one <ref> [--view compact]", "richi [-w NAME] frobs one REF [--json FILE]",
+                     "richi frobs one REF (--json FILE | --view full)"):
+            with self.subTest(text=text):
+                self.assertIsNone(validator.check_mention(text, sources))
+        for text, error in (("richi frobs one REF extra", "richi frobs one takes no argument extra"),
+                            ("richi frobs two now", "richi frobs two takes no argument now"),
+                            ("richi frobs one --json FILE REF now", "richi frobs one takes no argument now"),
+                            ("richi frobs one REF [--nope]", "richi frobs one has no option --nope"),
+                            ("richi frobs one REF (--nonexistent X)", "richi frobs one has no option --nonexistent"),
+                            # Parentheses that pair up within a word are its own.
+                            ("richi frobs one REF $(pwd)", "richi frobs one takes no argument $(pwd)")):
+            with self.subTest(text=text):
+                self.assertEqual(validator.check_mention(text, sources), error)
 
     def test_spans_without_richi_are_checked_when_they_name_a_command(self):
         sources = self.synthetic()
         for text in ("frobs one REF --view compact", "frobs one/two", "frobs deep on", "frobs one --json FILE",
-                     "frobs = 'example'", "frobs", "status: ok", "kind IN ('decision')"):
+                     "frobs = 'example'", "frobs = 'NAME'", "frobs IS NULL", "frobs kind is NAME", "frobs",
+                     "status: ok", "kind IN ('decision')"):
             with self.subTest(text=text):
                 self.assertIsNone(validator.check_mention(text, sources))
+        # A word after a group command that is no subcommand is a stale one
+        # when an option follows, when a placeholder follows it or when it
+        # nearly spells one.
         for text, error in (("frobs one --nope", "richi frobs one has no option --nope"),
-                            ("frobs one/bogus", "'one/bogus' is not a richi frobs command"),
+                            ("frobs one/bogus", "'bogus' is not a richi frobs command."),
                             ("frobs one/two --json FILE", "richi frobs two has no option --json"),
-                            ("frobs deep onn", "'onn' is not a richi frobs deep command"),
-                            ("frobs --json", "richi frobs has no option --json")):
+                            ("frobs deep onn", "'onn' is not a richi frobs deep command. Did you mean 'on'?"),
+                            ("frobs --json", "richi frobs has no option --json"),
+                            ("frobs bogus --json FILE", "'bogus' is not a richi frobs command."),
+                            ("frobs bogus NAME", "'bogus' is not a richi frobs command."),
+                            ("frobs bogus <name>", "'bogus' is not a richi frobs command."),
+                            ("frobs onee", "'onee' is not a richi frobs command. Did you mean 'one'?")):
             with self.subTest(text=text):
                 self.assertEqual(validator.check_mention(text, sources), error)
 
@@ -733,7 +835,9 @@ class MarkdownTests(unittest.TestCase):
                             ("richi help COMMAND --json", option % "--json"),
                             ("richi help %s SUBCOMMAND --x" % group, option % "--x"),
                             ("richi help %s QUERY" % leaf, "richi %s has no subcommands" % leaf),
-                            ("richi help %s %sx" % (group, child), "'%sx' is not a richi %s command" % (child, group)),
+                            # Worded as the CLI and the check of `richi GROUP SUBCOMMAND` word it.
+                            ("richi help %s %sx" % (group, child),
+                             "'%sx' is not a richi %s command. Did you mean '%s'?" % (child, group, child)),
                             ("richi help %s extra" % leaf, "richi %s has no subcommands" % leaf),
                             ("richi help %s where" % topic, "'richi help %s' takes no further words" % topic),
                             ('richi capabilities describe "frob nothing"',
@@ -742,6 +846,82 @@ class MarkdownTests(unittest.TestCase):
                 self.assertEqual(validator.check_line(line, self.sources), error)
                 self.assertEqual(validator.check_mention(line, self.sources), error)
 
+    def test_shell_operators_end_commands_and_redirections_take_no_arguments(self):
+        # Quotes and escapes keep their text; a number against a redirection
+        # is its file descriptor, and a heredoc is a redirection too.
+        self.assertEqual(validator._commands("richi recall 'a 2>b' e\\ 3>f g 4>&1 <<'JSON' | head; richi status &"),
+                         [["richi", "recall", "a 2>b", "e 3", "g"], ["head"], ["richi", "status"]])
+        # A placeholder in angle brackets is a word, not two redirections.
+        self.assertEqual(validator._commands("richi fetch --ref entry:<id> <in >out"),
+                         [["richi", "fetch", "--ref", "entry:<id>"]])
+        # A lone & ends a command as ; does.
+        self.assertEqual(validator._commands("richi map serve & richi status"),
+                         [["richi", "map", "serve"], ["richi", "status"]])
+        # Words after an angled placeholder are checked, and so are those of
+        # a line with an unclosed quote, which is split at blanks.
+        for text in ("richi fetch --ref entry:<id> --nope", 'richi recall "unclosed --nope'):
+            for check in (validator.check_line, validator.check_mention):
+                with self.subTest(text=text, check=check.__name__):
+                    self.assertIn("--nope", check(text, self.sources) or "")
+        checkout = Checkout(self)
+        lines = ("richi check >/dev/null 2>&1 && echo ok", "richi status 2>/dev/null | head",
+                 "richi entry put --json - <entry.json", "richi tools list --limit 2 > out.json",
+                 "richi recall q &>log; richi status >>log 2>>err",
+                 "richi backup && richi migrat", "richi status | richi recal q", "richi status;richi chek",
+                 # A number against a redirection is its file descriptor.
+                 "richi tools list --limit 2>out",
+                 # A richi command after another command is checked too.
+                 "richi status | head; richi recal q", "richi map serve & richi status",
+                 "richi map serve & richi recal q")
+        checkout.write("docs/EXTRA.md", "```sh\n%s\n```\nThen `richi status || richi recal q`.\n"
+                       "Or `richi recall q | jq .items && richi fetch --nope`.\n" % "\n".join(lines))
+        checkout.write("docs/EXTRA.ru.md", "Пусто.\n")
+        messages = [message for _, message in about(checkout.problems(), "docs/EXTRA.md")]
+        expected = {7: "'migrat' is not a richi command", 8: "'recal' is not a richi command",
+                    9: "'chek' is not a richi command", 10: "argument --limit: expected one argument",
+                    11: "'recal' is not a richi command", 13: "'recal' is not a richi command",
+                    15: "'recal' is not a richi command", 16: "richi fetch has no option --nope"}
+        self.assertEqual(len(messages), len(expected), messages)
+        for number, error in expected.items():
+            with self.subTest(line=number):
+                self.assertTrue(any(message.startswith("line %d: " % number) and error in message
+                                    for message in messages), messages)
+
+    def test_config_values_are_checked_as_the_launcher_checks_them(self):
+        from richi_launcher import workspace_commands
+        for text, argv in (("richi config set dev yes", ["set", "dev", "yes"]),
+                           ("richi -w work config set dev on", ["set", "dev", "on"]),
+                           ("config set dev on", ["set", "dev", "on"]),
+                           ("richi config set development.source ''", ["set", "development.source", ""]),
+                           # - is a value, and so is every word after --.
+                           ("richi config set dev -", ["set", "dev", "-"]),
+                           ("richi config set dev -- yes", ["set", "dev", "--", "yes"]),
+                           ("richi config set dev -- --help", ["set", "dev", "--", "--help"])):
+            with self.subTest(text=text):
+                with self.assertRaises(Exception) as refusal:
+                    workspace_commands.config_arguments(argv)
+                self.assertEqual(validator.check_mention(text, self.sources), str(refusal.exception))
+                if text.startswith("richi "):
+                    self.assertEqual(validator.check_line(text, self.sources), str(refusal.exception))
+        for line in ("richi config set dev true", "richi config set dev DEV", "richi config set dev yes --help",
+                     "richi config set dev -- true", "richi config set -- dev true"):
+            with self.subTest(line=line):
+                self.assertIsNone(validator.check_line(line, self.sources))
+                self.assertIsNone(validator.check_mention(line, self.sources))
+        # A span may leave the value out, and its prose may follow it.
+        for text in ("richi config set dev", "richi config set KEY VALUE", "config set dev true or false",
+                     "richi config set dev --"):
+            with self.subTest(text=text):
+                self.assertIsNone(validator.check_mention(text, self.sources))
+        # Lines and spans ask the launcher's function, unless a placeholder stands for a value.
+        def refuse(argv):
+            raise ValueError("refused " + " ".join(argv))
+
+        sources = dataclasses.replace(self.sources, config_arguments=refuse)
+        self.assertEqual(validator.check_line("richi config show", sources), "refused show")
+        self.assertEqual(validator.check_mention("config set dev true", sources), "refused set dev true")
+        self.assertIsNone(validator.check_line("richi config set dev DEV", sources))
+
     def test_a_comment_starts_only_where_the_shell_starts_one(self):
         for line in ("richi recall q # --nope", "richi recall q\t#--nope", "richi recall q #"):
             with self.subTest(line=line):
@@ -749,7 +929,8 @@ class MarkdownTests(unittest.TestCase):
                 self.assertIsNone(validator.check_mention(line, self.sources))
         # Inside a word, quotes or after a backslash, # is part of an argument.
         for line in ("richi recall task#1 --nope", "richi recall 'q # x' --nope", 'richi recall "q #x" --nope',
-                     "richi recall a\\ #b --nope", "richi recall \\#b --nope", 'richi recall "a\\"#" --nope'):
+                     "richi recall a\\ #b --nope", "richi recall \\#b --nope", 'richi recall "a\\"#" --nope',
+                     "richi recall 'q'#x --nope", 'richi recall "a\\" # x" --nope'):
             with self.subTest(line=line):
                 self.assertIn("--nope", validator.check_line(line, self.sources) or "")
                 self.assertIn("--nope", validator.check_mention(line, self.sources) or "")
@@ -770,7 +951,9 @@ class MarkdownTests(unittest.TestCase):
                      "richi --chat ID --db PATH status", "richi --chat ID --config FILE config show",
                      "richi --chat ID --db PATH workspace current", "richi --chat ID --db PATH --version",
                      "richi --chat ID -w work --db PATH status",
-                     "richi -w default --db PATH recall q", "richi -w NAME --db PATH recall q"):
+                     "richi -w default --db PATH recall q", "richi -w NAME --db PATH recall q",
+                     # Only applying the plan affects the whole workspace.
+                     "richi --project-path PATH storage optimize"):
             with self.subTest(line=line):
                 self.assertIsNone(validator.check_line(line, self.sources))
                 self.assertIsNone(validator.check_mention(line, self.sources))
@@ -793,7 +976,9 @@ class MarkdownTests(unittest.TestCase):
                                ("richi --project-path . init", rules(("init",))["--project-path"]),
                                ("richi --compact-json map", rules(("map",))["--compact-json"]),
                                ("richi --project-path . project upsert --json projects.json",
-                                rules(("project", "upsert"))["--project-path"])):
+                                rules(("project", "upsert"))["--project-path"]),
+                               ("richi --project-path PATH storage optimize --apply",
+                                rules(("storage", "optimize"), apply=True)["--project-path"])):
             expected = expected or cli.global_option_error(line.split()[1:], validator._placeholder)
             with self.subTest(line=line):
                 self.assertIsNotNone(expected)

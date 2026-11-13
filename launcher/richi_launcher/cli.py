@@ -11,6 +11,8 @@ from .runtime import ACTIVE_RUNTIME, installed_runtime, resolve_runtime, runtime
 # Commands this launcher parses itself; `richi help NAME` shows their pages.
 LAUNCHER_COMMANDS = frozenset({"agents", "setup", "update", "status", "workspace", "use", "chat", "config"})
 HELP_COMMANDS = frozenset({None, "help", "--help", "-h", "--version"})
+# Its options are global options as well, and take no value.
+HELP_OPTIONS = tuple(sorted(word for word in HELP_COMMANDS if word and word.startswith("-")))
 # Global options consumed before COMMAND and the setting each one selects.
 # The runtime declares the same options (scripts/check_cli_docs.py).
 GLOBAL_OPTIONS = {"--config": "config_file", "--db": "db", "--workspace": "workspace", "-w": "workspace",
@@ -18,6 +20,8 @@ GLOBAL_OPTIONS = {"--config": "config_file", "--db": "db", "--workspace": "works
 # The global options that take no value; every other one takes exactly one.
 GLOBAL_FLAGS = frozenset({"--compact-json"})
 _VALUE_OPTIONS = {option: name for option, name in GLOBAL_OPTIONS.items() if option not in GLOBAL_FLAGS}
+# Whether each global option, the help options included, takes a value.
+_TAKES_VALUE = {option: option in _VALUE_OPTIONS for option in (*GLOBAL_OPTIONS, *HELP_OPTIONS)}
 _STORAGE = ("config_file", "db", "workspace")
 _INSTALLATION_WIDE = {
     "agents": "Agent setup is installation-wide; omit storage selectors.",
@@ -80,14 +84,22 @@ class Parser(argparse.ArgumentParser):
         from . import help_format
         namespace, extras = self.parse_known_args(args, namespace)
         if extras:
-            # Report leftovers on the command they were given to; a global
-            # option is suggested only where that command accepts it.
+            # Report leftovers on the command they were given to.
             parser = help_format.selected(self, namespace)
-            path = parser.prog.split()[1:]
-            rejected = _rejections(path[0], path[1:]) if path else {}
-            accepted = [option for option, name in GLOBAL_OPTIONS.items() if name not in rejected]
-            parser.error(help_format.unrecognized(parser, extras, GLOBAL_OPTIONS, accepted))
+            parser.error(_unrecognized(parser, extras))
         return namespace
+
+    def parse_known_args(self, args=None, namespace=None):
+        # Global options go before the command, so a command keeps the
+        # separate values of those written after it with them. An option it
+        # defines itself is its own, and one written before the subcommand
+        # that defines it takes a value as it does there (update --version
+        # 1.2.0 apply).
+        from . import help_format
+        options = dict(_TAKES_VALUE)
+        options.update((name, action.nargs != 0) for name, action in help_format.defined(self).items()
+                       if name in options)
+        return help_format.known_args(self, args, namespace, super().parse_known_args, options, _unrecognized)
 
     def _check_value(self, action, value):
         from . import help_format
@@ -170,6 +182,12 @@ def _interactive(chat_id):
         return False
 
 
+def _setup_pending():
+    """An interrupted setup or activation left its journal for recovery."""
+    root = os.environ.get("RICHI_INSTALLATION_ROOT")
+    return bool(root) and os.path.isfile(os.path.join(root, "setup-pending.json"))
+
+
 def _hand_off_maps(port, interactive):
     """Once per installation generation and port range; never prevents the requested command."""
     try:
@@ -213,9 +231,9 @@ def _check_command_word(command):
         return
     from . import help_format
     option = command.split("=", 1)[0]
-    if option in GLOBAL_FLAGS:
+    if option in GLOBAL_FLAGS or option in HELP_OPTIONS:
         raise usage(option + " takes no value.", "richi help")
-    names = {name.lstrip("-"): name for name in GLOBAL_OPTIONS}
+    names = {name.lstrip("-"): name for name in [*GLOBAL_OPTIONS, *HELP_OPTIONS]}
     close = [names[name] for name in help_format.suggestions(option.lstrip("-"), names)]
     raise usage("unrecognized arguments: " + command + "." + help_format.did_you_mean(close), "richi help")
 
@@ -234,6 +252,19 @@ def _rejections(command, tail):
         rules.update(dict.fromkeys(_STORAGE, "Storage selectors apply to workspace current; use workspace "
                                              "list/create/use without --workspace, --config or --db."))
     return rules
+
+
+def _unrecognized(parser, extras):
+    """The error for EXTRAS, which PARSER does not take, with a correction
+    for the first unknown option; a global option is suggested only where
+    the command accepts it. An option the command defines anywhere is its
+    own in every subcommand (update rollback --version)."""
+    from . import help_format
+    path = parser.prog.split()[1:]
+    rejected = _rejections(path[0], path[1:]) if path else {}
+    accepted = [option for option, name in GLOBAL_OPTIONS.items() if name not in rejected] + list(HELP_OPTIONS)
+    return help_format.unrecognized(parser, extras, _TAKES_VALUE, accepted,
+                                    launcher_parser(path[0]) if path else None)
 
 
 def check_selectors(command, tail, selectors):
@@ -364,9 +395,11 @@ def _runtime_help(in_chat, selectors, command, tail):
             if command == "--version":
                 raise
         else:
-            if command != "map" and "RICHI_INSTALLATION_GENERATION" in os.environ:
-                # As for any terminal command: the first one of a new
-                # installation generation, help included, hands off the maps.
+            # As for any terminal command: the first one of a new installation
+            # generation, help included, hands off the maps. Help skips setup
+            # recovery, which a map's own command runs first, so a pending
+            # journal leaves the handoff to a command that recovers it.
+            if command != "map" and "RICHI_INSTALLATION_GENERATION" in os.environ and not _setup_pending():
                 _hand_off_maps(settings.port, _interactive(None))
     arguments = ([command] if command is not None else []) + tail
     execution = runtime_command(runtime or installed_runtime(), arguments)
@@ -377,11 +410,12 @@ def _runtime_help(in_chat, selectors, command, tail):
 
 
 def _typo(command):
-    """A launcher command name mistyped in an unbound chat gets a correction
-    instead of a request to bind the chat (no runtime command looks like one;
-    scripts/check_cli_docs.py keeps it so)."""
+    """A launcher command name or help mistyped in an unbound chat gets a
+    correction instead of a request to bind the chat (no runtime command
+    looks like one; scripts/check_cli_docs.py keeps it so)."""
     from . import help_format
-    close = help_format.suggestions(command, sorted(LAUNCHER_COMMANDS))
+    words = LAUNCHER_COMMANDS | {word for word in HELP_COMMANDS if word and not word.startswith("-")}
+    close = help_format.suggestions(command, sorted(words))
     if close:
         raise usage("'%s' is not a richi command.%s" % (command, help_format.did_you_mean(close)), "richi help")
 
@@ -400,14 +434,14 @@ def main(argv=None):
         # checks, recovery commands, or the selected runtime's configuration.
         compact_json = selectors.pop("compact_json", False)
         _check_command_word(command)
-        # Help changes nothing, so it needs no selection, chat choice or
-        # recovery; launcher pages are printed before any of them.
+        # Help reads no knowledge, so it needs no selection, chat choice or
+        # recovery; launcher pages are printed before any of them. Other help
+        # in a terminal still hands off maps (_runtime_help).
         if _launcher_help(command, tail):
             return 0
         asking = asks_for_help(command, tail)
-        root = os.environ.get("RICHI_INSTALLATION_ROOT")
         readonly_setup = asking or (command == "setup" and ("--status" in tail or "--dry-run" in tail)) or (command == "agents" and "--status" in tail)
-        if root and os.path.isfile(os.path.join(root, "setup-pending.json")) and not readonly_setup:
+        if _setup_pending() and not readonly_setup:
             from .agent_setup import recover_pending
             recover_pending()
         if _checks_arguments(command, tail):

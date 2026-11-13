@@ -114,7 +114,9 @@ The complete skill and references are bundled from `skills/project-memory/` into
 the wheel. Update and rollback switch its managed link to the matching package.
 A recoverable file journal coordinates the skill link, ownership metadata and
 runtime pointer. Interrupted activation is completed or undone on the next CLI
-call. Edited skill contents or replaced links block activation and are preserved.
+call other than help, `richi --version` or a read-only `richi setup --status`,
+`richi setup --dry-run` or `richi agents --status`. Edited skill contents or
+replaced links block activation and are preserved.
 Releases without the setup protocol cannot replace a managed integration. Open
 a new chat after updating, since running agents may retain loaded skill content.
 

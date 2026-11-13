@@ -10,7 +10,7 @@ import sys
 
 from .config import ConfigError, _path_text, resolve_settings, set_config_value
 from .chats import bind_chat, current_chat, reject_storage_overrides
-from .cli import Parser, _emit, usage
+from .cli import Parser, _emit, _interactive, usage
 from .help_format import complete, document
 from .runtime import installed_runtime, resolve_runtime
 from .workspaces import _name, create_workspace, list_workspaces, use_workspace
@@ -34,8 +34,11 @@ def config_parser():
     document(parser, "Inspect effective settings and choose installed or development code.", """
         Reads the selected workspace's configuration without opening its knowledge
         database: database and data paths, map port, dev mode, and both the
-        selected and the installed runtime. Changes affect only the selected
-        workspace's configuration file and never touch knowledge.""",
+        selected and the installed runtime. Changes write the selected
+        workspace's configuration file and never touch knowledge; in a registered
+        workspace, config set dev (and development.source while dev is on) also
+        re-points the managed agent skill links, which are user-wide, and reports
+        them in agent_skills.""",
              examples=(("Where is the database and which code runs?", "richi config show"),
                        ("Run the checkout's sources for CLI, agents and map",
                         ("richi config set development.source /path/to/Richi", "richi config set dev true")),
@@ -44,13 +47,20 @@ def config_parser():
     document(show, about="""
         Never opens the knowledge database, so it also works while the development
         checkout is broken. Use it to locate config_file, database and data_dir
-        instead of guessing paths.""",
+        instead of guessing paths. agent_skills tells where the managed agent
+        skill links point; when they do not follow this configuration,
+        matches_config is false and next_command is the command that re-points
+        them.""",
              examples=(("", "richi config show"), ("Settings of another workspace", "richi -w work config show")))
     document(change, about="""
         dev true selects the sources under development.source for CLI, agents and
-        the map; edits take effect on the next command and reload a running map.
-        dev false restores the installed package. Knowledge data is shared by
-        both modes, and SQLite is never migrated automatically.""",
+        the map; edits take effect on the next command and reload a running map,
+        but in an agent chat, help pages and --version still come from the
+        installed release. dev false restores the installed package and skills.
+        In a registered workspace, a change of dev, or of development.source while
+        dev is on, also re-points the managed agent skill links, which are
+        user-wide; agent_skills reports them. Knowledge data is shared by both
+        modes, and SQLite is never migrated automatically.""",
              examples=(("", ("richi config set development.source /path/to/Richi", "richi config set dev true")),
                        ("Back to the installed release", "richi config set dev false")))
     return complete(parser)
@@ -123,7 +133,8 @@ def configuration(args, selectors, *, compact_json=False):
 
 
 def _choose_workspace(target):
-    if not sys.stdin.isatty():
+    # No chat gets here: a chat may never change the default.
+    if not _interactive(None):
         raise usage("A workspace name is required without an interactive terminal; "
                     "use richi workspace list, then richi use NAME.", target)
     listing = list_workspaces()
