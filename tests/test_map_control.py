@@ -1,6 +1,7 @@
 """Stop, restart and replace running maps without signalling unverified processes."""
-from contextlib import closing
+from contextlib import closing, contextmanager, redirect_stdout
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import io
 import json
 import os
 from pathlib import Path
@@ -583,10 +584,12 @@ class FollowerTests(unittest.TestCase):
                                                    maps.GRACE_ENV: "600"})
         environment.start()
         self.addCleanup(environment.stop)
-        self.current = "g1"
-        patcher = mock.patch.object(maps, "current_generation", side_effect=lambda _root: self.current)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        # The installation's current generation, and what its file checks find.
+        self.current, self.problem = "g1", None
+        for patcher in (mock.patch.object(maps, "current_generation", side_effect=lambda _root: self.current),
+                        mock.patch.object(maps, "handoff_problem", side_effect=lambda _schema: self.problem)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
         self.capabilities = list(serve.CAPABILITIES)
         self.follower = serve.InstallationFollower(Path("/synthetic/memory.sqlite3"), ["--db", "/synthetic/memory.sqlite3"],
                                                    ["map", "serve", "--port", "1"], {}, self.capabilities)
@@ -596,6 +599,29 @@ class FollowerTests(unittest.TestCase):
         with mock.patch.object(maps, "handoff_command", return_value=(handoff, problem)) as prepared, \
                 mock.patch("sys.stdout"):
             return self.follower.due(), prepared
+
+    @contextmanager
+    def clocked(self, entry_point):
+        """Yield at(seconds, requested), due() at that second of a fake monotonic clock, and the map's log.
+
+        Like the real one, handoff_command runs the file checks before
+        ``entry_point``, the entry point check.
+        """
+        clock = mock.Mock()
+
+        def at(seconds, requested):
+            clock.return_value = 1000.0 + seconds
+            if requested:
+                self.follower.requested.set()
+            return self.follower.due()
+
+        def command(_selection, _arguments, _environment, schema):
+            problem = maps.handoff_problem(schema)
+            return (None, problem) if problem else entry_point()
+        with mock.patch.object(serve, "time", mock.Mock(monotonic=clock)), \
+                mock.patch.object(maps, "handoff_command", side_effect=command), \
+                redirect_stdout(io.StringIO()) as log:
+            yield at, log
 
     def test_requests_follow_only_a_new_generation_after_the_entry_point_check(self):
         self.follower.requested.set()
@@ -624,13 +650,59 @@ class FollowerTests(unittest.TestCase):
         self.current = "g2"
         self.follower.requested.set()
         self.assertEqual(self.due(None, "the current release did not start: boom")[0], False)
+        # Even when asked, the map starts the entry point again only at its recheck.
         self.follower.requested.set()
         followed, prepared = self.due()
         self.assertFalse(followed)
         self.assertFalse(prepared.called)
-        self.follower.blocked = ("g2", time.monotonic() - serve.HANDOFF_RECHECK, "old")
+        self.follower.blocked = self.follower.blocked._replace(checked=time.monotonic() - serve.HANDOFF_RECHECK)
         self.follower.requested.set()
         self.assertTrue(self.due()[0])
+
+    def test_the_command_that_recovers_a_setup_journal_is_followed_at_once(self):
+        # Unlike the entry point, the file checks start nothing: once what they
+        # found is gone, a request need not wait for the recheck.
+        journal, handoff = "a setup journal waits for recovery", maps.Handoff(("python", "entry"), frozenset())
+        entry_point = mock.Mock(return_value=(handoff, None))
+        self.current, self.problem = "g2", journal
+        with self.clocked(entry_point) as (at, log):
+            self.assertFalse(at(0, requested=True))
+            self.assertFalse(at(700, requested=False))  # Checked again after the grace, not logged again.
+            self.assertEqual(maps.handoff_problem.call_count, 2)
+            self.assertFalse(at(710, requested=True))  # The journal is still there.
+            self.assertEqual((entry_point.called, log.getvalue().count(journal)), (False, 1))
+            self.problem = None  # A command recovered the journal; then it asks the map.
+            self.assertFalse(at(715, requested=False))  # Unasked, the map still waits for its recheck.
+            self.assertTrue(at(720, requested=True))
+        self.assertEqual((self.follower.handoff, self.follower.reason), (handoff, "Restart requested"))
+
+    def test_a_journal_recovered_right_after_the_check_that_found_it_does_not_hold_the_request(self):
+        # What blocked the map comes from that check itself, not from reading
+        # the files again after a command may already have recovered the journal.
+        def read_then_recovered(_schema):
+            problem, self.problem = self.problem, None
+            return problem
+        self.current, self.problem = "g2", "a setup journal waits for recovery"
+        entry_point = mock.Mock(return_value=(maps.Handoff(("python", "entry"), frozenset()), None))
+        with mock.patch.object(maps, "handoff_problem", side_effect=read_then_recovered), \
+                self.clocked(entry_point) as (at, _log):
+            self.assertFalse(at(0, requested=False))  # Another generation is current: the grace starts.
+            self.assertFalse(at(700, requested=False))  # After it the map's own check finds the journal,
+            self.assertTrue(at(701, requested=True))  # which a command recovers at once and then asks the map.
+
+    def test_a_request_after_recovery_starts_a_failing_entry_point_only_once_per_recheck(self):
+        # Only a block by the file checks lets a request skip the recheck: once
+        # the entry point check itself failed, it starts again only at the recheck.
+        self.current, self.problem = "g2", "a setup journal waits for recovery"
+        entry_point = mock.Mock(return_value=(None, "the current release did not start: boom"))
+        checks = []
+        with self.clocked(entry_point) as (at, _log):
+            self.assertFalse(at(0, requested=True))
+            self.problem = None  # A command recovered the journal and asks the map; the release cannot start.
+            for seconds in (5, 10, 5 + serve.HANDOFF_RECHECK):
+                self.assertFalse(at(seconds, requested=True))
+                checks.append(entry_point.call_count)
+        self.assertEqual(checks, [1, 1, 2])
 
     def test_a_launcher_it_cannot_use_withdraws_the_capability(self):
         self.current = "g2"
@@ -663,6 +735,17 @@ class HandoffCommandTests(unittest.TestCase):
                          (None, "the installation entry point is unavailable; repair the installation"))
         with mock.patch.object(maps.handoff, "handoff_problem", return_value="release 9 is incomplete"):
             self.assertEqual(maps.handoff_command([], [], {}), (None, "release 9 is incomplete"))
+
+    def test_a_setup_journal_waiting_for_recovery_keeps_the_map_on_its_version(self):
+        # The map's own command recovers the journal before it serves, but the
+        # --version check skips recovery, so it cannot tell whether that fails.
+        with tempfile.TemporaryDirectory(prefix="richi-handoff-") as root, \
+                mock.patch.object(maps.handoff, "context", return_value={"root": root}), \
+                mock.patch.object(maps.handoff, "stable_command", side_effect=AssertionError("must not run")):
+            for name in ("state.json", "setup-pending.json"):
+                (Path(root) / name).write_text("{}", encoding="utf-8")
+            problem = "a setup or activation is waiting for recovery; run a command such as richi status to recover it"
+            self.assertEqual(maps.handoff_command([], [], {}), (None, problem))
 
     def test_the_check_tells_which_runtimes_take_over_the_listening_socket(self):
         # This runtime answers the check; 1.1.0 and earlier say nothing.

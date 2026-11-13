@@ -19,8 +19,9 @@ The map (``richi.serve``). A map advertises HANDOFF_CAPABILITY only when it
 installed the HANDOFF_SIGNAL handler, which needs this package at the
 runtime's API_VERSION (``richi.serve.MAPS_API``). Its follower watches
 ``state.json``; when another generation is current, at once on the signal or
-after HANDOFF_GRACE otherwise, it runs ``handoff.handoff_command``: the release
-must be complete and read the store's schema, and the stable entry point must
+after HANDOFF_GRACE otherwise, it runs ``handoff.handoff_command``: no setup
+or activation may wait for recovery, the release must be complete and read the
+store's schema, and the stable entry point must
 start it once with the map's own storage selection (``richi --version``, with
 PASSIVE_ENV and PROBE_ENV). The map then re-executes through that entry point,
 keeping its PID and URL; its old lease closes on exec. If the runtime that

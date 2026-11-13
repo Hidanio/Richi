@@ -81,12 +81,24 @@ def handoff_problem(schema=None):
     """Why a map must stay on its version instead of following the current one, or None.
 
     Unlike the per-second check, this validates the state as the stable entry
-    point will: the current release must be complete and able to read the store.
+    point will: no setup journal may wait for recovery, and the current release
+    must be complete and able to read the store. It only reads files, so a map
+    it blocked runs it again on each request (richi.serve.InstallationFollower).
     """
+    from ..setup_files import JOURNAL
     try:
         ctx = context()
         if not (Path(ctx["root"]) / "state.json").exists():
             return None
+        if (Path(ctx["root"]) / JOURNAL).exists():
+            # The map's own command recovers it before it serves, and fails if
+            # it cannot; the --version check skips recovery, as all help does.
+            # A knowledge command recovers it and asks this installation's maps
+            # (once per generation and port range), and a map waiting for that
+            # follows at once; richi map recovers it and switches only its own
+            # workspace's map. Other maps follow at their next recheck or at
+            # the next knowledge command.
+            return "a setup or activation is waiting for recovery; run a command such as richi status to recover it"
         state = bootstrap.read_state(ctx)
         record = state["generations"][state["current"]]
         site = Path(record["site"])
@@ -121,8 +133,9 @@ def handoff_command(selection_arguments, arguments, environment, schema=None,
     A working map is replaced only after the installation's stable entry point
     resolved the same storage selection and runtime once with that release's
     own code (``richi --version``); the release must also be complete and
-    declare support for the store's schema. That run also tells which
-    features the runtime that will serve the map takes over.
+    declare support for the store's schema, and no setup journal may wait for
+    recovery. That run also tells which features the runtime that will serve
+    the map takes over.
     """
     import subprocess
     problem = handoff_problem(schema)

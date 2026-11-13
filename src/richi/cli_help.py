@@ -14,8 +14,8 @@ import argparse
 # that differs gets plain argparse help instead of a failure.
 API = 1
 NEEDS = ("HelpFormatter", "TEXT_WIDTH", "choice_error", "complete", "did_you_mean", "document", "find",
-         "finish", "guide_url", "local_guide", "selected", "sentence", "subcommands", "suggestions",
-         "summaries", "syntax", "tidy", "unrecognized", "usage_message", "walk")
+         "finish", "guide_url", "known_args", "local_guide", "selected", "sentence", "subcommands",
+         "suggestions", "summaries", "syntax", "tidy", "unrecognized", "usage_message", "walk")
 try:
     from richi_launcher import help_format as style
 except ImportError:  # development sources run by an older installed launcher
@@ -156,14 +156,24 @@ Output, errors and exit codes
            options that a usage line separates with |, --workspace with
            --config, an argument that a run without a terminal needs)
            uses "usage_error" and adds "help" with the page that explains
-           the command. Every other error keeps its own code or has none,
-           for example a reference, field name, date or --where expression
+           the command. So does a global option the command does not take
+           (--project-path with init, --compact-json with map, storage
+           options with chat or agents); "help" then names that command's
+           page. Every other error keeps its own code or has none, for
+           example a reference, field name, date or --where expression
            that a command checks itself, --check-limit without
-           --check-sources, --db with a workspace that keeps its own
-           storage, or a malformed chat ID (invalid_chat_id). In a chat
-           that has no workspace yet, any mistake in a knowledge command
-           is chat_workspace_required: the runtime that parses it is not
-           chosen yet
+           --check-sources, a storage option the command takes but the
+           selected workspace refuses (--db with a workspace that keeps
+           its own storage), or a malformed chat ID (invalid_chat_id). In
+           a chat that has no workspace yet, a mistake the runtime parses
+           outside help is chat_workspace_required: that runtime is not
+           chosen yet. The launcher checks some mistakes first and reports
+           them as usage_error even then: those in its own commands
+           (such as workspace, chat and config), a mistyped launcher
+           command or help, and mistakes in the global options before the
+           command (a mistyped one, a missing value, the form of -w, --db
+           and --config, --workspace with --config, --project-path with
+           map) or in map's --port, --db and --config
   help     plain text: richi help, COMMAND --help; --version: Richi X.Y.Z
 
 exit codes:
@@ -210,7 +220,8 @@ default locations:
 set by Richi for its own processes; do not set them yourself:
   RICHI_ACTIVE_RUNTIME, RICHI_ACTIVE_CONFIG, RICHI_ACTIVE_WORKSPACE,
   RICHI_INSTALLATION_ROOT, RICHI_INSTALLATION_GENERATION,
-  RICHI_INSTALLATION_LEASE_FD
+  RICHI_INSTALLATION_LEASE_FD, RICHI_MAPS_PASSIVE, RICHI_MAP_PROBE,
+  RICHI_MAP_LISTEN_FD
 """),
 }
 
@@ -432,7 +443,8 @@ DETAILS = {
     "sources": dict(about="""
         Links knowledge to the code that supports it. capture records a file's exact
         bytes and revision, attach appends that evidence to a record, and show,
-        history, diff and commit read it later without a checkout. git-check,
+        history and diff read it later without a checkout; commit lists the changed
+        files of a legacy whole-commit reference (git:FULL_SHA). git-check,
         related and impact go the other way, from code to knowledge. snapshot and
         check track drift of selected records and local files. Nothing here uses
         the network.""",
@@ -470,7 +482,14 @@ DETAILS = {
     "sources history": dict(examples=(("", "richi sources history --ref entry:task:ABC-123 --limit 10"),)),
     "sources diff": dict(examples=(("Captured version against HEAD", "richi sources diff --ref entry:task:ABC-123"),
                                    ("Against the working copy", "richi sources diff --ref entry:task:ABC-123 --worktree"))),
-    "sources commit": dict(examples=(("", "richi sources commit --ref entry:task:ABC-123"),)),
+    "sources commit": dict(about="""
+        Only for a legacy whole-commit reference (git:FULL_SHA) in a record's
+        sources: it lists the files changed by that commit. Captured file sources
+        are refused; read them with sources show, history or diff. To read a listed
+        file, pass it with --path to sources show, history, diff or git-check.""",
+        examples=(("A legacy whole-commit reference: list its files, then read one",
+                   ("richi sources commit --ref entry:task:ABC-123 --source 1",
+                    "richi sources show --ref entry:task:ABC-123 --source 1 --path internal/cache.go")),)),
     "sources related": dict(about="""
         Reverse lookup: which records cite this repository path (and commit).""",
         examples=(("", "richi sources related --project service-example --path internal/cache.go"),)),

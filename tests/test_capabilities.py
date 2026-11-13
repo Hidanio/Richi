@@ -1,4 +1,5 @@
 """Capability IDs resolve to the real parser without opening personal storage."""
+import argparse
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -31,9 +32,23 @@ class CapabilitiesTests(unittest.TestCase):
         for identity, _, effect, _, guide in capabilities.COMMANDS:
             with self.subTest(identity=identity):
                 result = capabilities.run(SimpleNamespace(action="describe", id=identity), memory)
-                self.assertEqual(result["syntax"], help_format.syntax(help_format.find(root, identity.split(), None)))
+                parser = help_format.find(root, identity.split(), None)
+                self.assertEqual(result["syntax"], help_format.syntax(parser))
                 self.assertNotIn("examples:", result["syntax"])
                 self.assertEqual((result["effect"], result["guide"]), (effect, "references/" + guide))
+                # The contract, read from the parser itself: usage, summary, arguments and options.
+                text = " ".join(result["syntax"].split())
+                self.assertTrue(text.startswith("usage: richi " + identity + " "), text)
+                page = help_format.page_parts(parser)
+                self.assertIn(" ".join(page.summary.split()), text)
+                # The longer description stays on the help page.
+                about = " ".join((page.about or "").split()[:8])
+                if about:
+                    self.assertNotIn(about, text)
+                for action in parser._get_positional_actions():
+                    if action.help != argparse.SUPPRESS:
+                        self.assertIn(" ".join([action.metavar or action.dest, *(action.help or "").split()]), text)
+                self.assertIn("\noptions:\n", result["syntax"])
 
     def test_describe_exposes_real_filters_and_pagination_options(self):
         for identity, options in (("discover", ["--where", "--max-chars"]),

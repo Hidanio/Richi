@@ -1,14 +1,16 @@
 """Help presentation shared by the launcher's parsers and the selected runtime.
 
-Only text formatting lives here: no settings, storage or runtime selection.
-A parser carries its page as data (HelpPage); the text is composed only when
-the page is printed. The runtime uses this module only when the installed
-launcher provides the API version it was written for and every name it
-needs (richi.cli_help.NEEDS), and keeps plain argparse help otherwise.
+Only help and error text, and the reading of a command line that its errors
+need, live here: no settings, storage or runtime selection. A parser carries
+its page as data (HelpPage); the text is composed only when the page is
+printed. The runtime uses this module only when the installed launcher
+provides the API version it was written for and every name it needs
+(richi.cli_help.NEEDS), and keeps plain argparse help otherwise.
 """
 import argparse
-from collections import namedtuple
+from collections import Counter, namedtuple
 import functools
+import sys
 
 # Increase when the runtime starts to rely on a changed behavior or
 # signature here: a runtime and a launcher with different versions then
@@ -219,6 +221,12 @@ def walk(parser, path=(), summary=""):
         yield from walk(subcommands(parser).choices[name], path + (name,), text)
 
 
+def defined(parser):
+    """{option string: action} of a parser and every subcommand below it."""
+    return {name: action for _, command, _ in walk(parser) for action in command._actions
+            for name in action.option_strings}
+
+
 def tidy(parser):
     """Name sections and metavars consistently on every Python version."""
     parser.formatter_class = HelpFormatter
@@ -342,22 +350,33 @@ def selected(parser, namespace):
     return parser
 
 
-def unrecognized(parser, extras, global_options=(), accepted=None):
+def unrecognized(parser, extras, global_options=(), accepted=None, tree=None):
     """Error for arguments the innermost parser rejected, with a correction
-    for the first unknown option. global_options go before the command;
-    accepted are those this command takes (default: all of them)."""
+    for the first unknown option. global_options go before the command and
+    map each option string to whether it takes a value; accepted are those
+    this command takes (default: all of them). An option that TREE, the
+    parser of the whole command (default: PARSER), defines anywhere is not a
+    global option in it, even where one has its name: update check defines
+    --version, so update rollback has no global --version either."""
     message = "unrecognized arguments: " + " ".join(extras)
-    token = next((token for token in extras if token.startswith("-") and token != "-"), None)
-    if token is None:
+    index = next((index for index, token in enumerate(extras) if token.startswith("-") and token != "-"), None)
+    if index is None:
         return message
+    token = extras[index]
     option = token.split("=", 1)[0]
     if option not in global_options and not option.startswith("--") and option[:2] in global_options:
         option = option[:2]  # -wNAME
-    accepted = list(global_options if accepted is None else accepted)
-    if option in global_options:
-        if option in accepted:
-            return message + " (a global option: put it before the command)"
-        return message + " (%s does not take the global option %s)" % (parser.prog, option)
+    below = defined(tree or parser)
+    accepted = [name for name in (global_options if accepted is None else accepted) if name not in below]
+    if option in global_options and option not in below:
+        if option not in accepted:
+            return message + " (%s does not take the global option %s)" % (parser.prog, option)
+        # Before the command it takes no value either, so moving it there
+        # loses the value: richi --version 1.2.0 status only prints the version.
+        valued = token != option or (index + 1 < len(extras) and parser._parse_optional(extras[index + 1]) is None)
+        if valued and not global_options[option]:
+            return message + " (%s is a global option and takes no value)" % option
+        return message + " (a global option: put it before the command)"
     # Compare names without their dashes, which every option shares. The
     # command's own options win a tie: they are what is typed after it.
     import difflib
@@ -373,6 +392,94 @@ def unrecognized(parser, extras, global_options=(), accepted=None):
     if other and other_score > own_score:
         return sentence(message) + did_you_mean(other) + " Global options go before the command."
     return sentence(message) + did_you_mean(own) if own else message
+
+
+def known_args(parser, args, namespace, parse, global_options, unrecognized):
+    """parse_known_args of PARSER, a command written after the global
+    options; parse(args, namespace) is argparse's own. The separate value of
+    a global option written after the command, which argparse would give to
+    a positional, stays with its option among the leftovers, so an error
+    names them together. An option PARSER defines itself stays its own.
+
+    global_options maps each global option string to whether it takes a
+    value. A word after an unknown option that the first positional rejects
+    as a choice is reported as that option's value, with the tree's error
+    for leftovers: unrecognized(parser, extras)."""
+    args = list(sys.argv[1:] if args is None else args)
+    aside = _misread(parser, args, global_options, unrecognized)
+    namespace, extras = parse([word for index, word in enumerate(args) if index not in aside], namespace)
+    # Argparse keeps the options a command does not define among the
+    # leftovers, in order: each value follows the same occurrence of its
+    # option again, or comes last if a positional that takes the rest took
+    # the option.
+    values, count = {}, Counter()
+    for index, word in enumerate(args):
+        if index + 1 in aside:
+            values[word, count[word]] = args[index + 1]
+        count[word] += 1
+    restored, count = [], Counter()
+    for word in extras:
+        value = values.pop((word, count[word]), None)
+        restored += [word] if value is None else [word, value]
+        count[word] += 1
+    return namespace, restored + list(values.values())
+
+
+def _option(options, word):
+    """(name, whether WORD carries its value) of an option word among
+    OPTIONS: --name, --name=VALUE, -n or -nVALUE; (None, False) for any
+    other word."""
+    name = word.split("=", 1)[0]
+    if name not in options and not word.startswith("--"):
+        name = word[:2]  # -nVALUE
+    return (name, name != word) if name in options else (None, False)
+
+
+def _misread(parser, argv, global_options, unrecognized):
+    """Indexes of ARGV words that argparse would give PARSER's positionals
+    although they are separate values of global options PARSER does not
+    define. After an option of either kind, a word that the first
+    positional takes as a choice is that choice; one it rejects as a choice
+    after an unknown option is reported, after the leftovers before it, as
+    that option's value."""
+    own = parser._option_string_actions
+    first = next(iter(parser._get_positional_actions()), None)
+    aside, extras, unknown, index = set(), [], None, 0
+    while index < len(argv) and argv[index] != "--":
+        word = argv[index]
+        index += 1
+        # Positional as argparse reads it, like -, -1 or a word with a space.
+        if parser._parse_optional(word) is None:
+            if first is not None:
+                if unknown and first.choices is not None and word not in first.choices:
+                    parser.error(unrecognized(parser, extras + [word]))
+                if first.nargs in (argparse.PARSER, argparse.REMAINDER):
+                    break  # a subcommand, or the positional, takes the rest
+                first = None
+            unknown = None
+            continue
+        name, attached = _option(own, word)
+        if name is None:
+            extras.append(word)
+            name, attached = _option(global_options, word)
+            if name is None:
+                # An unknown option without an attached value may take the next word.
+                unknown = word if "=" not in word and (word.startswith("--") or len(word) == 2) else None
+                continue
+            # Its separate value, unless the next word is an option or a
+            # choice of the first positional: then the value is missing.
+            value = argv[index] if global_options[name] and not attached and index < len(argv) else None
+            if value is not None and parser._parse_optional(value) is None and not (
+                    first is not None and first.choices is not None and value in first.choices):
+                aside.add(index)
+                extras.append(value)
+                index += 1
+        elif isinstance(own[name], argparse._HelpAction):
+            break  # argparse prints the page before it reads further
+        elif own[name].nargs != 0 and not attached:
+            index += 1  # the command's own option takes its value
+        unknown = None
+    return aside
 
 
 def help_target(parser):

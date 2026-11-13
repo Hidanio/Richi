@@ -19,6 +19,7 @@ import sys
 import threading
 import time
 from types import SimpleNamespace
+from typing import NamedTuple
 from urllib.parse import parse_qs, urlsplit
 import webbrowser
 
@@ -594,6 +595,14 @@ def database_schema(database):
 HANDOFF_RECHECK = 30
 
 
+class Blocked(NamedTuple):
+    """Why a map keeps its version for now (InstallationFollower)."""
+    generation: str  # The current generation it did not follow.
+    checked: float   # When the check that found the problem ran (time.monotonic()).
+    problem: str
+    files: bool      # The file checks found it, not the entry point check.
+
+
 class InstallationFollower:
     """Decide when a map re-executes on its installation's current generation.
 
@@ -602,8 +611,13 @@ class InstallationFollower:
     asking directly goes first. A request while the map already runs the
     current generation is ignored, so the signal alone cannot restart a map.
     It follows only after the stable entry point started that release with
-    this storage selection, and only if the release is complete and can read
-    the store; otherwise it keeps serving and logs why.
+    this storage selection, and only if the release is complete, can read the
+    store and no setup or activation waits for recovery; otherwise it keeps
+    serving, logs why and checks again later. A knowledge command recovers a
+    setup journal and asks this installation's maps (once per generation and
+    port range), and a map waiting for that follows at once; richi map
+    recovers it and switches only its own workspace's map. Other maps follow
+    at their next recheck or at the next knowledge command.
     """
 
     def __init__(self, database, selection, arguments, environment, capabilities):
@@ -655,14 +669,26 @@ class InstallationFollower:
             self.changed_since = now
         if not requested and now - self.changed_since < self.grace:
             return False
-        if self.blocked is not None and self.blocked[0] == current and now - self.blocked[1] < HANDOFF_RECHECK:
+        # The check starts the entry point, so a blocked map repeats it only
+        # every HANDOFF_RECHECK seconds. When the file checks, which start
+        # nothing, blocked it, a request goes ahead as soon as they pass, as
+        # when the command that recovered a setup journal asks the maps.
+        if (self.blocked is not None and self.blocked.generation == current
+                and now - self.blocked.checked < HANDOFF_RECHECK
+                and not (requested and self.blocked.files
+                         and maps.handoff_problem(database_schema(self.database)) is None)):
             return False
-        handoff, problem = maps.handoff_command(self.selection, self.arguments, self.environment,
-                                                database_schema(self.database))
+        # The file checks run here first, so a block records which check found
+        # the problem; handoff_command repeats them before the entry point.
+        schema = database_schema(self.database)
+        problem = maps.handoff_problem(schema)
+        files = problem is not None
+        if not files:
+            handoff, problem = maps.handoff_command(self.selection, self.arguments, self.environment, schema)
         if problem is not None:
-            if self.blocked is None or self.blocked[2] != problem:
+            if self.blocked is None or self.blocked.problem != problem:
                 print("Map keeps its version instead of restarting: " + problem, flush=True)
-            self.blocked = (current, now, problem)
+            self.blocked = Blocked(current, now, problem, files)
             return False
         self.handoff, self.target = handoff, current
         self.reason = "Restart requested" if requested else "Installation changed"

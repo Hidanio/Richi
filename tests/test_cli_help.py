@@ -1,4 +1,5 @@
 """CLI help: overview, grouped command list, pages, topics, corrections and help routing."""
+import argparse
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 import importlib
 import io
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import unittest
 from unittest import mock
 
@@ -120,6 +122,8 @@ class HelpOutputTests(IsolatedCase):
                 self.assertEqual(code, 0)
                 self.assertEqual(stdout, parser.format_help())
                 self.assertEqual(self.help([*path, "--help"])[1], stdout)
+                # Argparse reads --help before a mistake written after it.
+                self.assertEqual(self.help([*path, "--help", "--prot", "8766"])[:2], (0, stdout))
 
     def test_direct_runtime_pages_of_launcher_commands_point_to_the_launcher(self):
         for name in cli_parser.LAUNCHER_COMMANDS:
@@ -164,6 +168,15 @@ class HelpOutputTests(IsolatedCase):
         for value in query_filters.FIELDS:
             self.assertRegex(filters, r"\b%s\b" % value)
 
+    def test_the_environment_topic_names_every_variable_of_richi_processes(self):
+        from richi_launcher.maps import reconcile
+        text = cli_help.topic("environment")
+        # A map child drops the user's selectors and every variable that Richi
+        # sets for its own processes; the topic names each of them.
+        for name in sorted(reconcile._CHILD_UNSET):
+            with self.subTest(variable=name):
+                self.assertRegex(text, r"\b%s\b" % name)
+
     def test_write_pages_name_every_field_a_write_accepts(self):
         pages = dict(runtime_pages())
         for path, fields in ((("entry", "put"), memory.ENTRY_FIELDS), (("entity", "put"), graph.ENTITY_FIELDS),
@@ -175,13 +188,20 @@ class HelpOutputTests(IsolatedCase):
                     self.assertRegex(about, r"\b%s\b" % field)
 
     def test_documented_ranges_are_the_ranges_the_types_accept(self):
+        import argparse
         for path, parser in list(runtime_pages()) + list(launcher_pages()):
             for action in parser._actions:
                 bounds = getattr(action.type, "bounds", None)
                 if bounds is None:
                     continue
+                low, high = bounds
                 with self.subTest(command=" ".join(path), option=action.option_strings):
                     self.assertIn("%d-%d" % bounds, action.help or "")
+                    # The type itself accepts exactly the range it declares.
+                    self.assertEqual((action.type(str(low)), action.type(str(high))), bounds)
+                    for value in (low - 1, high + 1):
+                        with self.assertRaises(argparse.ArgumentTypeError):
+                            action.type(str(value))
         pages = dict(runtime_pages())
         for path, option, text in ((("brief",), "--limit", "1-50"), (("brief",), "--max-chars", "4000-100000"),
                                    (("sources", "history"), "--limit", "1-100")):
@@ -285,13 +305,117 @@ class HelpOutputTests(IsolatedCase):
                 (["sources", "capture", "--project", "p", "--path", "x", "--outptu", "f"], "Did you mean '--output'?",
                  "richi help sources capture"),
                 (["recall", "q", "--compact-json"], "a global option: put it before the command", "richi help recall"),
+                (["init", "--version"], "arguments: --version (a global option: put it before the command)",
+                 "richi help init"),
+                # Moved before the command, one that takes no value would lose the value given here.
+                (["recall", "cache", "--compact-json", "1"],
+                 "arguments: --compact-json 1 (--compact-json is a global option and takes no value)", "richi help recall"),
+                (["recall", "cache", "--compact-json=1"],
+                 "arguments: --compact-json=1 (--compact-json is a global option and takes no value)", "richi help recall"),
+                (["init", "--version", "1.2.0"],
+                 "arguments: --version 1.2.0 (--version is a global option and takes no value)", "richi help init"),
+                (["init", "--version=1.2.0"],
+                 "arguments: --version=1.2.0 (--version is a global option and takes no value)", "richi help init"),
+                # An option that follows is no value, so moving it loses nothing.
+                (["recall", "cache", "--compact-json", "-w", "work"],
+                 "arguments: --compact-json -w work (a global option: put it before the command)", "richi help recall"),
+                # A command that rejects the option says so first.
+                (["map", "--compact-json=1"], "(richi map does not take the global option --compact-json)",
+                 "richi help map"),
+                # A global option after the command keeps its separate value,
+                # which argparse would give to the command's positional.
+                (["map", "-w", "work"], "arguments: -w work (a global option: put it before the command)",
+                 "richi help map"),
+                (["map", "--workspace", "work"], "arguments: --workspace work (a global option", "richi help map"),
+                (["map", "--chat", "synthetic"], "arguments: --chat synthetic (a global option", "richi help map"),
+                (["recall", "-w", "work", "cache"], "arguments: -w work (a global option", "richi help recall"),
+                (["sources", "-w", "work", "capture", "--project", "p", "--path", "a"],
+                 "arguments: -w work (a global option", "richi help sources capture"),
+                (["recall", "q", "-w", "--limit", "3"], "arguments: -w (a global option", "richi help recall"),
+                (["recall", "--compact-json", "cache"], "arguments: --compact-json (a global option", "richi help recall"),
+                (["recall", "-w", "-1", "cache"], "arguments: -w -1 (a global option", "richi help recall"),
+                # Even when a required positional then has no word, as -wwork does.
+                (["recall", "-w", "work"], "the following arguments are required: QUERY", "richi help recall"),
+                # The value follows its own option again, among other leftovers too.
+                (["recall", "-w", "work", "cache", "--limt", "3"], "arguments: -w work --limt 3 (a global option",
+                 "richi help recall"),
+                (["map", "-w", "a", "-w", "b"], "arguments: -w a -w b (a global option", "richi help map"),
+                # Argparse reads -1 and a word with a space as positionals; help's topic takes the rest.
+                (["help", "-1", "-w", "x"], "not options such as -1", "richi help"),
+                (["help", "-a b", "--db", "x"], "not options such as -a b", "richi help"),
+                (["help", "recall", "-w", "x"], "not options such as -w", "richi help recall"),
+                # A mistyped option takes the word a choice would reject; a valid choice stays one.
+                (["map", "--prot", "8766"], "arguments: --prot 8766. Did you mean '--port'?", "richi help map"),
+                (["map", "--port", "8799", "--prot", "8766"], "arguments: --prot 8766. Did you mean '--port'?",
+                 "richi help map"),
+                (["map", "-w", "work", "--prot", "8766"], "arguments: -w work --prot 8766 (a global option",
+                 "richi help map"),
+                (["map", "--foo", "--bar", "stopp"], "arguments: --foo --bar stopp. See", "richi help map"),
+                (["map", "--prot", "stop"], "arguments: --prot. Did you mean '--port'?", "richi help map"),
+                # After a global option written without its value, a valid choice stays one too.
+                (["storage", "-w", "stats", "--deep"], "arguments: -w (a global option: put it before the command)",
+                 "richi help storage stats"),
+                (["project", "-w", "add", "/p"], "arguments: -w (a global option", "richi help project add"),
+                (["sources", "-w", "capture", "--project", "p", "--path", "a"], "arguments: -w (a global option",
+                 "richi help sources capture"),
+                (["project", "--project-path", "add", "/p"],
+                 "arguments: --project-path (richi project add does not take the global option --project-path)",
+                 "richi help project add"),
+                (["map", "-w", "serve"], "arguments: -w (a global option", "richi help map"),
+                # Whether an unknown option takes a value is unknown: a free-text positional keeps the word.
+                (["recall", "--limt", "5", "cache"], "arguments: --limt cache. Did you mean '--limit'?",
+                 "richi help recall"),
+                (["map", "stopp"], "invalid choice: 'stopp' (choose from serve, stop, restart). Did you mean 'stop'?",
+                 "richi help map"),
                 (["brief", "q", "--limit", "60"], "limit must be between 1 and 50", "richi help brief"),
+                # Every range the parser checks fails before the store is opened.
+                (["brief", "q", "--check-sources", "--check-limit", "51"], "check-limit must be between 1 and 50",
+                 "richi help brief"),
+                (["brief", "q", "--max-chars", "3999"], "max-chars must be between 4000 and 100000", "richi help brief"),
+                (["punisher", "--summary-warn-chars", "1000001"], "summary-warn-chars must be between 1 and 1000000",
+                 "richi help punisher"),
+                (["sources", "history", "--ref", "entry:x", "--limit", "101"], "limit must be between 1 and 100",
+                 "richi help sources history"),
                 (["help", "filtres"], "Did you mean 'filters'?", "richi help"),
                 (["help", "sources", "captur"], "Did you mean 'capture'?", "richi help sources"),
                 (["help", "recall", "extra"], "has no subcommands", "richi help recall"),
                 (["help", "filters", "where"], "'richi help filters' takes no further words", "richi help filters")):
             with self.subTest(argv=argv):
                 self.assert_usage_error(argv, contains, target)
+        # The runtime reads a --help line plainly, before any scan, so argparse
+        # takes a valid choice after a global option without its value as the
+        # page to print (LauncherHelpTests cover the scan's choice rule).
+        code, stdout, stderr = self.help(["sources", "--project-path", "capture", "--help"])
+        self.assertEqual((code, stderr), (0, ""))
+        self.assertTrue(stdout.startswith("usage: richi sources capture"), stdout)
+        # A failed line is read again once; the tree reads its next line plainly.
+        root = memory.parser()
+        self.assertRaises(memory.UsageError, root.parse_args, ["map", "-w", "work"])
+        self.assertIs(type(root).rereading, False)
+
+    def test_an_option_a_command_defines_anywhere_is_no_global_option_in_it(self):
+        # As update rollback --version in the launcher; no runtime command
+        # defines a global option below itself yet.
+        group = help_format.subcommands(help_format.subcommands(memory.parser()).choices["entry"])
+        group.add_parser("demo").add_argument("--db")
+        self.assertEqual(memory._unrecognized(group.choices["get"], ["--db", "x"]), "unrecognized arguments: --db x")
+
+    def test_values_set_aside_are_put_back_in_linear_time(self):
+        # Without argparse's own parsing, which takes quadratic time in the
+        # number of options before Python 3.13.
+        words = ["-w", "x"] * 20000
+        started = time.monotonic()
+        _, extras = help_format.known_args(cli.launcher_parser("status"), words, None,
+                                           lambda args, namespace: (namespace, args), {"-w": True}, None)
+        self.assertLess(time.monotonic() - started, 1)
+        self.assertEqual(extras, words)
+        # A value comes last when a positional that takes the rest took its option.
+        parser = argparse.ArgumentParser()
+        parser.add_argument("first")
+        parser.add_argument("rest", nargs=argparse.REMAINDER)
+        namespace, extras = help_format.known_args(parser, ["a", "-w", "x", "b"], None, parser.parse_known_args,
+                                                   {"-w": True}, None)
+        self.assertEqual((namespace.rest, extras), (["-w", "b"], ["x"]))
 
     def test_values_from_fixed_lists_get_a_suggestion(self):
         from richi import query_tools
@@ -327,9 +451,11 @@ class HelpOutputTests(IsolatedCase):
     def test_direct_runtime_calls_of_launcher_commands_are_refused(self):
         for name in cli_parser.LAUNCHER_COMMANDS:
             with self.subTest(command=name):
-                code, _, stderr = self.help([name, "--some-option", "value"])
-                self.assertEqual(code, 1)
-                self.assertIn("Use the installed richi " + name + " command", json.loads(stderr)["error"])
+                # Its arguments are the launcher's to parse, also when -1 starts them.
+                for arguments in (["--some-option", "value"], ["-1", "-w", "x"]):
+                    code, _, stderr = self.help([name, *arguments])
+                    self.assertEqual(code, 1, arguments)
+                    self.assertIn("Use the installed richi " + name + " command", json.loads(stderr)["error"])
                 # A mistyped global option before it is not the launcher's to parse.
                 self.assert_usage_error(["--some-option", name], "unrecognized arguments: --some-option", "richi help")
 
@@ -344,27 +470,48 @@ class HelpOutputTests(IsolatedCase):
             code, stdout, _ = self.help(["help", "recall"])
             self.assertEqual(code, 0)
             self.assertIn("usage: richi recall", stdout)
-            self.assertIn("usage: richi", self.help([])[1])
+            # richi, richi help and richi --help print the root's argparse page.
+            page = self.help([])[1]
+            self.assertTrue(page.startswith("usage: richi [-w NAME]"), page)
+            for argv in (["help"], ["--help"]):
+                self.assertEqual(self.help(argv)[:2], (0, page), argv)
             self.assertTrue(self.help(["help", "sources", "capture"])[1].startswith("usage: richi sources capture"))
             # Every argument error still names its page.
             for argv, target in ((["stauts"], "richi help"), (["recall"], "richi help recall"),
                                  (["recall", "q", "--limt", "3"], "richi help"), (["help", "recall", "extra"], "richi help recall"),
-                                 (["help", "config", "show"], "richi help config")):
+                                 (["help", "config", "show"], "richi help config"),
+                                 (["help", "sources", "captur"], "richi help sources")):
                 with self.subTest(argv=argv):
                     self.assert_usage_error(argv, "", target)
             result = memory.run(memory.parser().parse_args(["capabilities", "describe", "recall"]))
             self.assertIn("usage: richi recall", result["syntax"])
+            code, _, stderr = self.help(["capabilities", "describe", "recal"])
+            self.assertEqual((code, json.loads(stderr)["error"]),
+                             (1, "Unknown capability ID; use capabilities list --group GROUP"))
 
         with mock.patch.object(cli_help, "style", None):
             plain_help()
-        # A launcher whose help_format API differs from the runtime's, or
-        # that lacks a name the runtime needs.
+        # A launcher whose help_format API differs from the runtime's, that
+        # lacks a name the runtime needs, or that has no help_format at all,
+        # as every release before help_format.
         @contextmanager
         def missing_name():
             with mock.patch.dict(help_format.__dict__):
                 del help_format.__dict__[cli_help.NEEDS[-1]]
                 yield
-        for launcher in (lambda: mock.patch.object(help_format, "API", help_format.API + 1), missing_name):
+
+        @contextmanager
+        def missing_module():
+            # A package without the file: the import finds nothing on its
+            # path and fails with ImportError, not ModuleNotFoundError.
+            import richi_launcher
+            with mock.patch.dict(sys.modules), mock.patch.dict(richi_launcher.__dict__):
+                del sys.modules["richi_launcher.help_format"]
+                del richi_launcher.__dict__["help_format"]
+                richi_launcher.__path__ = []
+                yield
+        for launcher in (lambda: mock.patch.object(help_format, "API", help_format.API + 1), missing_name,
+                         missing_module):
             try:
                 with launcher():
                     importlib.reload(cli_help)
@@ -389,10 +536,18 @@ class HelpOutputTests(IsolatedCase):
         paths = [str(Path(memory.__file__).resolve().parents[1]), str(Path(help_format.__file__).resolve().parents[1])]
         loaded = ("print(sorted(name for name in ('richi.cli_help', 'richi_launcher.help_format', "
                   "'richi_launcher.workspace_commands') if name in sys.modules))")
-        runtime = ("import sys; sys.path[:0] = %r\n"
+        # Commands run on a new store, through the modules that answer them.
+        project = self.root / "project"
+        project.mkdir()
+        commands = [["init"], ["project", "add", str(project)], ["--compact-json", "recall", "cache", "--limit", "3"],
+                    ["query", "count"], ["discover", "cache"], ["--project-path", str(project), "recall", "cache"]]
+        runtime = ("import contextlib, io, sys; sys.path[:0] = %r\n"
                    "from richi import memory\n"
                    "memory.parser().parse_args(['--compact-json', 'recall', 'cache', '--limit', '3'])\n"
-                   % paths) + loaded
+                   "for argv in %r:\n"
+                   "    with contextlib.redirect_stdout(io.StringIO()):\n"
+                   "        assert memory.main(['--db', %r, *argv]) == 0, argv\n"
+                   % (paths, commands, str(self.root / "knowledge.sqlite3"))) + loaded
         # The launcher selects the runtime of an ordinary command up to exec.
         launcher = ("import os, sys; sys.path[:0] = %r\n"
                     "from unittest import mock\n"
@@ -410,6 +565,33 @@ class HelpOutputTests(IsolatedCase):
                 result = subprocess.run([sys.executable, "-I", "-c", script], capture_output=True, text=True,
                                         env=cli_environment(self.root))
                 self.assertEqual((result.returncode, result.stdout.strip()), (0, "[]"), result.stderr)
+
+    def test_runtime_modules_import_help_only_inside_functions(self):
+        # In every runtime module, also those whose commands
+        # test_knowledge_commands_never_load_help does not run.
+        import ast
+        help_modules = {"richi.cli_help", "cli_help", "richi_launcher.help_format"}
+
+        def loaded(node):
+            """The statements that run when the module is imported."""
+            for child in ast.iter_child_nodes(node):
+                if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                    yield child
+                    yield from loaded(child)
+        found = []
+        for path in sorted(Path(memory.__file__).parent.glob("*.py")):
+            if path.name == "cli_help.py":
+                continue
+            for node in loaded(ast.parse(path.read_text(encoding="utf-8"))):
+                if isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom):
+                    base = ".".join(part for part in ("richi" if node.level else "", node.module or "") if part)
+                    names = [base] + [base + "." + alias.name for alias in node.names]
+                else:
+                    continue
+                found += ["%s:%d imports %s" % (path.name, node.lineno, name) for name in names if name in help_modules]
+        self.assertEqual(found, [])
 
     def test_map_errors_are_not_usage_errors(self):
         with self.assertRaises(memory.MemoryError) as raised:
@@ -488,14 +670,38 @@ class GuideTests(IsolatedCase):
                 self.assertEqual(help_format.guide_url("docs/CLI.md#help"),
                                  help_format.REPOSITORY + "blob/" + ref + "/docs/CLI.md#help")
 
+    def test_launcher_links_point_to_the_release_installed_beside_it(self):
+        # The launcher process has no selected runtime of its own: it reads
+        # the version of the runtime package next to it.
+        self.assertNotIn(cli.ACTIVE_RUNTIME, os.environ)
+        site = self.root / "site-packages"
+        version = site / "richi" / "__init__.py"
+        version.parent.mkdir(parents=True)
+        self.addCleanup(help_format.documentation.cache_clear)
+        for text, ref in (('__version__ = "1.2.3"\n', "v1.2.3"), ('__version__ = "1.2.3.dev1"\n', "main"),
+                          (None, "main")):
+            if text is None:
+                version.unlink()
+            else:
+                version.write_text(text, encoding="utf-8")
+            with self.subTest(version=text), \
+                    mock.patch.object(help_format, "__file__", str(site / "richi_launcher" / "help_format.py")):
+                help_format.documentation.cache_clear()
+                self.assertEqual(help_format.documentation(), help_format.REPOSITORY + "blob/" + ref + "/")
+
 
 class LauncherHelpTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="richi-launcher-help-")
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
+        # A command that slipped past the launcher's checks would replace the
+        # test runner with the installed runtime; tests that expect an exec
+        # patch these themselves.
         for patch in (mock.patch.dict(os.environ, cli_environment(self.root), clear=True),
-                      mock.patch.object(config.sys, "platform", "linux")):
+                      mock.patch.object(config.sys, "platform", "linux"),
+                      mock.patch.object(cli.os, "execve", side_effect=AssertionError("must not exec")),
+                      mock.patch.object(cli, "runtime_command", side_effect=AssertionError("must not run a runtime"))):
             patch.start()
             self.addCleanup(patch.stop)
 
@@ -521,6 +727,8 @@ class LauncherHelpTests(unittest.TestCase):
         self.assertEqual(error["code"], code_name, error)
         if target is not None:
             self.assertEqual(error["help"], target)
+        if code_name == "usage_error":
+            self.assertTrue(error["error"].endswith("See '%s'." % error["help"]), error)
         self.assertIn(contains, error["error"])
         return error
 
@@ -540,10 +748,28 @@ class LauncherHelpTests(unittest.TestCase):
                                   (["--chat", "synthetic", "help", "chat", "bind"], "usage: richi chat bind"),
                                   (["--chat", "synthetic", "use", "--help"], "usage: richi use"),
                                   (["-w", "work", "config", "show", "--help"], "usage: richi config show"),
+                                  # After a global option without its value, a valid
+                                  # choice still chooses the page.
+                                  (["config", "-w", "show", "--help"], "usage: richi config show"),
+                                  (["workspace", "--chat", "list", "--help"], "usage: richi workspace list"),
                                   (["help", "status", "-h"], "usage: richi status"),
                                   (["help", "update", "auto", "enable"], "usage: richi update auto enable")):
                 with self.subTest(argv=argv):
                     self.assert_page(argv, heading)
+
+    def test_config_pages_name_what_a_change_moves_besides_the_file(self):
+        # Dev mode also moves the user-wide agent skill links, and a chat
+        # keeps reading the installed release's help.
+        for words, phrases in (([], ("never touch knowledge", "user-wide", "agent_skills")),
+                               (["show"], ("agent_skills", "matches_config", "next_command")),
+                               (["set"], ("restores the installed package and skills", "user-wide", "agent_skills",
+                                          "in an agent chat, help pages and --version still come from the installed"))):
+            with self.subTest(words=words):
+                code, stdout, stderr = self.launch(["help", "config", *words])
+                self.assertEqual((code, stderr), (0, ""))
+                page = " ".join(stdout.split())
+                for phrase in phrases:
+                    self.assertIn(phrase, page)
 
     def test_launcher_help_survives_a_broken_chat_state(self):
         registry = chats._registry_path()
@@ -580,6 +806,10 @@ class LauncherHelpTests(unittest.TestCase):
                 (["-w", "work", "workspace"], "needs a command", "richi help workspace"),
                 (["--compact-jsn", "chat", "current"], "Did you mean '--compact-json'?", "richi help"),
                 (["--compact-json=false", "check"], "--compact-json takes no value", "richi help"),
+                (["--verison"], "Did you mean '--version'?", "richi help"),
+                (["--hepl", "recall"], "Did you mean '--help'?", "richi help"),
+                (["--version=1"], "--version takes no value", "richi help"),
+                (["--help=recall"], "--help takes no value", "richi help"),
                 (["help", "status", "--projects"], "not options such as --projects", "richi help status"),
                 (["status", "--limit", "0"], "limit must be between 1 and 200", "richi help status"),
                 (["config", "show", "--project-path", "."],
@@ -589,6 +819,80 @@ class LauncherHelpTests(unittest.TestCase):
                  "richi help update auto enable"),
                 (["config", "show", "--compact-json"], "a global option: put it before the command",
                  "richi help config show"),
+                (["config", "show", "--compact-json=1"],
+                 "arguments: --compact-json=1 (--compact-json is a global option and takes no value)",
+                 "richi help config show"),
+                # A global option after the command keeps its separate value,
+                # which argparse would give to the command's positional; a
+                # valid choice stays one.
+                (["config", "-w", "work", "show"], "arguments: -w work (a global option: put it before the command)",
+                 "richi help config show"),
+                (["config", "-w", "show"], "arguments: -w (a global option", "richi help config show"),
+                (["workspace", "create", "--chat", "synthetic-chat-9", "newname"],
+                 "arguments: --chat synthetic-chat-9 (a global option: put it before the command)",
+                 "richi help workspace create"),
+                (["chat", "bind", "--chat", "synthetic-chat-9", "work"], "arguments: --chat synthetic-chat-9 (a global",
+                 "richi help chat bind"),
+                (["use", "--chat", "synthetic-chat-9", "work"], "arguments: --chat synthetic-chat-9 (a global",
+                 "richi help use"),
+                (["config", "set", "dev", "--chat", "synthetic-chat-9", "true"],
+                 "arguments: --chat synthetic-chat-9 (a global", "richi help config set"),
+                (["config", "set", "development.source", "-w", "work", "/synthetic/checkout"],
+                 "arguments: -w work (a global", "richi help config set"),
+                (["workspace", "create", "-w", "x", "newname"],
+                 "arguments: -w x (richi workspace create does not take the global option -w)",
+                 "richi help workspace create"),
+                (["update", "-w", "work", "check"], "arguments: -w work (richi update check does not take",
+                 "richi help update check"),
+                (["config", "--shwo", "x", "show"], "arguments: --shwo x. See", "richi help config"),
+                # A global option keeps its separate value even when a
+                # required positional then has no word, as -wwork does.
+                (["chat", "bind", "-w", "work"], "one of the arguments NAME --current is required",
+                 "richi help chat bind"),
+                (["workspace", "create", "-w", "work"], "the following arguments are required: NAME",
+                 "richi help workspace create"),
+                # --version is a global option after a launcher command too,
+                # and takes no value there either.
+                (["status", "--verison"], "Did you mean '--version'? Global options go before the command.",
+                 "richi help status"),
+                (["status", "--version"], "arguments: --version (a global option: put it before the command)",
+                 "richi help status"),
+                (["status", "--version", "1.2.0"],
+                 "arguments: --version 1.2.0 (--version is a global option and takes no value)", "richi help status"),
+                (["status", "--version=1.2.0"],
+                 "arguments: --version=1.2.0 (--version is a global option and takes no value)", "richi help status"),
+                (["setup", "--version", "1.2.0", "--yes"],
+                 "arguments: --version 1.2.0 (--version is a global option and takes no value)", "richi help setup"),
+                # An option that follows is no value; argparse reads -1 as a value, not an option.
+                (["status", "--version", "-w", "work"],
+                 "arguments: --version -w work (a global option: put it before the command)", "richi help status"),
+                (["status", "--version", "-1"],
+                 "arguments: --version -1 (--version is a global option and takes no value)", "richi help status"),
+                # update check and apply define their own --version, which
+                # takes a value also when written before them.
+                (["update", "--version=1.2.0", "check"], "arguments: --version=1.2.0. Did you mean '--version'? See",
+                 "richi help update check"),
+                (["update", "--version", "check"], "arguments: --version. Did you mean '--version'? See",
+                 "richi help update check"),
+                (["update", "--version", "1.2.0", "apply"], "arguments: --version 1.2.0. Did you mean '--version'? See",
+                 "richi help update apply"),
+                (["update", "-w", "work", "--version", "1.2.0", "check"],
+                 "arguments: -w work --version 1.2.0 (richi update check does not take the global option -w)",
+                 "richi help update check"),
+                # So nothing in update calls it a global option or suggests it as one.
+                (["update", "--version", "--bogus", "x", "apply"], "arguments: --version --bogus x. See",
+                 "richi help update"),
+                (["update", "--verison", "1.2.0", "apply"], "arguments: --verison 1.2.0. See", "richi help update"),
+                (["update", "rollback", "--version", "1.0.1"], "arguments: --version 1.0.1. See",
+                 "richi help update rollback"),
+                (["update", "--version", "1.0.1", "rollback"], "arguments: --version 1.0.1. See",
+                 "richi help update rollback"),
+                (["update", "cleanup", "--version", "1.1.0"], "arguments: --version 1.1.0. See",
+                 "richi help update cleanup"),
+                (["update", "auto", "enable", "--version", "1.2.0"], "arguments: --version 1.2.0. See",
+                 "richi help update auto enable"),
+                (["update", "rollback", "--verison", "1.1.0"], "arguments: --verison 1.1.0. See",
+                 "richi help update rollback"),
                 (["config", "set", "dev", "maybe"], "dev must be true or false", "richi help config set"),
                 (["config", "set", "dev", "ture"], "dev must be true or false. Did you mean 'true'?",
                  "richi help config set"),
@@ -620,6 +924,9 @@ class LauncherHelpTests(unittest.TestCase):
                 (["help", "config", "sho"], "Did you mean 'show'?", "richi help config")):
             with self.subTest(argv=argv), mock.patch("sys.stdin", io.StringIO()):
                 self.assert_error(argv, contains, target=target)
+        # A command's own --version stays its own.
+        self.assertEqual(vars(cli.launcher_parser("update").parse_args(["check", "--version", "1.2.0"])),
+                         {"action": "check", "version": "1.2.0"})
 
     def test_selector_paths_are_checked_only_for_their_form(self):
         # A well-formed path that cannot be resolved is not a usage error.
@@ -672,21 +979,32 @@ class LauncherHelpTests(unittest.TestCase):
 
     def test_terminal_help_hands_off_the_maps_of_a_new_generation(self):
         os.environ["RICHI_INSTALLATION_GENERATION"] = "synthetic-generation"
+        pending = self.root / "installation"
+        pending.mkdir()
+        (pending / "setup-pending.json").write_text("{}", encoding="utf-8")
         # As any terminal command; richi map replaces its own map, and a chat
-        # gets the installed release's help without a selection.
-        for argv, chat, hands_off in ((["--version"], None, True), (["help", "recall"], None, True),
-                                      (["map", "--help"], None, False), (["--version"], "synthetic", False)):
-            with self.subTest(argv=argv, chat=chat), \
-                    mock.patch.dict(os.environ, {"RICHI_CHAT_ID": chat} if chat else {}), \
-                    mock.patch.object(cli, "resolve_settings", return_value=mock.Mock(port=8799)), \
-                    mock.patch.object(cli, "resolve_runtime", return_value=object()), \
-                    mock.patch.object(cli, "installed_runtime", return_value=object()), \
-                    mock.patch.object(cli, "runtime_command", return_value=["/synthetic/python"]), \
-                    mock.patch.object(cli, "_hand_off_maps") as hand_off, \
-                    mock.patch.object(cli.os, "execve", side_effect=SystemExit(0)):
-                with self.assertRaises(SystemExit):
-                    cli.main(argv)
-                self.assertEqual([call.args[0] for call in hand_off.call_args_list], [8799] if hands_off else [])
+        # gets the installed release's help without a selection. Help skips
+        # setup recovery, which a map's own command runs first, so a pending
+        # journal leaves the handoff to a command that recovers it, with a
+        # person at a terminal or not.
+        for argv, variables, hands_off in ((["--version"], {}, True), (["help", "recall"], {}, True),
+                                           (["map", "--help"], {}, False),
+                                           (["--version"], {"RICHI_CHAT_ID": "synthetic"}, False),
+                                           (["--version"], {"RICHI_INSTALLATION_ROOT": str(pending)}, False),
+                                           (["help", "recall"], {"RICHI_INSTALLATION_ROOT": str(pending)}, False)):
+            for terminal in (True, False):
+                with self.subTest(argv=argv, variables=variables, terminal=terminal), \
+                        mock.patch.dict(os.environ, variables), \
+                        mock.patch.object(cli, "_interactive", return_value=terminal), \
+                        mock.patch.object(cli, "resolve_settings", return_value=mock.Mock(port=8799)), \
+                        mock.patch.object(cli, "resolve_runtime", return_value=object()), \
+                        mock.patch.object(cli, "installed_runtime", return_value=object()), \
+                        mock.patch.object(cli, "runtime_command", return_value=["/synthetic/python"]), \
+                        mock.patch.object(cli, "_hand_off_maps") as hand_off, \
+                        mock.patch.object(cli.os, "execve", side_effect=SystemExit(0)):
+                    with self.assertRaises(SystemExit):
+                        cli.main(argv)
+                    self.assertEqual(hand_off.call_args_list, [mock.call(8799, terminal)] if hands_off else [])
 
     def test_a_chat_never_changes_the_default_whatever_it_selects(self):
         os.environ["RICHI_CHAT_ID"] = "synthetic"
@@ -746,13 +1064,49 @@ class LauncherHelpTests(unittest.TestCase):
                     # stderr is one JSON object; only a terminal is shown the plan.
                     self.assert_error(argv, "terminal", target=target)
 
+    def test_use_without_a_name_needs_a_terminal_even_with_stdin_closed(self):
+        # With descriptor 0 closed, Python starts with sys.stdin set to None.
+        script = ("import sys; sys.path[:0] = [%r]\nfrom richi_launcher import cli\nsys.exit(cli.main(sys.argv[1:]))"
+                  % str(Path(cli.__file__).resolve().parents[1]))
+        for argv, target in ((["use"], "richi help use"), (["workspace", "use"], "richi help workspace use")):
+            with self.subTest(argv=argv):
+                result = subprocess.run(["/bin/sh", "-c", 'exec "$@" 0<&-', "sh", sys.executable, "-I", "-c", script,
+                                         *argv], capture_output=True, text=True, env=dict(os.environ))
+                self.assertEqual((result.returncode, result.stdout), (1, ""), result.stderr)
+                self.assertEqual(json.loads(result.stderr), {
+                    "error": "A workspace name is required without an interactive terminal; use richi workspace list, "
+                             "then richi use NAME. See '%s'." % target, "code": "usage_error", "help": target})
+
     def test_an_unbound_chat_still_gets_corrections_and_accurate_hints(self):
         os.environ["RICHI_CHAT_ID"] = "synthetic"
         self.assert_error(["workspce", "list"], "Did you mean 'workspace'?", target="richi help")
+        # Help needs no binding either.
+        self.assert_error(["hepl", "recall"], "Did you mean 'help'?", target="richi help")
         # A knowledge command cannot be told from a runtime command before binding.
         self.assert_error(["recal", "cache"], "Choose a workspace", code_name="chat_workspace_required")
         error = self.assert_error(["use", "work"], "use chat bind NAME to choose", code_name="chat_global_use_forbidden")
         self.assertIsNone(error["workspace"])
+        # The launcher checks these before a binding is needed, as the output
+        # topic says; the runtime parses the rest only after one.
+        for argv, contains, target in ((["map", "--port", "99999"], "--port must be an integer", "richi help map"),
+                                       (["-w", "Bad Name", "recall", "x"], "Workspace name must match",
+                                        "richi help workspace"),
+                                       (["--project-path", "/synthetic", "map"], "not map", "richi help map")):
+            with self.subTest(argv=argv):
+                self.assert_error(argv, contains, target=target)
+        for argv in (["--compact-json", "map"], ["map", "--bogus"]):
+            with self.subTest(argv=argv):
+                self.assert_error(argv, "Choose a workspace", code_name="chat_workspace_required")
+        # Help mistakes are the installed release's to report, without a binding.
+        installed = object()
+        for argv in (["help", "recal"], ["recal", "--help"]):
+            with self.subTest(argv=argv), mock.patch.object(cli, "installed_runtime", return_value=installed), \
+                    mock.patch.object(cli, "pin_chat", side_effect=AssertionError("help needs no binding")), \
+                    mock.patch.object(cli, "runtime_command", return_value=["/synthetic/python"]) as command, \
+                    mock.patch.object(cli.os, "execve", side_effect=SystemExit(0)):
+                with self.assertRaises(SystemExit):
+                    cli.main(argv)
+                command.assert_called_once_with(installed, argv)
 
     def test_terminal_help_uses_the_installed_release_when_selection_is_broken(self):
         installed, selected = object(), object()
@@ -768,8 +1122,7 @@ class LauncherHelpTests(unittest.TestCase):
                 resolve.assert_called_once_with(workspace="work")
                 command.assert_called_once_with(runtime, ["help", "environment"])
         # The version names the selected runtime, so a broken selection is reported.
-        with mock.patch.object(cli, "resolve_settings", side_effect=ConfigError("Unknown workspace")), \
-                mock.patch.object(cli, "runtime_command", side_effect=AssertionError("must not run")):
+        with mock.patch.object(cli, "resolve_settings", side_effect=ConfigError("Unknown workspace")):
             self.assertEqual(self.assert_error_text(["--version"]), "Unknown workspace")
 
     def assert_error_text(self, argv):

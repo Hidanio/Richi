@@ -533,6 +533,96 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
                 if maps.is_map(current) and current["pid"] == pid:
                     self.assertEqual(self.console_json("map", "stop")["status"], "stopped")
 
+    def test_running_map_keeps_its_version_while_a_setup_journal_waits_for_recovery(self):
+        with tempfile.TemporaryDirectory(prefix="richi-map-journal-") as temporary:
+            self.root = Path(temporary).resolve()
+            port = int(synthetic_port())
+            # The map follows only when asked, so the journal is in place by then.
+            self.environment = cli_environment(self.root, RICHI_PORT=str(port), **{maps.GRACE_ENV: "3600"})
+            for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
+                self.environment.pop(key, None)
+            older, newer = self.make_wheel("0.1.0"), self.make_wheel("0.2.0")
+            seed = self.root / "seed"
+            venv.EnvBuilder(with_pip=True, symlinks=True).create(str(seed))
+            self.python, self.console_path = seed / "bin/python", seed / "bin/richi"
+            self.run_process([self.python, "-I", "-B", "-m", "pip", "--isolated", "--disable-pip-version-check",
+                              "install", "--no-index", "--no-deps", "--no-cache-dir", "--no-compile", older])
+            offline, rollback = self.root / "offline.py", self.root / "frozen-rollback.py"
+            offline.write_text(_OFFLINE_COMMAND, encoding="utf-8")
+            rollback.write_text(_FROZEN_ROLLBACK, encoding="utf-8")
+            self.console("init")
+            root = json.loads(self.run_process([self.python, "-I", "-B", offline, self.feed_fixture(
+                newer, "0.2.0"), "update", "apply"]).stdout)["root"]
+            journal, marker = Path(root) / "setup-pending.json", Path(root) / "maps" / "handoff.json"
+            pid = self.console_json("map", "--no-open")["pid"]
+            log = next(self.root.rglob("runtime/map-server.log"))
+
+            def wait_until_kept(times):
+                """Wait until the map has logged this many times that the journal keeps it on its version."""
+                deadline = time.monotonic() + 20
+                while log.read_text().count("waiting for recovery") < times:
+                    self.assertLess(time.monotonic(), deadline, log.read_text())
+                    time.sleep(0.1)
+            try:
+                swapped = json.loads(self.run_process([self.python, "-I", "-B", rollback]).stdout)
+                self.assertEqual(swapped["current"]["version"], "0.1.0")
+                # An interrupted setup whose file was edited afterwards: recovery
+                # refuses to overwrite the edit, so ordinary commands fail, while
+                # --version, which skips recovery like all help, still works.
+                edited = self.root / "instructions.md"
+                edited.write_text("edited after the crash\n", encoding="utf-8")
+                change = {"path": str(edited), "before": {"kind": "absent"},
+                          "after": {"kind": "file", "data": base64.b64encode(b"managed\n").decode(), "mode": 0o600}}
+                journal.write_text(json.dumps({"format_version": 1, "root": root, "generation": None,
+                                               "committed": False, "operations": [change]}), encoding="utf-8")
+                self.assertIn("Cannot recover setup journal", self.console("status", ok=False).stderr)
+                self.assertEqual(self.console("--version").stdout.strip(), "Richi 0.1.0")
+                # It hands off no map: the map's own command would fail on the journal.
+                self.assertFalse(marker.exists())
+                # Asked directly, the map keeps serving on its version instead.
+                self.assertIsNone(maps.request_handoff(port, maps.read_health(port, timeout=2)))
+                wait_until_kept(1)
+                time.sleep(2)
+                current = maps.read_health(port, timeout=2)
+                self.assertEqual((current["pid"], current["runtime"]["version"]), (pid, "0.2.0"))
+                # Once the edit is reconciled, the next knowledge command recovers
+                # the journal and then asks the map, which switches in place at
+                # once rather than at its next recheck.
+                edited.unlink()
+                self.console("project", "list")
+                self.assertFalse(journal.exists())
+                self.assertEqual([(entry["status"], entry["from_version"])
+                                  for entry in json.loads(marker.read_text())["maps"]], [("requested", "0.2.0")])
+                # The map's grace is an hour, so only the request can switch it.
+                deadline = time.monotonic() + maps.HANDOFF_TIMEOUT
+                while True:
+                    current = maps.read_health(port, timeout=2)
+                    if maps.is_map(current) and current["installation_generation"] == swapped["current"]["generation"]:
+                        break
+                    self.assertLess(time.monotonic(), deadline, log.read_text())
+                    time.sleep(0.1)
+                self.assertEqual((current["pid"], current["runtime"]["version"]), (pid, "0.1.0"))
+                # So does richi map, the desktop shortcut: after the next frozen
+                # rollback, with a journal that recovery accepts, it switches the
+                # map in place instead of waiting for it and then replacing it.
+                swapped = json.loads(self.run_process([self.python, "-I", "-B", rollback]).stdout)
+                self.assertEqual(swapped["current"]["version"], "0.2.0")
+                journal.write_text(json.dumps({"format_version": 1, "root": root, "generation": None,
+                                               "committed": False, "operations": []}), encoding="utf-8")
+                # First the map finds the journal, as it would after its grace.
+                self.assertIsNone(maps.request_handoff(port, current))
+                wait_until_kept(2)
+                shortcut = self.console_json("map", "--no-open")
+                self.assertFalse(journal.exists())
+                self.assertEqual((shortcut["status"], shortcut["pid"], shortcut["previous"]),
+                                 ("restarted", pid, {"pid": pid, "version": "0.1.0", "exited": False}))
+            finally:
+                # After a failure above, the journal would refuse map stop too,
+                # and richi map may have replaced the map with another process.
+                journal.unlink(missing_ok=True)
+                if maps.is_map(maps.read_health(port, timeout=2)):
+                    self.assertEqual(self.console_json("map", "stop")["status"], "stopped")
+
     def test_real_wheels_update_prune_and_recover_without_changing_workspaces(self):
         with tempfile.TemporaryDirectory(prefix="richi-wheel-lifecycle-") as temporary:
             self.root = Path(temporary).resolve()

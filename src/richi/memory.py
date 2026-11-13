@@ -13,6 +13,7 @@ import sqlite3
 import sys
 from . import graph
 from . import compact
+from .compact import bounded
 from . import output
 
 
@@ -575,9 +576,12 @@ class CommandParser(Parser):
     a help page, and help pages composed only when one is printed.
 
     Help presentation is never loaded for a valid command: errors and help
-    import it on demand.
+    import it on demand. A line that fails is read again, keeping the
+    separate value of a global option written after the command with it
+    (help_format.known_args), so that its error names them together.
     """
     root = None  # the tree's root parser; cli_parser.build_parser sets it per tree
+    rereading = False  # set on the class of a tree's root while parse_args reads a line again
 
     def add_argument(self, *args, **kwargs):
         action = super().add_argument(*args, **kwargs)
@@ -592,6 +596,28 @@ class CommandParser(Parser):
 
     def parse_args(self, args=None, namespace=None):
         args = list(sys.argv[1:] if args is None else args)
+        tree = type(type(self).root or self)  # one class per tree (cli_parser.build_parser)
+        try:
+            return self._read(args, namespace)
+        except UsageError:
+            from .cli_help import style
+            if style is None or tree.rereading:
+                raise
+        # Read the failed line again, keeping the separate value of a global
+        # option written after the command with it (parse_known_args), so
+        # the error names them together. For the runtime's own commands,
+        # doing so only after a failure equals doing so always: such an
+        # option is a leftover, so the line fails either way, unless it
+        # reaches a help page, which the plain reading prints or, when that
+        # reading fails first, the re-read does.
+        tree.rereading = True
+        try:
+            return self._read(args, namespace)
+        finally:
+            tree.rereading = False
+
+    def _read(self, args, namespace):
+        """parse_args without reading a failed line again."""
         namespace, extras = self.parse_known_args(args, namespace)
         if not extras:
             return namespace
@@ -610,12 +636,18 @@ class CommandParser(Parser):
         if leading:
             self.error(style.unrecognized(self, leading))
         # Report leftovers on the command they were given to, so the error
-        # names its page and suggests one of its options; a global option is
-        # suggested only where that command accepts it.
+        # names its page and suggests one of its options.
         parser = style.selected(self, namespace)
-        options = [name for action in root._actions for name in action.option_strings]
-        rules = global_option_rules(parser.prog.split()[1:], apply=getattr(namespace, "apply", False))
-        parser.error(style.unrecognized(parser, extras, options, [option for option in options if option not in rules]))
+        parser.error(_unrecognized(parser, extras, getattr(namespace, "apply", False)))
+
+    def parse_known_args(self, args=None, namespace=None):
+        # The root defines the global options; while a line is read again,
+        # a command keeps the separate values of those written after it.
+        root = type(self).root
+        if root in (None, self) or not type(root).rereading:
+            return super().parse_known_args(args, namespace)
+        from .cli_help import style
+        return style.known_args(self, args, namespace, super().parse_known_args, _global_options(root), _unrecognized)
 
     def _check_value(self, action, value):
         if action.choices is not None and value not in action.choices:
@@ -639,37 +671,48 @@ class CommandParser(Parser):
         raise UsageError(*style.usage_message(self, message))
 
 
+def _option(options, word):
+    """(action, whether WORD carries its value) of an option word in a
+    parser's OPTIONS: --name, --name=VALUE, -n or -nVALUE; (None, False)
+    for any other word."""
+    name = word.split("=", 1)[0]
+    if name not in options and not word.startswith("--"):
+        name = word[:2]  # -nVALUE
+    return options.get(name), name in options and name != word
+
+
 def _leading(parser, argv):
     """Unknown options of ARGV before its command word."""
-    options = parser._option_string_actions
     unknown = []
     index = 0
     while index < len(argv):
         token = argv[index]
         if token == "--" or token == "-" or not token.startswith("-"):
             break
-        action = options.get(token.split("=", 1)[0])
-        if action is None and not token.startswith("--") and token[:2] in options:
-            index += 1  # -wNAME carries its value
-        elif action is None:
+        action, attached = _option(parser._option_string_actions, token)
+        if action is None:
             unknown.append(token)
-            index += 1
-        else:
-            index += 2 if action.nargs != 0 and "=" not in token else 1
+        index += 2 if action is not None and action.nargs != 0 and not attached else 1
     return unknown
 
 
-def bounded(low, high, label):
-    """An integer argument type that accepts LOW to HIGH; help pages print its
-    bounds, so the documented range cannot drift from the checked one."""
-    def parse(value):
-        number = int(value)
-        if not low <= number <= high:
-            raise argparse.ArgumentTypeError("%s must be between %d and %d" % (label, low, high))
-        return number
-    parse.__name__ = label.replace("-", "_")
-    parse.bounds = (low, high)
-    return parse
+def _global_options(root):
+    """{option string: whether it takes a value} of the global options,
+    which the tree's ROOT defines."""
+    return {name: action.nargs != 0 for action in root._actions for name in action.option_strings}
+
+
+def _unrecognized(parser, extras, apply=False):
+    """The error for EXTRAS, which PARSER does not take, with a correction
+    for the first unknown option; a global option is suggested only where
+    the command accepts it (apply: whether --apply is given)."""
+    from .cli_help import style
+    root = type(parser).root or parser
+    path = parser.prog.split()[1:]
+    options = _global_options(root)
+    rules = global_option_rules(path, apply=apply)
+    return style.unrecognized(parser, extras, options, [option for option in options if option not in rules],
+                              style.subcommands(root).choices[path[0]] if path else None)
 
 
 limit = bounded(1, 200, "limit")

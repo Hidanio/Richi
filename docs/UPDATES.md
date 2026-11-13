@@ -167,7 +167,8 @@ change.
 - Before it follows, a map starts the newly current release once through the
   installation's entry point with its own storage selection (`richi --version`,
   which also tells whether that release takes over the socket), and checks that the release is complete and declares support for the map's
-  database schema. Otherwise the map stays on its version, logs the reason once
+  database schema, and that no setup or activation is waiting for recovery.
+  Otherwise the map stays on its version, logs the reason once
   and tries again later. This happens, for example, after 1.0.1 rolls itself back
   while the store is at schema 3: 1.0.1 cannot open that store, so the newer map
   keeps serving it until the installation changes again. A restart request while
@@ -178,7 +179,10 @@ change.
   installation has registered and the ports `richi map` would use for that
   command's workspace (the configured port and the next ten). `status`, `chat`,
   `config`, `workspace`, `use`, `update`, `setup`, `agents` and `map` do not
-  look. The command never waits for a map: newer maps are asked to switch, and
+  look. While a setup or activation is waiting for recovery, help and
+  `richi --version` do not look either: the next knowledge command recovers it
+  first and then looks.
+  The command never waits for a map: newer maps are asked to switch, and
   an older map is stopped and started again on the new version on the same port
   in the background. Only a command from a terminal without a chat identity
   starts such a replacement. A command from an agent (it has a chat identity and

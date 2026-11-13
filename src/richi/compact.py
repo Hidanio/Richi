@@ -10,14 +10,20 @@ EXCERPT_NOTE = "Partial verbatim excerpt; limitations may be omitted. Read the f
 CAUTION = re.compile(r"\b(?:not|no|never|only|failed|without|limit\w*|caveat\w*|unverified|historical|unknown|не|нет|только|без|огранич\w*|неудач\w*|историчес\w*|неподтверж\w*|неизвест\w*)\b", re.I)
 
 
-def max_chars(value):
-    number = int(value)
-    if not 2000 <= number <= 100000:
-        raise argparse.ArgumentTypeError("max-chars must be between 2000 and 100000")
-    return number
+def bounded(low, high, label):
+    """An integer argument type that accepts LOW to HIGH; help pages print its
+    bounds, so the documented range cannot drift from the checked one."""
+    def parse(value):
+        number = int(value)
+        if not low <= number <= high:
+            raise argparse.ArgumentTypeError("%s must be between %d and %d" % (label, low, high))
+        return number
+    parse.__name__ = label.replace("-", "_")
+    parse.bounds = (low, high)
+    return parse
 
 
-max_chars.bounds = (2000, 100000)
+max_chars = bounded(2000, 100000, "max-chars")
 
 
 def excerpt(text, limit):
