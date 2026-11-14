@@ -39,7 +39,7 @@ Required: `id`, `kind`, `title`, `summary`. Caller-chosen stable IDs are at most
 |---|---|
 | `kind` | `task`, `decision`, `fact`, `note`, `investigation`, `experiment`, `procedure` |
 | `project_ids` | Existing project IDs; default `[]` for genuinely general knowledge |
-| `jira_key` | Optional actual Jira key; never invent one |
+| `jira_key` | Optional actual issue key of any tracker, spelled as the tracker writes it (`ABC-123`, `AB#123`, `#123`); never invent one. Recall treats a token as an issue key only when a record declares it: see [RECALL.md](RECALL.md#ключи-задач) |
 | `knowledge_state` | `confirmed`, `hypothesis` (default), `superseded` |
 | `work_state` | `planned`, `in_progress`, `implemented`, `merged`, `released`, `blocked`, `done` or `null` |
 | `sources` | Objects with required `reference`; optional `label`, `type`, `observed_at`, `revision`, `locator`, `sha256`, `git`; default `[]` |

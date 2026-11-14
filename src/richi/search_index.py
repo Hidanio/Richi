@@ -27,6 +27,8 @@ MAX_RECORD_CHARS = 262144
 MAX_RECORD_KEYS = 16384
 MAX_KEY_CHARS = 4096
 MAX_RECORD_KEY_BYTES = 1048576
+MAX_ISSUE_KEYS = 2000
+MAX_ISSUE_SERIES = 64
 FILTER_INDEXES = {
     "richi_search_entries_state_kind": ("entries", "knowledge_state, kind"),
     "richi_search_entries_state_work": ("entries", "knowledge_state, work_state"),
@@ -348,3 +350,63 @@ def entity_ids(conn, query, terms, keys):
     for prefix in prefixes:
         result.update(_prefix_ids(conn, "entity", prefix))
     return result
+
+
+def recorded_issue_keys(conn, variants, series):
+    """Recorded issue keys among candidate spellings and series, or None to scan.
+
+    The answer equals recall's scan of every record. Keys of a dirty record may
+    be stale, so the index speaks for clean records only and dirty ones are
+    read directly. A series lookup is a range of keys that continue the prefix
+    with ASCII digits alone.
+    """
+    from . import recall
+
+    _, families, _, ready = _schema(conn)
+    if not ready or len(variants) > MAX_ISSUE_KEYS or len(series) > MAX_ISSUE_SERIES:
+        return None
+    source = (" FROM " + KEYS + " k JOIN " + RECORDS + " r ON r.record = k.record WHERE k.field = ? AND ")
+    clean = " AND NOT EXISTS (SELECT 1 FROM " + DIRTY + " d WHERE d.family = ? AND d.id = r.id)"
+
+    def equal(family, field, values):
+        result, values = set(), sorted(values)
+        for start in range(0, len(values), 400):
+            batch = values[start:start + 400]
+            result.update(row[0] for row in conn.execute(
+                "SELECT DISTINCT k.key" + source + "k.key IN (" + ",".join("?" for _ in batch) + ")" + clean,
+                [FIELDS[family][field], *batch, family]))
+        return result
+
+    def numbered(family, field, prefix):
+        return conn.execute(
+            "SELECT 1" + source + "k.key >= ? AND k.key < ? AND substr(k.key, ?) NOT GLOB '*[^0-9]*'" +
+            clean + " LIMIT 1",
+            (FIELDS[family][field], prefix + "0", prefix + ":", len(prefix) + 1, family)).fetchone() is not None
+
+    variants = {variant for variant in variants if recall.ISSUE_KEY.search(variant)}
+    found = equal("entry", "jira", variants)
+    leads = ("task:", "jira:")
+    for family in families.values():
+        found.update(key[5:] for key in equal(family, "id", {lead + variant for lead in leads for variant in variants}))
+    found_series = set()
+    for prefix in series:
+        # DEMO42 belongs to the series "demo-" too, when that spelling is a key.
+        forms = [prefix]
+        if prefix.endswith("-") and recall.canonical_key(prefix[:-1] + "0") == prefix + "0":
+            forms.append(prefix[:-1])
+        if any(numbered("entry", "jira", form) or
+               any(numbered(family, "id", lead + form) for family in families.values() for lead in leads)
+               for form in forms):
+            found_series.add(prefix)
+    identities, jira_keys = [], []
+    for table, family in families.items():
+        dirty = [row[0] for row in conn.execute("SELECT id FROM " + DIRTY + " WHERE family = ?", (family,))]
+        for start in range(0, len(dirty), 400):
+            batch = dirty[start:start + 400]
+            for row in conn.execute("SELECT id, " + ("jira_key" if family == "entry" else "NULL") + " FROM " + table +
+                                    " WHERE id IN (" + ",".join("?" for _ in batch) + ")", batch):
+                identities.append(row[0])
+                jira_keys.append(row[1])
+    dirty_variants, dirty_series = recall.issue_key_hits(
+        recall.declared_issue_keys(identities, jira_keys), variants, series)
+    return found | dirty_variants, found_series | dirty_series

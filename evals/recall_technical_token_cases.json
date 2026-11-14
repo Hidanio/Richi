@@ -1,0 +1,75 @@
+{
+  "description": "Entirely synthetic engineering knowledge; no production snapshots or workplace IDs. The store records no issue keys.",
+  "project": [
+    {"id": "atlas", "name": "Atlas", "source": "Synthetic evaluation fixture"}
+  ],
+  "entry": [
+    {
+      "id": "fact:resource-warning", "kind": "fact", "title": "ResourceWarning for unclosed connections",
+      "summary": "Every sqlite3 handle is now closed before the suite ends.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/fact:resource-warning", "type": "synthetic"}],
+      "verified_at": "2020-01-01"
+    },
+    {
+      "id": "fact:launcher", "kind": "fact", "title": "python3 launcher",
+      "summary": "The launcher prefers python3 from PATH.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/fact:launcher", "type": "synthetic"}],
+      "verified_at": "2020-01-01"
+    },
+    {
+      "id": "fact:wheel-digest", "kind": "fact", "title": "sha256 digest of the release wheel",
+      "summary": "The manifest stores the digest next to the file name.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/fact:wheel-digest", "type": "synthetic"}],
+      "verified_at": "2020-01-01"
+    },
+    {
+      "id": "fact:other-token", "kind": "fact", "title": "sha2560 is a different token",
+      "summary": "A deliberately longer number.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/fact:other-token", "type": "synthetic"}],
+      "verified_at": "2020-01-01"
+    },
+    {
+      "id": "fact:tokenizer", "kind": "fact", "title": "fts5 tokenizer",
+      "summary": "unicode61 keeps digits inside one token.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/fact:tokenizer", "type": "synthetic"}],
+      "verified_at": "2020-01-01"
+    },
+    {
+      "id": "experiment:embedding-probe", "kind": "experiment", "title": "gemma-4 embedding probe",
+      "summary": "Measured on arm64 only.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/experiment:embedding-probe", "type": "synthetic"}],
+      "verified_at": "2020-01-01"
+    },
+    {
+      "id": "experiment:later-model", "kind": "experiment", "title": "gemma-40 is another model",
+      "summary": "Not measured yet.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "planned",
+      "sources": [{"reference": "https://example.test/evidence/experiment:later-model", "type": "synthetic"}],
+      "verified_at": "2020-01-01"
+    },
+    {
+      "id": "note:warmup", "kind": "note", "title": "Cache warmup notes",
+      "summary": "DEMO-17 was mentioned in a chat; no tracker record was imported.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/note:warmup", "type": "synthetic"}],
+      "verified_at": "2020-01-01"
+    }
+  ],
+  "cases": [
+    {"id": "version-token-does-not-hide-the-subject", "query": "python3.13 ResourceWarning", "expected_refs": ["entry:fact:resource-warning"], "expected_first": "entry:fact:resource-warning", "excluded_refs": ["entry:fact:launcher"]},
+    {"id": "interpreter-token-with-another-word", "query": "python3 launcher", "expected_refs": ["entry:fact:launcher"], "expected_first": "entry:fact:launcher"},
+    {"id": "digest-is-a-whole-token", "query": "sha256", "expected_refs": ["entry:fact:wheel-digest"], "expected_first": "entry:fact:wheel-digest", "excluded_refs": ["entry:fact:other-token"]},
+    {"id": "module-token-with-another-word", "query": "fts5 tokenizer", "expected_refs": ["entry:fact:tokenizer"], "expected_first": "entry:fact:tokenizer"},
+    {"id": "hyphenated-model-name", "query": "gemma-4 probe", "expected_refs": ["entry:experiment:embedding-probe"], "expected_first": "entry:experiment:embedding-probe", "excluded_refs": ["entry:experiment:later-model"]},
+    {"id": "two-technical-tokens", "query": "http404 arm64", "expected_refs": ["entry:experiment:embedding-probe"]},
+    {"id": "technical-token-and-subject-in-different-records", "query": "arm64 ResourceWarning", "expected_refs": ["entry:fact:resource-warning", "entry:experiment:embedding-probe"]},
+    {"id": "unrecorded-key-is-a-word", "query": "DEMO-17 cache warmup", "expected_refs": ["entry:note:warmup"], "expected_first": "entry:note:warmup"},
+    {"id": "unrecorded-tokens-match-nothing", "query": "ubuntu-24 phase-0 mem0", "expected_no_match": true}
+  ]
+}

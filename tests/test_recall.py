@@ -327,6 +327,51 @@ class RecallTests(unittest.TestCase):
         self.assertEqual(result["results"], [])
         self.assertEqual(result["edges"], [])
 
+    def test_key_shaped_technical_tokens_are_words_in_a_store_without_keys(self):
+        self.put("entry", [
+            self.entry("warning", title="ResourceWarning for unclosed connections",
+                       summary="Every sqlite3 handle is now closed in the suite."),
+            self.entry("launcher", title="python3 launcher"),
+            self.entry("digest", title="sha256 of the release wheel"),
+            self.entry("longer-digest", title="sha2560 is a different token"),
+            self.entry("probe", title="gemma-4 embedding probe"),
+        ])
+        result = self.recall("python3.13 ResourceWarning")
+        self.assertEqual(self.ids(result), {"warning"})
+        self.assertEqual(result["selection"]["terms"], ["python3.13", "resourcewarning"])
+        for query, expected in (("python3.13 ResourceWarning", {"warning"}), ("sha256", {"digest"}),
+                                ("gemma-4 probe", {"probe"}), ("fts5 phase-0", set())):
+            with self.subTest(query=query):
+                result = self.recall(query)
+                self.assertEqual(self.ids(result), expected)
+                self.assertEqual(result["selection"]["jira_keys"], [])
+                self.assertNotIn("jira_mode", result["selection"])
+                if not expected:
+                    self.assertEqual(result["selection"]["abstention_reason"], "no_meaningful_lexical_anchor")
+
+    def test_recorded_keys_of_other_trackers_are_exact_issue_keys(self):
+        self.put("entry", [
+            self.entry("azure", kind="task", jira_key="AB#123", title="Gateway retries"),
+            self.entry("azure-near", kind="task", jira_key="AB#1234", title="Gateway retries"),
+            self.entry("cyrillic", kind="task", jira_key="ПРОЕКТ-12", title="Шлюз и повторы"),
+            self.entry("task:OPS-7", kind="task", title="Rotate the gateway certificate"),
+            self.entry("follow-up", summary="After AB#123 the gateway pool was resized."),
+        ])
+        result = self.recall("Что решили в AB#123?")
+        self.assertEqual(result["results"][0]["id"], "azure")
+        self.assertIn("exact_jira_key", result["results"][0]["match_reasons"])
+        self.assertEqual(self.ids(result), {"azure", "follow-up"})
+        self.assertEqual(result["selection"]["jira_keys"], ["ab#123"])
+        self.assertEqual(result["selection"]["jira_mode"], "required_whole_key")
+        self.assertEqual(self.ids(self.recall("проект12")), {"cyrillic"})
+        self.assertEqual(self.ids(self.recall("ops7 gateway")), {"task:OPS-7"})
+        for query in ("AB#999 gateway retries", "ПРОЕКТ-999 шлюз", "OPS-8 gateway certificate"):
+            with self.subTest(query=query):
+                unknown = self.recall(query)
+                self.assertTrue(unknown["no_match"])
+                self.assertEqual(unknown["candidate_count"], 0)
+                self.assertEqual(unknown["selection"]["abstention_reason"], "no_matching_issue_key")
+
     def test_unmatched_technical_subject_does_not_match_only_generic_verbs(self):
         self.put("entry", self.entry(
             "redis-pool-attempt", kind="experiment", title="Пул соединений Redis",

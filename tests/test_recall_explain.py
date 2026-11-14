@@ -101,7 +101,8 @@ class RecallExplainTests(unittest.TestCase):
                 self.assertEqual(included["explain"]["expected"]["outcome"], "returned")
 
     def test_direct_guards_report_the_actual_rejection_stage(self):
-        self.put("entry", self.entry("latency-note", title="latency observation"))
+        # The recorded DEMO series makes DEMO-99999 an issue key rather than a word.
+        self.put("entry", self.entry("latency-note", title="latency observation", jira_key="DEMO-42"))
         for query, reason in (("unrelatedunknown", "weak_lexical"),
                               ("latency QUIC", "subject_guard"),
                               ("latency Z", "short_subject_guard"),

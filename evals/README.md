@@ -26,6 +26,20 @@ runner also checks source provenance, knowledge/work states, serialized output
 budgets, and that recall leaves the seeded database unchanged. It exits nonzero
 when a case fails and refuses to overwrite reports.
 
+Issue-key recognition has two datasets of its own. Each seeds a separate store
+and runs through `--cases`; the default fixture and its expectations are unchanged:
+
+```sh
+python evals/evaluate_recall.py --cases evals/recall_issue_key_cases.json
+python evals/evaluate_recall.py --cases evals/recall_technical_token_cases.json
+```
+
+`recall_issue_key_cases.json` records keys of several trackers (`AB#123`, `#77`,
+`CU-8669abc`, `ПРОЕКТ-12`, `APP.WEB-12`, a `task:` ID) and checks exact keys,
+unknown numbers of a recorded series and technical tokens inside and outside such
+a series. `recall_technical_token_cases.json` records no keys: `python3.13`,
+`sha256`, `fts5` and `gemma-4` must behave as ordinary words.
+
 `recall_cases.json` contains all seeds and expectations. These are acceptance
 checks, not a blind benchmark or a claim about production recall accuracy.
 Historical private datasets remain outside this repository; this fixture does

@@ -33,6 +33,15 @@ class PublicRecallEvalTests(unittest.TestCase):
             self.assertTrue(report["database_unchanged_by_recall"])
             self.assertEqual(database.read_bytes(), original)
 
+    def test_issue_key_and_technical_token_datasets_pass(self):
+        for name, cases in (("recall_issue_key_cases.json", 13), ("recall_technical_token_cases.json", 9)):
+            with self.subTest(cases=name):
+                result = self.run_eval("--cases", str(EVALS / name))
+                self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+                report = json.loads(result.stdout)
+                self.assertEqual(report["summary"], {"cases": cases, "passed": cases, "failed": 0})
+                self.assertTrue(report["database_unchanged_by_recall"])
+
     def test_wrong_expected_result_makes_runner_fail(self):
         with tempfile.TemporaryDirectory(prefix="richi-eval-regression-") as temporary:
             fixture = json.loads((EVALS / "recall_cases.json").read_text())

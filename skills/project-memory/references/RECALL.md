@@ -45,6 +45,31 @@ Before writing changes, read full `get`, preserve original sources and fields, a
 
 Only `confirmed` is available by default. `--include-hypotheses` and `--include-superseded` enable their respective states separately. A filtered endpoint cannot enter results through a relationship. On schema 1, recall works without new entities or the graph.
 
+<a id="ключи-задач"></a>
+
+## Issue keys
+
+A token is an issue key only when the store records it; its form decides nothing. `python3`, `sha256` and `gemma-4` are ordinary words until a record declares them. A record declares a key in two ways:
+
+- `jira_key` of an entry. Despite its name, the field takes a key of any tracker in any format: `ABC-123`, `AB#123`, `#123`, `CU-8669abc`, `ПРОЕКТ-12`, `APP.WEB-12`.
+- An entry or entity ID `task:<key>` or `jira:<key>`.
+
+A key always contains a digit and at least one other character. `jira_key: "N/A"`, the ID `task:backup` and a bare number such as `17` declare nothing and stay ordinary words; record a numeric issue the way the tracker shows it, for example `#17`. Records in every knowledge state count, and `--where` does not change which tokens are keys.
+
+In a query, a key is a run without whitespace, at most 128 characters long, with no letter, digit or underscore next to it: `(ABC-123).`, a tracker URL and `feature/ABC-123-fix-login` all contain `ABC-123`, while `x_ABC-123` and `ABC-123x` do not. Case does not matter, and `ё` equals `е`. A key made of letters and a number has two equal spellings, `ABC-123` and `ABC123`; other formats match as recorded. The longest recorded key at a position wins.
+
+A recorded key switches recall to whole-key mode: `selection.jira_mode` is `required_whole_key` and `selection.jira_keys` lists the keys.
+
+- Only records that contain a whole key in their ID, `jira_key`, title, summary or aliases are candidates. `ABC-17` never returns `ABC-18` or `ABC-170`.
+- The other words of the question rank these records and add no candidates.
+- A record whose `jira_key` is the key gets the reason `exact_jira_key`. A record whose ID is the key, `task:<key>` or `jira:<key>` also gets `canonical_issue_record`.
+
+Another number of a recorded series is an unknown issue, not a set of words. With `ABC-123` recorded, `ABC-999999` returns only records that contain `ABC-999999`; when there are none, the answer is `no_match` with `selection.abstention_reason: no_matching_issue_key`. `AB#999` beside a recorded `AB#123` and `#999` beside `#77` behave the same way. A series is a recorded key without its final number, so a key that does not end in a number, such as `CU-8669abc`, starts none.
+
+The same rule covers a technical token that continues a recorded series. In a store that records `HTTP-12`, `http2` and `http-404` are issues of the `HTTP` series, and only records that contain the whole token are returned. A store without recorded keys never enters whole-key mode.
+
+A word with a digit that is not a key matches as a whole token: `sha256` does not find `sha2560`, `gemma-4` does not find `gemma-40`, and `python3` still finds `python3.13`. It remains a technical subject of the question: a record that contains none of the question's identifiers (Latin words with a capital letter, a digit or `-_.:/`) is rejected, which `--explain` reports as `subject_guard`.
+
 <a id="что-означает-выдача"></a>
 
 ## What the output means
