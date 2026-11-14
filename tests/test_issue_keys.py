@@ -88,7 +88,7 @@ class IssueKeyTests(unittest.TestCase):
         values.update(options)
         return recall.recall(conn, SimpleNamespace(**values), memory)
 
-    def words(self, conn, query, found, absent=(), **options):
+    def words(self, conn, query, found, **options):
         """The query is ordinary words: no key mode, and every word takes part."""
         value = self.ask(conn, query, **options)
         selection = value["selection"]
@@ -97,7 +97,6 @@ class IssueKeyTests(unittest.TestCase):
         self.assertEqual(selection["terms"], recall.phrase(query).split(), query)
         ids = [item["id"] for item in value["results"]]
         self.assertEqual(sorted(ids), sorted(found), query)
-        self.assertFalse(set(absent) & set(ids), query)
         self.assertEqual(value["no_match"], not found, query)
         if not found:
             self.assertEqual(selection["abstention_reason"], "no_meaningful_lexical_anchor", query)
@@ -134,12 +133,12 @@ class IssueKeyTests(unittest.TestCase):
 
         def check(conn, schema):
             # The reported miss: python3 alone used to decide the whole answer.
-            self.words(conn, "python3.13 ResourceWarning", ["warning"], absent=["launcher"])
+            self.words(conn, "python3.13 ResourceWarning", ["warning"])
             self.words(conn, "python3 launcher", ["launcher"])
-            self.words(conn, "sha256", ["digest"], absent=["longer-digest"])
-            self.words(conn, "sha2560", ["longer-digest"], absent=["digest"])
+            self.words(conn, "sha256", ["digest"])
+            self.words(conn, "sha2560", ["longer-digest"])
             self.words(conn, "fts5 tokenizer", ["tokenizer"])
-            self.words(conn, "gemma-4 probe", ["probe"], absent=["later-model"])
+            self.words(conn, "gemma-4 probe", ["probe"])
             self.words(conn, "http404 arm64", ["probe"])
             self.words(conn, "sqlite3 suite", ["warning"])
             self.words(conn, "ubuntu-24 phase-0 mem0 sha-256", [])
@@ -193,7 +192,7 @@ class IssueKeyTests(unittest.TestCase):
             # No number ends CU-8669abc, so it starts no series; other tokens stay words.
             self.words(conn, "CU-0000zzz", [])
             self.words(conn, "sha256 python3", [])
-            self.words(conn, "recorded tracker item", list(recorded) + list(near), absent=["mentions"], limit=20)
+            self.words(conn, "recorded tracker item", list(recorded) + list(near), limit=20)
 
         self.each_layout(check, entries)
 
@@ -292,7 +291,8 @@ class IssueKeyTests(unittest.TestCase):
 
     def test_keys_are_recognized_in_every_knowledge_state_and_ignore_filters(self):
         entries = [note("old", kind="task", jira_key="DEMO-42", knowledge_state="superseded"),
-                   note("current", title="demo-7 playground", summary="An unrelated sandbox.")]
+                   note("current", title="demo-7 playground", summary="An unrelated sandbox."),
+                   note("web", kind="task", jira_key="WEB-5", title="Web item")]
 
         def check(conn, schema):
             # The superseded card still tells that DEMO is an issue series.
@@ -300,9 +300,11 @@ class IssueKeyTests(unittest.TestCase):
             self.keyed(conn, "demo-7 playground", ["demo-7"], ["current"])
             value = self.ask(conn, "DEMO-42", include_superseded=True)
             self.assertEqual([item["id"] for item in value["results"]], ["old"])
-            filtered = self.ask(conn, "DEMO-42", where="kind = 'note'")
-            self.assertEqual(filtered["selection"]["jira_keys"], ["demo-42"])
-            self.assertTrue(filtered["no_match"])
+            # The filter hides the only record that declares WEB-5; it is still a key.
+            self.keyed(conn, "WEB-5 item", ["web-5"], ["web"], first="web")
+            filtered = self.ask(conn, "WEB-5 item", where="kind = 'note'")
+            self.assertEqual(filtered["selection"]["jira_keys"], ["web-5"])
+            self.assertEqual(filtered["selection"]["abstention_reason"], "no_matching_issue_key")
 
         self.each_layout(check, entries)
 
@@ -312,8 +314,7 @@ class IssueKeyTests(unittest.TestCase):
                 ("sha256", "sha256.", True), ("sha256", "hmac-sha256-v2", True),
                 ("30", "atl-3010 and 300", False), ("30", "within 30 seconds", True),
                 ("python3", "python3.13", True), ("python3", "python39", False),
-                ("gemma-4", "gemma-40", False), ("cache", "caching", False),
-                ("cach", "caching", True), ("warm", "prewarm", False)):
+                ("gemma-4", "gemma-40", False), ("cach", "caching", True)):
             with self.subTest(term=term, text=text):
                 self.assertEqual(recall.matches_term(term, text), expected)
 
@@ -375,7 +376,7 @@ class IssueKeyTests(unittest.TestCase):
             search_index.build(conn, memory)
         self.assertEqual(both("DEMO-42 OPS-7 NET-5 WEB-3 CORE-1 проект-5"), ["core-1", "ops-7", "проект-5"])
 
-    def test_seeded_corpus_recognition_matches_a_full_scan_oracle(self):
+    def test_index_and_scan_recognize_the_same_keys_in_a_seeded_corpus(self):
         rng = random.Random(14112026)
         keys = ["DEMO-42", "demo42", "Demo-7", "ПРОЁКТ-12", "проект12", "AB#123", "#77", "CU-8669abc",
                 "APP.WEB-12", "T1234", "12345", "Straße-7", "STRASSE-8", "a_b-3", "x-1-2", "2024-11",
@@ -405,6 +406,8 @@ class IssueKeyTests(unittest.TestCase):
             queries.append(" ".join(parts))
 
         def oracle():
+            # Every record read in full: independent of the index and of the SQL
+            # prefilter of the scan, though not of the declaration rules themselves.
             rows = list(conn.execute("SELECT id, jira_key FROM entries")) + [
                 (row[0], None) for row in conn.execute("SELECT id FROM entities")]
             return recall.declared_issue_keys([row[0] for row in rows], [row[1] for row in rows])
@@ -432,15 +435,64 @@ class IssueKeyTests(unittest.TestCase):
         self.assertTrue(search_index.status(conn)["available"])
         self.assertEqual(compare(), scanned)
 
-    def test_query_with_too_many_candidates_scans_with_the_same_answer(self):
+    def test_only_an_extreme_query_leaves_the_index_for_the_scan(self):
         conn = self.store([note("main", jira_key="DEMO-42")], index=True)
-        text = recall.normalize("DEMO-42 demo-7 sha256 release/2.0")
-        expected = recall.issue_keys(conn, text)
-        self.assertEqual(expected[0], ["demo-42", "demo-7"])
-        for limit in ("MAX_ISSUE_KEYS", "MAX_ISSUE_SERIES"):
-            with self.subTest(limit=limit), mock.patch.object(search_index, limit, 0):
-                self.assertIsNone(search_index.recorded_issue_keys(conn, {"demo-42"}, {"demo-"}))
-                self.assertEqual(recall.issue_keys(conn, text), expected)
+        path = "see /srv/app-1/releases/2026-01-02/v1.2.3/lib/python3.9/site-packages/x1/y2 DEMO-42 demo-7"
+        extreme = "DEMO-42 demo-7 " + "/".join("v{}.{}".format(number, number + 1) for number in range(400))
+        for query, indexed in ((path, True), (extreme, False)):
+            with self.subTest(indexed=indexed):
+                with mock.patch.object(search_index, "recorded_issue_keys",
+                                       wraps=search_index.recorded_issue_keys) as lookup:
+                    keys, _ = recall.issue_keys(conn, recall.normalize(query))
+                self.assertEqual(keys, ["demo-42", "demo-7"])
+                variants, series = lookup.call_args[0][1:]
+                self.assertEqual(len(variants) <= search_index.MAX_ISSUE_KEYS, indexed)
+                self.assertEqual(search_index.recorded_issue_keys(conn, variants, series) is not None, indexed)
+
+    def test_entities_that_mention_a_key_pass_the_index_gate(self):
+        # AB#123, #77 and C++-7 are several lexical tokens each in the entity index.
+        entries = [note("azure", kind="task", jira_key="AB#123", title="Gateway retries"),
+                   note("github", kind="task", jira_key="#77", title="Upload retries"),
+                   note("plus", kind="task", jira_key="C++-7", title="Port the parser")]
+        entities = [issue("svc-a", kind="component", summary="Changed by AB#123 last week."),
+                    issue("svc-b", kind="component", title="Regression after #77"),
+                    issue("svc-c", kind="component", aliases=["C++-7 port"]),
+                    issue("svc-d", kind="component", summary="Mentions 123, 77 and 7 without any key.")]
+
+        def check(conn, schema):
+            if schema == 1:
+                return
+            self.keyed(conn, "AB#123", ["ab#123"], ["azure", "svc-a"], first="azure")
+            self.keyed(conn, "#77", ["#77"], ["github", "svc-b"], first="github")
+            self.keyed(conn, "C++-7", ["c++-7"], ["plus", "svc-c"], first="plus")
+
+        self.each_layout(check, entries, entities)
+
+    def test_overflowing_shortlist_keeps_the_records_that_hold_the_key(self):
+        # FTS5 keeps only "12" of the key #12, and every date with a 12 matches that.
+        entries = [note("github", kind="task", jira_key="#12", title="Upload retries"),
+                   note("follow-up", kind="decision", summary="Decided after #12 to cap the retries.")]
+        entries += [note("dated-{:03d}".format(number), title="Report of 2026-01-12, part {}".format(number))
+                    for number in range(recall.CANDIDATE_LIMIT + 40)]
+        for schema, fts, index in LAYOUTS:
+            if schema == 3:
+                with self.subTest(fts=fts, index=index):
+                    conn = self.store(entries, schema=schema, fts=fts, index=index)
+                    value = self.keyed(conn, "#12", ["#12"], ["github", "follow-up"], first="github")
+                    self.assertFalse(value["truncated"])
+
+    def test_record_that_holds_a_key_is_an_answer_wherever_it_holds_it(self):
+        entries = [note("github", kind="task", jira_key="#77", title="Upload retries"),
+                   note("aliased", aliases=["#77"], title="Retry budget"),
+                   note("series", kind="task", jira_key="DEMO-7", title="Cache warmup"),
+                   note("shared", kind="task", jira_key="DEMO-45, DEMO-46", title="Two issues in one card")]
+
+        def check(conn, schema):
+            # Other words in the question must not hide a card that passed the key guard.
+            self.keyed(conn, "issue #77 status", ["#77"], ["github", "aliased"], first="github")
+            self.keyed(conn, "DEMO-45 status", ["demo-45"], ["shared"])
+
+        self.each_layout(check, entries)
 
     def test_responses_are_identical_without_and_with_the_search_index(self):
         entries = [

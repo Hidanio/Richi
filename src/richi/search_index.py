@@ -28,7 +28,6 @@ MAX_RECORD_KEYS = 16384
 MAX_KEY_CHARS = 4096
 MAX_RECORD_KEY_BYTES = 1048576
 MAX_ISSUE_KEYS = 2000
-MAX_ISSUE_SERIES = 64
 FILTER_INDEXES = {
     "richi_search_entries_state_kind": ("entries", "knowledge_state, kind"),
     "richi_search_entries_state_work": ("entries", "knowledge_state, work_state"),
@@ -352,6 +351,13 @@ def entity_ids(conn, query, terms, keys):
     prefixes.update(variant for key in keys for variant in recall.key_variants(key))
     for prefix in prefixes:
         result.update(_prefix_ids(conn, "entity", prefix))
+    # A key need not be one lexical token: AB#123 is indexed as "ab" and "123",
+    # and a record that holds the key holds every one of them.
+    for key in keys:
+        for variant in recall.key_variants(key):
+            tokens = recall.WORDS.findall(variant)
+            if tokens and tokens != [variant]:
+                result.update(set.intersection(*(_prefix_ids(conn, "entity", token) for token in tokens)))
     return result
 
 
@@ -366,40 +372,34 @@ def recorded_issue_keys(conn, variants, series):
     from . import recall
 
     _, families, _, ready = _schema(conn)
-    if not ready or len(variants) > MAX_ISSUE_KEYS or len(series) > MAX_ISSUE_SERIES:
+    if not ready or len(variants) > MAX_ISSUE_KEYS:
         return None
-    source = (" FROM " + KEYS + " k JOIN " + RECORDS + " r ON r.record = k.record WHERE k.field = ? AND ")
+    source = " FROM " + KEYS + " k JOIN " + RECORDS + " r ON r.record = k.record WHERE k.field = ? AND "
     clean = " AND NOT EXISTS (SELECT 1 FROM " + DIRTY + " d WHERE d.family = ? AND d.id = r.id)"
-
-    def equal(family, field, values):
-        result = set()
-        for batch in _batches(values):
-            result.update(row[0] for row in conn.execute(
+    # A key is recorded as the jira_key of an entry or as a task:/jira: ID.
+    places = [("entry", "jira", ("",))] + [(family, "id", ("task:", "jira:")) for family in families.values()]
+    found = set()
+    for family, field, leads in places:
+        wanted = {lead + variant: variant for lead in leads for variant in variants}
+        for batch in _batches(wanted):
+            found.update(wanted[row[0]] for row in conn.execute(
                 "SELECT DISTINCT k.key" + source + "k.key IN (" + ",".join("?" for _ in batch) + ")" + clean,
                 [FIELDS[family][field], *batch, family]))
-        return result
-
-    def numbered(family, field, prefix):
-        return conn.execute(
-            "SELECT 1" + source + "k.key >= ? AND k.key < ? AND substr(k.key, ?) NOT GLOB '*[^0-9]*'" +
-            clean + " LIMIT 1",
-            (FIELDS[family][field], prefix + "0", prefix + ":", len(prefix) + 1, family)).fetchone() is not None
-
-    variants = {variant for variant in variants if recall.ISSUE_KEY.search(variant)}
-    found = equal("entry", "jira", variants)
-    leads = ("task:", "jira:")
-    for family in families.values():
-        found.update(key[5:] for key in equal(family, "id", {lead + variant for lead in leads for variant in variants}))
-    found_series = set()
+    probes = []
     for prefix in series:
         # DEMO42 belongs to the series "demo-" too, when that spelling is a key.
-        forms = [prefix]
-        if prefix.endswith("-") and recall.canonical_key(prefix[:-1] + "0") == prefix + "0":
-            forms.append(prefix[:-1])
-        if any(numbered("entry", "jira", form) or
-               any(numbered(family, "id", lead + form) for family in families.values() for lead in leads)
-               for form in forms):
-            found_series.add(prefix)
+        compact = prefix.endswith("-") and recall.canonical_key(prefix[:-1] + "0") == prefix + "0"
+        probes.extend((prefix, family, field, lead + form) for form in ((prefix, prefix[:-1]) if compact else (prefix,))
+                      for family, field, leads in places for lead in leads)
+    exists = ("EXISTS (SELECT 1" + source + "k.key >= ? AND k.key < ? AND substr(k.key, ?) NOT GLOB '*[^0-9]*'" +
+              clean + ")")
+    found_series = set()
+    for start in range(0, len(probes), 100):
+        batch = probes[start:start + 100]
+        row = conn.execute("SELECT " + ", ".join(exists for _ in batch), [
+            value for _, family, field, first in batch
+            for value in (FIELDS[family][field], first + "0", first + ":", len(first) + 1, family)]).fetchone()
+        found_series.update(probe[0] for probe, hit in zip(batch, row) if hit)
     identities, jira_keys = [], []
     for table, family in families.items():
         dirty = [row[0] for row in conn.execute("SELECT id FROM " + DIRTY + " WHERE family = ?", (family,))]

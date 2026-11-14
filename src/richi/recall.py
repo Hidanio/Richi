@@ -194,9 +194,9 @@ def phrase(value):
 
 def terms_for(query, conn):
     # An issue key is one routing key, never an OR search for a generic prefix.
-    # Only the store can say which tokens are keys; with conn None all are words.
+    # Only the store can say which tokens are keys; the rest are words.
     text = normalize(query)
-    keys, spans = issue_keys(conn, text) if conn is not None else ([], [])
+    keys, spans = issue_keys(conn, text)
     for start, end in spans:
         text = text[:start] + " " * (end - start) + text[end:]
     terms = []
@@ -452,8 +452,8 @@ def lexical(record, query, terms, keys, family):
             matched.append(term)
     for key in keys:
         # Whole Jira keys may be mentioned in another record's evidence or summary.
-        patterns = [r"(?<![\w])" + re.escape(variant) + r"(?![\w])" for variant in key_variants(key)]
-        if any(re.search(pattern, text) for pattern in patterns for text in (title, summary, " ".join(aliases), identity)):
+        # The guard decides what holds a key, so no record passes it with no score.
+        if matches_key(record, [key]):
             score += 25
             matched.append(key)
     if matched:
@@ -571,14 +571,25 @@ def candidates(conn, query, terms, keys, states, project, api, trace=None, selec
         expression = " OR ".join('"' + word.replace('"', '""') + '"*' for word in terms)
         key_expressions = ['"' + variant.replace('"', '""') + '"' for key in keys for variant in key_variants(key)]
         expression = " OR ".join(key_expressions) if keys else expression
-        rows = conn.execute("""
+        def shortlist(holds_key=""):
+            return conn.execute("""
             SELECT e.id
             FROM entries e
                 JOIN entries_fts ON entries_fts.rowid = e.rowid
             WHERE 1=1 AND entries_fts MATCH ? AND e.knowledge_state IN (""" + states_sql + ") AND (" + clause + """ )
+            """ + holds_key + """
             ORDER BY bm25(entries_fts, 8.0, 6.0, 1.0, 10.0, 3.0, 5.0), e.id
             LIMIT ?
         """, [expression] + states + values + [CANDIDATE_LIMIT + 1]).fetchall()
+
+        rows = shortlist()
+        if keys and len(rows) > CANDIDATE_LIMIT:
+            # The tokenizer keeps only "12" of the key #12, so rows with any 12 can
+            # crowd out the ones that hold the key. Ask again for those rows alone.
+            conn.create_function("richi_holds_issue_key", 5, lambda identity, jira_key, title, summary, aliases: matches_key(
+                {"id": identity, "jira_key": jira_key, "title": title, "summary": summary,
+                 "aliases": json.loads(aliases)}, keys))
+            rows = shortlist("AND richi_holds_issue_key(e.id, e.jira_key, e.title, e.summary, e.aliases)")
         fts_truncated = len(rows) > CANDIDATE_LIMIT
         fts_ranks = {row[0]: rank for rank, row in enumerate(rows[:CANDIDATE_LIMIT])}
         if trace:

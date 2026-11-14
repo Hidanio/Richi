@@ -52,15 +52,15 @@ Only `confirmed` is available by default. `--include-hypotheses` and `--include-
 A token is an issue key only when the store records it; its form decides nothing. `python3`, `sha256` and `gemma-4` are ordinary words until a record declares them. A record declares a key in two ways:
 
 - `jira_key` of an entry. Despite its name, the field takes a key of any tracker in any format: `ABC-123`, `AB#123`, `#123`, `CU-8669abc`, `ПРОЕКТ-12`, `APP.WEB-12`.
-- An entry or entity ID `task:<key>` or `jira:<key>`.
+- An entry or entity ID `task:<key>` or `jira:<key>`. Any such ID with a number counts, also a descriptive one: `task:phase-0` makes `phase-0` a key and `phase-1` an unknown issue.
 
 A key always contains a digit and at least one other character. `jira_key: "N/A"`, the ID `task:backup` and a bare number such as `17` declare nothing and stay ordinary words; record a numeric issue the way the tracker shows it, for example `#17`. Records in every knowledge state count, and `--where` does not change which tokens are keys.
 
-In a query, a key is a run without whitespace, at most 128 characters long, with no letter, digit or underscore next to it: `(ABC-123).`, a tracker URL and `feature/ABC-123-fix-login` all contain `ABC-123`, while `x_ABC-123` and `ABC-123x` do not. Case does not matter, and `ё` equals `е`. A key made of letters and a number has two equal spellings, `ABC-123` and `ABC123`; other formats match as recorded. The longest recorded key at a position wins.
+In a query, a key is a run without whitespace, at most 128 characters long, with no letter, digit or underscore next to it: `(ABC-123).`, a tracker URL and `feature/ABC-123-fix-login` all contain `ABC-123`, while `x_ABC-123` and `ABC-123x` do not. Case does not matter, and `ё` equals `е`; a mention spelled with `ё` in a text still falls under the FTS limitation described in [RECALL_DEBUG.md](RECALL_DEBUG.md). A key of two or more letters and a number has two equal spellings, `ABC-123` and `ABC123`; other formats match as recorded. The longest recorded key at a position wins.
 
 A recorded key switches recall to whole-key mode: `selection.jira_mode` is `required_whole_key` and `selection.jira_keys` lists the keys.
 
-- Only records that contain a whole key in their ID, `jira_key`, title, summary or aliases are candidates. `ABC-17` never returns `ABC-18` or `ABC-170`.
+- A record is a candidate only when its ID, `jira_key`, title, summary or an alias contains a whole key. `ABC-17` never returns `ABC-18` or `ABC-170`.
 - The other words of the question rank these records and add no candidates.
 - A record whose `jira_key` is the key gets the reason `exact_jira_key`. A record whose ID is the key, `task:<key>` or `jira:<key>` also gets `canonical_issue_record`.
 
