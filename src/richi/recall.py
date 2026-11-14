@@ -192,9 +192,9 @@ def phrase(value):
     return " ".join(WORDS.findall(normalize(value)))
 
 
-def terms_for(query, conn=None):
+def terms_for(query, conn):
     # An issue key is one routing key, never an OR search for a generic prefix.
-    # Only the store can say which tokens are keys; without it all are words.
+    # Only the store can say which tokens are keys; with conn None all are words.
     text = normalize(query)
     keys, spans = issue_keys(conn, text) if conn is not None else ([], [])
     for start, end in spans:
@@ -298,7 +298,9 @@ def canonical_key(value):
 
 def key_variants(key):
     # Keep the numeric suffix intact: ABC-17 / ABC17 never matches ABC-170.
-    return (key, key.replace("-", ""))
+    # Only a letters-number key has a compact spelling: REL-1-2 is not REL12.
+    compact = key.replace("-", "")
+    return (key, compact) if canonical_key(compact) == key else (key,)
 
 
 def decode(row, arrays=("sources", "tags", "aliases")):

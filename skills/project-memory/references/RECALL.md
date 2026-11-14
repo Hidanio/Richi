@@ -66,7 +66,7 @@ A recorded key switches recall to whole-key mode: `selection.jira_mode` is `requ
 
 Another number of a recorded series is an unknown issue, not a set of words. With `ABC-123` recorded, `ABC-999999` returns only records that contain `ABC-999999`; when there are none, the answer is `no_match` with `selection.abstention_reason: no_matching_issue_key`. `AB#999` beside a recorded `AB#123` and `#999` beside `#77` behave the same way. A series is a recorded key without its final number, so a key that does not end in a number, such as `CU-8669abc`, starts none.
 
-The same rule covers a technical token that continues a recorded series. In a store that records `HTTP-12`, `http2` and `http-404` are issues of the `HTTP` series, and only records that contain the whole token are returned. A store without recorded keys never enters whole-key mode.
+The same rule covers a technical token that continues a recorded series. In a store that records `HTTP-12`, `http2` and `http-404` are issues of the `HTTP` series, and only records that contain the whole token are returned. A store without recorded keys never enters whole-key mode. There a key that appears only in titles or texts is an ordinary word: it matches as a whole token, but `ABC123` and `ABC-123` are different words. Record it in `jira_key` to make it a key.
 
 A word with a digit that is not a key matches as a whole token: `sha256` does not find `sha2560`, `gemma-4` does not find `gemma-40`, and `python3` still finds `python3.13`. It remains a technical subject of the question: a record that contains none of the question's identifiers (Latin words with a capital letter, a digit or `-_.:/`) is rejected, which `--explain` reports as `subject_guard`.
 

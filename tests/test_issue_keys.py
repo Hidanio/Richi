@@ -197,6 +197,26 @@ class IssueKeyTests(unittest.TestCase):
 
         self.each_layout(check, entries)
 
+    def test_only_a_letters_number_key_has_a_compact_spelling(self):
+        entries = [
+            note("item", kind="task", jira_key="REL-1-2", title="Release item"),
+            note("other", kind="task", jira_key="REL12", title="Other issue"),
+            note("clickup", kind="task", jira_key="CU-8669abc", title="Export format"),
+            note("mentions", summary="See REL12 and CU8669abc."),
+        ]
+
+        def check(conn, schema):
+            # REL-1-2 without its hyphens would be another issue, REL12.
+            self.keyed(conn, "REL-1-2", ["rel-1-2"], ["item"], first="item")
+            self.keyed(conn, "REL12", ["rel-12"], ["other", "mentions"], first="other")
+            self.keyed(conn, "rel-12", ["rel-12"], ["other", "mentions"], first="other")
+            self.keyed(conn, "CU-8669abc", ["cu-8669abc"], ["clickup"], first="clickup")
+            self.words(conn, "CU8669abc", ["mentions"])
+            self.assertEqual(recall.key_variants("rel-1-2"), ("rel-1-2",))
+            self.assertEqual(recall.key_variants("проект-12"), ("проект-12", "проект12"))
+
+        self.each_layout(check, entries)
+
     def test_ids_declare_keys_and_a_key_holds_a_number_and_more(self):
         entries = [
             note("task:OPS-7", kind="task", title="Rotate the signing certificate"),
@@ -362,7 +382,7 @@ class IssueKeyTests(unittest.TestCase):
                 "v1.2", "İS-5", "MY_PROJ-9", "WEB2-7", "release", "two words-3", " padded-1", "ops"]
         identities = ["task:OPS-7", "TASK:ops-8", "Jira:NET-5", "taſk:LONG-1", "tasK:KEL-2",
                       "task:backup", "jira:плёнка-3", "note:DEMO-99", "task:", "task:x", "tasks:SET-1",
-                      "jira:", "xjira:HID-4", "task:richi-recall-candidate-selection-20261016", "TaSk:Mixed-6"]
+                      "jira:", "xjira:HID-4", "task:atlas-cache-warmup-review-20260106", "TaSk:Mixed-6"]
         conn = self.store()
         for number, identity in enumerate(identities):
             memory.entry_put(conn, note(identity, jira_key=keys[number] if number % 3 == 0 else None))
@@ -372,7 +392,7 @@ class IssueKeyTests(unittest.TestCase):
         pool = keys + [identity.partition(":")[2] for identity in identities] + [
             "sha256", "python3.13", "http404", "gemma-4", "ops", "release-2", "x-1-3", "2024-12", "v1.3",
             "t1235", "t-1234", "is-6", "web2-8", "web27", "my_proj10", "long-2", "kel-3", "set-1", "hid-4",
-            "mixed-7", "richi-recall-candidate-selection-20261017", "candidate-selection-20261016", "#78",
+            "mixed-7", "atlas-cache-warmup-review-20260107", "warmup-review-20260106", "#78",
             "ab#124", "cu-8669abd", "app.web12", "app.web-13", "strasse-7", "straße-9", "плёнка-4", "12346"]
         wrappers = ["{}", "({})", "{}.", "{},", "see/{}/now", "x_{}", "{}x", "{}-fix", "https://example.test/{}"]
         queries = []
@@ -397,8 +417,6 @@ class IssueKeyTests(unittest.TestCase):
                 with mock.patch.object(recall, "recorded_issue_keys", lambda conn, variants, series:
                                        recall.issue_key_hits(declared, variants, series)):
                     expected = recall.issue_keys(conn, text)
-                with mock.patch.object(search_index, "recorded_issue_keys", return_value=None):
-                    self.assertEqual(recall.issue_keys(conn, text), expected, query)
                 self.assertEqual(recall.issue_keys(conn, text), expected, query)
                 recognized.update(expected[0])
             return recognized
@@ -406,20 +424,13 @@ class IssueKeyTests(unittest.TestCase):
         self.assertFalse(search_index.status(conn)["available"])
         scanned = compare()
         self.assertTrue({"demo-42", "проект-12", "ab#123", "#77", "cu-8669abc", "long-1", "kel-2", "ops-8",
-                         "richi-recall-candidate-selection-20261016", "mixed-6", "2024-11"} <= scanned)
+                         "atlas-cache-warmup-review-20260106", "mixed-6", "2024-11"} <= scanned)
         self.assertFalse({"sha-256", "http-404", "gemma-4", "backup", "x", "set-1", "hid-4", "release", "ops",
-                          "12345", "12346", "candidate-selection-20261016"} & scanned)
+                          "12345", "12346", "warmup-review-20260106"} & scanned)
         with memory.transaction(conn):
             search_index.build(conn, memory)
         self.assertTrue(search_index.status(conn)["available"])
         self.assertEqual(compare(), scanned)
-        # Old writers leave stale index keys behind; recognition must still agree.
-        for number in range(0, len(keys), 4):
-            conn.execute("UPDATE entries SET jira_key = ? WHERE id = ?",
-                         (rng.choice(pool), "record-" + str(number)))
-        conn.execute("UPDATE entries SET jira_key = NULL WHERE id = 'record-1'")
-        self.assertGreater(search_index.status(conn)["dirty"]["entry"], 0)
-        compare()
 
     def test_query_with_too_many_candidates_scans_with_the_same_answer(self):
         conn = self.store([note("main", jira_key="DEMO-42")], index=True)

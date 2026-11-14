@@ -274,12 +274,15 @@ def _query_parts(query):
     return recall.normalize(query).strip(), words
 
 
+def _batches(values):
+    # Stay below the older SQLite 999-variable limit even with many alias spans.
+    values = sorted(set(values))
+    return [values[start:start + 400] for start in range(0, len(values), 400)]
+
+
 def _equal_ids(conn, family, field, values):
     result = set()
-    values = sorted(set(values))
-    # Stay below the older SQLite 999-variable limit even with many alias spans.
-    for start in range(0, len(values), 400):
-        batch = values[start:start + 400]
+    for batch in _batches(values):
         result.update(row[0] for row in conn.execute(
             "SELECT r.id FROM " + KEYS + " k JOIN " + RECORDS + " r ON r.record = k.record "
             "WHERE k.field = ? AND k.key IN (" + ",".join("?" for _ in batch) + ")",
@@ -369,9 +372,8 @@ def recorded_issue_keys(conn, variants, series):
     clean = " AND NOT EXISTS (SELECT 1 FROM " + DIRTY + " d WHERE d.family = ? AND d.id = r.id)"
 
     def equal(family, field, values):
-        result, values = set(), sorted(values)
-        for start in range(0, len(values), 400):
-            batch = values[start:start + 400]
+        result = set()
+        for batch in _batches(values):
             result.update(row[0] for row in conn.execute(
                 "SELECT DISTINCT k.key" + source + "k.key IN (" + ",".join("?" for _ in batch) + ")" + clean,
                 [FIELDS[family][field], *batch, family]))
@@ -401,8 +403,7 @@ def recorded_issue_keys(conn, variants, series):
     identities, jira_keys = [], []
     for table, family in families.items():
         dirty = [row[0] for row in conn.execute("SELECT id FROM " + DIRTY + " WHERE family = ?", (family,))]
-        for start in range(0, len(dirty), 400):
-            batch = dirty[start:start + 400]
+        for batch in _batches(dirty):
             for row in conn.execute("SELECT id, " + ("jira_key" if family == "entry" else "NULL") + " FROM " + table +
                                     " WHERE id IN (" + ",".join("?" for _ in batch) + ")", batch):
                 identities.append(row[0])
