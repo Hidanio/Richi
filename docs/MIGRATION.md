@@ -107,8 +107,8 @@ to return to installed code; restoring an older database copy is unnecessary.
 Richi continues reading existing knowledge, including previously recorded `git:`
 references. This is data-format support, not support for old executable scripts.
 If `check` reports an unknown schema, investigate the cause; do not delete the
-database to reinstall. Schema 1 is upgraded to the graph separately, using a
-backup and explicit `migrate`, as described in the
+database to reinstall. Schema 1 is upgraded to the graph separately with an
+explicit `migrate`, which backs the store up first, as described in the
 [graph reference](../skills/project-memory/references/GRAPH.md).
 
 Before writes resume, an incorrect switch can be reversed by selecting the old

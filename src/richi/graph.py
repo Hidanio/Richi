@@ -2,6 +2,7 @@
 
 from collections import deque
 import json
+import sqlite3
 
 from . import compact
 
@@ -23,7 +24,7 @@ MIGRATION_TARGET = 3
 
 def require_v2(conn, api):
     if conn.execute("PRAGMA user_version").fetchone()[0] not in {2, 3}:
-        raise api.MemoryError("Graph commands require schema 2 or 3; make a backup and run migrate explicitly")
+        raise api.MemoryError("Graph commands require schema 2 or 3; run richi migrate, which backs up the store first")
 
 
 def _migrate_entities_v3(conn, api):
@@ -51,30 +52,55 @@ def _migrate_entities_v3(conn, api):
         conn.execute(row[0])
 
 
+def _migratable(conn, api):
+    """The store's schema version if it can be migrated or already is current;
+    stores that migrate would refuse raise before anything is written."""
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if version not in {1, 2, 3}:
+        raise api.MemoryError("Cannot migrate unknown schema version: " + str(version))
+    api.backend(conn)
+    if version == MIGRATION_TARGET:
+        return version
+    expected = {"projects", "entries", "entry_projects", "relations", "entry_history", "entry_events", "metadata"}
+    if version == 2:
+        expected.update({"entities", "graph_nodes", "graph_edges", "entity_history", "edge_history"})
+    existing = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    if not expected.issubset(existing):
+        raise api.MemoryError("Schema {} is missing required tables; migration refused".format(version))
+    if conn.execute("PRAGMA foreign_key_check").fetchone():
+        raise api.MemoryError("Existing foreign key violations; migration refused")
+    if [row[0] for row in conn.execute("PRAGMA integrity_check")] != ["ok"]:
+        raise api.MemoryError("Existing integrity errors; migration refused")
+    return version
+
+
 def migrate(conn, path, api):
+    """Back the store up, then upgrade its schema in one transaction.
+
+    Upgrades are forward-only: an older runtime cannot read the result, so the
+    verified copy made here is the way back. SQLite cannot copy a store from
+    inside its own write transaction, hence the copy comes first; the checks
+    run before it, so that a refused store leaves no copy, and again under the
+    write lock."""
     if conn.in_transaction:
         raise api.MemoryError("Migration requires a connection without an active transaction")
+    with api.transaction(conn, write=False):
+        version = _migratable(conn, api)
+    if version == MIGRATION_TARGET:
+        return {"status": "existing", "schema_version": MIGRATION_TARGET, "database": str(path)}
+    try:
+        copy = api.backup(conn, path, None, label="schema" + str(version))["backup"]
+    except (api.MemoryError, sqlite3.Error, OSError) as exc:
+        raise api.MemoryError("Cannot back up the store, so migration did not start and nothing changed: " + str(exc)) from exc
     foreign_keys = conn.execute("PRAGMA foreign_keys").fetchone()[0]
     conn.execute("PRAGMA foreign_keys = OFF")
     try:
         with api.transaction(conn):
-            version = conn.execute("PRAGMA user_version").fetchone()[0]
-            if version not in {1, 2, 3}:
-                raise api.MemoryError("Cannot migrate unknown schema version: " + str(version))
-            api.backend(conn)
-            if version == MIGRATION_TARGET:
-                return {"status": "existing", "schema_version": MIGRATION_TARGET, "database": str(path)}
-            expected = {"projects", "entries", "entry_projects", "relations", "entry_history", "entry_events", "metadata"}
-            if version == 2:
-                expected.update({"entities", "graph_nodes", "graph_edges", "entity_history", "edge_history"})
-            existing = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-            if not expected.issubset(existing):
-                raise api.MemoryError("Schema {} is missing required tables; migration refused".format(version))
-            if conn.execute("PRAGMA foreign_key_check").fetchone():
-                raise api.MemoryError("Existing foreign key violations; migration refused")
-            if [row[0] for row in conn.execute("PRAGMA integrity_check")] != ["ok"]:
-                raise api.MemoryError("Existing integrity errors; migration refused")
-            if version == 1:
+            current = _migratable(conn, api)
+            if current == MIGRATION_TARGET:
+                # Another process migrated the store after the copy was made.
+                return {"status": "existing", "schema_version": MIGRATION_TARGET, "database": str(path), "backup": copy}
+            if current == 1:
                 api.execute_script(conn, (api.BASE / "graph_schema.sql").read_text(encoding="utf-8"))
             else:
                 _migrate_entities_v3(conn, api)
@@ -83,7 +109,11 @@ def migrate(conn, path, api):
             if [row[0] for row in conn.execute("PRAGMA integrity_check")] != ["ok"]:
                 raise api.MemoryError("Migration integrity check failed")
             conn.execute("PRAGMA user_version = " + str(MIGRATION_TARGET))
-        return {"status": "migrated", "from_version": version, "schema_version": MIGRATION_TARGET, "database": str(path)}
+        return {"status": "migrated", "from_version": current, "schema_version": MIGRATION_TARGET, "database": str(path),
+                "backup": copy}
+    except (api.MemoryError, sqlite3.Error, OSError) as exc:
+        raise api.MemoryError("Migration failed and was rolled back; the store is unchanged and its backup is retained at " +
+                              copy + ": " + str(exc)) from exc
     finally:
         conn.execute("PRAGMA foreign_keys = " + str(foreign_keys))
 
@@ -143,7 +173,7 @@ def put(conn, obj, kind, api):
                       title=api.string(obj.get("title"), "title"), summary=api.string(obj.get("summary"), "summary"),
                       tags=api.string_list(obj.get("tags", []), "tags"), aliases=api.string_list(obj.get("aliases", []), "aliases"))
         if record["kind"] == "tool" and conn.execute("PRAGMA user_version").fetchone()[0] != 3:
-            raise api.MemoryError("Tool entities require schema 3; make a backup and run richi migrate explicitly")
+            raise api.MemoryError("Tool entities require schema 3; run richi migrate, which backs up the store first")
         table, history_table = "entities", "entity_history"
     else:
         record.update(from_ref=ref(obj.get("from_ref"), api), to_ref=ref(obj.get("to_ref"), api),
@@ -318,7 +348,7 @@ depth = compact.bounded(1, 3, "depth")
 
 
 def add_commands(commands, limit):
-    commands.add_parser("migrate", help="Upgrade an older store's schema in place (back up first)")
+    commands.add_parser("migrate", help="Back up an older store, then upgrade its schema in place")
     for name, summary, example in (
             ("entity", "Read or write graph entities (components, concepts, tools...)", "concept:connection-pool"),
             ("edge", "Read or write explicit, sourced links between records", "cache-uses-redis")):

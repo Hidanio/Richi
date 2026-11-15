@@ -101,6 +101,10 @@ Every protocol-1 release keeps them able to update in place:
   to `SCHEMA`. Never drop a schema: 1.0.1 installs without checking support, and
   its rollback has no schema checks. A schema bump also extends `migrate`
   (`graph.MIGRATION_TARGET`); `tests/test_tool_schema.py` enforces these rules.
+- Stores upgrade [forward only](UPDATES.md#forward-only). A new schema needs no
+  reader in earlier releases, so do not shape data formats around them. In
+  exchange `migrate` keeps backing the store up before it changes anything, and a
+  migration changes only the database, never files beside it.
 - Changing a manifest field or format, the map wire schema or the updater protocol
   needs a new protocol. Publish its manifest as an additional asset (for example
   `richi-release-2.json`): protocol-1 updaters select `richi-release.json` by exact
