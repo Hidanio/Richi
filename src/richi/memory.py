@@ -793,6 +793,8 @@ def global_option_rules(path, apply=False):
         rules["--project-path"] = "Use project upsert without --project-path for deliberate registration changes."
     elif command == "storage" and action == "optimize" and apply:
         rules["--project-path"] = "Storage optimization affects the whole workspace; omit --project-path."
+    elif command == "skill-sources":
+        rules["--project-path"] = "Agents are described for this computer, not for a project; omit --project-path."
     return rules
 
 
@@ -816,6 +818,10 @@ def run(args, cli=None):
     if args.command in LAUNCHER_COMMANDS:
         raise MemoryError("Use the installed richi " + args.command + " command")
     check_global_options(args)
+    if args.command == "skill-sources":
+        # Agent settings are the user's, shared by every workspace: no store is opened.
+        from . import agent_commands
+        return agent_commands.run(args, sys.modules[__name__])
     from richi_launcher.config import resolve_settings
     settings = resolve_settings(db=args.db, config_file=getattr(args, "config", None),
                                 workspace=getattr(args, "workspace", None))
@@ -853,12 +859,20 @@ def run(args, cli=None):
             return storage.run(conn, args, sys.modules[__name__], database)
         writing = getattr(args, "action", None) in {"put", "upsert"}
         items = payload(args.json) if writing else None
-        checked_project = None
+        checked_project = unmatched_path = None
+        loading_rules = args.command == "rules" and args.action == "show" and args.project is None
         with transaction(conn, write=writing or source_attach or adding_project or applying_scan or building_index or writing_rules):
             if project_path is not None:
                 from .projects import ensure_project_context
-                project = ensure_project_context(conn, project_path, expected_id=getattr(args, "project", None))
-                checked_project = project["id"]
+                try:
+                    project = ensure_project_context(conn, project_path, expected_id=getattr(args, "project", None))
+                except MemoryError as exc:
+                    # The user's global rules bind an agent in any repository, so loading
+                    # them does not depend on this one being registered.
+                    if not loading_rules:
+                        raise
+                    project, unmatched_path = None, str(exc)
+                checked_project = project["id"] if project else None
                 if writing and args.command == "entry":
                     for item in items:
                         if project["id"] not in (item.get("project_ids") or []):
@@ -869,7 +883,7 @@ def run(args, cli=None):
                             raise MemoryError("Relation must include checked project " + project["id"])
             if args.command == "rules":
                 return rules.run(conn, args, sys.modules[__name__], workspace=settings.workspace,
-                                 checked_project=checked_project)
+                                 checked_project=checked_project, unmatched_path=unmatched_path)
             if scanning:
                 from .projects import project_scan
                 result = project_scan(conn, args.path, apply=args.apply, max_depth=args.max_depth)

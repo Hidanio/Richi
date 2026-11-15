@@ -153,10 +153,29 @@ richi rules show
 richi --project-path /path/to/service-example rules show
 richi rules add no-agent-prefix --global --text "Never prefix branch names with the agent name."
 richi rules add branch-naming --project service-example --text "Name branches SE-<number>_<topic>."
+richi rules add pr-skill --global --text "Use the pr-description skill for pull requests." --skill pr-description
+richi rules add review-skill --global --text "Use the code review skill for reviews." --skill claude=engineering:code-review --skill codex=code-review
 ```
 
 Правила — это инструкции, а не знания: поиск их не возвращает, а агенты меняют их
 только по просьбе пользователя. Подробнее: [постоянные правила](../skills/project-memory/references/RULES.ru.md).
+Вкладка **«Правила»** карты показывает их, а на странице, открытой командой
+`richi map`, добавляет и меняет их по шаблонам и со списком установленных скиллов: один скилл для
+всех агентов или свой для каждого, если они различаются.
+
+Richi знает, какие агенты работают на этом компьютере и где каждый берёт скиллы.
+Claude Code и Codex встроены; выключайте их источники скиллов, добавляйте папки со
+скиллами или опишите другого агента, сразу для всех workspace:
+
+```sh
+richi skill-sources list
+richi skill-sources add gemini-cli --name "Gemini CLI" --skills ~/.gemini/skills
+richi skill-sources update claude --disable claude-app
+```
+
+Подробнее: [агенты и их скиллы](../skills/project-memory/references/AGENT_SKILLS.ru.md);
+вкладка карты **«Агенты»** показывает и меняет те же настройки.
+
 В привязанном чате `-w` может только повторять сохранённую область. Прямые
 `--db`, `--config` и соответствующие переменные хранилища отклоняются.
 Для другого клиента передавайте устойчивый ID через `--chat ID` или `RICHI_CHAT_ID`;

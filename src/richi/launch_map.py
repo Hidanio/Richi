@@ -10,11 +10,11 @@ import socket
 import subprocess
 import sys
 import time
-import webbrowser
 
 from richi_launcher.config import resolve_settings, ConfigError
 from richi_launcher.runtime import LAUNCHER_ROOT, current_runtime, preflight, runtime_command, lease_fds
 from .memory import Parser, MemoryError
+from . import map_access
 # maps is None when the installed launcher has no map protocol or another one.
 from .serve import (GENERATION_ENV, compatible_health, config_arguments, database_schema, foreign_answer,
                     maps, read_health, url, worker_environment)
@@ -378,7 +378,8 @@ def _main(argv=None):
                         config_required=args.config is not None or "RICHI_CONFIG" in os.environ,
                         workspace=settings.workspace, restart=args.action == "restart")
         if not args.no_open:
-            result["browser_opened"] = webbrowser.open(result["url"])
+            # The page opened here may also change standing rules (map_access).
+            result["browser_opened"] = map_access.open_browser(result["url"], database)
         print(json.dumps(result, ensure_ascii=False))
         return 0
     except MapRefused as exc:

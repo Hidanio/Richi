@@ -17,7 +17,9 @@ see [TOOLS.md](TOOLS.md) for configuration, runs and scope.
 
 Standing rules are the user's instructions for every chat bound to the workspace
 (global) or for one project. They are stored apart from knowledge, never returned
-by search, and loaded with `rules show`; see [RULES.md](RULES.md).
+by search, and loaded with `rules show`; see [RULES.md](RULES.md). A rule may
+name a skill per agent; `skill-sources list` shows the agents and where each
+finds skills, see [AGENT_SKILLS.md](AGENT_SKILLS.md).
 
 The database is stored separately from source code; `richi config show` reports its actual path. Python 3.9 or newer with the standard `sqlite3` module is required; the runtime uses the standard library and requires no cloud service. The interactive map uses an optional local HTTP server on `127.0.0.1`. Calls are explicit: there is no background reading of conversations, Jira or repositories, or updating of knowledge. A source in a record indicates provenance; the existence of a link alone does not prove a claim.
 

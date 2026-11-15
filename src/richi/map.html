@@ -61,6 +61,156 @@
 @media(max-width:760px){.git-dialog{width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:11px}.git-heading{padding:16px 15px 12px}.git-heading h2{font-size:16px}.git-tabs{padding:0 15px 11px}.git-controls{padding:12px 15px;gap:8px}.git-target-field{flex-basis:100%}.git-result{padding:15px}.git-footer{padding:10px 15px;font-size:10px}.git-commit{grid-template-columns:minmax(0,1fr)}.git-commit button{justify-self:start}.git-code{padding:10px;font-size:11px;max-height:47dvh}.git-captured code{font-size:10px}}
 
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+.switches[hidden]{display:none}
+.rules-heading{flex-wrap:wrap}
+.rules-totals{display:flex;gap:10px;flex:none;align-items:stretch}
+.rules-meter{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 16px;min-width:190px;display:flex;flex-direction:column;justify-content:center}
+.rules-meter strong{font-size:16px;font-weight:650;font-variant-numeric:tabular-nums}
+.rules-meter span{font-size:11px;color:var(--muted)}
+.rules-meter-bar{height:6px;border-radius:4px;background:var(--panel-soft);border:1px solid var(--line);margin-top:9px;overflow:hidden}
+.rules-meter-bar i{display:block;height:100%;background:var(--accent);border-radius:4px;transition:width .2s}
+.rules-meter.near .rules-meter-bar i{background:var(--entity)}
+.rules-mode{display:flex;gap:13px;align-items:flex-start;border:1px solid var(--line);border-left-width:3px;border-radius:11px;background:var(--panel);padding:13px 16px;font-size:12px;line-height:1.65;margin-bottom:18px}
+.rules-mode.editing{border-left-color:var(--record)}
+.rules-mode.commands{border-left-color:var(--accent)}
+.rules-mode-icon{flex:none;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font:600 12px/1 ui-monospace,SFMono-Regular,monospace}
+.rules-mode.editing .rules-mode-icon{color:var(--record);background:var(--panel-soft);font-size:15px}
+.rules-mode strong{display:block;font-size:13px;margin-bottom:2px}
+.rules-mode code{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11.5px;background:var(--panel-soft);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+.rules-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.rules-section-note{font-size:12px;color:var(--muted);margin:-6px 0 12px}
+.rules-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),1fr));gap:14px}
+.rule-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 19px;display:flex;flex-direction:column;gap:12px;min-width:0;box-shadow:0 3px 14px #21365a04;transition:border-color .16s,box-shadow .16s}
+.rule-card:hover{border-color:var(--accent);box-shadow:0 7px 24px #21365a0c}
+.rule-card-top{display:flex;gap:12px;align-items:center;min-width:0}
+.rule-mark{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;flex:none;background:var(--accent-soft);color:var(--accent);border:1px solid var(--line)}
+.rule-mark.skill{color:var(--record)}
+.rule-mark svg{width:20px;height:20px}
+.tools-empty .rule-mark{margin:0 auto 18px;width:50px;height:50px}
+.rule-title{min-width:0;display:flex;flex-direction:column;gap:1px}
+.rule-id{font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.rule-scope{font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.rule-text{font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
+.rule-text.clamped{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
+.rule-more{align-self:flex-start;border:0;background:transparent;padding:0;font-size:12px;color:var(--accent);margin-top:-6px}
+.rule-more:hover{background:transparent;text-decoration:underline}
+.rule-skill{display:inline-flex;align-self:flex-start;flex-wrap:wrap;align-items:center;gap:7px;border:1px solid var(--line);border-radius:9px;padding:6px 10px;font-size:12px;background:var(--panel-soft);max-width:100%}
+.rule-skill code{font-family:ui-monospace,SFMono-Regular,monospace;font-weight:600;color:var(--record);overflow-wrap:anywhere}
+.rule-skill-label{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.rule-skill-agents{font-size:11px;color:var(--muted)}
+.rule-skill.missing{border-style:dashed;border-color:var(--entity)}
+.rule-skill.missing code{color:var(--entity)}
+.rule-card-bottom{margin-top:auto;padding-top:12px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.rule-meta{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted);min-width:0;overflow-wrap:anywhere}
+.rule-actions{display:flex;gap:6px;margin-left:auto}
+button.danger{color:var(--danger)}
+button.danger:hover{border-color:var(--danger)}
+button.danger.solid{background:var(--danger);color:var(--panel);border-color:var(--danger)}
+.rule-starters{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:10px;margin-top:22px}
+.rule-starter{display:flex;flex-direction:column;gap:6px;align-items:flex-start;text-align:left;padding:14px;border-radius:12px}
+.rule-starter strong{font-size:13px}
+.rule-starter span{font-size:11.5px;color:var(--muted);line-height:1.55}
+.rules-empty{max-width:720px}
+.rule-dialog{width:min(740px,calc(100vw - 32px));max-width:none;max-height:calc(100dvh - 32px);padding:0;border:1px solid var(--line);border-radius:15px;background:var(--panel);color:var(--ink);box-shadow:0 20px 80px #0005;overflow:hidden}
+.rule-dialog::backdrop{background:#081426a3;backdrop-filter:blur(3px)}
+.rule-dialog[open]{display:flex;flex-direction:column}
+.rule-dialog form{display:flex;flex-direction:column;min-height:0;max-height:calc(100dvh - 34px)}
+.rule-dialog-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:20px 22px 15px;border-bottom:1px solid var(--line)}
+.rule-dialog-head h2{font-size:19px;letter-spacing:-.3px}
+.rule-dialog-head p{font-size:12px;color:var(--muted);margin-top:4px;overflow-wrap:anywhere}
+.rule-dialog-body{padding:18px 22px;overflow:auto;display:grid;gap:16px;min-height:0}
+.rule-dialog-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 22px;border-top:1px solid var(--line);background:var(--panel-soft)}
+.rule-field{display:grid;gap:6px;min-width:0}
+.rule-field[hidden],.rule-field-row[hidden]{display:none}
+.rule-field input[type=text],.rule-field select,.rule-field textarea{width:100%;border:1px solid var(--line);border-radius:9px;background:var(--panel-soft);color:var(--ink);padding:8px 10px;font:inherit;font-size:13px}
+.rule-field textarea{min-height:140px;resize:vertical;line-height:1.6}
+.rule-field select{max-width:none;height:39px;padding-right:30px}
+.rule-field input[type=text]{height:39px}
+.rule-field select:disabled{opacity:.5;cursor:default}
+.rule-field input[hidden]{display:none}
+.rule-skill-control{display:grid;gap:6px}
+.rule-skill-picker{display:grid;gap:10px}
+.project-field[hidden]{display:none}
+.agents-layout{display:grid;grid-template-columns:minmax(220px,300px) minmax(0,1fr);gap:18px;align-items:start}
+.agents-list{display:flex;flex-direction:column;gap:8px;min-width:0}
+.agent-item{text-align:left;padding:12px 14px;border-radius:12px;display:grid;gap:3px;background:var(--panel);min-width:0}
+.agent-item[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}
+.agent-item strong{font-size:13.5px;overflow-wrap:anywhere}
+.agent-item code,.agent-id{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere}
+.agent-item span{font-size:11px;color:var(--muted)}
+.agent-item .warn,.agent-warn{color:var(--entity)}
+.agent-add{border-style:dashed;color:var(--accent);padding:11px 14px;border-radius:12px}
+.agent-detail{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px 22px;min-width:0}
+.agent-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.agent-head h3{font-size:19px;letter-spacing:-.3px;overflow-wrap:anywhere}
+.agent-head-actions{display:flex;gap:8px;flex-wrap:wrap}
+.agent-badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.agent-badge{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:3px 9px;color:var(--muted);background:var(--panel-soft)}
+.agent-badge.ok{color:var(--record)}
+.agent-badge.warn{color:var(--entity);border-color:var(--entity)}
+.agent-badge.own{color:var(--accent);border-color:var(--accent)}
+.agent-section{font-size:10px;font-weight:650;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin:22px 0 2px}
+.agent-source{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)}
+.agent-source-name{font-size:13px}
+.agent-source-path{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;margin-top:2px}
+.agent-source-count{font-size:12px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.agent-source.off .agent-source-name{color:var(--muted)}
+.agent-switch{appearance:none;-webkit-appearance:none;width:34px;height:20px;border-radius:999px;border:1px solid var(--line);background:var(--panel-soft);position:relative;cursor:pointer;margin:0;flex:none;transition:background .15s,border-color .15s}
+.agent-switch::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
+.agent-switch:checked{background:var(--accent);border-color:var(--accent)}
+.agent-switch:checked::after{transform:translateX(14px);background:var(--panel)}
+.agent-switch:disabled{opacity:.5;cursor:default}
+.agent-switch:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.agent-folder-form{display:grid;gap:8px;margin-top:12px}
+.agent-folder-row{display:flex;gap:8px;flex-wrap:wrap}
+.agent-folder-row input{flex:1;min-width:200px}
+.agent-row-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.agent-lines{display:grid;gap:7px;font-size:12px;line-height:1.6;margin-top:8px}
+.agent-lines code{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11.5px;background:var(--panel-soft);border:1px solid var(--line);border-radius:5px;padding:1px 5px;overflow-wrap:anywhere}
+.agent-muted{font-size:12px;color:var(--muted);line-height:1.6;margin-top:8px}
+.agent-rule{display:flex;gap:10px;align-items:center;justify-content:space-between;text-align:left;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;padding:9px 2px;width:100%;font-size:12px;min-width:0}
+.agent-rule:hover{background:var(--panel-soft)}
+.agent-rule code{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;overflow-wrap:anywhere}
+.agent-rule span{color:var(--muted);overflow-wrap:anywhere;text-align:right}
+.agent-presets{display:flex;gap:6px;flex-wrap:wrap}
+.agent-preset{font-size:12px;padding:5px 11px;border-radius:999px}
+.agent-preset.found{border-color:var(--record);color:var(--record)}
+.rule-dialog details{border-top:1px solid var(--line);padding-top:12px}
+.rule-dialog summary{font-size:12px;color:var(--muted);cursor:pointer}
+.rule-dialog details[open] summary{margin-bottom:12px}
+.rule-dialog details .rule-field+.rule-field{margin-top:12px}
+.rule-skill-modes{display:flex;gap:16px;flex-wrap:wrap}
+.rule-skill-shared,.rule-agent-skills{display:grid;gap:8px}
+.rule-skill-shared[hidden],.rule-agent-skills[hidden],.rule-skill-modes[hidden]{display:none}
+.rule-agent-skill{display:grid;grid-template-columns:104px minmax(0,1fr);gap:10px;align-items:start}
+.rule-agent-name{font-size:12px;font-weight:650;line-height:39px}
+.rule-skill-sync{font-size:11.5px;line-height:1.55;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.rule-skill-sync:empty,.rule-skill-notice:empty{display:none}
+.rule-skill-sync.ok{color:var(--record)}
+.rule-skill-sync.warn{color:var(--entity)}
+.rule-skills{display:flex;flex-wrap:wrap;gap:6px}
+.rule-skill.none code{color:var(--muted);font-weight:400;font-family:inherit}
+.rule-skill-agents.warn{color:var(--entity)}
+.rule-field-hint{font-size:11px;color:var(--muted);line-height:1.55}
+.rule-field-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.rule-counter{display:flex;justify-content:space-between;gap:10px;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.rule-counter .over{color:var(--danger);font-weight:650}
+.rule-templates{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.rule-template{text-align:left;padding:10px 12px;border-radius:10px;display:grid;gap:3px;align-content:start}
+.rule-template strong{font-size:12.5px}
+.rule-template span{font-size:11px;color:var(--muted);line-height:1.45}
+.rule-template[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}
+.rule-template[aria-pressed=true] strong{color:var(--accent)}
+.rule-scope-options{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.rule-scope-options select{width:auto;min-width:200px;flex:1}
+.rule-readonly{font-size:12px;color:var(--muted);line-height:1.6}
+.rule-error{border:1px solid var(--danger);color:var(--danger);border-radius:9px;padding:9px 12px;font-size:12px;line-height:1.6}
+.rule-error[hidden],.rule-command[hidden]{display:none}
+.rule-command{border:1px solid var(--line);border-radius:10px;background:var(--panel-soft);padding:12px;display:grid;gap:9px;justify-items:start}
+.rule-command pre{margin:0;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;line-height:1.6;max-height:220px;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px}
+.rule-confirm{font-size:13px;line-height:1.7}
+.rule-quote{margin:0;border-left:3px solid var(--line);padding:6px 0 6px 12px;color:var(--muted);font-size:12px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:760px){.rules-totals{width:100%}.rules-totals>*{flex:1;min-width:0}.rule-templates{grid-template-columns:minmax(0,1fr)}.rule-dialog{width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:11px}.rule-dialog-body,.rule-dialog-head,.rule-dialog-foot{padding-left:16px;padding-right:16px}.rule-agent-skill{grid-template-columns:minmax(0,1fr);gap:4px}.rule-agent-name{line-height:1.4}.agents-layout{grid-template-columns:minmax(0,1fr)}.agent-detail{padding:16px}.agent-source{grid-template-columns:auto minmax(0,1fr) auto;row-gap:4px}.agent-source-count{grid-column:2}}
 </style>
 </head>
 <body>
@@ -73,6 +223,8 @@
     <button class="mode-tab" id="map-tab" type="button" role="tab" aria-selected="true" aria-controls="canvas">Карта</button>
     <button class="mode-tab" id="encyclopedia-tab" type="button" role="tab" aria-selected="false" aria-controls="encyclopedia" tabindex="-1">Энциклопедия</button>
     <button class="mode-tab" id="tools-tab" type="button" role="tab" aria-selected="false" aria-controls="tool-catalog" tabindex="-1">Инструменты</button>
+    <button class="mode-tab" id="rules-tab" type="button" role="tab" aria-selected="false" aria-controls="rules-panel" tabindex="-1">Правила</button>
+    <button class="mode-tab" id="agents-tab" type="button" role="tab" aria-selected="false" aria-controls="agents-panel" tabindex="-1">Агенты</button>
   </div>
   <div class="toolbar">
     <div class="field search-wrap"><label class="field-label" id="search-label" for="search">Найти в памяти</label><div class="input-wrap"><svg width="17" height="17" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 12L17 17" stroke="currentColor" stroke-width="1.6"/></svg><input id="search" type="search" placeholder="Проект, задача, решение, тег…" autocomplete="off" aria-controls="search-results" aria-expanded="false"></div><div class="results" id="search-results" hidden aria-label="Результаты поиска"></div></div>
@@ -97,6 +249,8 @@
       <div id="concepts"></div>
     </section>
     <section class="tools" id="tool-catalog" role="tabpanel" aria-labelledby="tools-tab" hidden><div class="tools-inner" id="tools-content"></div></section>
+    <section class="tools rules" id="rules-panel" role="tabpanel" aria-labelledby="rules-tab" hidden><div class="tools-inner" id="rules-content"></div></section>
+    <section class="tools rules agents" id="agents-panel" role="tabpanel" aria-labelledby="agents-tab" hidden><div class="tools-inner" id="agents-content"></div></section>
     <aside class="sidebar" id="sidebar" aria-label="Карточка выбранного объекта"><div class="sidebar-heading"><span id="detail-label">Как читать карту</span><button class="icon" id="close-details" type="button" title="Свернуть карточку" aria-label="Свернуть карточку">×</button></div><div class="detail" id="detail"></div></aside>
   </div>
   <div class="notice"><span id="data-note">Локальная память · только чтение</span><span id="view-hint">Перетаскивайте карту и узлы · колесо — масштаб</span></div>
@@ -118,6 +272,7 @@
   <div class="git-result" id="git-result" role="tabpanel" aria-labelledby="git-tab-show" tabindex="0"></div>
   <div class="git-footer" id="git-footer">Читаем локальный Git. Изменение кода — повод перепроверить вывод; состояние знаний и дата проверки не меняются.</div>
 </dialog>
+<dialog class="rule-dialog" id="rule-dialog" aria-labelledby="rule-dialog-title"></dialog>
 <div class="sr-only" id="announcer" aria-live="polite"></div>
 <script>
 'use strict';
@@ -345,6 +500,10 @@
   }
   function renderProjectOptions(){
     const select=$('project-filter');select.replaceChildren(new Option('Все проекты',''));
+    if(state.mode==='rules'){
+      select.replaceChildren(new Option('Все области',''),new Option('Глобальные','global'));for(const [id,name] of ruleProjectNames())select.add(new Option('Проект · '+name,'project:'+id));
+      if(rulesState.scope&&![...select.options].some(option=>option.value===rulesState.scope))rulesState.scope='';select.value=rulesState.scope;return;
+    }
     if(state.mode==='tools'){
       const projects=new Map();for(const tool of list(state.toolsData?.tools))for(const project of toolProjects(tool))projects.set(project.ref||'project:'+project.id,project);
       [...projects.entries()].sort((a,b)=>String(a[1].name).localeCompare(String(b[1].name),'ru')).forEach(([ref,project])=>select.add(new Option(project.name,ref)));if(state.toolFilter&&!projects.has(state.toolFilter))state.toolFilter='';select.value=state.toolFilter;return;
@@ -403,6 +562,8 @@
   function zoom(factor,x,y){const rect=svg.getBoundingClientRect();const px=x ?? rect.width/2,py=y ?? rect.height/2;const old=state.camera,k=Math.min(4,Math.max(.06,old.k*factor));state.camera={k,x:px-(px-old.x)*k/old.k,y:py-(py-old.y)*k/old.k};applyCamera();}
   function hideSearch(){$('search-results').hidden=true;$('search').setAttribute('aria-expanded','false');}
   function runSearch(){
+    if(state.mode==='rules'){rulesState.query=$('search').value;hideSearch();renderRules();return;}
+    if(state.mode==='agents'){agentsState.query=$('search').value;hideSearch();renderAgents();return;}
     if(state.mode==='tools'){state.toolQuery=$('search').value;state.toolId='';state.toolProject='';closeToolRecord();writeToolsLocation();hideSearch();renderTools();return;}
     if(state.mode==='encyclopedia'){state.conceptQuery=$('search').value;hideSearch();renderEncyclopedia();return;}
     state.mapQuery=$('search').value;
@@ -600,41 +761,45 @@
   }
   function applyToolsLocation(){
     if(location.hash==='#tools'||location.hash.startsWith('#tools?')){const params=new URLSearchParams(location.hash.split('?')[1]||'');state.toolId=params.get('tool')||'';state.toolProject=params.get('project')||'';closeToolRecord();if(state.mode!=='tools')setMode('tools',false);else{renderTools();ensureToolDetail();}}
-    else if(state.mode==='tools'&&['#map','#encyclopedia',''].includes(location.hash))setMode(location.hash==='#encyclopedia'?'encyclopedia':'map',false);
+    else if(location.hash==='#rules'){if(state.mode!=='rules')setMode('rules',false);}
+    else if(location.hash==='#agents'){if(state.mode!=='agents')setMode('agents',false);}
+    else if(['tools','rules','agents'].includes(state.mode)&&['#map','#encyclopedia',''].includes(location.hash))setMode(location.hash==='#encyclopedia'?'encyclopedia':'map',false);
   }
   function setMode(mode,updateLocation=true){
-    if(!['map','encyclopedia','tools'].includes(mode)||mode===state.mode)return;
-    const queryKey={map:'mapQuery',encyclopedia:'conceptQuery',tools:'toolQuery'};state[queryKey[state.mode]]=$('search').value;state.mode=mode;const encyclopedia=mode==='encyclopedia',tools=mode==='tools';hideSearch();
-    $('canvas').hidden=mode!=='map';$('encyclopedia').hidden=!encyclopedia;$('tool-catalog').hidden=!tools;$('kind-filters').hidden=mode!=='map';$('main').classList.toggle('tools-mode',tools);$('main').classList.remove('tools-reading');
-    for(const name of ['map','encyclopedia','tools']){const tab=$(name+'-tab');tab.setAttribute('aria-selected',String(name===mode));tab.tabIndex=name===mode?0:-1;}
-    $('search-label').textContent=tools?'Найти инструмент':encyclopedia?'Найти понятие':'Найти в памяти';$('project-label').textContent=tools?'Применялся в проекте':encyclopedia?'Область применения':'Вокруг проекта';
-    $('search').placeholder=tools?'Название, назначение, тема…':encyclopedia?'Термин, синоним, определение…':'Проект, задача, решение, тег…';$('search').value=state[queryKey[mode]];
-    $('view-hint').textContent=tools?'Инструмент → проект → задачи':encyclopedia?'Выберите определение, чтобы открыть полную карточку':'Перетаскивайте карту и узлы · колесо — масштаб';renderProjectOptions();
+    if(!viewModes.includes(mode)||mode===state.mode)return;
+    const queryKey={map:'mapQuery',encyclopedia:'conceptQuery',tools:'toolQuery',rules:'ruleQuery',agents:'agentQuery'};state[queryKey[state.mode]]=$('search').value;state.mode=mode;const encyclopedia=mode==='encyclopedia',tools=mode==='tools',rules=mode==='rules',agents=mode==='agents';hideSearch();
+    $('canvas').hidden=mode!=='map';$('encyclopedia').hidden=!encyclopedia;$('tool-catalog').hidden=!tools;$('rules-panel').hidden=!rules;$('agents-panel').hidden=!agents;$('kind-filters').hidden=mode!=='map';document.querySelector('.switches').hidden=rules||agents;document.querySelector('.project-field').hidden=agents;$('main').classList.toggle('tools-mode',tools||rules||agents);$('main').classList.remove('tools-reading');
+    for(const name of viewModes){const tab=$(name+'-tab');tab.setAttribute('aria-selected',String(name===mode));tab.tabIndex=name===mode?0:-1;}
+    $('search-label').textContent=agents?'Найти агента':rules?'Найти правило':tools?'Найти инструмент':encyclopedia?'Найти понятие':'Найти в памяти';$('project-label').textContent=rules?'Область':tools?'Применялся в проекте':encyclopedia?'Область применения':'Вокруг проекта';
+    $('search').placeholder=agents?'Имя, ID или папка…':rules?'ID, текст или скилл…':tools?'Название, назначение, тема…':encyclopedia?'Термин, синоним, определение…':'Проект, задача, решение, тег…';$('search').value=state[queryKey[mode]]||'';
+    $('view-hint').textContent=agents?'Агент → источники скиллов → правила':rules?'Агенты загружают правила в начале чата и после сжатия контекста':tools?'Инструмент → проект → задачи':encyclopedia?'Выберите определение, чтобы открыть полную карточку':'Перетаскивайте карту и узлы · колесо — масштаб';$('data-note').textContent=agents?agentsNote():rules?rulesNote():state.dataNote||'Локальная память · только чтение';renderProjectOptions();
     if(tools){closeToolRecord();renderTools();if((!state.toolsData||state.toolsFlags!==toolsFilterKey())&&(!state.toolsLoading||state.toolsRequestedFlags!==toolsFilterKey()))loadTools();ensureToolDetail();if(updateLocation)writeToolsLocation();}
+    else if(rules){closeToolRecord();rulesState.query=$('search').value;renderRules();if(!rulesState.loading)loadRules();if(updateLocation&&location.hash!=='#rules')history.pushState(null,'','#rules');}
+    else if(agents){closeToolRecord();agentsState.query=$('search').value;renderAgents();if(!agentsState.loading)loadAgents();if(!rulesState.data&&!rulesState.loading)loadRules();if(updateLocation&&location.hash!=='#agents')history.pushState(null,'','#agents');}
     else{
-      if(updateLocation&&location.hash.startsWith('#tools'))history.pushState(null,'','#'+mode);
+      if(updateLocation&&(location.hash.startsWith('#tools')||location.hash==='#rules'||location.hash==='#agents'))history.pushState(null,'','#'+mode);
       if(encyclopedia){renderEncyclopedia();if(state.selection?.type==='node'&&kindFor(state.nodeMap.get(state.selection.id))==='concept')renderNodeDetail(state.nodeMap.get(state.selection.id));else{state.selection=null;showIntro();}}
       else{renderGraph(true);if(state.selection?.type==='node')renderNodeDetail(state.nodeMap.get(state.selection.id));else if(state.selection?.type==='edge')renderEdgeDetail(state.edgeMap.get(state.selection.id));else showIntro();}
     }
-    announce(tools?'Каталог инструментов':encyclopedia?'Энциклопедия понятий':'Карта знаний');
+    announce(agents?'Агенты и их скиллы':rules?'Правила агентов':tools?'Каталог инструментов':encyclopedia?'Энциклопедия понятий':'Карта знаний');
   }
 
   async function loadWorkspace(){
     const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),5000);
-    try{const response=await fetch('/api/health',{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('HTTP '+response.status);const health=await response.json();const name=typeof health.workspace==='string'&&health.workspace?health.workspace:'отдельная конфигурация';$('workspace-name').textContent='Workspace: '+name;document.title='Карта знаний · '+name;}
+    try{const response=await fetch('/api/health',{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('HTTP '+response.status);const health=await response.json();const name=typeof health.workspace==='string'&&health.workspace?health.workspace:'отдельная конфигурация';state.workspaceName=typeof health.workspace==='string'&&health.workspace?health.workspace:null;if(state.mode==='rules')renderRules();$('workspace-name').textContent='Workspace: '+name;document.title='Карта знаний · '+name;}
     catch(_error){$('workspace-name').textContent='Workspace: недоступен';}
     finally{clearTimeout(timeout);}
   }
 
   async function loadGraph(){
-    loadWorkspace();if(state.mode==='tools'&&(!state.toolsLoading||state.toolsRequestedFlags!==toolsFilterKey()))loadTools();
+    loadWorkspace();if(state.mode==='tools'&&(!state.toolsLoading||state.toolsRequestedFlags!==toolsFilterKey()))loadTools();if(state.mode==='rules'){loadRules();loadSkills();}if(state.mode==='agents'){loadAgents();loadRules();}
     if($('git-dialog').open)closeGit();
     const request=++state.request;state.loading=true;$('refresh').disabled=true;$('refresh').textContent='Обновляем…';$('error-banner').hidden=true;if(!state.loaded)showMessage('Загружаем карту','Читаем актуальные знания из локальной памяти.');
     const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),20000);
     try{const params=new URLSearchParams({include_hypotheses:$('hypotheses').checked?'1':'0',include_superseded:$('superseded').checked?'1':'0'});const response=await fetch('/api/graph?'+params,{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('Сервер вернул HTTP '+response.status);const data=await response.json();if(!data||!Array.isArray(data.nodes)||!Array.isArray(data.edges))throw new Error('Неожиданный формат ответа сервера');if(request!==state.request)return;
       state.nodes=data.nodes.filter(n=>n&&typeof n.id==='string');state.nodeMap=new Map(state.nodes.map(n=>[n.id,n]));state.edges=data.edges.filter(e=>e&&typeof e.id==='string'&&state.nodeMap.has(e.from_ref)&&state.nodeMap.has(e.to_ref));state.edgeMap=new Map(state.edges.map(e=>[e.id,e]));state.adjacency=new Map(state.nodes.map(n=>[n.id,[]]));for(const edge of state.edges){state.adjacency.get(edge.from_ref).push(edge);if(edge.to_ref!==edge.from_ref)state.adjacency.get(edge.to_ref).push(edge);}state.kinds=new Set(state.nodes.map(kindFor));state.loaded=true;state.loading=false;state.truncated=Boolean(data.truncated);state.lastError='';if(state.conceptProject&&!state.nodeMap.has(state.conceptProject))state.conceptProject='';
       if(state.focus&&!state.nodeMap.has(state.focus))state.focus=null;if(state.selection&&!(state.selection.type==='node'?state.nodeMap:state.edgeMap).has(state.selection.id))state.selection=null;
-      $('updated-at').textContent='Снимок: '+dateText(data.generated_at);$('data-note').textContent=data.truncated?'Локальная память · только чтение · ответ ограничен, показана часть данных':'Локальная память · только чтение';renderFilters();renderProjectOptions();renderGraph(true);renderEncyclopedia();if(state.mode==='tools'){renderTools();}else if(state.selection?.type==='node')renderNodeDetail(state.nodeMap.get(state.selection.id));else if(state.selection?.type==='edge')renderEdgeDetail(state.edgeMap.get(state.selection.id));else showIntro();if($('search').value&&state.mode!=='tools')runSearch();announce(`Загружено ${state.nodes.length} узлов и ${state.edges.length} связей`);
+      $('updated-at').textContent='Снимок: '+dateText(data.generated_at);state.dataNote=data.truncated?'Локальная память · только чтение · ответ ограничен, показана часть данных':'Локальная память · только чтение';$('data-note').textContent=state.mode==='rules'?rulesNote():state.mode==='agents'?agentsNote():state.dataNote;renderFilters();renderProjectOptions();renderGraph(true);renderEncyclopedia();if(state.mode==='rules')renderRules();if(state.mode==='agents')renderAgents();if(state.mode==='tools'){renderTools();}else if(state.selection?.type==='node')renderNodeDetail(state.nodeMap.get(state.selection.id));else if(state.selection?.type==='edge')renderEdgeDetail(state.edgeMap.get(state.selection.id));else showIntro();if($('search').value&&state.mode!=='tools')runSearch();announce(`Загружено ${state.nodes.length} узлов и ${state.edges.length} связей`);
     }catch(error){if(request!==state.request)return;state.loading=false;const detail=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;state.lastError=detail;renderEncyclopedia();if(state.loaded){$('error-banner').textContent='Не удалось обновить: '+detail+' На карте остался предыдущий снимок.';$('error-banner').hidden=false;}else showMessage('Не удалось загрузить карту',detail+' Проверьте, что локальный сервер работает.','retry');announce('Не удалось загрузить карту');}
     finally{clearTimeout(timeout);if(request===state.request){state.loading=false;$('refresh').disabled=false;$('refresh').textContent='↻ Обновить';}}
   }
@@ -646,17 +811,603 @@
   svg.addEventListener('pointerup',endDrag);svg.addEventListener('pointercancel',endDrag);
   svg.addEventListener('wheel',event=>{event.preventDefault();const rect=svg.getBoundingClientRect();zoom(Math.exp(-event.deltaY*.0015),event.clientX-rect.left,event.clientY-rect.top);},{passive:false});
   $('zoom-in').addEventListener('click',()=>zoom(1.25));$('zoom-out').addEventListener('click',()=>zoom(.8));$('fit').addEventListener('click',fitGraph);$('reset').addEventListener('click',()=>resetView());$('refresh').addEventListener('click',loadGraph);$('hypotheses').addEventListener('change',loadGraph);$('superseded').addEventListener('change',loadGraph);$('message-action').addEventListener('click',()=>{$('message-action').dataset.action==='retry'?loadGraph():resetView();});
-  $('project-filter').addEventListener('change',event=>{if(state.mode==='tools'){state.toolFilter=event.target.value;openTool('');}else if(state.mode==='encyclopedia'){state.conceptProject=event.target.value;renderEncyclopedia();}else{event.target.value?focusNode(event.target.value):resetView(false);}});document.querySelectorAll('[data-depth]').forEach(b=>b.addEventListener('click',()=>{state.depth=Number(b.dataset.depth);renderGraph(true);}));
+  $('project-filter').addEventListener('change',event=>{if(state.mode==='rules'){rulesState.scope=event.target.value;renderRules();}else if(state.mode==='tools'){state.toolFilter=event.target.value;openTool('');}else if(state.mode==='encyclopedia'){state.conceptProject=event.target.value;renderEncyclopedia();}else{event.target.value?focusNode(event.target.value):resetView(false);}});document.querySelectorAll('[data-depth]').forEach(b=>b.addEventListener('click',()=>{state.depth=Number(b.dataset.depth);renderGraph(true);}));
   $('search').addEventListener('input',runSearch);$('search').addEventListener('focus',()=>{if($('search').value&&state.mode!=='tools')runSearch();});$('search').addEventListener('keydown',event=>{if(event.key==='Escape'){hideSearch();return;}if(event.key==='ArrowDown'){event.preventDefault();$('search-results').querySelector('button')?.focus();}if(event.key==='Enter'&&state.mode==='tools'){$('tools-content').querySelector('[data-tool]')?.focus();}if(event.key==='Enter'&&state.mode==='encyclopedia'){$('concepts').querySelector('button')?.focus();}if(event.key==='Enter'&&state.mode==='map'){$('search-results').querySelector('button')?.click();}});$('search-results').addEventListener('keydown',event=>{const buttons=[...$('search-results').querySelectorAll('button')],index=buttons.indexOf(document.activeElement);if(event.key==='ArrowDown'){event.preventDefault();buttons[Math.min(index+1,buttons.length-1)]?.focus();}if(event.key==='ArrowUp'){event.preventDefault();index<=0?$('search').focus():buttons[index-1]?.focus();}if(event.key==='Escape'){hideSearch();$('search').focus();}});document.addEventListener('click',event=>{if(!event.target.closest('.search-wrap'))hideSearch();});
   $('close-details').addEventListener('click',()=>{if(state.mode==='tools'){closeToolRecord();$('tools-content').querySelector('.tool-detail-heading')?.focus({preventScroll:true});return;}state.sidebarOpen=false;$('main').classList.add('sidebar-closed');$('open-details').hidden=false;});$('open-details').addEventListener('click',openSidebar);
   let resizeTimer;new ResizeObserver(()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(state.loaded)fitGraph();},80);}).observe($('canvas'));
-  const viewModes=['map','encyclopedia','tools'];
+  // Standing rules (richi rules): the user's instructions agents load at the start of a chat.
+  const viewModes=['map','encyclopedia','tools','rules','agents'];
+  const RULE_SECRET_KEY='richi-map-edit-secret',RULE_HEADER='X-Richi-Map-Secret',RULE_SOURCE='richi map';
+  const RULE_NAME=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/;
+  // Agents come from the server's registry (rules list, else the skill catalog); a rule may
+  // also name agents this registry does not list, and those are kept and shown as they are.
+  const knownAgents=()=>list(rulesState.data?.agents||rulesState.skills?.agents).filter(agent=>agent&&typeof agent.id==='string');
+  const knownAgentIds=()=>knownAgents().map(agent=>agent.id);
+  const agentName=id=>knownAgents().find(agent=>agent.id===id)?.name||id;
+  const agentList=ids=>ids.map(agentName).join(', ');
+  const ruleAgentIds=(...rules)=>[...new Set([...knownAgentIds(),...rules.flatMap(rule=>Object.keys(rule?.skills||{}))])];
+  // A rule names a skill for every agent (skill) and, where agents differ, one per agent (skills).
+  const ruleSkillFor=(rule,agent)=>rule?.skills&&Object.prototype.hasOwnProperty.call(rule.skills,agent)?rule.skills[agent]||null:rule?.skill||null;
+  function ruleSkillSetting(rule){
+    const ids=ruleAgentIds(rule);if(!ids.length)return {skill:rule?.skill||null,skills:null};
+    const own=Object.fromEntries(ids.map(agent=>[agent,ruleSkillFor(rule,agent)]));
+    if(new Set(Object.values(own)).size===1)return {skill:own[ids[0]],skills:null};
+    return {skill:null,skills:Object.fromEntries(Object.entries(own).filter(([,name])=>name))};
+  }
+  const ruleHasSkill=rule=>Boolean(rule?.skill)||Object.values(rule?.skills||{}).some(Boolean);
+  const sameRuleSkills=(a,b)=>{const ids=ruleAgentIds(a,b);return ids.length?ids.every(agent=>ruleSkillFor(a,agent)===ruleSkillFor(b,agent)):(a?.skill||null)===(b?.skill||null);};
+  const ruleTemplates={
+    text:{label:'Свой текст',hint:'Любая постоянная инструкция или промт.'},
+    skill:{label:'Скилл для действия',hint:'Агент берёт выбранный скилл, когда делает это действие.'},
+    naming:{label:'Формат имён',hint:'Как называть ветки, коммиты, PR или задачи.'}
+  };
+  const skillSituations=['создании pull request','написании описания pull request','ревью кода','создании коммита','написании тестов','работе с задачами в Jira'];
+  const namingTargets=[['ветки','branch-naming'],['коммиты','commit-naming'],['pull request','pr-naming'],['задачи','task-naming'],['файлы','file-naming']];
+  const translit={а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'e',ж:'zh',з:'z',и:'i',й:'y',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'h',ц:'c',ч:'ch',ш:'sh',щ:'sch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya'};
+  const rulesState={data:null,loading:false,error:'',editing:false,request:0,query:'',scope:'',skills:null,skillMap:new Map(),skillsLoading:false,notice:''};
+  let ruleSecret='',ruleFieldCount=0,rulesController=null;
+  try{ruleSecret=sessionStorage.getItem(RULE_SECRET_KEY)||'';}catch{ruleSecret='';}
+  function storeRuleSecret(value){ruleSecret=value||'';try{if(ruleSecret)sessionStorage.setItem(RULE_SECRET_KEY,ruleSecret);else sessionStorage.removeItem(RULE_SECRET_KEY);}catch{}}
+  const ruleList=()=>list(rulesState.data?.rules).filter(rule=>rule&&typeof rule.id==='string');
+  const ruleLength=value=>Array.from(String(value||'')).length;
+  const ruleCountLabel=n=>{const a=n%10,b=n%100;return a===1&&b!==11?'правило':a>=2&&a<=4&&(b<12||b>14)?'правила':'правил';};
+  const rulesNote=()=>rulesState.editing?'Правила · изменения сохраняются в workspace':'Правила · режим команд';
+  const shellQuote=value=>{value=String(value);return /^[A-Za-z0-9_.:\/@%+=,-]+$/.test(value)?value:"'"+value.replace(/'/g,"'\\''")+"'";};
+  function ruleProjectNames(){
+    const names=new Map();for(const node of state.nodes)if(groupFor(node)==='project')names.set(String(node.id).slice(8),titleFor(node));
+    for(const rule of ruleList())if(rule.project_id&&!names.has(rule.project_id))names.set(rule.project_id,rule.project_id);
+    return new Map([...names.entries()].sort((a,b)=>String(a[1]).localeCompare(String(b[1]),'ru')));
+  }
+  const ruleProjectName=id=>ruleProjectNames().get(id)||id;
+  const ruleScopeText=rule=>rule.scope==='global'?'Все чаты workspace':'Проект · '+ruleProjectName(rule.project_id);
+  function ruleSlug(value){
+    const latin=Array.from(String(value||'').toLocaleLowerCase('ru')).map(ch=>translit[ch]??ch).join('');
+    return latin.replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').split('-').slice(0,5).join('-').slice(0,48).replace(/-+$/,'');
+  }
+  function uniqueRuleId(base){
+    const taken=new Set(ruleList().map(rule=>rule.id));base=base||'rule';
+    let id=base,index=2;while(taken.has(id))id=base+'-'+index++;return id;
+  }
+  function ruleMark(kind){
+    const mark=make('span','rule-mark'+(kind==='skill'?' skill':''));mark.setAttribute('aria-hidden','true');const icon=makeSvg('svg',{viewBox:'0 0 24 24',fill:'none'});
+    icon.append(makeSvg('path',{d:kind==='skill'?'M12 3.5l2.5 5 5.5.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.5-.8Z':'M6.5 3.5h11v17l-2.75-1.8-2.75 1.8-2.75-1.8-2.75 1.8v-17ZM9.5 8.5h5M9.5 12h5',stroke:'currentColor','stroke-width':'1.4','stroke-linejoin':'round','stroke-linecap':'round'}));
+    mark.append(icon);return mark;
+  }
+  function ruleField(label,control,hint=null,target=control){
+    const field=make('div','rule-field');if(!target.id)target.id='rule-field-'+(++ruleFieldCount);const caption=make('label','field-label',label);caption.htmlFor=target.id;field.append(caption,control);
+    if(hint)field.append(make('span','rule-field-hint',hint));return field;
+  }
+
+  // One edit key serves rules and agents: a page either saves both or composes commands for both.
+  function setMapEditing(editing,sent){rulesState.editing=editing;if(sent&&!editing){storeRuleSecret('');rulesState.notice='expired';}}
+  function setSkills(catalog){rulesState.skills=catalog;rulesState.skillMap=new Map(list(catalog?.skills).filter(skill=>skill&&typeof skill.name==='string').map(skill=>[skill.name,skill]));}
+  async function loadSkills(){
+    if(rulesState.skillsLoading)return;rulesState.skillsLoading=true;
+    try{const response=await fetch('/api/skills',{cache:'no-store'});const data=await response.json();if(!response.ok||!data||!Array.isArray(data.skills))throw new Error(data&&data.error||'HTTP '+response.status);setSkills(data);}
+    catch(_error){setSkills({skills:[],unavailable:true});}
+    finally{rulesState.skillsLoading=false;if(state.mode==='rules')renderRules();if(state.mode==='agents')renderAgents();}
+  }
+  async function loadRules(){
+    if(rulesController)rulesController.abort();const request=++rulesState.request,sent=ruleSecret;rulesState.loading=true;rulesState.error='';renderRules();
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);rulesController=controller;
+    try{
+      const response=await fetch('/api/rules',{cache:'no-store',headers:sent?{[RULE_HEADER]:sent}:{},signal:controller.signal});let data=null;try{data=await response.json();}catch{data=null;}
+      if(!response.ok)throw new Error(data&&data.error||'Сервер вернул HTTP '+response.status);if(!data||!Array.isArray(data.rules))throw new Error('Неожиданный формат ответа сервера');
+      if(request!==rulesState.request)return;
+      if(sent!==ruleSecret){rulesState.loading=false;loadRules();return;}
+      rulesState.data=data;setMapEditing(data.editing===true,sent);
+    }catch(error){if(request!==rulesState.request)return;rulesState.error=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;}
+    finally{clearTimeout(timeout);if(request===rulesState.request){rulesState.loading=false;rulesController=null;if(state.mode==='rules'){renderProjectOptions();renderRules();}if(state.mode==='agents')renderAgents();}}
+    if(!rulesState.skills&&state.mode!=='agents')loadSkills();
+  }
+  function redeemRuleTicket(){
+    const match=/^#ticket=([0-9a-f]{64})$/.exec(location.hash);if(!match)return;
+    // The ticket works once; it never stays in the address bar or history entry.
+    history.replaceState(null,'',location.pathname+location.search);
+    fetch('/api/session',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticket:match[1]})})
+      .then(async response=>{let data=null;try{data=await response.json();}catch{data=null;}if(response.ok&&data&&typeof data.secret==='string'){storeRuleSecret(data.secret);rulesState.notice='';}else rulesState.notice='ticket';})
+      .catch(()=>{rulesState.notice='ticket';})
+      .finally(()=>{if(state.mode==='rules'||rulesState.data)loadRules();if(state.mode==='agents'||agentsState.data)loadAgents();});
+  }
+  const sendRuleChange=change=>sendMapChange('/api/rules',change);
+  async function sendMapChange(url,change){
+    const response=await fetch(url,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json',[RULE_HEADER]:ruleSecret},body:JSON.stringify(change)});
+    let data=null;try{data=await response.json();}catch{data=null;}
+    if(!response.ok){const error=new Error(data&&data.error||'Сервер вернул HTTP '+response.status);error.code=data&&data.code;throw error;}
+    return data;
+  }
+  function ruleChangeProblem(error){
+    if(error.code==='not_editing'){storeRuleSecret('');rulesState.editing=false;rulesState.notice='expired';return 'Ключ редактирования больше не действует: карту открыли заново в другой вкладке. Ниже — команда для терминала; чтобы сохранять здесь, снова выполните richi map.';}
+    if(error.code==='conflict')return 'Правило изменили после загрузки списка. Закройте форму, нажмите «Обновить» и повторите изменение.';
+    if(error.code==='exists')return 'Правило с таким ID уже есть. Выберите другой ID.';
+    if(error.code==='not_found')return 'Правило или проект не найдены: список устарел. Закройте форму и нажмите «Обновить».';
+    if(error.code==='limit')return /in all/.test(error.message)?'Все правила workspace вместе превысят лимит символов. Сократите или удалите другие правила.':'Текст правила длиннее допустимого.';
+    return error.message;
+  }
+  function ruleCommand(change){
+    const parts=['richi'];if(state.workspaceName)parts.push('--workspace',shellQuote(state.workspaceName));parts.push('rules',change.action,change.id);
+    if(change.action==='add')parts.push(...(change.scope==='global'?['--global']:['--project',shellQuote(change.project)]));
+    else parts.push('--expected-updated-at',change.expected_updated_at);
+    if('text' in change)parts.push('--text',shellQuote(change.text));
+    if('skill' in change||'skills' in change){
+      const options=[];if(change.skill)options.push(change.skill);for(const agent of Object.keys(change.skills||{}).sort())if(change.skills[agent])options.push(agent+'='+change.skills[agent]);
+      for(const option of options.length?options:[''])parts.push('--skill',shellQuote(option));
+    }
+    if(change.action==='add')parts.push('--source',shellQuote(RULE_SOURCE));
+    return parts.join(' ');
+  }
+  function ruleDialog(title,subtitle){
+    const dialog=$('rule-dialog');if(dialog.open)dialog.close();dialog.replaceChildren();const form=make('form');form.noValidate=true;
+    const head=make('div','rule-dialog-head'),titles=make('div'),heading=make('h2','',title);heading.id='rule-dialog-title';titles.append(heading);if(subtitle)titles.append(make('p','',subtitle));
+    const close=toolButton('×',()=>dialog.close(),'icon');close.setAttribute('aria-label','Закрыть');close.title='Закрыть · Esc';head.append(titles,close);
+    const body=make('div','rule-dialog-body'),foot=make('div','rule-dialog-foot');form.append(head,body,foot);dialog.append(form);return {dialog,form,body,foot};
+  }
+  function ruleProblem(parent){const box=make('div','rule-error');box.setAttribute('role','alert');box.hidden=true;parent.append(box);return text=>{box.textContent=text||'';box.hidden=!text;};}
+  function ruleCommandBox(parent,hint=''){
+    const box=make('div','rule-command');box.hidden=true;const pre=make('pre');
+    const copy=toolButton('Скопировать команду',async()=>{try{await navigator.clipboard.writeText(pre.textContent);copy.textContent='Скопировано';setTimeout(()=>copy.textContent='Скопировать команду',1600);}catch{copy.textContent='Выделите текст';}},'small');
+    box.append(make('div','rule-field-hint',hint||'Выполните в терминале или передайте агенту. Команда меняет правила '+(state.workspaceName?'workspace «'+state.workspaceName+'»':'той же конфигурации, что и карта')+'.'),pre,copy);parent.append(box);
+    return command=>{pre.textContent=command;box.hidden=false;box.scrollIntoView({block:'nearest'});};
+  }
+  function skillSelect(agent,current){
+    // agent: list only the skills this agent has; null lists every skill with the agents that have it.
+    const box=make('div','rule-skill-control'),select=make('select'),other=make('input'),about=make('div','rule-field-hint');
+    const skills=list(rulesState.skills?.skills).filter(skill=>!agent||list(skill.agents).includes(agent));
+    select.add(new Option('Без скилла',''));
+    const kinds=[['skills','Скиллы'],['system','Встроенные скиллы'],['plugins','Скиллы плагинов']],kindOf=skill=>kinds.some(([kind])=>kind===skill.kind)?skill.kind:'skills';
+    for(const [kind,label] of kinds){const members=skills.filter(skill=>kindOf(skill)===kind);if(!members.length)continue;const group=make('optgroup');group.label=label;
+      for(const skill of members){const agents=agent?'':agentList(list(skill.agents));group.append(new Option(skill.name+(agents?' · '+agents:''),skill.name));}select.append(group);}
+    select.add(new Option('Другой скилл — ввести имя…','__other__'));
+    other.type='text';other.maxLength=100;other.placeholder='Например, plugin:skill-name';other.autocomplete='off';other.spellcheck=false;other.setAttribute('aria-label','Имя скилла'+(agent?' для '+agentName(agent):''));
+    const describe=()=>{const value=select.value,skill=rulesState.skillMap.get(value);other.hidden=value!=='__other__';
+      about.textContent=value==='__other__'?'Имя так, как его называет агент. Карта не проверяет, что такой скилл установлен.':skill?cut(skill.description||'Описание в SKILL.md не указано.',280):rulesState.skillsLoading?'Загружаем установленные скиллы…':
+        !skills.length?'Установленные скиллы не найдены; имя можно ввести вручную.':agent?'Скиллы, которые видит '+agentName(agent)+'.':'Скиллы Claude Code и Codex на этом компьютере: свои, встроенные и из плагинов, включая плагины claude.ai.';};
+    const set=name=>{name=name||'';if(name&&!skills.some(skill=>skill.name===name)){select.value='__other__';other.value=name;}else{select.value=name;other.value='';}describe();};
+    const changed=()=>box.dispatchEvent(new CustomEvent('skillchange',{bubbles:true}));
+    select.addEventListener('change',()=>{describe();changed();if(select.value==='__other__')other.focus();});
+    other.addEventListener('input',changed);set(current);box.append(select,other,about);
+    return {element:box,select,set,value:()=>select.value==='__other__'?other.value.trim():select.value};
+  }
+  function ruleSkillPicker(rule){
+    // One skill for every agent when they share it; otherwise a list per agent.
+    const box=make('div','rule-skill-picker'),modes=make('div','rule-skill-modes'),group='rule-skill-mode-'+(++ruleFieldCount);
+    modes.setAttribute('role','radiogroup');modes.setAttribute('aria-label','Для каких агентов скилл');
+    const radio=label=>{const wrap=make('label','check-label'),input=make('input');input.type='radio';input.name=group;wrap.append(input,document.createTextNode(label));modes.append(wrap);return input;};
+    const sharedRadio=radio('Один скилл для всех агентов'),ownRadio=radio('Свой для каждого агента');
+    const ids=ruleAgentIds(rule||{}),known=knownAgentIds(),initial=ruleSkillSetting(rule||{}),shared=skillSelect(null,initial.skill||''),status=make('div','rule-skill-sync'),sharedPanel=make('div','rule-skill-shared');sharedPanel.append(shared.element,status);
+    const agentsPanel=make('div','rule-agent-skills'),notice=make('div','rule-field-hint rule-skill-notice'),perAgent=new Map();
+    for(const agent of ids){
+      const row=make('div','rule-agent-skill'),control=skillSelect(agent,ruleSkillFor(rule,agent)||''),label=make('label','rule-agent-name',agentName(agent));
+      control.select.id='rule-agent-skill-'+agent+'-'+(++ruleFieldCount);label.htmlFor=control.select.id;row.append(label,control.element);agentsPanel.append(row);perAgent.set(agent,control);
+    }
+    // Without a list of agents there is nothing to choose per agent.
+    agentsPanel.append(notice);modes.hidden=!ids.length;box.append(modes,sharedPanel,agentsPanel);
+    let mode=initial.skills?'agents':'shared';
+    const changed=()=>box.dispatchEvent(new CustomEvent('skillchange',{bubbles:true}));
+    const lacking=name=>{const info=rulesState.skillMap.get(name);return info?known.filter(agent=>!list(info.agents).includes(agent)):[];};
+    const similar=(name,agent)=>{const base=name.split(':').pop().toLowerCase(),found=list(rulesState.skills?.skills).find(skill=>list(skill.agents).includes(agent)&&skill.name.split(':').pop().toLowerCase()===base);return found?found.name:'';};
+    function showStatus(){
+      const name=shared.value(),missing=name?lacking(name):[];status.className='rule-skill-sync';status.replaceChildren();
+      if(!name||!rulesState.skillMap.has(name))return;
+      if(!missing.length){status.classList.add('ok');status.textContent='✓ Один и тот же скилл у всех агентов: '+agentList(known.length?known:ids);return;}
+      status.classList.add('warn');status.append(document.createTextNode(agentList(missing)+(missing.length>1?' не видят':' не видит')+' этот скилл.'),toolButton('Выбрать для каждого агента',()=>split(name),'small'));
+    }
+    function setMode(next){mode=next;sharedRadio.checked=mode==='shared';ownRadio.checked=mode==='agents';sharedPanel.hidden=mode!=='shared';agentsPanel.hidden=mode!=='agents';showStatus();}
+    function split(name){
+      // Agents that lack the skill get one with the same name after the plugin prefix, if they have it.
+      const notes=[];
+      for(const agent of ids){
+        const has=!name||!lacking(name).includes(agent),pick=has?name:similar(name,agent);perAgent.get(agent).set(pick);
+        if(!has)notes.push(pick?agentName(agent)+' не видит «'+name+'», поэтому выбран похожий «'+pick+'».':agentName(agent)+' не видит «'+name+'»: выберите для него свой скилл или оставьте без скилла.');
+      }
+      notice.textContent=notes.join(' ');setMode('agents');changed();
+    }
+    shared.element.addEventListener('skillchange',()=>{const name=shared.value();if(name&&lacking(name).length)split(name);else showStatus();});
+    for(const control of perAgent.values())control.element.addEventListener('skillchange',()=>{notice.textContent='';});
+    sharedRadio.addEventListener('change',()=>{const names=ids.map(agent=>perAgent.get(agent).value()).filter(Boolean);shared.set(new Set(names).size===1?names[0]:names[0]||'');notice.textContent='';setMode('shared');changed();});
+    ownRadio.addEventListener('change',()=>{if(shared.value())split(shared.value());else{setMode('agents');changed();}});
+    setMode(mode);
+    const values=()=>mode==='shared'?[shared.value()]:ids.map(agent=>perAgent.get(agent).value());
+    return {element:box,focusTarget:shared.select,names:()=>values().filter(Boolean),
+      value:()=>ruleSkillSetting(mode==='shared'?{skill:shared.value()||null}:{skill:null,skills:Object.fromEntries(ids.map(agent=>[agent,perAgent.get(agent).value()||null]))})};
+  }
+  function skillPhrase(setting){
+    if(!setting.skills)return setting.skill?'используй скилл '+setting.skill:'';
+    const parts=ruleAgentIds(setting).map(agent=>[agent,ruleSkillFor(setting,agent)]).filter(([,name])=>name);
+    if(parts.length===1)return 'в '+agentName(parts[0][0])+' используй скилл '+parts[0][1];
+    const pieces=parts.map(([agent,name])=>name+' в '+agentName(agent));
+    return parts.length?'используй скилл '+pieces.slice(0,-1).join(', ')+' и '+pieces[pieces.length-1]:'';
+  }
+  function openRuleEditor(options={}){
+    const rule=options.rule||null;let template=rule?'text':options.template||'text',textTouched=Boolean(rule),idTouched=false;
+    const {dialog,form,body,foot}=ruleDialog(rule?'Изменить правило':'Новое правило',rule?rule.id+' · '+ruleScopeText(rule):'Агенты загрузят его в начале каждого подходящего чата.');
+    const templateRow=make('div','rule-templates'),templateButtons=new Map();templateRow.setAttribute('role','group');templateRow.setAttribute('aria-label','Шаблон правила');
+    for(const [key,item] of Object.entries(ruleTemplates)){const button=toolButton('',()=>{template=key;syncTemplate();compose();},'rule-template');button.append(make('strong','',item.label),make('span','',item.hint));templateButtons.set(key,button);templateRow.append(button);}
+    const situation=make('input'),situations=make('datalist');situation.type='text';situation.maxLength=200;situation.placeholder='например, создании pull request';situations.id='rule-situations';situation.setAttribute('list',situations.id);skillSituations.forEach(value=>situations.append(new Option(value)));
+    const situationField=ruleField('Когда применять',situation,'Попадёт в текст: «При … используй скилл …».');situationField.append(situations);
+    const target=make('select'),format=make('input'),example=make('input');namingTargets.forEach(([label])=>target.add(new Option(label,label)));
+    for(const input of [format,example]){input.type='text';input.maxLength=300;input.spellcheck=false;input.autocomplete='off';}format.placeholder='REC-<номер>_<описание>';example.placeholder='REC-1234_fix_login';
+    const namingRow=make('div','rule-field-row');namingRow.append(ruleField('Что называть',target),ruleField('Формат',format,'Постоянные части и <заполнители>.'),ruleField('Пример',example,'Необязательно.'));
+    const skill=ruleSkillPicker(rule),skillField=ruleField('Скилл',skill.element,null,skill.focusTarget);
+    const text=make('textarea'),counter=make('div','rule-counter'),own=make('span'),total=make('span');text.rows=6;text.value=rule?.text||'';text.placeholder='Например: отвечай пользователю на русском языке, а код и команды оставляй как есть.';counter.append(own,total);
+    const textField=ruleField('Текст правила',text,'Агент получит этот текст дословно. Одна инструкция на правило.');textField.insertBefore(counter,textField.lastChild);
+    const scopeField=make('div','rule-field');let scopeValue=()=>({scope:rule.scope,project:rule.project_id});
+    if(rule)scopeField.append(make('span','field-label','Область'),make('div','rule-readonly',ruleScopeText(rule)+'. Чтобы сменить область, добавьте новое правило и удалите это.'));
+    else{
+      const legend=make('span','field-label','Область'),choices=make('div','rule-scope-options'),projectSelect=make('select'),projects=ruleProjectNames();choices.setAttribute('role','radiogroup');choices.setAttribute('aria-label','Область правила');
+      const radio=(value,label)=>{const wrap=make('label','check-label'),input=make('input');input.type='radio';input.name='rule-scope';input.value=value;wrap.append(input,document.createTextNode(label));choices.append(wrap);return input;};
+      const globalRadio=radio('global','Все чаты workspace'),projectRadio=radio('project','Только проект');projectSelect.setAttribute('aria-label','Проект');for(const [id,name] of projects)projectSelect.add(new Option(name===id?id:name+' · '+id,id));choices.append(projectSelect);
+      const preset=rulesState.scope.startsWith('project:')?rulesState.scope.slice(8):'';if(preset&&projects.has(preset)){projectRadio.checked=true;projectSelect.value=preset;}else globalRadio.checked=true;
+      if(!projects.size){projectRadio.disabled=true;projectSelect.hidden=true;}
+      const sync=()=>{projectSelect.disabled=!projectRadio.checked;};globalRadio.addEventListener('change',sync);projectRadio.addEventListener('change',sync);sync();
+      scopeField.append(legend,choices,make('span','rule-field-hint',projects.size?'Правило проекта агент получает при работе в этом репозитории.':'В workspace нет зарегистрированных проектов, поэтому доступна только глобальная область.'));
+      scopeValue=()=>projectRadio.checked?(projectSelect.value?{scope:'project',project:projectSelect.value}:null):{scope:'global'};
+    }
+    const idInput=make('input');idInput.type='text';idInput.maxLength=100;idInput.spellcheck=false;idInput.autocomplete='off';idInput.placeholder='branch-naming';
+    const idField=ruleField('ID правила',idInput,'Латиница, цифры, «.», «_», «:» или «-». По ID правило потом меняют и удаляют.');idInput.addEventListener('input',()=>{idTouched=true;});
+    if(rule)body.append(skillField,textField,scopeField);else body.append(templateRow,situationField,namingRow,skillField,textField,scopeField,idField);
+    const problem=ruleProblem(body),showCommand=ruleCommandBox(body),cancel=toolButton('Отмена',()=>dialog.close()),submit=make('button','primary');submit.type='submit';foot.append(cancel,submit);
+    const submitLabel=()=>{submit.textContent=rulesState.editing?(rule?'Сохранить':'Добавить правило'):'Показать команду';};
+    function templateText(){
+      if(template==='skill'){const phrase=skillPhrase(skill.value()),when=situation.value.trim();return phrase?(when?'При '+when+' '+phrase:phrase.charAt(0).toUpperCase()+phrase.slice(1))+'.':'';}
+      if(template==='naming'){const shape=format.value.trim(),sample=example.value.trim();return shape?'Называй '+target.value+' по формату '+shape+'.'+(sample?' Пример: '+sample+'.':''):'';}
+      return '';
+    }
+    function suggestedId(){
+      if(template==='skill'&&skill.names().length)return uniqueRuleId(ruleSlug('skill-'+skill.names()[0].replace(/:/g,'-')));
+      if(template==='naming'){const found=namingTargets.find(([label])=>label===target.value);return uniqueRuleId(found?found[1]:'naming');}
+      return uniqueRuleId(ruleSlug(text.value));
+    }
+    function updateCounter(){
+      const limit=rulesState.data?.limit_text||2000,totalLimit=rulesState.data?.limit_characters||20000,length=ruleLength(text.value),others=ruleList().filter(item=>item.id!==rule?.id).reduce((sum,item)=>sum+ruleLength(item.text),0);
+      own.textContent=length.toLocaleString('ru-RU')+' / '+limit.toLocaleString('ru-RU');own.className=length>limit?'over':'';total.textContent='Все правила: '+(others+length).toLocaleString('ru-RU')+' / '+totalLimit.toLocaleString('ru-RU');total.className=others+length>totalLimit?'over':'';
+    }
+    function syncTemplate(){
+      for(const [key,button] of templateButtons)button.setAttribute('aria-pressed',String(key===template));situationField.hidden=template!=='skill';namingRow.hidden=template!=='naming';
+      skillField.querySelector('.field-label').textContent=template==='skill'||(rule&&ruleHasSkill(rule))?'Скилл':'Скилл (необязательно)';
+    }
+    function compose(){if(!rule&&!textTouched&&template!=='text')text.value=templateText();if(!rule&&!idTouched)idInput.value=suggestedId();updateCounter();}
+    function change(){
+      const value=text.value,setting=skill.value(),limit=rulesState.data?.limit_text||2000;
+      if(!value.trim())return 'Напишите текст правила.';if(ruleLength(value)>limit)return 'Текст длиннее '+limit+' символов. Разделите его на несколько правил.';
+      if(skill.names().some(name=>!RULE_NAME.test(name)))return 'Имя скилла: латиница, цифры, «.», «_», «:» или «-», до 100 символов, начиная с буквы или цифры.';
+      if(!rule&&template==='skill'&&!ruleHasSkill(setting))return 'Выберите скилл.';
+      if(rule){const update={action:'update',id:rule.id,expected_updated_at:rule.updated_at};if(value!==rule.text)update.text=value;if(!sameRuleSkills(setting,rule)){update.skill=setting.skill;update.skills=setting.skills;}return 'text' in update||'skill' in update?update:'Изменений нет.';}
+      const id=idInput.value.trim();if(!RULE_NAME.test(id))return 'ID: 1–100 символов — латиница, цифры, «.», «_», «:» или «-», начиная с буквы или цифры.';
+      if(ruleList().some(item=>item.id===id))return 'Правило с ID «'+id+'» уже есть.';const scope=scopeValue();if(!scope)return 'Выберите проект.';
+      const add={action:'add',id,scope:scope.scope,text:value};if(scope.project)add.project=scope.project;if(setting.skill)add.skill=setting.skill;if(setting.skills)add.skills=setting.skills;return add;
+    }
+    text.addEventListener('input',()=>{textTouched=text.value!=='';if(!rule&&!idTouched&&template==='text')idInput.value=suggestedId();updateCounter();});
+    for(const input of [situation,format,example])input.addEventListener('input',compose);target.addEventListener('change',compose);skill.element.addEventListener('skillchange',compose);
+    form.addEventListener('submit',async event=>{
+      event.preventDefault();problem('');const request=change();if(typeof request==='string'){problem(request);return;}
+      if(!rulesState.editing){showCommand(ruleCommand(request));return;}
+      submit.disabled=true;submit.textContent='Сохраняем…';
+      try{await sendRuleChange(request);dialog.close();announce(rule?'Правило изменено':'Правило добавлено');loadRules();}
+      catch(error){problem(ruleChangeProblem(error));if(!rulesState.editing){showCommand(ruleCommand(request));renderRules();}}
+      finally{if(dialog.open){submit.disabled=false;submitLabel();}}
+    });
+    syncTemplate();compose();submitLabel();dialog.showModal();(rule?text:template==='skill'?situation:template==='naming'?format:text).focus();
+  }
+  function openRuleRemoval(rule){
+    const {dialog,form,body,foot}=ruleDialog('Удалить правило?',rule.id+' · '+ruleScopeText(rule));
+    body.append(make('p','rule-confirm','Агенты перестанут получать это правило, когда в следующий раз загрузят правила. Удаление нельзя отменить: вернуть правило можно, только добавив его заново.'),make('blockquote','rule-quote',cut(rule.text,500)));
+    const problem=ruleProblem(body),showCommand=ruleCommandBox(body),cancel=toolButton('Отмена',()=>dialog.close()),submit=make('button',rulesState.editing?'danger solid':'primary',rulesState.editing?'Удалить правило':'Показать команду');submit.type='submit';foot.append(cancel,submit);
+    form.addEventListener('submit',async event=>{
+      event.preventDefault();problem('');const request={action:'remove',id:rule.id,expected_updated_at:rule.updated_at};
+      if(!rulesState.editing){showCommand(ruleCommand(request));return;}
+      submit.disabled=true;
+      try{await sendRuleChange(request);dialog.close();announce('Правило удалено');loadRules();}
+      catch(error){problem(ruleChangeProblem(error));if(!rulesState.editing){submit.className='primary';submit.textContent='Показать команду';showCommand(ruleCommand(request));renderRules();}}
+      finally{if(dialog.open)submit.disabled=false;}
+    });
+    dialog.showModal();cancel.focus();
+  }
+  function ruleMatches(rule){
+    const query=normalized(rulesState.query);if(!query)return true;const fields=[rule.id,rule.text,rule.skill,...Object.values(rule.skills||{}),rule.source,rule.project_id&&ruleProjectName(rule.project_id)].map(normalized);
+    return query.split(/\s+/).filter(Boolean).every(word=>fields.some(field=>field.includes(word)));
+  }
+  function ruleSkillChip(label,name,agents){
+    // Warns when an agent this chip is for does not have the skill installed.
+    const known=Boolean(rulesState.skills)&&!rulesState.skills.unavailable,info=name?rulesState.skillMap.get(name):null;
+    const missing=known&&name&&info?agents.filter(agent=>knownAgentIds().includes(agent)&&!list(info.agents).includes(agent)):[];
+    const chip=make('div','rule-skill'+(name?'':' none')+(name&&known&&(!info||missing.length)?' missing':''));chip.append(make('span','rule-skill-label',label),make('code','',name||'без скилла'));
+    if(name&&known){
+      if(!info)chip.append(make('span','rule-skill-agents','не найден среди установленных'));
+      else{const have=agents.filter(agent=>!missing.includes(agent));if(agents.length>1&&have.length)chip.append(make('span','rule-skill-agents',have.map(agentName).join(' · ')));
+        if(missing.length)chip.append(make('span','rule-skill-agents warn',agents.length>1?'нет у '+agentList(missing):'не установлен'));}
+    }
+    if(info?.description)chip.title=info.description;return chip;
+  }
+  function ruleSkillChips(rule){
+    const setting=ruleSkillSetting(rule);if(!setting.skills)return ruleSkillChip('Скилл',setting.skill,knownAgentIds());
+    const box=make('div','rule-skills');for(const agent of ruleAgentIds(setting))box.append(ruleSkillChip(agentName(agent),ruleSkillFor(setting,agent),[agent]));return box;
+  }
+  function renderRuleCard(rule){
+    const card=make('article','rule-card'),top=make('div','rule-card-top'),title=make('div','rule-title');card.dataset.rule=rule.id;
+    title.append(make('code','rule-id',rule.id),make('span','rule-scope',ruleScopeText(rule)));top.append(ruleMark(ruleHasSkill(rule)?'skill':'rule'),title);card.append(top);
+    const text=make('p','rule-text',rule.text);card.append(text);
+    if(ruleLength(rule.text)>360||String(rule.text).split('\n').length>6){text.classList.add('clamped');const more=toolButton('Показать полностью',()=>{const folded=text.classList.toggle('clamped');more.textContent=folded?'Показать полностью':'Свернуть';more.setAttribute('aria-expanded',String(!folded));},'rule-more');more.setAttribute('aria-expanded','false');card.append(more);}
+    if(ruleHasSkill(rule))card.append(ruleSkillChips(rule));
+    const bottom=make('div','rule-card-bottom'),meta=make('div','rule-meta'),actions=make('div','rule-actions');meta.append(make('span','','Изменено '+dateText(rule.updated_at)));
+    if(rule.source){const source=make('span','','Источник: '+cut(rule.source,70));source.title=rule.source;meta.append(source);}
+    const edit=toolButton('Изменить',()=>openRuleEditor({rule}),'small'),remove=toolButton('Удалить',()=>openRuleRemoval(rule),'small danger');edit.setAttribute('aria-label','Изменить правило '+rule.id);remove.setAttribute('aria-label','Удалить правило '+rule.id);
+    actions.append(edit,remove);bottom.append(meta,actions);card.append(bottom);return card;
+  }
+  function renderRuleMode(root,saved='Изменения сразу сохраняются в памяти workspace. Агенты получат их при следующей загрузке правил: в новом чате, после сжатия контекста или при смене проекта.'){
+    const box=make('div','rules-mode '+(rulesState.editing?'editing':'commands')),icon=make('span','rules-mode-icon',rulesState.editing?'✓':'›_'),content=make('div');box.setAttribute('role','status');icon.setAttribute('aria-hidden','true');
+    if(rulesState.editing)content.append(make('strong','','Редактирование включено'),make('span','',saved));
+    else{
+      const line=make('span');line.append(document.createTextNode(rulesState.notice==='expired'?'Ключ редактирования сменился: карту открыли заново в другой вкладке. ':rulesState.notice==='ticket'?'Ключ из ссылки не подошёл: он уже использован или устарел. ':'Вкладка открыта без ключа редактирования, например по закладке. '),
+        document.createTextNode('Форма соберёт команду richi для терминала или агента. Чтобы сохранять прямо здесь, откройте карту командой '),make('code','','richi map'),document.createTextNode('.'));
+      content.append(make('strong','','Режим команд'),line);
+    }
+    box.append(icon,content);root.append(box);
+  }
+  function renderRuleStarters(root){
+    const box=make('div','tools-empty rules-empty'),starters=make('div','rule-starters');box.append(ruleMark('rule'),make('h3','','Правил пока нет'),make('p','','Закрепите то, что агент должен делать всегда: формат имён, обязательные проверки, нужный скилл или любой промт.'));
+    for(const [key,title,description] of [['skill','Скилл для действия','«При создании pull request используй скилл pr-description.»'],['naming','Формат имён','«Называй ветки по формату REC-<номер>_<описание>.»'],['text','Свой текст','Любая постоянная инструкция или промт для агентов.']]){const button=toolButton('',()=>openRuleEditor({template:key}),'rule-starter');button.append(make('strong','',title),make('span','',description));starters.append(button);}
+    box.append(starters);root.append(box);
+  }
+  function renderRules(){
+    const root=$('rules-content');root.replaceChildren();$('rules-panel').setAttribute('aria-busy',String(rulesState.loading));if(state.mode==='rules')$('data-note').textContent=rulesNote();
+    const all=ruleList(),limit=rulesState.data?.limit_characters||20000,used=all.reduce((sum,rule)=>sum+ruleLength(rule.text),0);
+    const heading=make('div','tools-heading rules-heading'),intro=make('div'),totals=make('div','rules-totals'),count=make('div','tools-total'),meter=make('div','rules-meter'+(used>limit*.85?' near':'')),bar=make('div','rules-meter-bar'),fill=make('i');
+    intro.append(make('div','tools-eyebrow','Постоянные инструкции'),make('h2','','Правила агентов'),make('p','tools-lead','Агенты загружают эти правила в начале каждого чата'+(state.workspaceName?' workspace «'+state.workspaceName+'»':'')+', после сжатия контекста и при смене проекта и выполняют их как ваши инструкции. Глобальные действуют во всех чатах, правила проекта — при работе с ним. Более новая просьба в чате важнее правила.'));
+    count.append(make('strong','',String(all.length)),make('span','',ruleCountLabel(all.length)));fill.style.width=Math.min(100,used/limit*100).toFixed(1)+'%';bar.append(fill);
+    meter.append(make('strong','',used.toLocaleString('ru-RU')+' / '+limit.toLocaleString('ru-RU')),make('span','','символов загружают агенты'),bar);meter.title='Агенты загружают правила целиком, поэтому общий объём ограничен.';
+    totals.append(count,meter);heading.append(intro,totals);root.append(heading);
+    if(!rulesState.data){
+      const failed=Boolean(rulesState.error)&&!rulesState.loading,box=make('div','tools-empty');box.append(ruleMark('rule'),make('h3','',failed?'Не удалось загрузить правила':'Загружаем правила'),make('p','',failed?rulesState.error:'Читаем правила workspace.'));
+      if(failed)box.append(toolButton('Повторить загрузку',()=>loadRules(),'primary'));root.append(box);return;
+    }
+    if(rulesState.error)toolWarning(root,'Не удалось обновить правила: '+rulesState.error+' Показан предыдущий список.');
+    renderRuleMode(root);
+    const actions=make('div','rules-actions');actions.append(toolButton('+ Новое правило',()=>openRuleEditor(),'primary'),toolButton('Скилл для действия',()=>openRuleEditor({template:'skill'})),toolButton('Формат имён',()=>openRuleEditor({template:'naming'})));root.append(actions);
+    if(!all.length){renderRuleStarters(root);return;}
+    const shown=all.filter(rule=>(!rulesState.scope||(rulesState.scope==='global'?rule.scope==='global':'project:'+rule.project_id===rulesState.scope))&&ruleMatches(rule));
+    if(!shown.length){const box=make('div','tools-empty');box.append(ruleMark('rule'),make('h3','','Ничего не найдено'),make('p','','Измените запрос или область.'));root.append(box);return;}
+    const groups=new Map();for(const rule of shown){const key=rule.scope==='global'?'':rule.project_id;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(rule);}
+    for(const [key,items] of groups){
+      toolSection(root,key?'Проект · '+ruleProjectName(key):'Глобальные',items.length);root.append(make('p','rules-section-note',key?'Действуют при работе с проектом '+key+'.':'Действуют во всех чатах, привязанных к этому workspace.'));
+      const grid=make('div','rules-grid');items.forEach(rule=>grid.append(renderRuleCard(rule)));root.append(grid);
+    }
+  }
+
+
+  // Agents: who Richi works with on this computer and where each finds skills (richi skill-sources).
+  const agentsState={data:null,loading:false,error:'',request:0,query:'',selected:'',addingFolder:'',folderDraft:'',focusFolder:false,busy:false,problem:''};
+  let agentsController=null;
+  const agentsNote=()=>rulesState.editing?'Агенты · изменения сохраняются для этого компьютера':'Агенты · режим команд';
+  const agentItems=()=>list(agentsState.data?.agents).filter(agent=>agent&&typeof agent.id==='string');
+  const AGENT_ID=/^[a-z][a-z0-9-]{0,31}$/,AGENT_VARIABLE=/^[A-Za-z_][A-Za-z0-9_]{0,63}(=[^\x00-\x1f\x7f]{1,100})?$/;
+  const plural=(n,forms)=>{const a=n%10,b=n%100;return n.toLocaleString('ru-RU')+' '+(a===1&&b!==11?forms[0]:a>=2&&a<=4&&(b<12||b>14)?forms[1]:forms[2]);};
+  const skillForms=['скилл','скилла','скиллов'];
+  const agentSaved='Изменения сразу сохраняются в настройках Richi на этом компьютере и действуют во всех workspace.';
+  const agentCommandHint='Выполните в терминале или передайте агенту. Команда меняет настройки агентов на этом компьютере.';
+  function agentSourceLabel(agent,source){
+    if(source.added)return agent.builtin?'Добавленная папка':'Папка скиллов';
+    if(source.kind==='system')return 'Встроенные скиллы';
+    if(source.layout==='claude-app')return 'Плагины claude.ai из приложения Claude';
+    return source.kind==='plugins'?'Плагины':'Свои скиллы';
+  }
+  const agentFolderProblem=value=>!value?'Укажите папку со скиллами.':value.length>1000||!/^(~|~\/.*|\/.*)$/.test(value)?'Нужен полный путь или путь от домашней папки: /opt/skills или ~/skills.':'';
+  // Rules that give this agent a skill, and whether the agent really has it.
+  function agentRules(agent){
+    const known=Boolean(rulesState.skills)&&!rulesState.skills.unavailable;
+    return ruleList().map(rule=>({rule,skill:ruleSkillFor(rule,agent.id)})).filter(item=>item.skill).map(item=>{const info=rulesState.skillMap.get(item.skill);return {...item,missing:known&&(!info||!list(info.agents).includes(agent.id))};});
+  }
+  function agentMatches(agent){
+    const query=normalized(agentsState.query);if(!query)return true;const fields=[agent.id,agent.name,...list(agent.sources).map(source=>source.path)].map(normalized);
+    return query.split(/\s+/).filter(Boolean).every(word=>fields.some(field=>field.includes(word)));
+  }
+  async function loadAgents(){
+    if(agentsController)agentsController.abort();const request=++agentsState.request,sent=ruleSecret;agentsState.loading=true;agentsState.error='';renderAgents();
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);agentsController=controller;
+    try{
+      const response=await fetch('/api/agents',{cache:'no-store',headers:sent?{[RULE_HEADER]:sent}:{},signal:controller.signal});let data=null;try{data=await response.json();}catch{data=null;}
+      if(!response.ok)throw new Error(data&&data.error||'Сервер вернул HTTP '+response.status);if(!data||!Array.isArray(data.agents))throw new Error('Неожиданный формат ответа сервера');
+      if(request!==agentsState.request)return;
+      if(sent!==ruleSecret){agentsState.loading=false;loadAgents();return;}
+      setAgents(data);setMapEditing(data.editing===true,sent);
+    }catch(error){if(request!==agentsState.request)return;agentsState.error=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;}
+    finally{clearTimeout(timeout);if(request===agentsState.request){agentsState.loading=false;agentsController=null;if(state.mode==='agents')renderAgents();}}
+  }
+  function agentCommand(change){
+    const parts=['richi','skill-sources',change.action,change.id];
+    if(change.expected_updated_at)parts.push('--expected-updated-at',change.expected_updated_at);
+    if('name' in change)parts.push('--name',shellQuote(change.name));
+    for(const folder of list(change.folders))parts.push('--skills',shellQuote(folder));
+    if('variable' in change&&(change.variable||change.action==='update'))parts.push('--variable',shellQuote(change.variable||''));
+    if(change.manual_skills&&(change.action==='update'||change.manual_skills!=='none'))parts.push('--manual-skills',change.manual_skills);
+    for(const [key,flag] of [['add_folders','--add-skills'],['remove_folders','--remove-skills'],['disable','--disable'],['enable','--enable']])for(const value of list(change[key]))parts.push(flag,shellQuote(value));
+    return parts.join(' ');
+  }
+  function agentChangeProblem(error){
+    if(error.code==='not_editing'){storeRuleSecret('');rulesState.editing=false;rulesState.notice='expired';return 'Ключ редактирования больше не действует: карту открыли заново в другой вкладке. Чтобы сохранять здесь, снова выполните richi map.';}
+    if(error.code==='conflict')return 'Настройки этого агента изменили в другом окне. Нажмите «Обновить» и повторите.';
+    if(error.code==='exists')return /skill source/.test(error.message)?'Эта папка уже есть среди источников агента.':'Агент с таким ID уже есть.';
+    if(error.code==='not_found')return 'Агент или источник не найден: список устарел. Нажмите «Обновить».';
+    if(error.code==='limit')return 'Достигнут предел числа агентов или папок.';
+    if(error.code==='settings')return 'Файл настроек агентов повреждён, поэтому изменения не сохраняются. Исправьте или удалите файл: '+(agentsState.data?.settings_file||'agents.json')+'.';
+    return error.message;
+  }
+  // An agents answer: the list, and the skill catalog it was counted from.
+  function setAgents(data){const {catalog,...listing}=data;agentsState.data=listing;if(catalog&&Array.isArray(catalog.skills))setSkills(catalog);}
+  const closeFolderForm=()=>{agentsState.addingFolder='';agentsState.folderDraft='';agentsState.focusFolder=false;};
+  function openAgentCommand(change,title='Команда для терминала'){
+    const {dialog,body,foot}=ruleDialog(title,'Вкладка открыта без ключа редактирования, поэтому изменение нужно выполнить командой.');
+    ruleCommandBox(body,agentCommandHint)(agentCommand(change));foot.append(toolButton('Закрыть',()=>dialog.close(),'primary'));dialog.showModal();
+  }
+  // Save a change made right in the tab; without the edit key it becomes a command.
+  async function applyAgentChange(change,done='Настройки агента сохранены'){
+    const agent=agentItems().find(item=>item.id===change.id);if(agent?.updated_at&&change.action!=='add')change.expected_updated_at=agent.updated_at;
+    if(!rulesState.editing){openAgentCommand(change);return false;}
+    agentsState.busy=true;agentsState.problem='';renderAgents();
+    try{
+      setAgents((await sendMapChange('/api/agents',change)).listing);announce(done);return true;
+    }catch(error){agentsState.problem=agentChangeProblem(error);if(!rulesState.editing)openAgentCommand(change);return false;}
+    finally{agentsState.busy=false;renderAgents();}
+  }
+  function openAgentEditor(agent=null){
+    const {dialog,form,body,foot}=ruleDialog(agent?'Изменить агента':'Новый агент',agent?agent.name+' · '+agent.id:'Опишите агента, которого в Richi нет, чтобы правила могли называть скилл и для него.');
+    const name=make('input'),folder=make('input'),id=make('input'),variable=make('input'),manual=make('select');let idTouched=false;
+    for(const input of [name,folder,id,variable]){input.type='text';input.autocomplete='off';input.spellcheck=false;}
+    name.maxLength=60;name.placeholder='Gemini CLI';folder.maxLength=1000;folder.placeholder='~/.gemini/skills';id.maxLength=32;id.placeholder='gemini-cli';variable.maxLength=165;variable.placeholder='GEMINI_CLI=1';
+    manual.add(new Option('Показывать все скиллы','none'));manual.add(new Option('Скрывать скиллы с disable-model-invocation: true','front-matter'));
+    const taken=()=>new Set(agentItems().map(item=>item.id));
+    const slug=value=>{let base=ruleSlug(value).slice(0,28).replace(/-+$/,'');if(!/^[a-z]/.test(base))return '';let result=base,index=2;while(taken().has(result))result=base+'-'+index++;return result;};
+    if(agent){name.value=agent.name;variable.value=list(agent.variables)[0]||'';manual.value=agent.manual_skills==='front-matter'?'front-matter':'none';}
+    else{
+      const presets=list(agentsState.data?.presets).filter(preset=>preset&&typeof preset.id==='string').sort((a,b)=>Number(b.exists)-Number(a.exists));
+      if(presets.length){
+        const row=make('div','agent-presets');row.setAttribute('role','group');row.setAttribute('aria-label','Известные агенты');
+        for(const preset of presets){const button=toolButton(preset.name,()=>{name.value=preset.name;folder.value=preset.folder;id.value=preset.id;idTouched=true;problem('');name.focus();},'agent-preset'+(preset.exists?' found':''));button.title=preset.exists?'Папка скиллов найдена на этом компьютере: '+preset.folder:preset.folder;row.append(button);}
+        const field=make('div','rule-field');field.append(make('span','field-label','Начать с известного агента'),row,make('span','rule-field-hint',presets.some(preset=>preset.exists)?'Выделены агенты, чья папка скиллов уже есть на этом компьютере.':'Имя, ID и папка скиллов подставятся сами; их можно поправить.'));body.append(field);
+      }
+      name.addEventListener('input',()=>{if(!idTouched)id.value=slug(name.value);});id.addEventListener('input',()=>{idTouched=true;});
+    }
+    body.append(ruleField('Имя',name,'Так агент называется в правилах и на этой вкладке.'));
+    if(!agent)body.append(ruleField('Папка со скиллами',folder,'Папка, где каждый скилл лежит в своей подпапке с файлом SKILL.md. Ещё папки можно добавить позже.'));
+    const more=make('details'),summary=make('summary','','Дополнительно');more.append(summary);
+    if(!agent)more.append(ruleField('ID',id,'Короткое постоянное имя для команд и правил, например --skill gemini-cli=review. Подставляется из имени; после создания не меняется.'));
+    more.append(ruleField('Переменная окружения',variable,'Необязательно. Если терминал агента задаёт свою переменную, Richi поймёт по ней, какой агент запрашивает правила. Без неё агент называет себя сам: richi rules show --agent ID.'),
+      ruleField('Скиллы только по вызову пользователя',manual,'Скилл, который агент не выбирает сам, правило использовать не сможет, поэтому в списках он не нужен.'));
+    body.append(more);
+    const problem=ruleProblem(body),showCommand=ruleCommandBox(body,agentCommandHint),cancel=toolButton('Отмена',()=>dialog.close()),submit=make('button','primary',rulesState.editing?(agent?'Сохранить':'Добавить агента'):'Показать команду');submit.type='submit';foot.append(cancel,submit);
+    function change(){
+      const label=name.value.trim(),mark=variable.value.trim();
+      if(!label)return 'Введите имя агента.';
+      if(mark&&!AGENT_VARIABLE.test(mark)){more.open=true;return 'Переменная: ИМЯ или ИМЯ=ЗНАЧЕНИЕ, имя из латинских букв, цифр и «_».';}
+      if(agent){const update={action:'update',id:agent.id};if(label!==agent.name)update.name=label;if(mark!==(list(agent.variables)[0]||''))update.variable=mark;if(manual.value!==(agent.manual_skills==='front-matter'?'front-matter':'none'))update.manual_skills=manual.value;return Object.keys(update).length>2?update:'Изменений нет.';}
+      const identifier=id.value.trim()||slug(label),path=folder.value.trim(),wrong=agentFolderProblem(path);
+      if(wrong)return wrong;
+      if(!AGENT_ID.test(identifier)){more.open=true;return 'ID: до 32 символов — строчные латинские буквы, цифры и дефис, начиная с буквы.';}
+      if(taken().has(identifier)){more.open=true;return 'Агент с ID «'+identifier+'» уже есть.';}
+      const add={action:'add',id:identifier,name:label,folders:[path],manual_skills:manual.value};if(mark)add.variable=mark;return add;
+    }
+    form.addEventListener('submit',async event=>{
+      event.preventDefault();problem('');const request=change();if(typeof request==='string'){problem(request);return;}
+      if(agent?.updated_at)request.expected_updated_at=agent.updated_at;
+      if(!rulesState.editing){showCommand(agentCommand(request));return;}
+      submit.disabled=true;submit.textContent='Сохраняем…';
+      try{setAgents((await sendMapChange('/api/agents',request)).listing);dialog.close();agentsState.selected=request.id;agentsState.problem='';announce(agent?'Агент изменён':'Агент добавлен');renderAgents();}
+      catch(error){problem(agentChangeProblem(error));if(!rulesState.editing){showCommand(agentCommand(request));renderAgents();}}
+      finally{if(dialog.open){submit.disabled=false;submit.textContent=rulesState.editing?(agent?'Сохранить':'Добавить агента'):'Показать команду';}}
+    });
+    dialog.showModal();name.focus();
+  }
+  function openAgentRemoval(agent){
+    const rules=agentRules(agent).length,reset=agent.builtin;
+    const {dialog,form,body,foot}=ruleDialog(reset?'Сбросить к встроенным настройкам?':'Удалить агента?',agent.name+' · '+agent.id);
+    body.append(make('p','rule-confirm',reset?'Выключенные источники скиллов снова включатся, а добавленные папки исчезнут из списка. Сами папки и скиллы на диске не меняются.':
+      'Richi перестанет учитывать этого агента: он пропадёт из форм правил и списков скиллов. Его папки и скиллы на диске не меняются.'+(rules?' Правила, которые называют скилл для него ('+rules+'), останутся как есть.':'')));
+    const problem=ruleProblem(body),showCommand=ruleCommandBox(body,agentCommandHint),cancel=toolButton('Отмена',()=>dialog.close()),label=reset?'Сбросить':'Удалить агента',submit=make('button',rulesState.editing?(reset?'primary':'danger solid'):'primary',rulesState.editing?label:'Показать команду');submit.type='submit';foot.append(cancel,submit);
+    form.addEventListener('submit',async event=>{
+      event.preventDefault();problem('');const request={action:'remove',id:agent.id,expected_updated_at:agent.updated_at};
+      if(!rulesState.editing){showCommand(agentCommand(request));return;}
+      submit.disabled=true;
+      try{setAgents((await sendMapChange('/api/agents',request)).listing);dialog.close();agentsState.problem='';announce(reset?'Настройки агента сброшены':'Агент удалён');renderAgents();}
+      catch(error){problem(agentChangeProblem(error));if(!rulesState.editing){submit.className='primary';submit.textContent='Показать команду';showCommand(agentCommand(request));renderAgents();}}
+      finally{if(dialog.open)submit.disabled=false;}
+    });
+    dialog.showModal();cancel.focus();
+  }
+  function renderAgentDetail(agent){
+    const box=make('section','agent-detail'),head=make('div','agent-head'),titles=make('div'),actions=make('div','agent-head-actions'),heading=make('h3','',agent.name);box.setAttribute('aria-label','Агент '+agent.name);
+    const idLine=make('code','agent-id',agent.id);idLine.title='ID агента: так он называется в командах и правилах';titles.append(heading,idLine);
+    if(!agent.builtin)actions.append(toolButton('Изменить',()=>openAgentEditor(agent),'small'),toolButton('Удалить',()=>openAgentRemoval(agent),'small danger'));
+    else if(agent.updated_at)actions.append(toolButton('Сбросить к встроенным',()=>openAgentRemoval(agent),'small'));
+    head.append(titles,actions);box.append(head);
+    const badges=make('div','agent-badges');badges.append(make('span','agent-badge'+(agent.builtin?'':' own'),agent.builtin?'Встроенный':'Свой'));
+    badges.append(make('span','agent-badge'+(agent.detected?' ok':''),agent.detected?'Найден на компьютере':'Не найден на компьютере'));
+    if(agent.connection==='configured')badges.append(make('span','agent-badge ok','Richi подключён'));
+    else if(agent.connection==='not_configured'){const badge=make('span','agent-badge warn','Richi не подключён');badge.title='Подключить: richi setup --agent '+agent.id;badges.append(badge);}
+    else if(agent.connection)badges.append(make('span','agent-badge warn','Подключение Richi нужно проверить'));
+    else if(agent.builtin&&agentsState.data?.connections_problem){const badge=make('span','agent-badge','Подключение Richi неизвестно');badge.title=agentsState.data.connections_problem;badges.append(badge);}
+    if(agent.builtin&&agent.updated_at)badges.append(make('span','agent-badge own','Есть ваши изменения'));
+    box.append(badges);
+    if(agentsState.problem){const error=make('div','rule-error',agentsState.problem);error.setAttribute('role','alert');error.style.marginTop='14px';box.append(error);}
+    box.append(make('div','agent-section','Откуда брать скиллы'));
+    for(const source of list(agent.sources)){
+      const row=make('div','agent-source'+(source.enabled?'':' off')),toggle=make('input'),text=make('div'),label=agentSourceLabel(agent,source);
+      toggle.type='checkbox';toggle.className='agent-switch';toggle.setAttribute('role','switch');toggle.checked=source.enabled!==false;toggle.disabled=agentsState.busy;toggle.setAttribute('aria-label',label+': '+source.path);
+      toggle.addEventListener('change',async()=>{const enabled=toggle.checked;if(!await applyAgentChange({action:'update',id:agent.id,[enabled?'enable':'disable']:[source.key]},enabled?'Источник включён':'Источник выключен'))toggle.checked=!enabled;});
+      text.append(make('div','agent-source-name',label),make('div','agent-source-path',source.path));
+      const count=make('span','agent-source-count',!source.enabled?'выключено':source.denied?'нет доступа':!source.exists?'папки нет':plural(Number(source.skills)||0,skillForms));
+      row.append(toggle,text,count);
+      if(source.added&&(agent.builtin||list(agent.sources).length>1)){const remove=toolButton('×',()=>applyAgentChange({action:'update',id:agent.id,remove_folders:[source.key]},'Папка убрана'),'icon');remove.title='Убрать папку из источников';remove.setAttribute('aria-label','Убрать папку '+source.path);remove.disabled=agentsState.busy;row.append(remove);}
+      else row.append(make('span'));
+      box.append(row);
+    }
+    if(agentsState.addingFolder===agent.id){
+      const formBox=make('form','agent-folder-form'),field=make('div','rule-field'),line=make('div','agent-folder-row'),input=make('input'),problem=make('div','rule-error');input.type='text';input.id='agent-folder-input';input.maxLength=1000;input.placeholder='~/work/team-skills';input.autocomplete='off';input.spellcheck=false;input.setAttribute('aria-label','Папка со скиллами');input.value=agentsState.folderDraft;problem.hidden=true;problem.setAttribute('role','alert');
+      const add=make('button','primary',rulesState.editing?'Добавить':'Показать команду');add.type='submit';line.append(input,add,toolButton('Отмена',()=>{closeFolderForm();renderAgents();}));
+      field.append(line,make('span','rule-field-hint','Папка, где каждый скилл лежит в своей подпапке с файлом SKILL.md.'),problem);formBox.append(field);formBox.noValidate=true;
+      // The page is rebuilt whenever data arrives; what is being typed lives in the state, not in the field.
+      input.addEventListener('input',()=>{agentsState.folderDraft=input.value;problem.hidden=true;});
+      formBox.addEventListener('submit',async event=>{event.preventDefault();const value=input.value.trim(),wrong=agentFolderProblem(value);if(wrong){problem.textContent=wrong;problem.hidden=false;return;}
+        if(await applyAgentChange({action:'update',id:agent.id,add_folders:[value]},'Папка добавлена')){closeFolderForm();renderAgents();}});
+      box.append(formBox);
+    }else{const row=make('div','agent-row-actions');row.append(toolButton('+ Добавить папку',()=>{agentsState.addingFolder=agent.id;agentsState.folderDraft='';agentsState.focusFolder=true;agentsState.problem='';renderAgents();},'small'));box.append(row);}
+    box.append(make('div','agent-section','Как Richi узнаёт агента'));
+    const lines=make('div','agent-lines'),line=(label,value)=>{const item=make('div');item.append(document.createTextNode(label+' '),make('code','',value));lines.append(item);};
+    line('Идентификатор чата:','RICHI_CHAT_ID='+agent.id+':…');
+    for(const value of list(agent.variables))line('Переменная в терминале агента:',value);
+    line('Явно в команде:','richi rules show --agent '+agent.id);box.append(lines);
+    box.append(make('div','agent-muted',agent.builtin?'Задано в Richi и обновляется вместе с ним. По этим признакам команда rules show отдаёт агенту его скилл.':'По этим признакам команда rules show отдаёт агенту его скилл. Чтобы агент загружал правила, добавьте эту команду в его постоянные инструкции.'));
+    box.append(make('div','agent-section','Правила со скиллом для этого агента'));
+    const rules=agentRules(agent);
+    if(!rulesState.data)box.append(make('div','agent-muted',rulesState.error?'Правила не загрузились: '+rulesState.error:'Загружаем правила…'));
+    else if(!rules.length)box.append(make('div','agent-muted','Правила пока не называют скилл для этого агента.'));
+    else for(const item of rules.slice(0,12)){
+      const row=toolButton('',()=>{setMode('rules');$('search').value=item.rule.id;rulesState.query=item.rule.id;renderRules();},'agent-rule'),skill=make('span',item.missing?'agent-warn':'',item.skill+(item.missing?' · у агента такого нет':''));
+      row.append(make('code','',item.rule.id),skill);row.setAttribute('aria-label','Открыть правило '+item.rule.id);box.append(row);
+    }
+    if(rules.length>12)box.append(make('div','agent-muted','И ещё '+(rules.length-12)+'. Все правила — на вкладке «Правила».'));
+    return box;
+  }
+  function renderAgents(){
+    const typing=document.activeElement?.id==='agent-folder-input'?[document.activeElement.selectionStart,document.activeElement.selectionEnd]:null;
+    renderAgentsContent();
+    const field=$('agent-folder-input');
+    if(field&&(typing||agentsState.focusFolder)){field.focus();if(typing)field.setSelectionRange(typing[0],typing[1]);}
+    agentsState.focusFolder=false;
+  }
+  function renderAgentsContent(){
+    const root=$('agents-content');root.replaceChildren();$('agents-panel').setAttribute('aria-busy',String(agentsState.loading));if(state.mode==='agents')$('data-note').textContent=agentsNote();
+    const all=agentItems(),heading=make('div','tools-heading rules-heading'),intro=make('div'),count=make('div','tools-total');
+    intro.append(make('div','tools-eyebrow','Кто работает с памятью'),make('h2','','Агенты'),make('p','tools-lead','Richi учитывает этих агентов на компьютере: правило может назвать скилл для всех сразу или свой для каждого, а агент получает именно свой. Встроенных агентов Richi настраивает и обновляет сам. Здесь можно выключить источник скиллов, добавить папку или описать ещё одного агента.'));
+    count.append(make('strong','',String(all.length)),make('span','',all.length%10===1&&all.length%100!==11?'агент':all.length%10>=2&&all.length%10<=4&&(all.length%100<12||all.length%100>14)?'агента':'агентов'));heading.append(intro,count);root.append(heading);
+    if(!agentsState.data){
+      const failed=Boolean(agentsState.error)&&!agentsState.loading,box=make('div','tools-empty');box.append(ruleMark('rule'),make('h3','',failed?'Не удалось загрузить агентов':'Загружаем агентов'),make('p','',failed?agentsState.error:'Читаем настройки и считаем скиллы.'));
+      if(failed)box.append(toolButton('Повторить загрузку',()=>loadAgents(),'primary'));root.append(box);return;
+    }
+    if(agentsState.error)toolWarning(root,'Не удалось обновить список агентов: '+agentsState.error+' Показан предыдущий список.');
+    if(agentsState.data.problem)toolWarning(root,'Файл настроек агентов не читается, поэтому показаны только встроенные агенты без ваших изменений. Исправьте или удалите файл: '+(agentsState.data.settings_file||'agents.json')+'.');
+    renderRuleMode(root,agentSaved);
+    const shown=all.filter(agentMatches),layout=make('div','agents-layout'),column=make('div','agents-list');
+    if(!shown.some(agent=>agent.id===agentsState.selected))agentsState.selected=shown[0]?.id||'';
+    for(const agent of shown){
+      const rules=agentRules(agent),missing=rules.filter(item=>item.missing).length,button=toolButton('',()=>{agentsState.selected=agent.id;closeFolderForm();agentsState.problem='';renderAgents();},'agent-item');
+      button.setAttribute('aria-pressed',String(agent.id===agentsState.selected));button.dataset.agent=agent.id;
+      button.append(make('strong','',agent.name),make('code','',agent.id),make('span','',plural(Number(agent.skills)||0,skillForms)+' · '+plural(rules.length,['правило','правила','правил'])));
+      if(missing)button.append(make('span','warn',plural(missing,['правило','правила','правил'])+' со скиллом, которого у агента нет'));
+      column.append(button);
+    }
+    if(!shown.length)column.append(make('div','agent-muted','По запросу «'+agentsState.query+'» агентов нет.'));
+    column.append(toolButton('+ Добавить агента',()=>openAgentEditor(),'agent-add'));layout.append(column);
+    const selected=shown.find(agent=>agent.id===agentsState.selected);
+    if(selected)layout.append(renderAgentDetail(selected));
+    root.append(layout);
+  }
   for(const mode of viewModes){const tab=$(mode+'-tab');tab.addEventListener('click',()=>setMode(mode));tab.addEventListener('keydown',event=>{
     if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const index=viewModes.indexOf(mode),next=event.key==='Home'?0:event.key==='End'?viewModes.length-1:(index+(event.key==='ArrowLeft'?-1:1)+viewModes.length)%viewModes.length;setMode(viewModes[next]);$(viewModes[next]+'-tab').focus();
   });}
   window.addEventListener('popstate',applyToolsLocation);
   window.addEventListener('hashchange',applyToolsLocation);
-  showIntro();applyToolsLocation();loadGraph();
+  window.addEventListener('hashchange',redeemRuleTicket);
+  redeemRuleTicket();showIntro();applyToolsLocation();loadGraph();
 })();
 </script>
 </body>

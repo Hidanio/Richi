@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from richi import memory, rules
+from richi import agents, memory, rules
 from richi_launcher import agent_setup, chats, config
 from richi_launcher.claude_setup import HOOK
 
@@ -24,8 +24,11 @@ class RulesTests(unittest.TestCase):
         environment = mock.patch.dict(os.environ, {"HOME": str(self.root / "home")})
         environment.start()
         self.addCleanup(environment.stop)
-        for key in [key for key in os.environ if key.startswith("RICHI_") or key == "CODEX_THREAD_ID"]:
+        # Agent shells identify the agent; rules show must not depend on the shell running the tests.
+        for key in [key for key in os.environ if key.startswith("RICHI_")
+                    or key in {"CODEX_THREAD_ID", "CLAUDECODE", "XDG_CONFIG_HOME"}]:
             del os.environ[key]
+        agents._cache.clear()
         self.configs, self.repos = {}, {}
         for name in ("alpha", "beta"):
             store = self.root / name
@@ -84,7 +87,12 @@ class RulesTests(unittest.TestCase):
         self.add("beta", "shared-id", "--global", text="Beta rule.")
         self.assertEqual(self.command("alpha", "rules", "show")["rules"][0]["text"], "Alpha rule.")
         self.assertEqual(self.command("beta", "rules", "show")["rules"][0]["text"], "Beta rule.")
-        self.command("beta", "--project-path", self.repos["alpha", "service"], "rules", "show", ok=False)
+        # Another workspace's repository is unknown here: beta answers with its own global rules
+        # and says so, and nothing of alpha's leaks.
+        self.add("alpha", "alpha-service", "--project", "service", text="Alpha service rule.")
+        foreign = self.command("beta", "--project-path", self.repos["alpha", "service"], "rules", "show")
+        self.assertEqual(([rule["text"] for rule in foreign["rules"]], foreign["project"]), (["Beta rule."], None))
+        self.assertIn("project_path_problem", foreign)
 
     def test_invalid_rules_are_rejected_without_writes(self):
         for argv in (["rules", "add", "a", "--project", "missing", "--text", "x"],
@@ -141,6 +149,89 @@ class RulesTests(unittest.TestCase):
         missing = self.command("alpha", "rules", "remove", "naming", "--expected-updated-at", changed["updated_at"], ok=False)
         self.assertEqual(missing["code"], "not_found")
 
+    def test_rules_may_name_a_skill_and_errors_carry_codes(self):
+        rule = self.add("alpha", "pr-skill", "--global", text="Use it for pull requests.", skill="plugin:pr-description")
+        self.assertEqual(rule["skill"], "plugin:pr-description")
+        shown = self.command("alpha", "rules", "show")
+        self.assertEqual(shown["rules"][0]["skill"], "plugin:pr-description")
+        self.assertIn("names a skill", shown["note"])
+        self.assertIsNone(self.add("alpha", "plain", "--global")["skill"])
+        for skill in ("-x", "two words", "s" * 101):
+            with self.subTest(skill=skill):
+                self.command("alpha", "rules", "add", "bad", "--global", "--text", "x", "--skill", skill, ok=False)
+        renamed = self.command("alpha", "rules", "update", "pr-skill", "--expected-updated-at", rule["updated_at"],
+                               "--skill", "pr-review")["rule"]
+        self.assertEqual((renamed["skill"], renamed["text"]), ("pr-review", rule["text"]))
+        cleared = self.command("alpha", "rules", "update", "pr-skill", "--expected-updated-at", renamed["updated_at"],
+                               "--skill", "")["rule"]
+        self.assertIsNone(cleared["skill"])
+        self.assertEqual(self.command("alpha", "rules", "update", "pr-skill", "--expected-updated-at",
+                                      rule["updated_at"], "--skill", "x", ok=False)["code"], "conflict")
+        self.assertEqual(self.command("alpha", "rules", "add", "plain", "--global", "--text", "x", ok=False)["code"],
+                         "exists")
+        self.assertEqual(self.command("alpha", "rules", "add", "long", "--global", "--text", "x" * (rules.MAX_TEXT + 1),
+                                      ok=False)["code"], "limit")
+        # A row stored before rules could name a skill reads as having none.
+        database = self.configs["alpha"].parent / "memory.sqlite3"
+        earlier = {key: value for key, value in cleared.items() if key not in {"skill", "skills"}}
+        earlier["id"] = "earlier"
+        with sqlite3.connect(str(database)) as conn:
+            conn.execute("INSERT INTO metadata(key, value) VALUES (?, ?)", ("rule:earlier", json.dumps(earlier)))
+        listed = {item["id"]: item for item in self.command("alpha", "rules", "list")["rules"]}
+        self.assertIsNone(listed["earlier"]["skill"])
+        self.assertIsNone(listed["earlier"]["skills"])
+
+    def test_agents_share_a_skill_or_each_get_their_own(self):
+        def add(identifier, *skills):
+            argv = ["rules", "add", identifier, "--global", "--text", "Review code."]
+            for skill in skills:
+                argv += ["--skill", skill]
+            return self.command("alpha", *argv)["rule"]
+
+        both = add("review", "claude=engineering:code-review", "codex=code-review")
+        self.assertEqual((both["skill"], both["skills"]),
+                         (None, {"claude": "engineering:code-review", "codex": "code-review"}))
+        # The same skill for every agent is stored once, as the shared skill.
+        same = add("same", "claude=pr-description", "codex=pr-description")
+        self.assertEqual((same["skill"], same["skills"]), ("pr-description", None))
+        mixed = add("mixed", "pr-description", "codex=pr-codex", "claude=pr-description")
+        self.assertEqual((mixed["skill"], mixed["skills"]), ("pr-description", {"codex": "pr-codex"}))
+        only = add("only", "pr-description", "codex=")
+        self.assertEqual(only["skills"], {"codex": None})
+
+        def used(**environment):
+            with mock.patch.dict(os.environ, environment):
+                shown = self.command("alpha", "rules", "show")
+            return shown["agent"], {rule["id"]: rule.get("use_skill", "-") for rule in shown["rules"]}, shown["note"]
+
+        agent, skills, note = used(CODEX_THREAD_ID="thread-1")
+        self.assertEqual((agent, skills), ("codex", {"mixed": "pr-codex", "only": None, "review": "code-review",
+                                                     "same": "pr-description"}))
+        self.assertIn("use_skill", note)
+        self.assertEqual(used(RICHI_CHAT_ID="claude:chat-1", CODEX_THREAD_ID="thread-1")[:2],
+                         ("claude", {"mixed": "pr-description", "only": "pr-description",
+                                     "review": "engineering:code-review", "same": "pr-description"}))
+        self.assertEqual(used(CLAUDECODE="1")[0], "claude")
+        agent, skills, note = used()
+        self.assertEqual((agent, set(skills.values())), (None, {"-"}))
+        self.assertIn("skills maps an agent ID (claude: Claude Code, codex: Codex)", note)
+        with mock.patch.dict(os.environ, {"CODEX_THREAD_ID": "thread-1"}):
+            explicit = self.command("alpha", "rules", "show", "--agent", "claude")
+        self.assertEqual(explicit["rules"][2]["use_skill"], "engineering:code-review")
+
+        for skills in (["gemini=x"], ["a", "b"], ["codex=a", "codex=b"], ["codex=two words"]):
+            with self.subTest(skills=skills):
+                argv = ["rules", "add", "bad", "--global", "--text", "x"]
+                for skill in skills:
+                    argv += ["--skill", skill]
+                self.command("alpha", *argv, ok=False)
+        changed = self.command("alpha", "rules", "update", "review", "--expected-updated-at", both["updated_at"],
+                               "--skill", "codex=code-review")["rule"]
+        self.assertEqual((changed["skill"], changed["skills"]), (None, {"codex": "code-review"}))
+        cleared = self.command("alpha", "rules", "update", "review", "--expected-updated-at", changed["updated_at"],
+                               "--skill", "")["rule"]
+        self.assertEqual((cleared["skill"], cleared["skills"]), (None, None))
+
     def test_project_path_guards_rule_scope(self):
         service = self.repos["alpha", "service"]
         self.command("alpha", "--project-path", service, "rules", "add", "x", "--project", "tools", "--text", "x", ok=False)
@@ -151,7 +242,72 @@ class RulesTests(unittest.TestCase):
                              "--expected-updated-at", tools_rule["updated_at"], ok=False)
         self.assertIn("belongs to project tools", error["error"])
         self.command("alpha", "--project-path", service, "rules", "show", "--project", "tools", ok=False)
-        self.command("alpha", "--project-path", self.root / "missing", "rules", "show", ok=False)
+        # Global rules bind the agent in any repository: an unregistered path loads them and says why
+        # the project's rules are missing, instead of leaving the agent without rules.
+        unregistered = self.root / "unregistered"
+        unregistered.mkdir()
+        for path in (unregistered, self.root / "missing"):
+            with self.subTest(path=path.name):
+                shown = self.command("alpha", "--project-path", path, "rules", "show")
+                self.assertEqual(([rule["id"] for rule in shown["rules"]], shown["project"]), (["g"], None))
+                self.assertIn("roject path", shown["project_path_problem"]["error"])
+                self.assertIn("project add", shown["project_path_problem"]["next"])
+        self.assertNotIn("project_path_problem", self.command("alpha", "--project-path", service, "rules", "show"))
+        # Changes stay strict: a rule is never written from a path the workspace does not know.
+        self.command("alpha", "--project-path", unregistered, "rules", "add", "y", "--global", "--text", "y", ok=False)
+        self.command("alpha", "--project-path", unregistered, "rules", "list", ok=False)
+
+    def test_apply_takes_the_same_change_as_the_command_options(self):
+        def apply(change, ok=True, **options):
+            return self.command("alpha", *options.get("selectors", ()), "rules", "apply", "--json", "-", ok=ok,
+                                stdin=json.dumps(change))
+
+        tricky = "--global\n'single' \"double\" $HOME `date` -"
+        added = apply({"action": "add", "id": "review", "scope": "global", "text": tricky, "source": "map",
+                       "skills": {"claude": "engineering:code-review", "codex": "code-review"}})
+        self.assertEqual(added["results"], [{"id": "review", "status": "created"}])
+        rule = added["rule"]
+        self.assertEqual((rule["text"], rule["source"], rule["skill"], rule["skills"]),
+                         (tricky, "map", None, {"claude": "engineering:code-review", "codex": "code-review"}))
+        by_options = self.command("alpha", "rules", "add", "review-2", "--global", "--text", "-", "--source", "map",
+                                  "--skill", "claude=engineering:code-review", "--skill", "codex=code-review",
+                                  stdin=tricky)["rule"]
+        same = ("scope", "project_id", "text", "skill", "skills", "source")
+        self.assertEqual([rule[key] for key in same], [by_options[key] for key in same])
+        self.assertEqual(apply({"action": "add", "id": "review", "scope": "global", "text": "x"}, ok=False)["code"],
+                         "exists")
+        scoped = apply({"action": "add", "id": "naming", "scope": "project", "project": "service", "text": "Names."})
+        self.assertEqual(scoped["rule"]["project_id"], "service")
+        apply({"action": "add", "id": "other", "scope": "project", "project": "tools", "text": "x"}, ok=False,
+              selectors=("--project-path", self.repos["alpha", "service"]))
+        self.assertEqual(apply({"action": "update", "id": "review", "expected_updated_at": "stale", "text": "x"},
+                               ok=False)["code"], "conflict")
+        version = {"id": "review", "expected_updated_at": rule["updated_at"]}
+        # The skills of a rule are replaced together; the text stays unless it is given.
+        updated = apply({"action": "update", **version, "skill": "pr-description", "skills": {"codex": None}})["rule"]
+        self.assertEqual((updated["text"], updated["skill"], updated["skills"]),
+                         (tricky, "pr-description", {"codex": None}))
+        self.assertEqual(apply({"action": "update", "id": "review", "expected_updated_at": updated["updated_at"],
+                                "skill": "pr-description", "skills": {"codex": None}})["results"][0]["status"],
+                         "unchanged")
+        for change in ({"action": "update", "id": "review", "expected_updated_at": updated["updated_at"]},
+                       {"action": "add", "id": "x", "scope": "global", "text": "x", "unexpected": 1},
+                       {"action": "add", "id": "x", "scope": "everywhere", "text": "x"},
+                       {"action": "add", "id": "x", "scope": "global", "project": "service", "text": "x"},
+                       {"action": "add", "id": "x", "scope": "global", "text": 5},
+                       {"action": "add", "id": "x", "scope": "global", "text": "x", "skills": ["codex"]},
+                       {"action": "add", "id": "x", "scope": "global", "text": "x", "skills": {"cursor": "x"}},
+                       {"action": "add", "id": "-x", "scope": "global", "text": "x"},
+                       {"action": "drop", "id": "review"}, ["add"], "add"):
+            with self.subTest(change=change):
+                self.assertNotIn(apply(change, ok=False).get("code"), {"exists", "conflict", "not_found"})
+        self.command("alpha", "rules", "apply", "--json", "-", ok=False, stdin="{not json")
+        self.command("alpha", "rules", "apply", "--json", self.root / "no-such-file.json", ok=False)
+        change_file = self.root / "change.json"
+        change_file.write_text(json.dumps({"action": "remove", "id": "review",
+                                           "expected_updated_at": updated["updated_at"]}), encoding="utf-8")
+        self.assertEqual(self.command("alpha", "rules", "apply", "--json", change_file)["results"][0]["status"],
+                         "removed")
 
     def test_text_from_stdin_keeps_lines(self):
         text = "First line.\nSecond line.\n"

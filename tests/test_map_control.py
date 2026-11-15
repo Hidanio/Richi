@@ -19,6 +19,7 @@ import threading
 import time
 import unittest
 from unittest import mock
+from urllib.parse import unquote, urlsplit
 
 from richi import cli_parser, launch_map, memory, serve
 import richi_bootstrap
@@ -318,7 +319,16 @@ class MapControlTests(unittest.TestCase):
                 served = subprocess.run(self.command + ["map", "serve", "--open", "--port", str(port)],
                                         capture_output=True, text=True, timeout=60, env=browser, cwd=self.root)
                 self.assertEqual(served.returncode == 0, ok, served.stdout + served.stderr)
-        self.assertEqual(opened.read_text().split(), [maps.url(self.port)])
+        # BROWSER would see a URL in its arguments, so the map opens through a
+        # private redirect file that carries the one-time edit ticket.
+        targets = opened.read_text().split()
+        # This BROWSER never loads the page, like a sandboxed one that cannot read the private
+        # file: the ticket stays unused, so the map's plain address is opened as well.
+        self.assertEqual(len(targets), 2)
+        self.assertEqual(targets[1], maps.url(self.port))
+        self.assertTrue(targets[0].startswith("file://") and targets[0].endswith("/runtime/map-open.html"), targets)
+        redirect = Path(unquote(urlsplit(targets[0]).path))
+        self.assertIn(maps.url(self.port) + "#ticket=", redirect.read_text(encoding="utf-8"))
         with mock.patch.object(maps.control, "listens", return_value=None):
             # Where processes may not be inspected a copy cannot be told apart: refused too.
             self.assertEqual(serve.foreign_answer(self.port, real), maps.Reason.NOT_PERMITTED)

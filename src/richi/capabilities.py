@@ -11,6 +11,7 @@ GROUPS = {
     'write': 'Save knowledge with provenance and optimistic concurrency.',
     'maintenance': 'Inspect storage and explicitly maintain derived structures.',
     'rules': "Load the user's standing rules; change them only on the user's request.",
+    'agents': 'See which AI agents Richi knows and where each finds skills; describe another agent.',
 }
 # id, group, effect, task-oriented summary, canonical detailed guide: a NAME.md
 # under skills/project-memory/references, which is also the command's help page
@@ -51,11 +52,16 @@ COMMANDS = (
     ('search-index build', 'maintenance', 'write', 'Explicitly rebuild derived search indexes; canonical knowledge is preserved.', 'FILTERS.md'),
     ('check', 'maintenance', 'read', 'Check SQLite integrity and foreign keys.', 'DIAGNOSTICS.md'),
     ('backup', 'maintenance', 'write', 'Write a consistent database backup; copy captured Git artifacts separately.', 'CLI.md'),
-    ('rules show', 'rules', 'read', 'Print applicable global and project rules in full; follow them as user instructions.', 'RULES.md'),
+    ('rules show', 'rules', 'read', 'Print applicable global and project rules in full, each with the skill for this agent; follow them as user instructions.', 'RULES.md'),
     ('rules list', 'rules', 'read', 'List every stored rule of the workspace with versions and size.', 'RULES.md'),
     ('rules add', 'rules', 'write', 'Create a global or project rule the user explicitly asked to keep.', 'RULES.md'),
-    ('rules update', 'rules', 'write', "Change a rule's text or source with optimistic concurrency.", 'RULES.md'),
+    ('rules update', 'rules', 'write', "Change a rule's text, skills or source with optimistic concurrency.", 'RULES.md'),
     ('rules remove', 'rules', 'write', 'Delete a rule with optimistic concurrency.', 'RULES.md'),
+    ('rules apply', 'rules', 'write', 'Add, update or remove a rule from one JSON change object.', 'RULES.md'),
+    ('skill-sources list', 'agents', 'read', 'List known agents with their skill sources, skill counts and versions.', 'AGENT_SKILLS.md'),
+    ('skill-sources add', 'agents', 'write', 'Describe an agent Richi lacks: name, skill folders and how to recognize it.', 'AGENT_SKILLS.md'),
+    ('skill-sources update', 'agents', 'write', "Switch an agent's skill sources, add or remove skill folders, or edit an own agent.", 'AGENT_SKILLS.md'),
+    ('skill-sources remove', 'agents', 'write', 'Delete an own agent or drop the adjustments of a built-in one.', 'AGENT_SKILLS.md'),
 )
 # Commands deliberately left out of the catalog, with the reason. A group
 # covers all of its subcommands. scripts/check_cli_docs.py requires every
