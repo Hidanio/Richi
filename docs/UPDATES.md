@@ -102,10 +102,9 @@ richi check
 ```
 
 `backup` verifies what it wrote and refuses a path that still has a database or
-its `-wal` and `-shm` files. Use it rather than copying the file by hand: a
-hand-copied store may not open for reading on macOS. Records written after the
-migration are not in the copy. Migration does not touch the captured Git bytes in
-`artifacts/git/`, and the copy does not contain them.
+its `-wal` and `-shm` files: SQLite would replay such files into the copy. Records
+written after the migration are not in the copy. Migration does not touch the
+captured Git bytes in `artifacts/git/`, and the copy does not contain them.
 
 <a id="schema-support"></a>
 The manager records verified database-schema support per installed generation.
