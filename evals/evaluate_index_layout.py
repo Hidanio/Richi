@@ -38,7 +38,7 @@ def main():
                                       args.old_revision + ':src/richi/search_index.py'])
     exec(compile(source, 'frozen-search-index-v1.py', 'exec'), old.__dict__)
     # The frozen layout predates issue-key lookups; recall then scans for recorded keys.
-    old.recorded_issue_keys = lambda conn, variants, series: None
+    old.indexed_issue_keys = lambda conn, variants, series: None
     fixture = (args.checkout / 'evals/recall_cases.json').read_bytes()
     data, cases = ev.corpus(10000, json.loads(fixture))
     queries = [case['query'] for case in cases] + ['transport', 'component', 'route', 'arch', 'entry:background-00001']
@@ -74,7 +74,7 @@ def main():
                     'pages': [dict(row) for row in conn.execute("SELECT name,sum(pgsize) bytes,sum(payload) payload,sum(unused) unused FROM dbstat WHERE name LIKE 'richi_search%' OR name LIKE 'sqlite_autoindex_richi_search%' GROUP BY name")],
                     'lookup': {}, 'writes': {}}
             for query in queries:
-                terms, keys = recall.terms_for(query, connections['v2'])
+                terms, keys = recall.terms_for(connections['v2'], query)
                 for family in ('entry', 'entity'):
                     samples, values = {'v1': [], 'v2': []}, {}
                     for repeat in range(40):

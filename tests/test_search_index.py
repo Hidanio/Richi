@@ -43,7 +43,7 @@ class SearchIndexTests(unittest.TestCase):
             return search_index.build(self.conn, memory)
 
     def candidates(self, family, query, conn=None):
-        terms, keys = recall.terms_for(query, conn or self.conn)
+        terms, keys = recall.terms_for(conn or self.conn, query)
         if family == "entry":
             return search_index.entry_ids(conn or self.conn, query, keys)
         return search_index.entity_ids(conn or self.conn, query, terms, keys)
@@ -110,7 +110,7 @@ class SearchIndexTests(unittest.TestCase):
                       "why cache routing changed", "why cache changed", "unknown",
                       " ".join(["word" + str(i) for i in range(60)] + ["cache", "routing"])]:
             with self.subTest(query=query):
-                _, keys = recall.terms_for(query, self.conn)
+                _, keys = recall.terms_for(self.conn, query)
                 variants = {variant for key in keys for variant in recall.key_variants(key)}
                 expected = {row["id"] for row in rows if recall.entry_routing_match(
                     row, recall.normalize(query).strip(), recall.phrase(query), variants)}
@@ -140,7 +140,7 @@ class SearchIndexTests(unittest.TestCase):
         # tokenization reimplementation. Over-inclusion is deliberately allowed.
         for query in queries:
             with self.subTest(query=query):
-                terms, keys = recall.terms_for(query, self.conn)
+                terms, keys = recall.terms_for(self.conn, query)
                 expected = {record["id"] for record in records
                             if recall.lexical(record, query, terms, keys, "entity")[0] > 0}
                 self.assertTrue(expected.issubset(self.candidates("entity", query)), expected)

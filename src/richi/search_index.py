@@ -352,16 +352,18 @@ def entity_ids(conn, query, terms, keys):
     for prefix in prefixes:
         result.update(_prefix_ids(conn, "entity", prefix))
     # A key need not be one lexical token: AB#123 is indexed as "ab" and "123",
-    # and a record that holds the key holds every one of them.
+    # and a record that holds the key holds every one of them. Only the last
+    # token can continue in the text (123-rc); the others are whole tokens there.
     for key in keys:
         for variant in recall.key_variants(key):
             tokens = recall.WORDS.findall(variant)
             if tokens and tokens != [variant]:
-                result.update(set.intersection(*(_prefix_ids(conn, "entity", token) for token in tokens)))
+                whole = [_equal_ids(conn, "entity", "token", [token]) for token in tokens[:-1]]
+                result.update(_prefix_ids(conn, "entity", tokens[-1]).intersection(*whole))
     return result
 
 
-def recorded_issue_keys(conn, variants, series):
+def indexed_issue_keys(conn, variants, series):
     """Recorded issue keys among candidate spellings and series, or None to scan.
 
     The answer equals recall's scan of every record. Keys of a dirty record may
@@ -385,12 +387,10 @@ def recorded_issue_keys(conn, variants, series):
             found.update(wanted[row[0]] for row in conn.execute(
                 "SELECT DISTINCT k.key" + source + "k.key IN (" + ",".join("?" for _ in batch) + ")" + clean,
                 [FIELDS[family][field], *batch, family]))
-    probes = []
-    for prefix in series:
-        # DEMO42 belongs to the series "demo-" too, when that spelling is a key.
-        compact = prefix.endswith("-") and recall.canonical_key(prefix[:-1] + "0") == prefix + "0"
-        probes.extend((prefix, family, field, lead + form) for form in ((prefix, prefix[:-1]) if compact else (prefix,))
-                      for family, field, leads in places for lead in leads)
+    # DEMO42 belongs to the series "demo-" too: a series has the spellings of its keys.
+    probes = [(prefix, family, field, lead + spelling[:-1])
+              for prefix in series for spelling in recall.key_variants(prefix + "0")
+              for family, field, leads in places for lead in leads]
     exists = ("EXISTS (SELECT 1" + source + "k.key >= ? AND k.key < ? AND substr(k.key, ?) NOT GLOB '*[^0-9]*'" +
               clean + ")")
     found_series = set()

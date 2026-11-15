@@ -118,7 +118,7 @@ def build_parser(parser_class, *, limit, positive_int, scan_depth, bounded):
             short.add_argument("id", help="Entry ID, for example task:ABC-123")
             short.add_argument("--max-chars", type=compact.max_chars, default=6000)
     query = commands.add_parser("search", help="Lexical search over entries, with strict filters")
-    query.add_argument("query", help="Words to match in IDs, titles, summaries, Jira keys, tags and aliases")
+    query.add_argument("query", help="Words to match in IDs, titles, summaries, issue keys, tags and aliases")
     query.add_argument("--project", help="Only entries of this project")
     query.add_argument("--where", help="Strict composed filter; AND/OR/NOT, comparisons, IN, LIKE, HAS")
     ctx = commands.add_parser("context", help="Show a project with its direct relations and recent entries")

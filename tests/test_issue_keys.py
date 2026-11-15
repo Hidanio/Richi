@@ -1,7 +1,8 @@
 """Issue keys come from what the store records, never from the shape of a token.
 
-Disposable synthetic stores only. Each scenario runs on schemas 1, 2 and 3, with
-FTS5 and with the scan backend, without and with the optional search index.
+Disposable synthetic stores only. Behaviour scenarios run on schemas 1, 2 and 3,
+with FTS5 and with the scan backend, without and with the optional search index.
+A test of one mechanism names the layouts it needs.
 """
 from contextlib import closing
 from pathlib import Path
@@ -26,8 +27,9 @@ def fts5_available():
         conn.close()
 
 
+FTS5 = fts5_available()
 LAYOUTS = [(schema, fts, index) for schema in (1, 2, 3)
-           for fts in ((True, False) if fts5_available() else (False,)) for index in (False, True)]
+           for fts in ((True, False) if FTS5 else (False,)) for index in (False, True)]
 
 
 def note(identity, **changes):
@@ -53,7 +55,7 @@ class IssueKeyTests(unittest.TestCase):
         self.root = Path(temporary.name)
         self.created = 0
 
-    def store(self, entries=(), entities=(), schema=3, fts=True, index=False):
+    def store(self, entries=(), entities=(), schema=3, fts=FTS5, index=False):
         """A store of the requested layout; schema 1 has no entities."""
         self.created += 1
         self.path = self.root / "store-{}.sqlite3".format(self.created)
@@ -213,6 +215,37 @@ class IssueKeyTests(unittest.TestCase):
             self.words(conn, "CU8669abc", ["mentions"])
             self.assertEqual(recall.key_variants("rel-1-2"), ("rel-1-2",))
             self.assertEqual(recall.key_variants("проект-12"), ("проект-12", "проект12"))
+            self.assertEqual(recall.key_variants("#77"), ("#77",))
+
+        self.each_layout(check, entries)
+
+    def test_series_recorded_only_in_its_compact_spelling(self):
+        entries = [note("compact", kind="task", jira_key="DEMO42", title="Cache warmup"),
+                   note("task:ops7", kind="task", title="Rotate the certificate")]
+
+        def check(conn, schema):
+            self.keyed(conn, "DEMO-42", ["demo-42"], ["compact"], first="compact")
+            self.keyed(conn, "demo-7 warmup", ["demo-7"], [])
+            self.keyed(conn, "demo8", ["demo-8"], [])
+            self.keyed(conn, "OPS-7", ["ops-7"], ["task:ops7"], first="task:ops7")
+            self.keyed(conn, "ops-8 certificate", ["ops-8"], [])
+
+        self.each_layout(check, entries)
+
+    def test_several_keys_in_one_question(self):
+        entries = [note("main", kind="task", jira_key="DEMO-42", title="Ranking"),
+                   note("sibling", kind="task", jira_key="DEMO-43", title="Caching"),
+                   note("both", summary="DEMO-42 and DEMO-43 were released together."),
+                   note("one", summary="Blocked by DEMO-43."),
+                   note("other", kind="task", jira_key="DEMO-44", title="Unrelated")]
+
+        def check(conn, schema):
+            value = self.keyed(conn, "DEMO-42/DEMO-43", ["demo-42", "demo-43"], ["main", "sibling", "both", "one"])
+            # A record is credited with the keys it mentions; its own jira_key is no mention.
+            mentioned = {item["id"]: [reason for reason in item["match_reasons"] if reason.startswith("keywords:")]
+                         for item in value["results"]}
+            self.assertEqual(mentioned, {"main": [], "sibling": [], "both": ["keywords:demo-42,demo-43"],
+                                         "one": ["keywords:demo-43"]})
 
         self.each_layout(check, entries)
 
@@ -314,16 +347,16 @@ class IssueKeyTests(unittest.TestCase):
                 ("sha256", "sha256.", True), ("sha256", "hmac-sha256-v2", True),
                 ("30", "atl-3010 and 300", False), ("30", "within 30 seconds", True),
                 ("python3", "python3.13", True), ("python3", "python39", False),
-                ("gemma-4", "gemma-40", False), ("cach", "caching", True)):
+                ("gemma-4", "gemma-40", False), ("cach", "caching", True),
+                ("sha256", "the_sha256_digest", True), ("30", "timeout_30", True)):
             with self.subTest(term=term, text=text):
                 self.assertEqual(recall.matches_term(term, text), expected)
 
-    def test_recognition_reads_indexes_only_and_writes_nothing(self):
+    def test_recognition_only_reads_indexes_on_a_read_only_connection(self):
         entries = [note("main", jira_key="DEMO-42"), note("task:OPS-7")]
         for schema, fts, index in LAYOUTS:
             with self.subTest(schema=schema, fts=fts, index=index):
                 self.store(entries, [issue("jira:NET-5")], schema, fts, index).close()
-                before = self.path.read_bytes()
                 conn = memory.connect(self.path, readonly=True)
                 self.addCleanup(conn.close)
                 statements = []
@@ -341,6 +374,7 @@ class IssueKeyTests(unittest.TestCase):
                         plan = " ".join(row[3] for row in conn.execute("EXPLAIN QUERY PLAN " + sql))
                         self.assertIn("COVERING INDEX", plan, sql)
                 self.assertFalse(any("entries_fts" in sql or "summary" in sql for sql in statements))
+                self.assertTrue(all(sql.lstrip().startswith("SELECT") for sql in statements), statements)
                 # A question without a number cannot name an issue: nothing is read at all.
                 del statements[:]
                 conn.set_trace_callback(statements.append)
@@ -348,7 +382,6 @@ class IssueKeyTests(unittest.TestCase):
                 conn.set_trace_callback(None)
                 self.assertEqual(statements, [])
                 conn.close()
-                self.assertEqual(self.path.read_bytes(), before)
 
     def test_search_index_and_scan_agree_after_old_writer_changes(self):
         conn = self.store([note("moved", jira_key="DEMO-42"), note("task:OPS-7"), note("removed", jira_key="WEB-3"),
@@ -356,7 +389,7 @@ class IssueKeyTests(unittest.TestCase):
 
         def both(text):
             indexed = recall.issue_keys(conn, recall.normalize(text))
-            with mock.patch.object(search_index, "recorded_issue_keys", return_value=None):
+            with mock.patch.object(search_index, "indexed_issue_keys", return_value=None):
                 self.assertEqual(recall.issue_keys(conn, recall.normalize(text)), indexed, text)
             return indexed[0]
 
@@ -441,13 +474,13 @@ class IssueKeyTests(unittest.TestCase):
         extreme = "DEMO-42 demo-7 " + "/".join("v{}.{}".format(number, number + 1) for number in range(400))
         for query, indexed in ((path, True), (extreme, False)):
             with self.subTest(indexed=indexed):
-                with mock.patch.object(search_index, "recorded_issue_keys",
-                                       wraps=search_index.recorded_issue_keys) as lookup:
+                with mock.patch.object(search_index, "indexed_issue_keys",
+                                       wraps=search_index.indexed_issue_keys) as lookup:
                     keys, _ = recall.issue_keys(conn, recall.normalize(query))
                 self.assertEqual(keys, ["demo-42", "demo-7"])
                 variants, series = lookup.call_args[0][1:]
                 self.assertEqual(len(variants) <= search_index.MAX_ISSUE_KEYS, indexed)
-                self.assertEqual(search_index.recorded_issue_keys(conn, variants, series) is not None, indexed)
+                self.assertEqual(search_index.indexed_issue_keys(conn, variants, series) is not None, indexed)
 
     def test_entities_that_mention_a_key_pass_the_index_gate(self):
         # AB#123, #77 and C++-7 are several lexical tokens each in the entity index.
@@ -459,27 +492,74 @@ class IssueKeyTests(unittest.TestCase):
                     issue("svc-c", kind="component", aliases=["C++-7 port"]),
                     issue("svc-d", kind="component", summary="Mentions 123, 77 and 7 without any key.")]
 
-        def check(conn, schema):
-            if schema == 1:
-                return
-            self.keyed(conn, "AB#123", ["ab#123"], ["azure", "svc-a"], first="azure")
-            self.keyed(conn, "#77", ["#77"], ["github", "svc-b"], first="github")
-            self.keyed(conn, "C++-7", ["c++-7"], ["plus", "svc-c"], first="plus")
+        for schema, fts, index in LAYOUTS:
+            if schema >= 2:
+                with self.subTest(schema=schema, fts=fts, index=index):
+                    conn = self.store(entries, entities, schema, fts, index)
+                    self.keyed(conn, "AB#123", ["ab#123"], ["azure", "svc-a"], first="azure")
+                    self.keyed(conn, "#77", ["#77"], ["github", "svc-b"], first="github")
+                    self.keyed(conn, "C++-7", ["c++-7"], ["plus", "svc-c"], first="plus")
 
-        self.each_layout(check, entries, entities)
+    def test_graph_neighbour_without_the_key_is_not_added(self):
+        entries = [note("main", kind="task", jira_key="DEMO-42", title="Ranking"),
+                   note("neighbour", title="Capacity plan"),
+                   note("keyed-neighbour", summary="Planned together with DEMO-42.")]
+        for schema, fts, index in LAYOUTS:
+            if schema >= 2:
+                with self.subTest(schema=schema, fts=fts, index=index):
+                    conn = self.store(entries, schema=schema, fts=fts, index=index)
+                    for target in ("neighbour", "keyed-neighbour"):
+                        graph.put(conn, dict(id="main-" + target, from_ref="entry:main", to_ref="entry:" + target,
+                                             kind="informs", description="Recorded link.", knowledge_state="confirmed",
+                                             sources=[{"reference": "https://example.test/link/" + target}]), "edge", memory)
+                    self.keyed(conn, "DEMO-42", ["demo-42"], ["main", "keyed-neighbour"], first="main")
+                    explained = self.ask(conn, "DEMO-42", expect="entry:neighbour")["explain"]["expected"]
+                    self.assertEqual(explained["graph_stage"], "jira_guard")
 
-    def test_overflowing_shortlist_keeps_the_records_that_hold_the_key(self):
+    def test_key_mode_shortlist_holds_only_records_with_the_key(self):
         # FTS5 keeps only "12" of the key #12, and every date with a 12 matches that.
-        entries = [note("github", kind="task", jira_key="#12", title="Upload retries"),
-                   note("follow-up", kind="decision", summary="Decided after #12 to cap the retries.")]
-        entries += [note("dated-{:03d}".format(number), title="Report of 2026-01-12, part {}".format(number))
-                    for number in range(recall.CANDIDATE_LIMIT + 40)]
+        holders = [note("github", kind="task", jira_key="#12", title="Upload retries"),
+                   note("in-summary", kind="decision", summary="Decided after #12 to cap the retries."),
+                   note("in-title", title="Follow-up to #12"),
+                   note("in-alias", aliases=["#12"], title="Retry budget"),
+                   note("in-shared-key", kind="task", jira_key="#12, #13", title="Two issues in one card"),
+                   note("retro-#12", title="Retrospective")]
+        ids = [value["id"] for value in holders]
+        for schema, fts, index in LAYOUTS:
+            if schema == 3:
+                with self.subTest(fts=fts, index=index):
+                    scores = []
+                    for unrelated in (recall.CANDIDATE_LIMIT - 20, recall.CANDIDATE_LIMIT + 40):
+                        dated = [note("dated-{:03d}".format(number), title="Report of 2026-01-12, part {}".format(number))
+                                 for number in range(unrelated)]
+                        conn = self.store(holders + dated, schema=schema, fts=fts, index=index)
+                        value = self.keyed(conn, "#12", ["#12"], ids, first="github")
+                        self.assertFalse(value["truncated"])
+                        scores.append([(item["id"], item["retrieval_score"]) for item in value["results"]])
+                        if fts:
+                            self.assertEqual(value["selection"]["discarded_weak_matches"], unrelated)
+                        filtered = self.ask(conn, "#12", where="kind = 'decision'", expect="entry:in-summary")
+                        self.assertEqual([item["id"] for item in filtered["results"]], ["in-summary"])
+                        self.assertEqual(filtered["explain"]["expected"]["outcome"], "returned")
+                    # Unrelated rows that cross the shortlist limit change nothing for the holders.
+                    self.assertEqual(scores[0], scores[1])
+                    with mock.patch.object(recall, "CANDIDATE_LIMIT", 3):
+                        capped = self.ask(conn, "#12")
+                    self.assertEqual(capped["truncated"], fts)
+                    self.assertLessEqual({item["id"] for item in capped["results"]}, set(ids))
+
+    def test_digit_term_shortlist_is_not_filled_by_longer_tokens(self):
+        # "sha256"* would shortlist 170 rows with sha2560, and lexical() rejects them all.
+        entries = [note("digest", summary="The manifest stores a sha256 of the wheel."),
+                   note("timeout", summary="The gateway waits 30 seconds.")]
+        entries += [note("longer-{:03d}".format(number), title="sha2560 probe with 300 requests")
+                    for number in range(recall.CANDIDATE_LIMIT + 10)]
         for schema, fts, index in LAYOUTS:
             if schema == 3:
                 with self.subTest(fts=fts, index=index):
                     conn = self.store(entries, schema=schema, fts=fts, index=index)
-                    value = self.keyed(conn, "#12", ["#12"], ["github", "follow-up"], first="github")
-                    self.assertFalse(value["truncated"])
+                    self.assertFalse(self.words(conn, "sha256", ["digest"])["truncated"])
+                    self.assertFalse(self.words(conn, "30 seconds", ["timeout"])["truncated"])
 
     def test_record_that_holds_a_key_is_an_answer_wherever_it_holds_it(self):
         entries = [note("github", kind="task", jira_key="#77", title="Upload retries"),

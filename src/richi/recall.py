@@ -1,6 +1,7 @@
 """Bounded, explainable recall over existing records; no writes or network calls."""
 
 import bisect
+import functools
 import json
 import re
 
@@ -192,7 +193,7 @@ def phrase(value):
     return " ".join(WORDS.findall(normalize(value)))
 
 
-def terms_for(query, conn):
+def terms_for(conn, query):
     # An issue key is one routing key, never an OR search for a generic prefix.
     # Only the store can say which tokens are keys; the rest are words.
     text = normalize(query)
@@ -274,7 +275,7 @@ def recorded_issue_keys(conn, variants, series):
     to s and k.
     """
     from . import search_index
-    found = search_index.recorded_issue_keys(conn, variants, series)
+    found = search_index.indexed_issue_keys(conn, variants, series)
     if found is not None:
         return found
     jira_keys = [row[0] for row in conn.execute(
@@ -300,7 +301,7 @@ def key_variants(key):
     # Keep the numeric suffix intact: ABC-17 / ABC17 never matches ABC-170.
     # Only a letters-number key has a compact spelling: REL-1-2 is not REL12.
     compact = key.replace("-", "")
-    return (key, compact) if canonical_key(compact) == key else (key,)
+    return (key, compact) if compact != key and canonical_key(compact) == key else (key,)
 
 
 def decode(row, arrays=("sources", "tags", "aliases")):
@@ -314,13 +315,25 @@ def table_exists(conn, name):
     return conn.execute("SELECT 1 FROM sqlite_master WHERE 1=1 AND type = 'table' AND name = ?", (name,)).fetchone() is not None
 
 
+@functools.lru_cache(maxsize=256)
+def key_pattern(keys):
+    """Every spelling of the keys, and one expression that finds any of them as a whole key."""
+    spellings = tuple(variant for key in keys for variant in key_variants(key))
+    return spellings, re.compile(r"(?<![\w])(?:" + "|".join(map(re.escape, spellings)) + r")(?![\w])")
+
+
+def holds_key(text, keys):
+    # Few texts contain a spelling at all; the plain test spares the rest the expression.
+    spellings, pattern = key_pattern(tuple(keys))
+    return any(spelling in text for spelling in spellings) and pattern.search(text) is not None
+
+
 def matches_key(record, keys):
     if not keys:
         return True
     texts = [record.get(field, "") for field in ("id", "jira_key", "title", "summary")]
     texts += record.get("aliases", [])
-    return any(re.search(r"(?<![\w])" + re.escape(variant) + r"(?![\w])", normalize(text))
-               for key in keys for variant in key_variants(key) for text in texts)
+    return any(holds_key(normalize(text), keys) for text in texts)
 
 
 def matches_term(term, text):
@@ -450,10 +463,13 @@ def lexical(record, query, terms, keys, family):
         if points:
             score += points
             matched.append(term)
+    mentions = [title, summary, identity] + [normalize(value) for value in record.get("aliases", [])] if keys else []
     for key in keys:
         # Whole Jira keys may be mentioned in another record's evidence or summary.
-        # The guard decides what holds a key, so no record passes it with no score.
-        if matches_key(record, [key]):
+        # Aliases are read as written, and a jira_key that holds the key among other
+        # text is a mention too, so no record passes the guard with no score.
+        texts = mentions if record_key in key_variants(key) else mentions + [record_key]
+        if any(holds_key(text, (key,)) for text in texts):
             score += 25
             matched.append(key)
     if matched:
@@ -571,29 +587,40 @@ def candidates(conn, query, terms, keys, states, project, api, trace=None, selec
         expression = " OR ".join('"' + word.replace('"', '""') + '"*' for word in terms)
         key_expressions = ['"' + variant.replace('"', '""') + '"' for key in keys for variant in key_variants(key)]
         expression = " OR ".join(key_expressions) if keys else expression
-        def shortlist(holds_key=""):
+        # A term with a digit matches whole tokens only (matches_term). Without its
+        # prefix star, rows that merely start with it cannot fill the shortlist.
+        expression = re.sub(r'("[^"]*\d[^"]*")\*', r"\1", expression)
+
+        def shortlist(columns, limit):
             return conn.execute("""
-            SELECT e.id
+            SELECT """ + columns + """
             FROM entries e
                 JOIN entries_fts ON entries_fts.rowid = e.rowid
             WHERE 1=1 AND entries_fts MATCH ? AND e.knowledge_state IN (""" + states_sql + ") AND (" + clause + """ )
-            """ + holds_key + """
             ORDER BY bm25(entries_fts, 8.0, 6.0, 1.0, 10.0, 3.0, 5.0), e.id
             LIMIT ?
-        """, [expression] + states + values + [CANDIDATE_LIMIT + 1]).fetchall()
+        """, [expression] + states + values + [limit])
 
-        rows = shortlist()
-        if keys and len(rows) > CANDIDATE_LIMIT:
-            # The tokenizer keeps only "12" of the key #12, so rows with any 12 can
-            # crowd out the ones that hold the key. Ask again for those rows alone.
-            conn.create_function("richi_holds_issue_key", 5, lambda identity, jira_key, title, summary, aliases: matches_key(
-                {"id": identity, "jira_key": jira_key, "title": title, "summary": summary,
-                 "aliases": json.loads(aliases)}, keys))
-            rows = shortlist("AND richi_holds_issue_key(e.id, e.jira_key, e.title, e.summary, e.aliases)")
+        if keys:
+            # FTS cannot spell every key: it keeps only "12" of #12, and the phrase
+            # for DEMO-42 also matches "demo 42". Take the ranked rows that hold a
+            # key themselves, so no other row crowds them out of the shortlist.
+            rows, fetched, cursor = [], 0, shortlist("e.id, e.jira_key, e.title, e.summary, e.aliases", -1)
+            for row in cursor:
+                fetched += 1
+                if matches_key(decode(row, ("aliases",)), keys):
+                    rows.append(row)
+                    if len(rows) > CANDIDATE_LIMIT:
+                        break
+            cursor.close()
+            discarded_weak += fetched - len(rows)
+        else:
+            rows = shortlist("e.id", CANDIDATE_LIMIT + 1).fetchall()
+            fetched = len(rows)
         fts_truncated = len(rows) > CANDIDATE_LIMIT
         fts_ranks = {row[0]: rank for rank, row in enumerate(rows[:CANDIDATE_LIMIT])}
         if trace:
-            trace.counts.update(fts_rows_fetched=len(rows), fts_shortlisted=len(fts_ranks))
+            trace.counts.update(fts_rows_fetched=fetched, fts_shortlisted=len(fts_ranks))
 
     # Preserve all FTS exceptions without loading/scoring unrelated full texts.
     for row, probe in entry_candidate_rows(conn, query, keys, states, fts_ranks, has_fts, trace, selection_filter):
@@ -818,7 +845,7 @@ def _recall(conn, args, api, *, bounded=True):
         if trace and trace.expected and trace.expected["direct_stage"] == "not_evaluated":
             if not selection_filter.matches_ref(conn, trace.expected["ref"]):
                 trace.expected["direct_stage"] = "filtered_where"
-    terms, keys = terms_for(query, conn)
+    terms, keys = terms_for(conn, query)
     options = {"selection_filter": selection_filter} if selection_filter else {}
     direct_by_ref, fts_truncated, backend, discarded_weak = candidates(conn, query, terms, keys, states, project, api, trace, **options)
     direct = rank(direct_by_ref.values())
