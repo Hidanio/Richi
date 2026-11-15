@@ -80,7 +80,10 @@ a full current record is needed. Prior recall and entry read calls are not requi
 a short full record may be smaller than a bounded wrapper. Add `--history`
 for chronology. For an unknown ID, first find the record and follow `read_more`.
 
-Read commands open SQLite in `mode=ro` with `query_only=ON`.
+Read commands open SQLite in `mode=ro` with `query_only=ON`. The macOS system
+SQLite cannot read a store that way when its `-wal` and `-shm` files are missing,
+as after copying the database file alone; only then, one read-write open creates
+them without changing the database.
 `punisher` selects candidates for manual maintenance, `recall --explain --expect REF`
 explains misses, and `sources snapshot/check` tracks changes in selected
 cards, relationships and local files. Examples and limits are in

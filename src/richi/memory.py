@@ -2,7 +2,7 @@
 """Local project memory. Python 3.9+, stdlib only; see README.md."""
 
 import argparse
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import date, datetime, timezone
 import hashlib
 import json
@@ -231,23 +231,65 @@ def execute_script(conn, script):
         raise MemoryError("Incomplete schema statement")
 
 
-def connect(path, create=False, readonly=False):
+def connect(path, create=False, readonly=False, timeout=10):
+    """Open the store; timeout is how many seconds a statement waits for a lock.
+
+    A read-only connection is returned after its first read (_first_read), so
+    a store that cannot be read fails here with the error of that read.
+    """
     if create and readonly:
         raise MemoryError("Cannot create a read-only database")
     if create:
         path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(path), timeout=10, isolation_level=None)
+        conn = sqlite3.connect(str(path), timeout=timeout, isolation_level=None)
     else:
         if not path.is_file():
             raise MemoryError("Database does not exist; run init first: " + str(path))
         mode = "ro" if readonly else "rw"
-        conn = sqlite3.connect(path.as_uri() + "?mode=" + mode, uri=True, timeout=10, isolation_level=None)
+        conn = sqlite3.connect(path.as_uri() + "?mode=" + mode, uri=True, timeout=timeout, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA busy_timeout = 10000")
+    conn.execute("PRAGMA busy_timeout = %d" % (timeout * 1000))
     if readonly:
         conn.execute("PRAGMA query_only = ON")
+        try:
+            _first_read(conn, path, timeout)
+        except BaseException:
+            conn.close()
+            raise
     return conn
+
+
+def _first_read(conn, path, timeout):
+    """Read through a read-only connection, creating missing WAL files once.
+
+    SQLite opens a WAL database's -wal and -shm files at the first read. The
+    system SQLite of macOS does not create a missing -wal file for a read-only
+    connection, so there a store copied as a single file fails that read with
+    "unable to open database file". Only after that error, a read-write
+    connection creates the files; the database itself is not changed. If that
+    fails too, as in a read-only directory, the first error is raised unchanged.
+    """
+    try:
+        conn.execute("PRAGMA user_version").fetchone()
+    except sqlite3.OperationalError as exc:
+        # Python reports SQLITE_CANTOPEN as a code only from 3.11; this is its text.
+        if str(exc) != "unable to open database file" or not _created_wal_files(conn, path, timeout):
+            raise
+
+
+def _created_wal_files(conn, path, timeout):
+    """True once a read-write connection made the WAL files and conn read the store."""
+    try:
+        with closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=timeout,
+                                     isolation_level=None)) as writer:
+            writer.execute("PRAGMA query_only = ON")
+            writer.execute("PRAGMA user_version").fetchone()
+            # Read before the writer closes: SQLite removes the files with the last connection.
+            conn.execute("PRAGMA user_version").fetchone()
+    except sqlite3.Error:
+        return False
+    return True
 
 
 def backend(conn):
