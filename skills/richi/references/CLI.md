@@ -234,7 +234,7 @@ WAL, a lock wait of up to 10 seconds, foreign keys and explicit transactions are
 `check` verifies schema version, SQLite integrity and foreign keys. New databases
 use schema 3. Core commands support schemas 1, 2 and 3; graph commands support
 schemas 2 and 3. Tool entities require schema 3. For an older store, migration is
-explicit: `backup`, then `migrate`. Unknown versions are rejected. Repeated `init`
+explicit: `migrate` backs the store up, then upgrades it. Unknown versions are rejected. Repeated `init`
 does not reset data; schema 1/2 requires `migrate`, and an unknown nonempty database
 is not reinitialized. Original tables are `projects`, `entries`, `entry_projects`,
 `relations`, `entry_history`, `entry_events`, `metadata` and, where supported,

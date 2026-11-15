@@ -57,7 +57,9 @@ checkout installed normally, so they test the proposed version rather than a
 previous fixed installation. Tests and public evaluations use disposable stores
 and synthetic repositories; they must not depend on personal memory. Test
 schema changes against a copy: selecting a runtime never migrates SQLite
-automatically.
+automatically. Stores upgrade forward only: a new schema need not be readable by
+earlier releases, and `migrate` backs the store up before it changes anything
+(`docs/UPDATES.md#forward-only`).
 
 For authorized work with an existing knowledge store, use the `richi`
 skill and inspect `richi config show` to resolve its location. Search relevant

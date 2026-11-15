@@ -78,8 +78,16 @@ class GraphTests(unittest.TestCase):
             before = {t: conn.execute("SELECT * FROM " + t).fetchall() for t in tables}
         self.cli("init", ok=False)
         self.cli("graph", "export", ok=False)
-        self.assertEqual(self.cli("migrate")["status"], "migrated")
-        self.assertEqual(self.cli("migrate")["status"], "existing")
+        migrated = self.cli("migrate")
+        self.assertEqual(migrated["status"], "migrated")
+        # migrate itself wrote the copy an older release can still read.
+        copy = Path(migrated["backup"])
+        self.assertEqual((copy.parent, copy.parent.parent), (Path(migrated["database"]).parent / "backups", self.db.parent.resolve()))
+        with closing(sqlite3.connect(str(copy))) as conn, conn:
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 1)
+            self.assertEqual({t: conn.execute("SELECT * FROM " + t).fetchall() for t in tables}, before)
+        self.assertEqual(self.cli("migrate"), {"status": "existing", "schema_version": 3, "database": migrated["database"]})
+        self.assertEqual(list(copy.parent.iterdir()), [copy])
         with closing(sqlite3.connect(str(self.db))) as conn, conn:
             after = {t: conn.execute("SELECT * FROM " + t).fetchall() for t in tables}
             self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 3)
@@ -92,6 +100,37 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(len(self.cli("entry", "get", "old", "--history")["history"]), 2)
         self.assertEqual(len(self.graph()["nodes"]), 2)
         self.cli("check")
+        # The way back: the current runtime still reads the copy.
+        self.db = copy
+        self.assertEqual(self.cli("check")["schema_version"], 1)
+        self.assertIn("old", json.dumps(self.cli("search", "FTSneedlepersist")))
+
+    def test_copy_made_by_migrate_can_be_put_back(self):
+        store = self.db = Path(self.temp.name) / "wal" / "memory.sqlite3"
+        store.parent.mkdir()
+        with closing(sqlite3.connect(str(store))) as conn, conn:
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.executescript((BASE / "schema.sql").read_text())
+            conn.executescript(memory.FTS_SQL)
+            conn.execute("INSERT INTO metadata VALUES ('search_backend', 'fts5')")
+            conn.execute("PRAGMA user_version = 1")
+        self.put("project", {"id": "a", "name": "A"}, action="upsert")
+        self.put("entry", self.entry("old", summary="FTSneedlepersist"))
+        copy = Path(self.cli("migrate")["backup"])
+        self.put("entry", self.entry("later"))
+        # The documented way back: clear the database path, then write the copy to it.
+        self.db = copy
+        self.cli("backup", "--output", str(store), ok=False)
+        aside = store.parent / "aside"
+        aside.mkdir()
+        for path in list(store.parent.glob(store.name + "*")):
+            path.rename(aside / path.name)
+        self.assertEqual(self.cli("backup", "--output", str(store))["status"], "created")
+        self.db = store
+        self.assertEqual(self.cli("check")["schema_version"], 1)
+        self.assertIn("old", json.dumps(self.cli("search", "FTSneedlepersist")))
+        self.cli("entry", "get", "later", ok=False)
+        self.assertEqual(self.cli("migrate")["status"], "migrated")
 
     def test_migration_rolls_back_on_partial_schema_collision(self):
         self.db = Path(self.temp.name) / "broken.sqlite3"
@@ -101,7 +140,8 @@ class GraphTests(unittest.TestCase):
             conn.execute("PRAGMA user_version = 1")
             conn.execute("CREATE TABLE graph_nodes (valuable TEXT)")
             conn.execute("INSERT INTO graph_nodes VALUES ('keep')")
-        self.cli("migrate", ok=False)
+        error = self.cli("migrate", ok=False)["error"]
+        self.assertIn("the store is unchanged and its backup is retained at ", error)
         with closing(sqlite3.connect(str(self.db))) as conn, conn:
             self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 1)
             self.assertEqual(conn.execute("SELECT * FROM graph_nodes").fetchall(), [("keep",)])

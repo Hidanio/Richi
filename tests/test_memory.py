@@ -198,6 +198,19 @@ class MemoryIntegrationTests(unittest.TestCase):
         self.run_cli("backup", "--output", str(target), ok=False)
         self.assertEqual(target.read_bytes(), b"existing valuable data")
 
+    def test_backup_refuses_a_destination_with_leftover_wal_files(self):
+        # Another database's -wal beside the new copy would be replayed into it.
+        target = self.root / "restored.sqlite3"
+        for suffix in ("-wal", "-shm"):
+            leftover = Path(str(target) + suffix)
+            leftover.write_bytes(b"stale")
+            self.run_cli("backup", "--output", str(target), ok=False)
+            self.assertFalse(target.exists())
+            self.assertEqual(leftover.read_bytes(), b"stale")
+            leftover.unlink()
+        self.run_cli("backup", "--output", str(target))
+        self.run_cli("check", db=target)
+
 
 if __name__ == "__main__":
     unittest.main()
