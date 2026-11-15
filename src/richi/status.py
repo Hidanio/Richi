@@ -206,8 +206,7 @@ def inspect(database, project_path=None, project_id=None, all_projects=False, li
             return report
         if not stat.S_ISREG(mode):
             raise ValueError("Database path is not a regular file")
-        conn = memory.connect(database, readonly=True)
-        conn.execute("PRAGMA busy_timeout = 1000")
+        conn = memory.connect(database, readonly=True, timeout=1)
         conn.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
         version = conn.execute("PRAGMA user_version").fetchone()[0]
         report["database"]["schema_version"] = version

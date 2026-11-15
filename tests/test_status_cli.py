@@ -126,7 +126,7 @@ class StatusCliTests(unittest.TestCase):
         self.assertFalse(Path(report["storage"]["database"]).exists())
         self.assertEqual(self.snapshot(), before)
 
-    def test_checkpointed_wal_without_sidecars_preserves_data_across_sqlite_versions(self):
+    def test_checkpointed_wal_without_sidecars_is_read_and_preserved_across_sqlite_versions(self):
         self.command("init")
         database = self.command("config", "show")["database"]
         # All fixture subprocesses exited. Checkpoint every frame and close the
@@ -147,14 +147,10 @@ class StatusCliTests(unittest.TestCase):
         self.assertFalse(shm.exists())
         before = self.snapshot()
         report = self.command("status")
-        diagnostic = report["diagnostics"]["database"]
-        # System SQLite on macOS may refuse this read-only open. Other builds
-        # create empty WAL bookkeeping. Both must preserve persistent contents.
-        if diagnostic["status"] == "unavailable":
-            self.assertIn("unable to open database file", diagnostic["error"])
-            self.assertEqual(report["status"], "attention")
-        else:
-            self.assertEqual(diagnostic["status"], "ready")
+        # Most builds create empty WAL bookkeeping for the read-only open. System
+        # SQLite on macOS does not, and gets it from one read-write open. Both
+        # must preserve persistent contents.
+        self.assertEqual(report["diagnostics"]["database"]["status"], "ready")
         self.assertTrue(report["runtime"]["available"])
         allowed_created = set()
         for file, size in ((wal, 0), (shm, 32768)):

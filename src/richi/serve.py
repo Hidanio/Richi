@@ -585,10 +585,11 @@ def source_fingerprint(package=None):
 
 def database_schema(database):
     """The store's schema, read the same read-only way as at startup; None if unknown."""
+    from . import memory
     try:
-        with closing(sqlite3.connect(Path(database).as_uri() + "?mode=ro", uri=True)) as conn:
+        with closing(memory.connect(Path(database), readonly=True, timeout=5)) as conn:
             return conn.execute("PRAGMA user_version").fetchone()[0]
-    except sqlite3.Error:
+    except (sqlite3.Error, MemoryError):
         return None
 
 
