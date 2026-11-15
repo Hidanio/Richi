@@ -58,6 +58,7 @@ COMMANDS = (
     ('rules update', 'rules', 'write', "Change a rule's text, skills or source with optimistic concurrency.", 'RULES.md'),
     ('rules remove', 'rules', 'write', 'Delete a rule with optimistic concurrency.', 'RULES.md'),
     ('rules apply', 'rules', 'write', 'Add, update or remove a rule from one JSON change object.', 'RULES.md'),
+    ('rules log', 'rules', 'read', 'Show recent rule changes: who changed which rule, with the rule before and after.', 'RULES.md'),
     ('skill-sources list', 'agents', 'read', 'List known agents with their skill sources, skill counts and versions.', 'AGENT_SKILLS.md'),
     ('skill-sources add', 'agents', 'write', 'Describe an agent Richi lacks: name, skill folders and how to recognize it.', 'AGENT_SKILLS.md'),
     ('skill-sources update', 'agents', 'write', "Switch an agent's skill sources, add or remove skill folders, or edit an own agent.", 'AGENT_SKILLS.md'),

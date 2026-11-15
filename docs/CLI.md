@@ -151,10 +151,12 @@ richi rules add no-agent-prefix --global --text "Never prefix branch names with 
 richi rules add branch-naming --project service-example --text "Name branches SE-<number>_<topic>."
 richi rules add pr-skill --global --text "Use the pr-description skill for pull requests." --skill pr-description
 richi rules add review-skill --global --text "Use the code review skill for reviews." --skill claude=engineering:code-review --skill codex=code-review
+richi rules log
 ```
 
 Rules are instructions, not knowledge: search never returns them, and agents
-change them only at the user's request. See [standing rules](../skills/project-memory/references/RULES.md).
+change them only at the user's request. `rules log` shows who changed which rule,
+with the rule before and after. See [standing rules](../skills/project-memory/references/RULES.md).
 The map's **Rules** tab shows them and, in a page opened by `richi map`, adds
 and edits them with templates and a list of installed skills: one skill for every agent, or
 one per agent when they differ.

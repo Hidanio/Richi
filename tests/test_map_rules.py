@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sqlite3
 import stat
 import tempfile
 import threading
@@ -13,6 +14,7 @@ import unittest
 from unittest import mock
 
 from richi import agents, map_access, memory, rules, serve, skill_catalog
+from richi_launcher import config
 
 
 def write_skill(directory, header):
@@ -206,23 +208,49 @@ class MapAccessTests(unittest.TestCase):
         self.assertIsNone(map_access.secret(self.database))
 
     def test_the_browser_gets_the_ticket_outside_its_arguments(self):
-        opened = []
+        address, redirect, opened = "http://127.0.0.1:1/", self.runtime / map_access.REDIRECT_FILE, []
+        with_ticket = r"\Ahttp://127\.0\.0\.1:1/#ticket=[0-9a-f]{64}\Z"
+
+        def opens(url):
+            opened.append(url)
+            return True
+
+        def refuses_first(url):
+            opened.append(url)
+            return len(opened) > 1
         environment = {key: value for key, value in os.environ.items() if key != "BROWSER"}
         with mock.patch.dict(os.environ, environment, clear=True), mock.patch.object(map_access.sys, "platform", "darwin"):
-            map_access.open_browser("http://127.0.0.1:1/", self.database, opened.append)
-        self.assertRegex(opened[0], r"\Ahttp://127\.0\.0\.1:1/#ticket=[0-9a-f]{64}\Z")
-        self.assertIsNotNone(map_access.redeem(self.database, opened[0].rsplit("=", 1)[1]))
+            # macOS hands the URL to its own controller on standard input, so the ticket may go in it.
+            self.assertTrue(map_access.open_browser(address, self.database, opens))
+            self.assertRegex(opened[0], with_ticket)
+            self.assertEqual(len(opened), 1)
+            self.assertIsNotNone(map_access.redeem(self.database, opened[0].rsplit("=", 1)[1]))
+            # When that controller fails, the ticket does not go on to a browser that takes it as an argument.
+            del opened[:]
+            self.assertTrue(map_access.open_browser(address, self.database, refuses_first, wait=0))
+            self.assertRegex(opened[0], with_ticket)
+            self.assertEqual(opened[1:], [redirect.as_uri()])
+            with mock.patch.object(map_access.webbrowser, "get",
+                                   side_effect=map_access.webbrowser.Error("no controller")) as controller:
+                self.assertFalse(map_access._tell_system_browser(address))
+            controller.assert_called_once_with("MacOSX")
+            # The user's own BROWSER is a command line again.
+            del opened[:]
+            with mock.patch.dict(os.environ, {"BROWSER": "firefox"}):
+                map_access.open_browser(address, self.database, opens, wait=0)
+            self.assertEqual(opened, [redirect.as_uri()])
+        del opened[:]
         with mock.patch.object(map_access.sys, "platform", "linux"):
-            map_access.open_browser("http://127.0.0.1:1/", self.database, opened.append, wait=0)
-        redirect = self.runtime / map_access.REDIRECT_FILE
-        self.assertEqual(opened[1], redirect.as_uri())
+            map_access.open_browser(address, self.database, opens, wait=0)
+        self.assertEqual(opened, [redirect.as_uri()])
         self.assertEqual(self.mode(redirect), 0o600)
         link = re.search(r'href="([^"]+)"', redirect.read_text(encoding="utf-8")).group(1)
         self.assertTrue(html.unescape(link).startswith("http://127.0.0.1:1/#ticket="))
         self.assertIsNotNone(map_access.redeem(self.database, html.unescape(link).rsplit("=", 1)[1]))
+        del opened[:]
         with mock.patch.object(map_access, "issue_ticket", side_effect=PermissionError("read-only")):
-            map_access.open_browser("http://127.0.0.1:1/", self.database, opened.append)
-        self.assertEqual(opened[2], "http://127.0.0.1:1/")
+            map_access.open_browser(address, self.database, opens)
+        self.assertEqual(opened, [address])
 
     def test_a_browser_that_cannot_read_the_redirect_still_gets_the_map(self):
         address, redirect = "http://127.0.0.1:1/", (self.runtime / map_access.REDIRECT_FILE).as_uri()
@@ -345,6 +373,50 @@ class MapRulesAPITests(unittest.TestCase):
         self.assertEqual((none["skill"], none["skills"]), (None, None))
         self.change(secret, action="remove", id="pr-skill", expected_updated_at=none["updated_at"])
         self.assertEqual([item["id"] for item in self.listed(secret)["rules"]], ["naming"])
+        # The page never chooses the source, and every change is recorded as the map's.
+        self.assertEqual(self.change(secret, action="add", id="sourced", scope="global", text="x",
+                                     source="a chat")["rule"]["source"], "richi map")
+        renamed = self.change(secret, action="update", id="naming", expected_updated_at=project["updated_at"],
+                              text="Names.", source="someone else")["rule"]
+        self.assertEqual((renamed["source"], renamed["changed_by"]), ("richi map", "richi map"))
+        self.change(secret, 400, action="update", id="naming", expected_updated_at=renamed["updated_at"], source="x")
+
+    def test_the_rules_answer_carries_what_the_form_needs(self):
+        secret = self.secret()
+        listing = self.listed()
+        self.assertEqual((listing["projects"], listing["agents"]),
+                         ([{"id": "service", "name": "Service"}],
+                          [{"id": "claude", "name": "Claude Code"}, {"id": "codex", "name": "Codex"}]))
+        self.assertNotIn("invalid_rules", listing)
+        self.change(secret, action="add", id="kept", scope="global", text="Stays.")
+        with sqlite3.connect(str(self.database)) as conn:
+            conn.execute("INSERT INTO metadata(key, value) VALUES ('rule:broken', '{not json')")
+        # A damaged row does not take the list down: it is named, and the page can remove it.
+        listing = self.listed(secret)
+        self.assertEqual([rule["id"] for rule in listing["rules"]], ["kept"])
+        self.assertEqual([(item["id"], item["updated_at"]) for item in listing["invalid_rules"]], [("broken", "invalid")])
+        self.assertEqual(self.change(secret, 409, action="remove", id="broken", expected_updated_at="x")["code"], "conflict")
+        self.change(secret, action="remove", id="broken", expected_updated_at="invalid")
+        self.assertNotIn("invalid_rules", self.listed())
+
+    def test_bodies_made_to_break_the_parser_are_refused(self):
+        header = {map_access.HEADER: self.secret()}
+        nested = b"[" * 20000 + b"]" * 20000
+        lone = "\\ud800"
+        for path, raw, expected in (
+                ("/api/rules", nested, 400), ("/api/agents", nested, 400),
+                ("/api/rules", ('{"action":"add","id":"s","scope":"global","text":"%s"}' % lone).encode(), 400),
+                ("/api/rules", ('{"action":"add","id":"s","scope":"global","text":"x","skill":"%s"}' % lone).encode(), 400),
+                ("/api/agents", ('{"action":"add","id":"s","name":"%s","folders":["~/x"]}' % lone).encode(), 400),
+                ("/api/agents", ('{"action":"add","id":"s","name":"S","folders":["~/%s"]}' % lone).encode(), 400)):
+            with self.subTest(path=path, raw=raw[:40]):
+                status, payload = self.request("POST", path, headers=header, raw=raw)
+                self.assertEqual((status, "error" in payload), (expected, True), payload)
+        # Without the secret a body is not parsed at all, and a ticket is never this long.
+        self.assertEqual(self.request("POST", "/api/rules", raw=nested)[0], 403)
+        self.assertEqual(self.request("POST", "/api/session", raw=nested)[1]["code"], "ticket_invalid")
+        self.assertEqual((self.listed()["rules"], [agent["id"] for agent in self.agents()["agents"]]),
+                         ([], ["claude", "codex"]))
 
     def test_change_requests_must_be_same_origin_json(self):
         secret = self.secret()
@@ -420,6 +492,11 @@ class MapRulesAPITests(unittest.TestCase):
                          ["pr-description", "review"])
         self.assertEqual(sorted(skill["name"] for skill in self.agents()["catalog"]["skills"]),
                          ["pr-description", "review"])
+        # Skill folders behind the lists stay on the server, and only an editing page learns where
+        # the settings file is.
+        self.assertTrue(all("roots" not in answer["catalog"] for answer in (added["listing"], self.agents(secret))))
+        self.assertEqual(("settings_file" in self.agents(), self.agents(secret)["settings_file"],
+                          added["listing"]["settings_file"]), (False, str(agents.settings_path()), str(agents.settings_path())))
         self.assertEqual(self.agent_change(secret, 409, **agent)["code"], "exists")
         # The skill list and the rules follow the registry at once.
         catalog = self.request("GET", "/api/skills")[1]
@@ -473,6 +550,24 @@ class MapRulesAPITests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(catalog["skills"], [{"name": "pr-description", "description": "Writes pull request descriptions.",
                                               "kind": "skills", "agents": ["codex"]}])
+        self.assertNotIn("roots", catalog)
+        self.assertEqual(health["store_arguments"], ["--db", str(self.database)])
+
+    def test_a_command_names_the_workspace_only_when_the_name_leads_to_this_store(self):
+        own = config.resolve_settings(workspace="default").database
+        by_file = ["--db", str(self.database)]
+        self.assertEqual(serve.store_arguments(own, None, "default"), ["--workspace", "default"])
+        # A map started with --db keeps the workspace's name and shows another file.
+        self.assertEqual(serve.store_arguments(self.database, None, "default"), by_file)
+        # What selected storage for the map's own process says nothing about the user's terminal.
+        with mock.patch.dict(os.environ, {"RICHI_DB": str(self.database)}):
+            self.assertEqual(serve.store_arguments(self.database, None, "default"), by_file)
+            self.assertEqual(serve.store_arguments(own, None, "default"), ["--workspace", "default"])
+            self.assertEqual(os.environ["RICHI_DB"], str(self.database))
+        settings = self.root / "config.json"
+        self.assertEqual(serve.store_arguments(self.database, settings, None, True), ["--config", str(settings), *by_file])
+        for workspace in ("no-such-workspace", "Not A Name", None):
+            self.assertEqual(serve.store_arguments(self.database, None, workspace), by_file)
 
 
 if __name__ == "__main__":

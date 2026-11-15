@@ -1,8 +1,9 @@
-"""Who may change standing rules through the loopback map.
+"""Who may change standing rules and agent settings through the loopback map.
 
 The map serves knowledge read-only to any loopback client of its port. Rules
-are different: agents follow them as the user's instructions, so a page that
-changes them must show it was opened by this user. `richi map` writes a
+are different: agents follow them as the user's instructions, and agent
+settings decide which skill folders are read, so a page that changes either
+must show it was opened by this user. `richi map` writes a
 one-time ticket next to the store, readable only by the user, and opens the
 map with that ticket in the URL fragment, which browsers never send to a
 server. The page redeems the ticket once, within TICKET_SECONDS, for a new
@@ -132,8 +133,20 @@ def redeem(database, ticket, now=None):
 
 
 def _argument_safe():
-    """webbrowser passes the URL to the browser outside its argument list."""
+    """The system browser can be told the URL outside any argument list (_tell_system_browser)."""
     return sys.platform == "darwin" and not os.environ.get("BROWSER")
+
+
+def _tell_system_browser(url):
+    """Open the URL with macOS's own controller, which hands it to osascript on standard input.
+
+    webbrowser.open would go on to the next registered browser when this one
+    fails, and that one may take the URL, ticket included, as an argument.
+    """
+    try:
+        return bool(webbrowser.get("MacOSX").open(url))
+    except (webbrowser.Error, OSError):
+        return False
 
 
 def _unused(database, ticket):
@@ -145,23 +158,30 @@ def _unused(database, ticket):
 
 
 def open_browser(address, database, opener=None, wait=FALLBACK_SECONDS, sleep=time.sleep):
-    """Open the map so that this page may change rules; returns what the opener returns."""
-    opener = opener or webbrowser.open
+    """Open the map so that this page may change rules; returns whether a browser was opened.
+
+    opener replaces the browser in tests: it takes the URL and says whether it opened.
+    """
     try:
         ticket = issue_ticket(database)
-        target, redirected = address + "#ticket=" + ticket, not _argument_safe()
-        if redirected:
-            redirect = runtime_dir(database, create=True) / REDIRECT_FILE
-            link = html.escape(target, quote=True)
-            _write_private(redirect, '<!doctype html><meta charset="utf-8"><meta name="referrer" content="no-referrer">'
-                                     '<meta http-equiv="refresh" content="0;url=' + link + '"><title>Richi</title>'
-                                     '<p><a href="' + link + '">Открыть карту Richi</a></p>\n')
-            target = redirect.as_uri()
     except OSError:
         # Without a ticket the map still opens; it composes commands instead of saving.
+        return (opener or webbrowser.open)(address)
+    target = address + "#ticket=" + ticket
+    if _argument_safe() and (opener or _tell_system_browser)(target):
+        return True
+    # Anywhere else a browser would get the URL as an argument: it gets the path of a private file instead.
+    opener = opener or webbrowser.open
+    try:
+        redirect = runtime_dir(database, create=True) / REDIRECT_FILE
+        link = html.escape(target, quote=True)
+        _write_private(redirect, '<!doctype html><meta charset="utf-8"><meta name="referrer" content="no-referrer">'
+                                 '<meta http-equiv="refresh" content="0;url=' + link + '"><title>Richi</title>'
+                                 '<p><a href="' + link + '">Открыть карту Richi</a></p>\n')
+    except OSError:
         return opener(address)
-    opened = opener(target)
-    if redirected and opened and wait:
+    opened = opener(redirect.as_uri())
+    if opened and wait:
         # The page redeems its ticket as soon as it loads. A ticket nobody used means the
         # browser could not read the private file, so the map is opened by its address.
         deadline = time.monotonic() + wait

@@ -1,5 +1,6 @@
 """Standing rules: scopes, guards, concurrency and isolation in synthetic stores."""
 from contextlib import redirect_stderr, redirect_stdout
+import hashlib
 import io
 import json
 import os
@@ -208,12 +209,17 @@ class RulesTests(unittest.TestCase):
         self.assertEqual((agent, skills), ("codex", {"mixed": "pr-codex", "only": None, "review": "code-review",
                                                      "same": "pr-description"}))
         self.assertIn("use_skill", note)
-        self.assertEqual(used(RICHI_CHAT_ID="claude:chat-1", CODEX_THREAD_ID="thread-1")[:2],
+        self.assertEqual(used(RICHI_CHAT_ID="claude:chat-1")[:2],
                          ("claude", {"mixed": "pr-description", "only": "pr-description",
                                      "review": "engineering:code-review", "same": "pr-description"}))
         self.assertEqual(used(CLAUDECODE="1")[0], "claude")
-        agent, skills, note = used()
-        self.assertEqual((agent, set(skills.values())), (None, {"-"}))
+        # Codex started from a Claude Code terminal carries both agents' signs: neither is named,
+        # so no agent is told to use the other's skill.
+        for environment in ({}, {"RICHI_CHAT_ID": "claude:chat-1", "CODEX_THREAD_ID": "thread-1"},
+                            {"CLAUDECODE": "1", "CODEX_THREAD_ID": "thread-1"}):
+            with self.subTest(environment=environment):
+                agent, skills, note = used(**environment)
+                self.assertEqual((agent, set(skills.values())), (None, {"-"}))
         self.assertIn("skills maps an agent ID (claude: Claude Code, codex: Codex)", note)
         with mock.patch.dict(os.environ, {"CODEX_THREAD_ID": "thread-1"}):
             explicit = self.command("alpha", "rules", "show", "--agent", "claude")
@@ -309,10 +315,22 @@ class RulesTests(unittest.TestCase):
         self.assertEqual(self.command("alpha", "rules", "apply", "--json", change_file)["results"][0]["status"],
                          "removed")
 
-    def test_text_from_stdin_keeps_lines(self):
-        text = "First line.\nSecond line.\n"
-        rule = self.command("alpha", "rules", "add", "multi", "--global", "--text", "-", stdin=text)["rule"]
-        self.assertEqual(rule["text"], text)
+    def test_text_from_stdin_keeps_lines_but_not_the_newline_that_ends_the_pipe(self):
+        def piped(identifier, text):
+            return self.command("alpha", "rules", "add", identifier, "--global", "--text", "-", stdin=text)["rule"]
+
+        multi = piped("multi", "First line.\nSecond line.\n")
+        self.assertEqual(multi["text"], "First line.\nSecond line.")
+        self.assertEqual(piped("bare", "No newline")["text"], "No newline")
+        # Only the last newline goes: a blank line the user ended the text with is theirs.
+        self.assertEqual(piped("spaced", "Line.\n\n")["text"], "Line.\n")
+        # The same text arrives whichever way it is given, so a pipe does not "change" a rule.
+        self.assertEqual(self.command("alpha", "rules", "update", "multi", "--expected-updated-at", multi["updated_at"],
+                                      "--text", "-", stdin="First line.\nSecond line.\n")["results"][0]["status"],
+                         "unchanged")
+        # A text that begins with a dash is given as --text=TEXT.
+        dashed = self.command("alpha", "rules", "add", "dashed", "--global", "--text=- one instruction")["rule"]
+        self.assertEqual(dashed["text"], "- one instruction")
 
     def test_rules_stay_out_of_search_and_travel_with_backups(self):
         marker = "zebracornflux"
@@ -332,16 +350,83 @@ class RulesTests(unittest.TestCase):
             rows = conn.execute("SELECT key FROM metadata WHERE key LIKE 'rule:%'").fetchall()
         self.assertEqual(rows, [("rule:marker",)])
 
-    def test_reading_does_not_write_and_damaged_rows_are_reported(self):
+    def test_reading_does_not_write_and_a_damaged_row_does_not_hide_the_rules(self):
         database = self.configs["alpha"].parent / "memory.sqlite3"
         before = database.stat().st_mtime_ns
-        self.command("alpha", "rules", "show")
-        self.command("alpha", "rules", "list")
+        for view in ("show", "list", "log"):
+            self.command("alpha", "rules", view)
         self.assertEqual(database.stat().st_mtime_ns, before)
+        kept = self.add("alpha", "kept", "--global", text="Reply in Russian.")
         with sqlite3.connect(str(database)) as conn:
-            conn.execute("INSERT INTO metadata(key, value) VALUES ('rule:broken', '{\"id\": \"other\"}')")
-        error = self.command("alpha", "rules", "show", ok=False)
-        self.assertIn("Invalid stored rule rule:broken", error["error"])
+            for key, value in (("rule:broken", '{"id": "other"}'), ("rule:garbled", "{not json"),
+                               ("rule:partial", '{"id": "partial", "updated_at": "v1", "text": 5}')):
+                conn.execute("INSERT INTO metadata(key, value) VALUES (?, ?)", (key, value))
+            # A newer Richi may store fields this one does not know: they are kept, not refused.
+            row = json.loads(conn.execute("SELECT value FROM metadata WHERE key = 'rule:kept'").fetchone()[0])
+            row["when"] = "pull-request"
+            conn.execute("UPDATE metadata SET value = ? WHERE key = 'rule:kept'", (json.dumps(row),))
+        for view in ("show", "list"):
+            with self.subTest(view=view):
+                shown = self.command("alpha", "rules", view)
+                self.assertEqual([(rule["id"], rule["when"]) for rule in shown["rules"]], [("kept", "pull-request")])
+                self.assertEqual([(item["id"], item["updated_at"], item["next"]) for item in shown["invalid_rules"]], [
+                    ("broken", "invalid", "richi rules remove broken --expected-updated-at invalid"),
+                    ("garbled", "invalid", "richi rules remove garbled --expected-updated-at invalid"),
+                    ("partial", "v1", "richi rules remove partial --expected-updated-at v1")])
+                self.assertTrue(all(item["error"] for item in shown["invalid_rules"]))
+        updated = self.command("alpha", "rules", "update", "kept", "--expected-updated-at", kept["updated_at"],
+                               "--text", "Reply in English.")["rule"]
+        self.assertEqual((updated["text"], updated["when"]), ("Reply in English.", "pull-request"))
+        # A damaged row cannot be changed, only removed, and with the version the listing names.
+        self.assertIn("rules remove broken --expected-updated-at invalid",
+                      self.command("alpha", "rules", "update", "broken", "--expected-updated-at", "invalid",
+                                   "--text", "x", ok=False)["error"])
+        self.assertEqual(self.command("alpha", "rules", "remove", "partial", "--expected-updated-at", "invalid",
+                                      ok=False)["code"], "conflict")
+        for identifier, version in (("broken", "invalid"), ("garbled", "invalid"), ("partial", "v1")):
+            removed = self.command("alpha", "rules", "remove", identifier, "--expected-updated-at", version)
+            self.assertEqual((removed["results"][0]["status"], removed["rule"]), ("removed", None))
+        self.assertNotIn("invalid_rules", self.command("alpha", "rules", "list"))
+        self.assertIn("{not json",
+                      self.command("alpha", "rules", "log", "--id", "garbled")["entries"][0]["before"]["unreadable"])
+
+    def test_changes_are_logged_with_who_made_them(self):
+        with mock.patch.dict(os.environ, {"RICHI_CHAT_ID": "claude:chat-1"}):
+            created = self.add("alpha", "names", "--global", text="First.")
+        self.assertEqual(created["changed_by"], "claude:chat-1")
+        version = ["--expected-updated-at", created["updated_at"]]
+        # The map names itself, whatever chat its server was started from.
+        with mock.patch.dict(os.environ, {"RICHI_CHAT_ID": "claude:chat-1", "RICHI_RULES_ACTOR": "richi map"}):
+            updated = self.command("alpha", "rules", "update", "names", *version, "--text", "Second.")["rule"]
+        self.assertEqual(updated["changed_by"], "richi map")
+        version = ["--expected-updated-at", updated["updated_at"]]
+        self.assertEqual(self.command("alpha", "rules", "update", "names", *version, "--text", "Second.")
+                         ["results"][0]["status"], "unchanged")
+        self.command("alpha", "rules", "update", "names", "--expected-updated-at", "stale", "--text", "x", ok=False)
+        self.command("alpha", "rules", "remove", "names", *version)
+        self.assertIsNone(self.add("alpha", "other", "--global")["changed_by"])
+        log = self.command("alpha", "rules", "log")
+        self.assertEqual((log["view"], log["kept"]), ("rules-log", rules.MAX_LOG))
+        # Newest first; a change that changed nothing and a refused one leave no entry.
+        self.assertEqual([(entry["id"], entry["action"], entry["by"], entry["agent"]) for entry in log["entries"]],
+                         [("other", "created", None, None), ("names", "removed", None, None),
+                          ("names", "updated", "richi map", None), ("names", "created", "claude:chat-1", "claude")])
+        self.assertEqual(sorted(entry["at"] for entry in log["entries"]), [entry["at"] for entry in log["entries"]][::-1])
+        names = self.command("alpha", "rules", "log", "--id", "names", "--entries", "2")["entries"]
+        self.assertEqual([(entry["action"], (entry["before"] or {}).get("text"), (entry["after"] or {}).get("text"))
+                          for entry in names], [("removed", "Second.", None), ("updated", "First.", "Second.")])
+        self.assertEqual(self.command("beta", "rules", "log")["entries"], [])
+        for arguments in (["--entries", "0"], ["--entries", str(rules.MAX_LOG + 1)], ["--id", "-bad"]):
+            self.command("alpha", "rules", "log", *arguments, ok=False)
+        # Only the latest changes are kept, and the log never shows up as a rule.
+        with mock.patch.object(rules, "MAX_LOG", 3):
+            for number in range(4):
+                self.add("alpha", "extra-%d" % number, "--global")
+        self.assertEqual([entry["id"] for entry in self.command("alpha", "rules", "log")["entries"]],
+                         ["extra-3", "extra-2", "extra-1"])
+        self.assertEqual([rule["id"] for rule in self.command("alpha", "rules", "list")["rules"]],
+                         ["extra-0", "extra-1", "extra-2", "extra-3", "other"])
+        self.assertEqual(self.command("alpha", "check")["status"], "ok")
 
 
 class RulesIntegrationTests(unittest.TestCase):
@@ -371,10 +456,15 @@ class RulesIntegrationTests(unittest.TestCase):
         self.assertIn("resumed", context(source="resume"))
         self.assertEqual(context(), startup)
 
-    def test_managed_instructions_load_rules(self):
-        block = agent_setup._block("/opt/richi/bin/richi").decode()
-        self.assertIn("richi rules show", block)
-        self.assertIn("standing instructions", block)
+    def test_managed_instructions_stay_as_released(self):
+        # An update is activated by the launcher it replaces, which rewrites the skill link and the
+        # Claude hook but not this block. A changed text would leave every updated installation
+        # needing repair, so the rules step lives in the chat binding and the hook instead. Change
+        # these only together with a way for an updated installation to get the new text.
+        for agent, digest in (("codex", "a908ceb314de9bdbd7c5c22366957d76862553701baccec9a5c6ae86cca8153c"),
+                              ("claude", "6ef11912428f7f4356b598d7a9cd74dad3e30fdd02ac6d2888030f0903a7bc79")):
+            with self.subTest(agent=agent):
+                self.assertEqual(hashlib.sha256(agent_setup._block("/opt/richi/bin/richi", agent)).hexdigest(), digest)
 
 
 if __name__ == "__main__":

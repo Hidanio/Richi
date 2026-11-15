@@ -547,21 +547,26 @@ DETAILS = {
         Prints every rule that applies in full: global rules, then the project's
         with --project-path or --project. When the agent running the command is
         known (detected from its shell, or given with --agent), each rule's
-        use_skill is the skill that agent uses whenever the rule applies. In a
+        use_skill is the skill that agent uses whenever the rule applies. A shell
+        that carries the signs of two agents names neither: pass --agent. In a
         repository the workspace does not know, the global rules still come back,
-        with project_path_problem saying why the project's rules do not.""",
+        with project_path_problem saying why the project's rules do not, and
+        invalid_rules names stored rules that cannot be read.""",
         examples=(("", "richi rules show"), ("", "richi --project-path /path/to/service rules show"),
                   ("As a particular agent", "richi rules show --agent codex"))),
     "rules list": dict(about="""
         Lists every stored rule of the workspace with its version and the total
         size; agents load rules in full, so the total is limited. agents lists the
-        agents a rule may name a skill for.""",
+        agents a rule may name a skill for, projects the registered projects, and
+        invalid_rules the stored rules that cannot be read, each with the command
+        that removes it.""",
         examples=(("", "richi rules list"), ("", "richi rules list --global"),
                   ("", "richi rules list --project service"))),
     "rules add": dict(about="""
         Creates a rule only when the user explicitly asks for a standing rule, in
         the user's words, one instruction per rule. --skill names a skill for every
-        agent; AGENT=NAME names one for that agent only.""",
+        agent; AGENT=NAME names one for that agent only. Write a text that begins
+        with a dash as --text="- ...".""",
         examples=(("", 'richi rules add no-agent-prefix --global --text "Never prefix branch names with the agent name."'),
                   ("A skill for every agent",
                    'richi rules add pr-skill --global --text "Use the pr-description skill for pull requests." '
@@ -582,6 +587,13 @@ DETAILS = {
         Deletes a rule; agents stop receiving it when they next load the rules.
         Pass the updated_at last read.""",
         examples=(("", "richi rules remove branch-naming --expected-updated-at 2026-01-02T03:04:05.000000Z"),)),
+    "rules log": dict(about="""
+        Shows the latest changes of rules, newest first: when, which rule, the
+        action, who made it (the chat identity of the shell that ran the command,
+        or richi map), and the rule before and after. The workspace keeps the
+        latest 200 changes. It is a record for review, not proof of who acted.""",
+        examples=(("", "richi rules log"),
+                  ("The last changes of one rule", "richi rules log --id branch-naming --entries 5"))),
     "rules apply": dict(about="""
         Takes the same change as rules add, update and remove, as one JSON object:
         action, id and that action's fields (scope, project, text, skill, skills,

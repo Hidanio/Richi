@@ -5,11 +5,14 @@ differs between agents lives only here: how to recognize the agent whose shell
 runs a command, where it keeps the skills it can use, how a skill says the
 agent never chooses it by itself, and whether plugin commands count as skills.
 Rules, the skill catalog and the map work with whatever agents registry()
-returns. It has three layers, each refining the one before:
+returns. An entry names how its skill folders are laid out and how a skill is
+marked as manual; skill_catalog reads the layouts and marks it knows, so an
+agent with a new one also needs that reader added there. The registry has
+three layers, each refining the one before:
 
-1. AGENTS: the agents built into Richi. Everything special about one, such as
-   an unusual skill layout, its policy file or the order of detection, is code
-   here and changes only with Richi (plus its setup in the launcher, if Richi
+1. AGENTS: the agents built into Richi. What is special about one, such as
+   its skill layouts and the variables of its shells, is described here and
+   changes only with Richi (plus its setup in the launcher, if Richi
    installs an integration for it).
 2. The user's adjustments of a built-in agent: skill sources switched off and
    extra skill folders. Removing them restores the built-in agent.
@@ -29,7 +32,7 @@ import os
 from pathlib import Path
 import re
 import sys
-from typing import Callable, Dict, NamedTuple, Optional, Tuple
+from typing import Callable, Dict, NamedTuple, Optional
 
 
 ID = re.compile(r"[a-z][a-z0-9-]{0,31}\Z")
@@ -49,7 +52,6 @@ VARIABLE_HELP = ("Environment variable NAME or NAME=VALUE: NAME marks the agent'
 MANUAL_SKILLS = ("none", "front-matter")
 _SOURCE_KEY = re.compile(r"[a-z][a-z0-9-]{0,31}\Z")
 _VARIABLE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}(=[^\x00-\x1f\x7f]{1,100})?\Z")
-_ENTRY_KEYS = {"created_at", "updated_at", "name", "folders", "disabled", "variable", "manual_skills"}
 # Where the Claude desktop app keeps the claude.ai plugins and built-in skills
 # it passes to Claude Code (CLAUDE_CODE_PLUGIN_ATTRIBUTION and
 # CLAUDE_CODE_DESKTOP_SKILLS_PLUGIN_DIR in that process; shells do not get them).
@@ -82,12 +84,11 @@ class Agent(NamedTuple):
     # Also the prefix of the chat identity its integration sets: RICHI_CHAT_ID "<id>:...".
     id: str
     name: str
-    # Set only in this agent's own sessions, so they identify it even in a
-    # process started from another agent's shell.
-    session_variables: Tuple[str, ...]
-    # Set in this agent's shells and inherited by everything started there:
-    # {name: the value it has, or None when being set is enough}.
-    shell_variables: Dict[str, Optional[str]]
+    # Environment variables its shells set: {name: the value it has, or None
+    # when being set is enough}. Everything started from such a shell inherits
+    # them, another agent included, so they identify the agent only when no
+    # other agent's variables are present (detect).
+    variables: Dict[str, Optional[str]]
     # How a skill says the agent never chooses it itself: "front-matter"
     # (disable-model-invocation: true in SKILL.md), "openai-yaml"
     # (policy.allow_implicit_invocation: false in agents/openai.yaml) or "none".
@@ -123,9 +124,9 @@ def _codex_sources(environ, home):
 
 
 AGENTS = (
-    Agent(id="claude", name="Claude Code", session_variables=(), shell_variables={"CLAUDECODE": "1"},
+    Agent(id="claude", name="Claude Code", variables={"CLAUDECODE": "1"},
           invocation="front-matter", plugin_commands=True, sources=_claude_sources),
-    Agent(id="codex", name="Codex", session_variables=("CODEX_THREAD_ID",), shell_variables={},
+    Agent(id="codex", name="Codex", variables={"CODEX_THREAD_ID": None},
           invocation="openai-yaml", plugin_commands=False, sources=_codex_sources),
 )
 
@@ -155,8 +156,9 @@ def valid_id(value):
 
 
 def _one_line(value, limit):
+    # No control characters and no lone surrogates: the value is written to a UTF-8 file.
     return (isinstance(value, str) and 0 < len(value) <= limit and value == value.strip()
-            and not any(ord(ch) < 32 or ord(ch) == 127 for ch in value))
+            and not any(ord(ch) < 32 or ord(ch) == 127 or 0xD800 <= ord(ch) <= 0xDFFF for ch in value))
 
 
 def valid_name(value):
@@ -195,11 +197,15 @@ def settings_path(environ=None, home=None):
 
 
 def check_entry(identifier, entry):
-    """Raise ValueError unless entry is a well-formed stored agent."""
+    """Raise ValueError unless entry is a well-formed stored agent.
+
+    Fields this version does not know are allowed and kept, so settings that a
+    newer Richi wrote keep working here.
+    """
     if not valid_id(identifier):
         raise ValueError(ID_HELP)
-    if not isinstance(entry, dict) or set(entry) - _ENTRY_KEYS:
-        raise ValueError("unexpected fields for " + identifier)
+    if not isinstance(entry, dict):
+        raise ValueError("settings of " + identifier + " must be an object")
     if not _one_line(entry.get("updated_at"), 64) or ("created_at" in entry and not _one_line(entry["created_at"], 64)):
         raise ValueError("invalid timestamps for " + identifier)
     folders = entry.get("folders", [])
@@ -289,9 +295,8 @@ def _custom(identifier, entry):
     """The user's own agent, built from generic parts."""
     variable, folders = entry.get("variable") or "", _stored_folders(entry)
     name, separator, value = variable.partition("=")
-    # The user's variable marks the agent's shells, so processes started there inherit it.
-    return Agent(id=identifier, name=entry["name"], session_variables=(),
-                 shell_variables={name: value if separator else None} if name else {},
+    return Agent(id=identifier, name=entry["name"],
+                 variables={name: value if separator else None} if name else {},
                  invocation=entry.get("manual_skills", "none"), plugin_commands=False,
                  sources=lambda environ, home: _folders(folders, home), builtin=False,
                  updated_at=entry["updated_at"])
@@ -319,34 +324,27 @@ def describe(environ=None, home=None):
 
 def variables(agent):
     """The variables that mark the agent, as people write them: NAME or NAME=VALUE."""
-    return list(agent.session_variables) + [name if value is None else name + "=" + value
-                                            for name, value in agent.shell_variables.items()]
+    return [name if value is None else name + "=" + value for name, value in agent.variables.items()]
 
 
 def _in_shell(agent, environ):
-    return bool(agent.shell_variables) and all(
+    return bool(agent.variables) and all(
         bool(environ.get(name)) if value is None else environ.get(name) == value
-        for name, value in agent.shell_variables.items())
+        for name, value in agent.variables.items())
 
 
 def detect(environ=None):
     """The agent whose shell runs this command, or None.
 
-    The chat identity an integration set wins; then a variable only an
-    agent's own session has; then one its shells pass on to child processes.
-    A process started from an agent's shell inherits that agent's variables,
-    so when the variables of several agents are present the answer is None:
-    the caller then says who it is (rules show --agent ID) rather than get
-    another agent's skills.
+    Two signs name an agent: the chat identity its integration sets
+    (RICHI_CHAT_ID "<id>:...") and its shell variables. A process inherits
+    both from the shell that started it, so one agent started from another's
+    terminal carries the signs of both. Richi names an agent only when every
+    sign present points to the same one; otherwise the caller says who it is
+    (rules show --agent ID) rather than get another agent's skills.
     """
     environ = os.environ if environ is None else environ
-    agents = registry(environ)
     prefix, separator, _rest = (environ.get("RICHI_CHAT_ID") or "").partition(":")
-    for agent in agents:
-        if separator and agent.id == prefix:
-            return agent.id
-    for matches in ([agent.id for agent in agents if any(environ.get(name) for name in agent.session_variables)],
-                    [agent.id for agent in agents if _in_shell(agent, environ)]):
-        if matches:
-            return matches[0] if len(matches) == 1 else None
-    return None
+    named = {agent.id for agent in registry(environ)
+             if (separator and agent.id == prefix) or _in_shell(agent, environ)}
+    return named.pop() if len(named) == 1 else None

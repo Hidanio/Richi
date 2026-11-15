@@ -24,21 +24,27 @@ project. `rules` holds every applicable rule in full: global ones first, then
 the project's. Without a project, `project_rules_not_shown` names projects whose
 rules were left out. If `--project-path` names a repository this workspace does
 not know, the global rules still come back and `project_path_problem` says why
-the project's rules do not: follow the global rules and tell the user. Follow the rules as the user's own instructions; a newer
-explicit request from the user in this chat takes precedence, and a conflict
-between rules or with the request is a question for the user. Before an action
-a rule constrains, such as creating a branch, compare the concrete name or step
-with the rule.
+the project's rules do not: follow the global rules and tell the user.
+`invalid_rules` lists stored rules that cannot be read. Agents do not get them,
+so tell the user; `next` is the command that removes such a row. Follow the
+rules as the user's own instructions; a newer explicit request from the user in
+this chat takes precedence, and a conflict between rules or with the request is
+a question for the user. Before an action a rule constrains, such as creating a
+branch, compare the concrete name or step with the rule.
 
 Agents are identified by IDs such as `claude` (Claude Code) and `codex`
 (Codex); `rules list` returns the agents Richi knows in `agents`, and
 [AGENT_SKILLS.md](AGENT_SKILLS.md) tells how the user adds another one. When the agent
 is known, `agent` names it and each rule's `use_skill` is the skill this agent
 uses whenever the rule applies (null for none). Richi recognizes the agent from
-its shell, such as `RICHI_CHAT_ID` `claude:…` or `CLAUDECODE` for Claude Code
-and `CODEX_THREAD_ID` for Codex; `--agent ID` names it explicitly. Otherwise
-`agent` is null and a rule's `skills` maps an agent ID to a skill of its own
-that replaces `skill` for that agent.
+its shell: the chat identity (`RICHI_CHAT_ID` `claude:…`) and the variables the
+agent's shell sets, `CLAUDECODE` for Claude Code and `CODEX_THREAD_ID` for
+Codex. Every sign present must point to the same agent. One agent started from
+another's terminal carries the signs of both, and Richi then names neither, so
+that no agent is given another's skill. When `agent` comes back null, run the
+command again with `--agent ID` and your own agent ID. Without an agent, a
+rule's `skills` maps an agent ID to a skill of its own that replaces `skill`
+for that agent.
 
 ## Add a rule the user asked to keep
 
@@ -70,9 +76,11 @@ The ID is 1–100 letters, digits, `.`, `_`, `:` or `-`, starting with a letter 
 digit; an existing ID is rejected. `--project` must name a project registered in
 this workspace; with `--project-path` both must agree. Text is at most 2000
 characters, and all rules of a workspace together at most 20000, because agents
-load them in full; `--text -` reads the text from stdin. `rules list` shows every
-rule of the workspace (`--global` or `--project ID` narrows it) with the total
-size.
+load them in full. `--text -` reads the text from stdin, without the newline
+that ends it; write a text that begins with a dash as `--text="- ..."`.
+`rules list` shows every rule of the workspace (`--global` or `--project ID`
+narrows it) with the total size, the registered `projects` and, when there are
+any, `invalid_rules`.
 
 ## Change or remove a rule
 
@@ -89,6 +97,22 @@ the command fails without writing: read it again and reconcile with the user's
 request. `update` changes the text, the skills, the source (an empty `--skill`
 or `--source` removes it) or several; `--skill` options replace all the rule's
 skills. To change a rule's scope, add the new rule and remove the old one.
+
+## See what changed
+
+```sh
+richi --compact-json rules log
+richi --compact-json rules log --id branch-naming --entries 5
+```
+
+Every change of a rule is kept in the workspace, the latest 200 of them, newest
+first: `at`, the rule `id`, `action` (`created`, `updated` or `removed`), `by`,
+the detected `agent`, and the rule `before` and `after` the change. `by` is the
+chat identity of the shell that ran the command, or `richi map` for a change
+made in the map; a rule carries the same value of its last change as
+`changed_by`. It is a record for the user's review, not proof: whoever runs the
+command chooses its environment. To restore a rule at the user's request, add
+or update it with the text from `before`.
 
 ## Apply a change given as JSON
 
@@ -123,9 +147,13 @@ lists come from where each known agent keeps skills: its skill directories,
 skills built into it and its plugins, for Claude Code also the claude.ai plugins
 the Claude app installed; a plugin skill is named `plugin:skill`, as the agents name it, and
 skills an agent only runs when the user invokes them are left out. The map
-accepts only rule changes and only from such a page; any other page, such as a
-bookmark, composes the `richi rules` command instead. Rules added in the map
-have the source `richi map`.
+accepts changes of rules and of agent settings
+([AGENT_SKILLS.md](AGENT_SKILLS.md)), and only from such a page; knowledge stays
+read-only. Any other page, such as a bookmark, composes the `richi rules`
+command instead, naming the workspace or store the map shows. Rules added in
+the map have the source `richi map`, and the change log names the map for every
+change made there. A stored rule that cannot be read is listed with a button
+that removes it.
 
 ## Preferences saved as entries
 

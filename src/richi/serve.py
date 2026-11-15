@@ -5,6 +5,11 @@ Knowledge is served read-only. The only changes the map accepts are to the
 user's standing rules and to the user's agent settings (which agents there
 are and where each finds skills), and only from a page opened by `richi map`
 (map_access).
+
+Like the knowledge itself, the rules, the agents and the names and
+descriptions of this user's installed skills are readable by any client of the
+loopback port; paths of the user's files are given only to a page that may
+edit.
 """
 
 import argparse
@@ -142,10 +147,6 @@ RULES_WORKER_TIMEOUT = 20
 RULES_WORKER_OUTPUT_LIMIT = 1024 * 1024
 # Error codes of a refused change and the HTTP status the map answers with; any other code is 400.
 CHANGE_ERROR_STATUS = {"not_found": 404, "conflict": 409, "exists": 409, "settings": 409}
-AGENT_FIELDS = {"add": {"action", "id", "name", "folders", "variable", "manual_skills"},
-                "update": {"action", "id", "expected_updated_at", "name", "variable", "manual_skills", "add_folders",
-                           "remove_folders", "enable", "disable"},
-                "remove": {"action", "id", "expected_updated_at"}}
 RULES_SOURCE = "richi map"
 CHANGES_ONLY = "The map changes only standing rules and agent settings"
 
@@ -427,9 +428,13 @@ def rules_change(body):
     options, so the map adds nothing here but where the rule came from. The
     object travels on stdin: no value of it is ever a command argument.
     """
-    if isinstance(body, dict) and body.get("action") == "add":
-        body = dict(body, source=RULES_SOURCE)
-    return json.dumps(body, ensure_ascii=False).encode("utf-8")
+    if isinstance(body, dict):
+        # The page never chooses the source: a rule added here says so, and an edit keeps what it had.
+        body = {key: value for key, value in body.items() if key != "source"}
+        if body.get("action") == "add":
+            body["source"] = RULES_SOURCE
+    # ASCII escapes: a lone surrogate in the text cannot be encoded as UTF-8.
+    return json.dumps(body).encode("ascii")
 
 
 def agent_change(body):
@@ -438,30 +443,43 @@ def agent_change(body):
     The same function as `richi skill-sources` validates and writes, so the map
     accepts exactly what the command does.
     """
-    if not isinstance(body, dict) or body.get("action") not in AGENT_FIELDS \
-            or set(body) - AGENT_FIELDS[body["action"]]:
-        return 400, {"error": "Send action add, update or remove with that action's fields only",
-                     "code": "invalid_request"}
+    if not isinstance(body, dict):
+        return 400, {"error": "Send an object with action add, update or remove", "code": "invalid_request"}
     options = {key: value for key, value in body.items() if key not in {"action", "id"}}
     try:
         # full: the page shows every agent and the skill lists, read once after the change.
-        return 200, agent_commands.change(body["action"], body.get("id"), options, full=True)
+        return 200, public_agents(agent_commands.change(body.get("action"), body.get("id"), options, full=True),
+                                  editing=True)
     except agent_commands.AgentError as exc:
         return CHANGE_ERROR_STATUS.get(exc.code, 400), {"error": str(exc), "code": exc.code}
     except OSError as exc:
         return 503, {"error": "Agent settings could not be saved: " + str(exc), "code": "unavailable"}
 
 
+def public_agents(payload, editing):
+    """An agents answer as the map gives it: without folder internals, and without paths for a page that only reads."""
+    listing = payload.get("listing", payload)
+    if "catalog" in listing:
+        listing["catalog"] = {key: value for key, value in listing["catalog"].items() if key != "roots"}
+    if not editing:
+        listing.pop("settings_file", None)
+    return payload
+
+
 def _run_rules_request(database, operation, runtime, config_file=None, workspace=None, config_required=False,
                        stdin=None):
     """Run a rules command for the map; its answer, or its error with a matching HTTP status."""
+    environment = worker_environment(config_file, workspace, config_required)
+    if stdin is not None:
+        # The change log names the map as the one who made the change.
+        environment["RICHI_RULES_ACTOR"] = RULES_SOURCE
     try:
         process = subprocess.Popen(
             runtime_command(runtime, [*config_arguments(config_file, config_required),
                                       "--db", str(database), *operation]),
             stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            pass_fds=lease_fds(), env=worker_environment(config_file, workspace, config_required))
+            pass_fds=lease_fds(), env=environment)
         status, output, error = _read_worker_output(process, label="Rules command",
             timeout=RULES_WORKER_TIMEOUT, maximum=RULES_WORKER_OUTPUT_LIMIT, request=stdin)
     except (TimeoutError, subprocess.TimeoutExpired):
@@ -496,8 +514,11 @@ def compatible_health(health, database, runtime=None, config_file=None):
 
 
 def handler_for(database, config_file=None, runtime=None, config_required=False, workspace=None,
-                capabilities=None):
+                capabilities=None, store=None):
     database = Path(database).expanduser().resolve()
+    # Without a resolved answer, the file itself is the one selector that cannot name another store.
+    store = list(store) if store is not None else [*config_arguments(config_file, config_required),
+                                                    "--db", str(database)]
     runtime = runtime or current_runtime()
     # A running map may withdraw a capability it can no longer provide.
     capabilities = list(CAPABILITIES) if capabilities is None else capabilities
@@ -561,7 +582,8 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                                             "runtime": runtime.as_dict(), "workspace": workspace, "pid": os.getpid(),
                                             "launcher": str(LAUNCHER_ROOT),
                                             "installation_generation": os.environ.get(GENERATION_ENV),
-                                            "config_file": str(config_file) if config_file is not None else None})
+                                            "config_file": str(config_file) if config_file is not None else None,
+                                            "store_arguments": store})
             if url.path == "/api/git":
                 try:
                     options = _git_options(url.query)
@@ -577,24 +599,34 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 finally:
                     git_lock.release()
             if url.path == "/api/rules" and not url.query:
-                status, payload = _run_rules_request(database, ["rules", "list"], runtime, config_file, workspace,
-                                                     config_required)
+                # One rules worker at a time, readers included: a burst of requests waits instead of forking.
+                if not rules_lock.acquire(timeout=RULES_WORKER_TIMEOUT + 5):
+                    return self.send_data(503, {"error": "The rules are being read or changed; try again", "code": "busy"})
+                try:
+                    status, payload = _run_rules_request(database, ["rules", "list"], runtime, config_file, workspace,
+                                                         config_required)
+                finally:
+                    rules_lock.release()
                 if status == 200:
                     payload["editing"] = map_access.authorized(database, self.headers.get(map_access.HEADER))
                     payload["limit_text"] = rules.MAX_TEXT
                 return self.send_data(status, payload)
-            if url.path == "/api/agents" and not url.query:
+            if url.path in {"/api/agents", "/api/skills"} and not url.query:
+                # Both scan this user's skill folders: one scan at a time.
+                if not agents_lock.acquire(timeout=RULES_WORKER_TIMEOUT + 5):
+                    return self.send_data(503, {"error": "Skills are being read; try again", "code": "busy"})
                 try:
-                    payload = agent_commands.listing(catalog=True)
+                    if url.path == "/api/skills":
+                        catalog = skill_catalog.catalog()
+                        return self.send_data(200, {key: value for key, value in catalog.items() if key != "roots"})
+                    editing = map_access.authorized(database, self.headers.get(map_access.HEADER))
+                    payload = public_agents(agent_commands.listing(catalog=True), editing)
+                    payload["editing"] = editing
+                    return self.send_data(200, payload)
                 except OSError:
-                    return self.send_data(503, {"error": "Agent settings are unavailable"})
-                payload["editing"] = map_access.authorized(database, self.headers.get(map_access.HEADER))
-                return self.send_data(200, payload)
-            if url.path == "/api/skills" and not url.query:
-                try:
-                    return self.send_data(200, skill_catalog.catalog())
-                except OSError:
-                    return self.send_data(503, {"error": "Installed skills are unavailable"})
+                    return self.send_data(503, {"error": "Agents and skills are unavailable"})
+                finally:
+                    agents_lock.release()
             if url.path not in {"/api/graph", "/api/tools"}:
                 return self.send_data(404, {"error": "Not found"})
             try:
@@ -630,7 +662,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
             self.do_GET()
 
         def read_change(self):
-            """The JSON body of a same-origin change request, or None after answering it."""
+            """The body of a same-origin change request as bytes, or None after answering it."""
             port = self.server.server_address[1]
             if (not self.allowed_origin()
                     or self.headers.get("Origin") not in {"http://127.0.0.1:%d" % port, "http://localhost:%d" % port}
@@ -647,20 +679,29 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
             if not 0 <= length <= RULES_BODY_LIMIT:
                 self.send_data(413, {"error": "The request body must have a length of at most %d bytes" % RULES_BODY_LIMIT})
                 return None
+            return self.rfile.read(length)
+
+        def parse_change(self, raw):
+            """The JSON value of a request body, or None after answering 400; reached only by an entitled request."""
             try:
-                return json.loads(self.rfile.read(length).decode("utf-8"))
-            except (ValueError, UnicodeError):
-                self.send_data(400, {"error": "Invalid JSON"})
+                return json.loads(raw.decode("utf-8"))
+            except (ValueError, UnicodeError, RecursionError):
+                # RecursionError: brackets nested deeper than the parser goes.
+                self.send_data(400, {"error": "Invalid JSON", "code": "invalid_request"})
                 return None
 
         def do_POST(self):
             path = urlsplit(self.path)
             if path.path not in {"/api/session", "/api/rules", "/api/agents"} or path.query:
                 return self.send_data(405, {"error": CHANGES_ONLY})
-            body = self.read_change()
-            if body is None:
+            raw = self.read_change()
+            if raw is None:
                 return None
             if path.path == "/api/session":
+                # A ticket is 64 hexadecimal characters: nothing longer is parsed without the secret.
+                body = self.parse_change(raw) if len(raw) <= 256 else {}
+                if body is None:
+                    return None
                 value = map_access.redeem(database, body.get("ticket") if isinstance(body, dict) else None)
                 if value is None:
                     return self.send_data(403, {"error": "This edit ticket is invalid, expired or already used; open the map again with richi map",
@@ -669,6 +710,9 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
             if not map_access.authorized(database, self.headers.get(map_access.HEADER)):
                 return self.send_data(403, {"error": "Open the map with richi map to change rules or agents here",
                                             "code": "not_editing"})
+            body = self.parse_change(raw)
+            if body is None:
+                return None
             if path.path == "/api/agents":
                 with agents_lock:
                     status, payload = agent_change(body)
@@ -724,6 +768,34 @@ def config_arguments(config_file, required=False):
     if config_file is not None and (required or Path(config_file).is_file()):
         return ["--config", str(config_file)]
     return []
+
+
+# What selects storage for a process: a terminal the user opens later has none of them.
+STORAGE_VARIABLES = ("RICHI_DB", "RICHI_DATA_DIR", "RICHI_CONFIG", "RICHI_WORKSPACE", "RICHI_ACTIVE_CONFIG",
+                     "RICHI_ACTIVE_WORKSPACE")
+
+
+def store_arguments(database, config_file=None, workspace=None, config_required=False):
+    """The global options with which a `richi` command reaches the store this map shows.
+
+    The page puts them into every command it composes. A workspace name is
+    enough only when, in a terminal that selects no storage of its own, it
+    leads to this very database: a map started for an explicit --db or --config
+    may carry a workspace's name and still show another file, and a command for
+    it names that file. Call before threads start: the name is resolved with
+    this process's own storage variables set aside.
+    """
+    database = Path(database)
+    if workspace is not None:
+        saved = {key: os.environ.pop(key) for key in STORAGE_VARIABLES if key in os.environ}
+        try:
+            if resolve_settings(workspace=workspace).database == database:
+                return ["--workspace", workspace]
+        except ConfigError:
+            pass
+        finally:
+            os.environ.update(saved)
+    return [*config_arguments(config_file, config_required), "--db", str(database)]
 
 
 def source_fingerprint(package=None):
@@ -948,6 +1020,7 @@ def _main(argv=None):
     serve_arguments = ["map", "serve", "--port", str(args.port)]
     environment = worker_environment(settings.config_file, settings.workspace, config_required)
     environment.pop("RICHI_ACTIVE_RUNTIME", None)
+    store = store_arguments(database, settings.config_file, settings.workspace, config_required)
     capabilities = list(CAPABILITIES)
     follower = handoff_signal = previous_handoff = None
     if handoff_supported():
@@ -964,7 +1037,7 @@ def _main(argv=None):
     try:
         server = LoopbackHTTPServer(("127.0.0.1", args.port),
                                     handler_for(database, settings.config_file, runtime, config_required,
-                                                settings.workspace, capabilities),
+                                                settings.workspace, capabilities, store),
                                     listener=listener)
     except OSError as exc:
         problem = str(exc)
@@ -997,8 +1070,8 @@ def _main(argv=None):
     print("Project memory map: " + address, flush=True)
     if listener is not None:
         print("Took over the listening socket of the previous map process.", flush=True)
-    print("Local viewer: knowledge is read-only; standing rules change only from a page opened by richi map. "
-          "Press Ctrl+C to stop.", flush=True)
+    print("Local viewer: knowledge is read-only; standing rules and agent settings change only from a page "
+          "opened by richi map. Press Ctrl+C to stop.", flush=True)
     if args.open:
         # In a thread: the page can redeem its edit ticket only once the server below answers.
         threading.Thread(target=map_access.open_browser, args=(address, database), daemon=True).start()

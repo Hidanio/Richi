@@ -155,10 +155,12 @@ richi rules add no-agent-prefix --global --text "Never prefix branch names with 
 richi rules add branch-naming --project service-example --text "Name branches SE-<number>_<topic>."
 richi rules add pr-skill --global --text "Use the pr-description skill for pull requests." --skill pr-description
 richi rules add review-skill --global --text "Use the code review skill for reviews." --skill claude=engineering:code-review --skill codex=code-review
+richi rules log
 ```
 
 Правила — это инструкции, а не знания: поиск их не возвращает, а агенты меняют их
-только по просьбе пользователя. Подробнее: [постоянные правила](../skills/project-memory/references/RULES.ru.md).
+только по просьбе пользователя. `rules log` показывает, кто и какое правило менял, с
+правилом до и после изменения. Подробнее: [постоянные правила](../skills/project-memory/references/RULES.ru.md).
 Вкладка **«Правила»** карты показывает их, а на странице, открытой командой
 `richi map`, добавляет и меняет их по шаблонам и со списком установленных скиллов: один скилл для
 всех агентов или свой для каждого, если они различаются.

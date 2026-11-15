@@ -17,6 +17,13 @@ import secrets
 from . import agents, skill_catalog
 
 
+# What each change may carry; `skill-sources` options and the map send exactly these.
+OPTIONS = {"add": {"name", "folders", "variable", "manual_skills"},
+           "update": {"expected_updated_at", "name", "variable", "manual_skills", "add_folders", "remove_folders",
+                      "enable", "disable"},
+           "remove": {"expected_updated_at"}}
+
+
 class AgentError(ValueError):
     """A refused change with a stable code: invalid, exists, not_found, conflict, limit, builtin, settings."""
 
@@ -148,8 +155,7 @@ def listing(environ=None, home=None, catalog=False):
                for identifier, name, folder in agents.PRESETS if identifier not in known]
     result = {"view": "agents", "agents": items, "presets": presets,
               "settings_file": str(agents.settings_path(environ, home)), "problem": problem,
-              "connections_problem": connections_problem,
-              "limits": {"agents": agents.MAX_CUSTOM, "folders": agents.MAX_FOLDERS, "name": agents.MAX_NAME}}
+              "connections_problem": connections_problem}
     if catalog:
         result["catalog"] = skills
     return result
@@ -158,7 +164,6 @@ def listing(environ=None, home=None, catalog=False):
 @contextlib.contextmanager
 def _locked(path):
     """One writer of the settings at a time, across processes."""
-    path.parent.mkdir(parents=True, exist_ok=True)
     try:
         import fcntl
     except ImportError:
@@ -337,6 +342,20 @@ def _updated(identifier, options, builtin, current, environ, home):
     return "updated", entry
 
 
+def _apply(action, identifier, options, entries, environ, home):
+    """(status, entry or None) of one change against the stored entries; nothing is written."""
+    builtin, current = identifier in agents.builtin_ids(), entries.get(identifier)
+    if action == "add":
+        return "created", _added(identifier, options, builtin, current, entries, home)
+    if action == "update":
+        return _updated(identifier, options, builtin, current, environ, home)
+    if current is None:
+        raise AgentError((identifier + " has no adjustments to remove" if builtin
+                          else "Unknown agent: " + identifier + "; see skill-sources list"), "not_found")
+    _check_version(identifier, current, options.get("expected_updated_at"))
+    return ("reset" if builtin else "removed"), None
+
+
 def change(action, identifier, options=None, environ=None, home=None, full=False):
     """Apply one change to the user's agent settings and describe the agent as it is afterwards.
 
@@ -346,30 +365,25 @@ def change(action, identifier, options=None, environ=None, home=None, full=False
     explicit = (environ, home)
     environ = os.environ if environ is None else environ
     home = Path(home) if home is not None else Path.home()
-    options = options or {}
-    if not isinstance(options, dict):
-        raise AgentError("Options must be an object")
+    options = {} if options is None else options
+    if action not in OPTIONS:
+        raise AgentError("Unknown action; use add, update or remove")
+    if not isinstance(options, dict) or set(options) - OPTIONS[action]:
+        raise AgentError("A change to " + action + " takes only: " + ", ".join(sorted(OPTIONS[action])))
     if not agents.valid_id(identifier):
         raise AgentError(agents.ID_HELP)
     expected = options.get("expected_updated_at")
     if expected is not None and not isinstance(expected, str):
         raise AgentError("expected_updated_at must be a string")
     path = agents.settings_path(environ, home)
-    with _locked(path):
+    # A refused change leaves nothing behind: the directory and the lock appear with the first write.
+    if not path.parent.is_dir():
+        status, entry = _apply(action, identifier, options, {}, environ, home)
+        if status != "unchanged":
+            path.parent.mkdir(parents=True, exist_ok=True)
+    with _locked(path) if path.parent.is_dir() else contextlib.nullcontext():
         entries = _read(path)
-        builtin, current = identifier in agents.builtin_ids(), entries.get(identifier)
-        if action == "add":
-            status, entry = "created", _added(identifier, options, builtin, current, entries, home)
-        elif action == "update":
-            status, entry = _updated(identifier, options, builtin, current, environ, home)
-        elif action == "remove":
-            if current is None:
-                raise AgentError((identifier + " has no adjustments to remove" if builtin
-                                  else "Unknown agent: " + identifier + "; see skill-sources list"), "not_found")
-            _check_version(identifier, current, expected)
-            status, entry = ("reset" if builtin else "removed"), None
-        else:
-            raise AgentError("Unknown action; use add, update or remove")
+        status, entry = _apply(action, identifier, options, entries, environ, home)
         if status != "unchanged":
             if entry is None:
                 entries.pop(identifier, None)

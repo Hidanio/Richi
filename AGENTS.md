@@ -4,11 +4,15 @@ Use branch names with underscores, such as `audit_fixes_bilingual_docs`, without
 the `codex/` prefix.
 
 Develop the implementation in `src/richi/` and the distributable agent skill in
-`skills/project-memory/`. Keep agent-specific details (how to recognize an agent,
-where it keeps skills, how a skill opts out of the agent choosing it) in the
-registry `src/richi/agents.py`; rules, the skill catalog and the map handle any
-agent it lists, so supporting another agent means adding one entry there plus its
-setup in `launcher/richi_launcher/` if Richi installs an integration for it.
+`skills/project-memory/`. Keep what is particular to one agent (how to recognize
+it, which folders it reads, which folder layout and which opt-out rule apply) in
+the registry `src/richi/agents.py`; rules, the skill catalog and the map handle
+any agent it lists, so supporting another agent means adding one entry there
+plus its setup in `launcher/richi_launcher/` if Richi installs an integration
+for it. The registry names a layout and an opt-out rule; `skill_catalog.py`
+implements each of them once, for every agent that names it, and the map labels
+a skill source by its key. Built-in agents are the ones the launcher connects
+(`agent_adapters.AGENTS`); a test keeps the two lists equal.
 Users adjust built-in agents and describe their own with `richi skill-sources`
 or the map's Agents tab; those settings layer on top of the built-in entries
 and never replace them. Installed skills are local deployment copies (with dev

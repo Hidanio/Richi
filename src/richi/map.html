@@ -205,7 +205,9 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 .rule-scope-options select{width:auto;min-width:200px;flex:1}
 .rule-readonly{font-size:12px;color:var(--muted);line-height:1.6}
 .rule-error{border:1px solid var(--danger);color:var(--danger);border-radius:9px;padding:9px 12px;font-size:12px;line-height:1.6}
-.rule-error[hidden],.rule-command[hidden]{display:none}
+.rule-error[hidden],.rule-command[hidden],.rule-unsaved[hidden]{display:none}
+.rule-unsaved{margin:0 22px 12px;border:1px solid var(--entity);border-radius:9px;padding:9px 12px;font-size:12px;line-height:1.6}
+.rule-invalid{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between}
 .rule-command{border:1px solid var(--line);border-radius:10px;background:var(--panel-soft);padding:12px;display:grid;gap:9px;justify-items:start}
 .rule-command pre{margin:0;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;line-height:1.6;max-height:220px;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px}
 .rule-confirm{font-size:13px;line-height:1.7}
@@ -786,7 +788,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 
   async function loadWorkspace(){
     const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),5000);
-    try{const response=await fetch('/api/health',{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('HTTP '+response.status);const health=await response.json();const name=typeof health.workspace==='string'&&health.workspace?health.workspace:'отдельная конфигурация';state.workspaceName=typeof health.workspace==='string'&&health.workspace?health.workspace:null;if(state.mode==='rules')renderRules();$('workspace-name').textContent='Workspace: '+name;document.title='Карта знаний · '+name;}
+    try{const response=await fetch('/api/health',{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('HTTP '+response.status);const health=await response.json();const name=typeof health.workspace==='string'&&health.workspace?health.workspace:'отдельная конфигурация';state.workspaceName=typeof health.workspace==='string'&&health.workspace?health.workspace:null;state.mapStore=list(health.store_arguments).filter(item=>typeof item==='string');if(state.mode==='rules')renderRules();$('workspace-name').textContent='Workspace: '+name;document.title='Карта знаний · '+name;}
     catch(_error){$('workspace-name').textContent='Workspace: недоступен';}
     finally{clearTimeout(timeout);}
   }
@@ -819,15 +821,18 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   const viewModes=['map','encyclopedia','tools','rules','agents'];
   const RULE_SECRET_KEY='richi-map-edit-secret',RULE_HEADER='X-Richi-Map-Secret',RULE_SOURCE='richi map';
   const RULE_NAME=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/;
-  // Agents come from the server's registry (rules list, else the skill catalog); a rule may
-  // also name agents this registry does not list, and those are kept and shown as they are.
-  const knownAgents=()=>list(rulesState.data?.agents||rulesState.skills?.agents).filter(agent=>agent&&typeof agent.id==='string');
-  const knownAgentIds=()=>knownAgents().map(agent=>agent.id);
-  const agentName=id=>knownAgents().find(agent=>agent.id===id)?.name||id;
+  // rules-agents-pure: begin. No DOM here: tests/test_map_rules_ui.py runs these lines under Node.
+  // Agents as the server last listed them (a rules, skills or agents answer). A rule may also
+  // name agents this list lacks, and those are kept and shown as they are.
+  let mapAgents=[];
+  const setMapAgents=value=>{if(Array.isArray(value))mapAgents=value.filter(agent=>agent&&typeof agent.id==='string').map(agent=>({id:agent.id,name:agent.name}));};
+  const knownAgentIds=()=>mapAgents.map(agent=>agent.id);
+  const agentName=id=>mapAgents.find(agent=>agent.id===id)?.name||id;
   const agentList=ids=>ids.map(agentName).join(', ');
   const ruleAgentIds=(...rules)=>[...new Set([...knownAgentIds(),...rules.flatMap(rule=>Object.keys(rule?.skills||{}))])];
   // A rule names a skill for every agent (skill) and, where agents differ, one per agent (skills).
   const ruleSkillFor=(rule,agent)=>rule?.skills&&Object.prototype.hasOwnProperty.call(rule.skills,agent)?rule.skills[agent]||null:rule?.skill||null;
+  // How a rule's skills read to a person: one for all listed agents, or one per agent.
   function ruleSkillSetting(rule){
     const ids=ruleAgentIds(rule);if(!ids.length)return {skill:rule?.skill||null,skills:null};
     const own=Object.fromEntries(ids.map(agent=>[agent,ruleSkillFor(rule,agent)]));
@@ -836,6 +841,52 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   }
   const ruleHasSkill=rule=>Boolean(rule?.skill)||Object.values(rule?.skills||{}).some(Boolean);
   const sameRuleSkills=(a,b)=>{const ids=ruleAgentIds(a,b);return ids.length?ids.every(agent=>ruleSkillFor(a,agent)===ruleSkillFor(b,agent)):(a?.skill||null)===(b?.skill||null);};
+  // What a change sends. chosen is one name for every agent, or {agent: name} from the per-agent
+  // lists; base is the rule's every-agent skill, which stays the default for agents this computer
+  // does not list, so only agents that differ from it get an entry (null: no skill for that agent).
+  function skillRequest(base,chosen){
+    if(chosen===null||typeof chosen!=='object')return {skill:chosen||null,skills:null};
+    base=base||null;const own=Object.entries(chosen).map(([agent,name])=>[agent,name||null]).filter(([,name])=>name!==base);
+    return {skill:base,skills:own.length?Object.fromEntries(own):null};
+  }
+  const shellQuote=value=>{value=String(value);return /^[A-Za-z0-9_.:\/@%+=,-]+$/.test(value)?value:"'"+value.replace(/'/g,"'\\''")+"'";};
+  // --option=value: a value that starts with a dash is still read as the value.
+  const commandOption=(flag,value)=>flag+'='+shellQuote(value);
+  // store: the global options that reach the store the map shows, as its server gives them. A
+  // command without them would change whatever store the terminal currently uses, so none is composed.
+  function ruleCommand(change,store){
+    const selector=list(store).map(shellQuote);if(!selector.length)return '';
+    const parts=['richi',...selector,'rules',change.action,change.id];
+    if(change.action==='add')parts.push(change.scope==='global'?'--global':commandOption('--project',change.project));
+    else parts.push(commandOption('--expected-updated-at',change.expected_updated_at));
+    if('text' in change)parts.push(commandOption('--text',change.text));
+    if('skill' in change||'skills' in change){
+      const options=[];if(change.skill)options.push(change.skill);for(const agent of Object.keys(change.skills||{}).sort())options.push(agent+'='+(change.skills[agent]||''));
+      for(const option of options.length?options:[''])parts.push(commandOption('--skill',option));
+    }
+    if(change.action==='add')parts.push(commandOption('--source',RULE_SOURCE));
+    return parts.join(' ');
+  }
+  function agentCommand(change){
+    const parts=['richi','skill-sources',change.action,change.id];
+    if(change.expected_updated_at)parts.push(commandOption('--expected-updated-at',change.expected_updated_at));
+    if('name' in change)parts.push(commandOption('--name',change.name));
+    for(const folder of list(change.folders))parts.push(commandOption('--skills',folder));
+    if('variable' in change&&(change.variable||change.action==='update'))parts.push(commandOption('--variable',change.variable||''));
+    if(change.manual_skills&&(change.action==='update'||change.manual_skills!=='none'))parts.push(commandOption('--manual-skills',change.manual_skills));
+    for(const [key,flag] of [['add_folders','--add-skills'],['remove_folders','--remove-skills'],['disable','--disable'],['enable','--enable']])for(const value of list(change[key]))parts.push(commandOption(flag,value));
+    return parts.join(' ');
+  }
+  // Who changed a rule last: the map, or a chat named by its agent.
+  function changedBy(value){
+    if(typeof value!=='string'||!value)return '';if(value===RULE_SOURCE)return 'карта';
+    const at=value.indexOf(':'),agent=at>0?value.slice(0,at):'';
+    return agent&&knownAgentIds().includes(agent)?agentName(agent)+' · чат '+value.slice(at+1,at+9):value.length>40?value.slice(0,39)+'…':value;
+  }
+  const SOURCE_LABELS={'claude-app':'Плагины claude.ai из приложения Claude',system:'Встроенные скиллы',plugins:'Плагины',skills:'Свои скиллы'};
+  // A source is named by its own key where Richi knows it, else by its kind.
+  const agentSourceLabel=(agent,source)=>source.added?(agent.builtin?'Добавленная папка':'Папка скиллов'):SOURCE_LABELS[source.key]||SOURCE_LABELS[source.kind]||SOURCE_LABELS.skills;
+  // rules-agents-pure: end.
   const ruleTemplates={
     text:{label:'Свой текст',hint:'Любая постоянная инструкция или промт.'},
     skill:{label:'Скилл для действия',hint:'Агент берёт выбранный скилл, когда делает это действие.'},
@@ -844,7 +895,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   const skillSituations=['создании pull request','написании описания pull request','ревью кода','создании коммита','написании тестов','работе с задачами в Jira'];
   const namingTargets=[['ветки','branch-naming'],['коммиты','commit-naming'],['pull request','pr-naming'],['задачи','task-naming'],['файлы','file-naming']];
   const translit={а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'e',ж:'zh',з:'z',и:'i',й:'y',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'h',ц:'c',ч:'ch',ш:'sh',щ:'sch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya'};
-  const rulesState={data:null,loading:false,error:'',editing:false,request:0,query:'',scope:'',skills:null,skillMap:new Map(),skillsLoading:false,notice:''};
+  const rulesState={data:null,loading:false,error:'',failure:'',editing:false,request:0,query:'',scope:'',skills:null,skillMap:new Map(),skillsLoading:false,notice:''};
   let ruleSecret='',ruleFieldCount=0,rulesController=null;
   try{ruleSecret=sessionStorage.getItem(RULE_SECRET_KEY)||'';}catch{ruleSecret='';}
   function storeRuleSecret(value){ruleSecret=value||'';try{if(ruleSecret)sessionStorage.setItem(RULE_SECRET_KEY,ruleSecret);else sessionStorage.removeItem(RULE_SECRET_KEY);}catch{}}
@@ -852,9 +903,10 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   const ruleLength=value=>Array.from(String(value||'')).length;
   const ruleCountLabel=n=>{const a=n%10,b=n%100;return a===1&&b!==11?'правило':a>=2&&a<=4&&(b<12||b>14)?'правила':'правил';};
   const rulesNote=()=>rulesState.editing?'Правила · изменения сохраняются в workspace':'Правила · режим команд';
-  const shellQuote=value=>{value=String(value);return /^[A-Za-z0-9_.:\/@%+=,-]+$/.test(value)?value:"'"+value.replace(/'/g,"'\\''")+"'";};
   function ruleProjectNames(){
     const names=new Map();for(const node of state.nodes)if(groupFor(node)==='project')names.set(String(node.id).slice(8),titleFor(node));
+    // The rules answer lists the registered projects, so the form does not wait for the graph.
+    for(const project of list(rulesState.data?.projects))if(project&&typeof project.id==='string')names.set(project.id,project.name||project.id);
     for(const rule of ruleList())if(rule.project_id&&!names.has(rule.project_id))names.set(rule.project_id,rule.project_id);
     return new Map([...names.entries()].sort((a,b)=>String(a[1]).localeCompare(String(b[1]),'ru')));
   }
@@ -880,7 +932,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 
   // One edit key serves rules and agents: a page either saves both or composes commands for both.
   function setMapEditing(editing,sent){rulesState.editing=editing;if(sent&&!editing){storeRuleSecret('');rulesState.notice='expired';}}
-  function setSkills(catalog){rulesState.skills=catalog;rulesState.skillMap=new Map(list(catalog?.skills).filter(skill=>skill&&typeof skill.name==='string').map(skill=>[skill.name,skill]));}
+  function setSkills(catalog){setMapAgents(catalog?.agents);rulesState.skills=catalog;rulesState.skillMap=new Map(list(catalog?.skills).filter(skill=>skill&&typeof skill.name==='string').map(skill=>[skill.name,skill]));}
+  const skillsKnown=()=>Boolean(rulesState.skills)&&!rulesState.skills.unavailable&&!rulesState.skills.truncated;
   async function loadSkills(){
     if(rulesState.skillsLoading)return;rulesState.skillsLoading=true;
     try{const response=await fetch('/api/skills',{cache:'no-store'});const data=await response.json();if(!response.ok||!data||!Array.isArray(data.skills))throw new Error(data&&data.error||'HTTP '+response.status);setSkills(data);}
@@ -895,7 +948,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       if(!response.ok)throw new Error(data&&data.error||'Сервер вернул HTTP '+response.status);if(!data||!Array.isArray(data.rules))throw new Error('Неожиданный формат ответа сервера');
       if(request!==rulesState.request)return;
       if(sent!==ruleSecret){rulesState.loading=false;loadRules();return;}
-      rulesState.data=data;setMapEditing(data.editing===true,sent);
+      rulesState.data=data;setMapAgents(data.agents);setMapEditing(data.editing===true,sent);
     }catch(error){if(request!==rulesState.request)return;rulesState.error=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;}
     finally{clearTimeout(timeout);if(request===rulesState.request){rulesState.loading=false;rulesController=null;if(state.mode==='rules'){renderProjectOptions();renderRules();}if(state.mode==='agents')renderAgents();}}
     if(!rulesState.skills&&state.mode!=='agents')loadSkills();
@@ -924,29 +977,39 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     if(error.code==='limit')return /in all/.test(error.message)?'Все правила workspace вместе превысят лимит символов. Сократите или удалите другие правила.':'Текст правила длиннее допустимого.';
     return error.message;
   }
-  function ruleCommand(change){
-    const parts=['richi'];if(state.workspaceName)parts.push('--workspace',shellQuote(state.workspaceName));parts.push('rules',change.action,change.id);
-    if(change.action==='add')parts.push(...(change.scope==='global'?['--global']:['--project',shellQuote(change.project)]));
-    else parts.push('--expected-updated-at',change.expected_updated_at);
-    if('text' in change)parts.push('--text',shellQuote(change.text));
-    if('skill' in change||'skills' in change){
-      const options=[];if(change.skill)options.push(change.skill);for(const agent of Object.keys(change.skills||{}).sort())if(change.skills[agent])options.push(agent+'='+change.skills[agent]);
-      for(const option of options.length?options:[''])parts.push('--skill',shellQuote(option));
-    }
-    if(change.action==='add')parts.push('--source',shellQuote(RULE_SOURCE));
-    return parts.join(' ');
+  // A tab is rebuilt whenever its data arrives, which drops the focused control. Controls carry a
+  // key (data-focus) by which the rebuilt one is found again; the first key that works wins.
+  function focusByKey(root,...keys){
+    for(const key of keys){if(!key)continue;const target=[...root.querySelectorAll('[data-focus]')].find(element=>element.dataset.focus===key&&!element.disabled);if(target){target.focus({preventScroll:true});return target;}}
+    return null;
   }
+  const keyed=(element,key)=>{element.dataset.focus=key;return element;};
+  function restoreTabFocus(key){
+    if(state.mode==='rules')focusByKey($('rules-content'),key,'rule-add');
+    else if(state.mode==='agents')focusByKey($('agents-content'),key,'item:'+agentsState.selected,'add-agent');
+  }
+  let dialogInstance=0;
   function ruleDialog(title,subtitle){
-    const dialog=$('rule-dialog');if(dialog.open)dialog.close();dialog.replaceChildren();const form=make('form');form.noValidate=true;
+    const dialog=$('rule-dialog'),opener=document.activeElement?.dataset?.focus||'';if(dialog.open)dialog.close();dialog.replaceChildren();const form=make('form'),instance=++dialogInstance;form.noValidate=true;
     const head=make('div','rule-dialog-head'),titles=make('div'),heading=make('h2','',title);heading.id='rule-dialog-title';titles.append(heading);if(subtitle)titles.append(make('p','',subtitle));
     const close=toolButton('×',()=>dialog.close(),'icon');close.setAttribute('aria-label','Закрыть');close.title='Закрыть · Esc';head.append(titles,close);
-    const body=make('div','rule-dialog-body'),foot=make('div','rule-dialog-foot');form.append(head,body,foot);dialog.append(form);return {dialog,form,body,foot};
+    const body=make('div','rule-dialog-body'),foot=make('div','rule-dialog-foot'),unsaved=make('div','rule-unsaved','Есть несохранённые изменения. Нажмите Esc ещё раз, чтобы закрыть без сохранения.');unsaved.hidden=true;unsaved.setAttribute('role','status');
+    form.append(head,body,unsaved,foot);dialog.append(form);
+    // Esc closes at once only a form nobody typed into: the first Esc on a changed form asks.
+    let dirty=false,asked=false;form.addEventListener('input',()=>{dirty=true;asked=false;unsaved.hidden=true;});
+    dialog.oncancel=event=>{if(instance!==dialogInstance||!dirty||asked)return;event.preventDefault();asked=true;unsaved.hidden=false;};
+    // The browser returns focus to the control that opened the form, unless the tab was rebuilt
+    // meanwhile: then focus is nowhere, or still on a control of the form that has just closed.
+    dialog.onclose=()=>{const active=document.activeElement;if(instance===dialogInstance&&(!active||active===document.body||!active.isConnected||dialog.contains(active)))restoreTabFocus(opener);};
+    // alive: a save answers later, and by then the user may have closed this form or opened another.
+    return {dialog,form,body,foot,alive:()=>instance===dialogInstance&&dialog.open};
   }
+  const ruleCommandFor=change=>ruleCommand(change,state.mapStore)||'# Карта ещё не сообщила, какое хранилище она показывает. Нажмите «Обновить» и повторите.';
   function ruleProblem(parent){const box=make('div','rule-error');box.setAttribute('role','alert');box.hidden=true;parent.append(box);return text=>{box.textContent=text||'';box.hidden=!text;};}
   function ruleCommandBox(parent,hint=''){
     const box=make('div','rule-command');box.hidden=true;const pre=make('pre');
     const copy=toolButton('Скопировать команду',async()=>{try{await navigator.clipboard.writeText(pre.textContent);copy.textContent='Скопировано';setTimeout(()=>copy.textContent='Скопировать команду',1600);}catch{copy.textContent='Выделите текст';}},'small');
-    box.append(make('div','rule-field-hint',hint||'Выполните в терминале или передайте агенту. Команда меняет правила '+(state.workspaceName?'workspace «'+state.workspaceName+'»':'той же конфигурации, что и карта')+'.'),pre,copy);parent.append(box);
+    box.append(make('div','rule-field-hint',hint||(list(state.mapStore)[0]==='--workspace'?'Выполните в терминале или передайте агенту. Команда меняет правила workspace «'+state.mapStore[1]+'».':'Выполните в терминале. Команда называет файл хранилища, которое показывает карта; чат агента, привязанный к workspace, такую команду не примет.')),pre,copy);parent.append(box);
     return command=>{pre.textContent=command;box.hidden=false;box.scrollIntoView({block:'nearest'});};
   }
   function skillSelect(agent,current){
@@ -961,11 +1024,12 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     other.type='text';other.maxLength=100;other.placeholder='Например, plugin:skill-name';other.autocomplete='off';other.spellcheck=false;other.setAttribute('aria-label','Имя скилла'+(agent?' для '+agentName(agent):''));
     const describe=()=>{const value=select.value,skill=rulesState.skillMap.get(value);other.hidden=value!=='__other__';
       about.textContent=value==='__other__'?'Имя так, как его называет агент. Карта не проверяет, что такой скилл установлен.':skill?cut(skill.description||'Описание в SKILL.md не указано.',280):rulesState.skillsLoading?'Загружаем установленные скиллы…':
-        !skills.length?'Установленные скиллы не найдены; имя можно ввести вручную.':agent?'Скиллы, которые видит '+agentName(agent)+'.':'Скиллы Claude Code и Codex на этом компьютере: свои, встроенные и из плагинов, включая плагины claude.ai.';};
+        !skills.length?'Установленные скиллы не найдены; имя можно ввести вручную.':(agent?'Скиллы, которые видит '+agentName(agent)+'.':'Скиллы агентов на этом компьютере ('+agentList(knownAgentIds())+'): свои, встроенные и из плагинов.')+(rulesState.skills?.truncated?' Показана только часть: скиллов больше, чем помещается в список.':'');};
     const set=name=>{name=name||'';if(name&&!skills.some(skill=>skill.name===name)){select.value='__other__';other.value=name;}else{select.value=name;other.value='';}describe();};
-    const changed=()=>box.dispatchEvent(new CustomEvent('skillchange',{bubbles:true}));
-    select.addEventListener('change',()=>{describe();changed();if(select.value==='__other__')other.focus();});
-    other.addEventListener('input',changed);set(current);box.append(select,other,about);
+    // typing: the name is still being written, so nothing may react to a prefix of it.
+    const changed=typing=>box.dispatchEvent(new CustomEvent('skillchange',{bubbles:true,detail:{typing}}));
+    select.addEventListener('change',()=>{describe();changed(false);if(select.value==='__other__')other.focus();});
+    other.addEventListener('input',()=>changed(true));other.addEventListener('change',()=>changed(false));set(current);box.append(select,other,about);
     return {element:box,select,set,value:()=>select.value==='__other__'?other.value.trim():select.value};
   }
   function ruleSkillPicker(rule){
@@ -983,7 +1047,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     // Without a list of agents there is nothing to choose per agent.
     agentsPanel.append(notice);modes.hidden=!ids.length;box.append(modes,sharedPanel,agentsPanel);
     let mode=initial.skills?'agents':'shared';
-    const changed=()=>box.dispatchEvent(new CustomEvent('skillchange',{bubbles:true}));
+    const changed=()=>box.dispatchEvent(new CustomEvent('skillchange',{bubbles:true,detail:{typing:false}}));
     const lacking=name=>{const info=rulesState.skillMap.get(name);return info?known.filter(agent=>!list(info.agents).includes(agent)):[];};
     const similar=(name,agent)=>{const base=name.split(':').pop().toLowerCase(),found=list(rulesState.skills?.skills).find(skill=>list(skill.agents).includes(agent)&&skill.name.split(':').pop().toLowerCase()===base);return found?found.name:'';};
     function showStatus(){
@@ -1002,25 +1066,25 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       }
       notice.textContent=notes.join(' ');setMode('agents');changed();
     }
-    shared.element.addEventListener('skillchange',()=>{const name=shared.value();if(name&&lacking(name).length)split(name);else showStatus();});
+    shared.element.addEventListener('skillchange',event=>{const name=shared.value();if(!event.detail?.typing&&name&&lacking(name).length)split(name);else showStatus();});
     for(const control of perAgent.values())control.element.addEventListener('skillchange',()=>{notice.textContent='';});
-    sharedRadio.addEventListener('change',()=>{const names=ids.map(agent=>perAgent.get(agent).value()).filter(Boolean);shared.set(new Set(names).size===1?names[0]:names[0]||'');notice.textContent='';setMode('shared');changed();});
+    sharedRadio.addEventListener('change',()=>{const names=ids.map(agent=>perAgent.get(agent).value()).filter(Boolean);shared.set(names[0]||'');notice.textContent='';setMode('shared');changed();});
     ownRadio.addEventListener('change',()=>{if(shared.value())split(shared.value());else{setMode('agents');changed();}});
     setMode(mode);
     const values=()=>mode==='shared'?[shared.value()]:ids.map(agent=>perAgent.get(agent).value());
     return {element:box,focusTarget:shared.select,names:()=>values().filter(Boolean),
-      value:()=>ruleSkillSetting(mode==='shared'?{skill:shared.value()||null}:{skill:null,skills:Object.fromEntries(ids.map(agent=>[agent,perAgent.get(agent).value()||null]))})};
+      value:()=>mode==='shared'?skillRequest(null,shared.value()):skillRequest(rule?.skill,Object.fromEntries(ids.map(agent=>[agent,perAgent.get(agent).value()||null])))};
   }
   function skillPhrase(setting){
-    if(!setting.skills)return setting.skill?'используй скилл '+setting.skill:'';
+    const said=ruleSkillSetting(setting);if(!said.skills)return said.skill?'используй скилл '+said.skill:'';
     const parts=ruleAgentIds(setting).map(agent=>[agent,ruleSkillFor(setting,agent)]).filter(([,name])=>name);
     if(parts.length===1)return 'в '+agentName(parts[0][0])+' используй скилл '+parts[0][1];
     const pieces=parts.map(([agent,name])=>name+' в '+agentName(agent));
     return parts.length?'используй скилл '+pieces.slice(0,-1).join(', ')+' и '+pieces[pieces.length-1]:'';
   }
   function openRuleEditor(options={}){
-    const rule=options.rule||null;let template=rule?'text':options.template||'text',textTouched=Boolean(rule),idTouched=false;
-    const {dialog,form,body,foot}=ruleDialog(rule?'Изменить правило':'Новое правило',rule?rule.id+' · '+ruleScopeText(rule):'Агенты загрузят его в начале каждого подходящего чата.');
+    let rule=options.rule||null,template=rule?'text':options.template||'text',textTouched=Boolean(rule),idTouched=false;rulesState.failure='';
+    const {dialog,form,body,foot,alive}=ruleDialog(rule?'Изменить правило':'Новое правило',rule?rule.id+' · '+ruleScopeText(rule):'Агенты загрузят его в начале каждого подходящего чата.');
     const templateRow=make('div','rule-templates'),templateButtons=new Map();templateRow.setAttribute('role','group');templateRow.setAttribute('aria-label','Шаблон правила');
     for(const [key,item] of Object.entries(ruleTemplates)){const button=toolButton('',()=>{template=key;syncTemplate();compose();},'rule-template');button.append(make('strong','',item.label),make('span','',item.hint));templateButtons.set(key,button);templateRow.append(button);}
     const situation=make('input'),situations=make('datalist');situation.type='text';situation.maxLength=200;situation.placeholder='например, создании pull request';situations.id='rule-situations';situation.setAttribute('list',situations.id);skillSituations.forEach(value=>situations.append(new Option(value)));
@@ -1069,7 +1133,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     function compose(){if(!rule&&!textTouched&&template!=='text')text.value=templateText();if(!rule&&!idTouched)idInput.value=suggestedId();updateCounter();}
     function change(){
       const value=text.value,setting=skill.value(),limit=rulesState.data?.limit_text||2000;
-      if(!value.trim())return 'Напишите текст правила.';if(ruleLength(value)>limit)return 'Текст длиннее '+limit+' символов. Разделите его на несколько правил.';
+      if(!value.trim())return 'Напишите текст правила.';if(value.trim()==='-')return 'Текст из одного дефиса команда прочитала бы как «возьми текст из stdin». Напишите правило словами.';if(ruleLength(value)>limit)return 'Текст длиннее '+limit+' символов. Разделите его на несколько правил.';
       if(skill.names().some(name=>!RULE_NAME.test(name)))return 'Имя скилла: латиница, цифры, «.», «_», «:» или «-», до 100 символов, начиная с буквы или цифры.';
       if(!rule&&template==='skill'&&!ruleHasSkill(setting))return 'Выберите скилл.';
       if(rule){const update={action:'update',id:rule.id,expected_updated_at:rule.updated_at};if(value!==rule.text)update.text=value;if(!sameRuleSkills(setting,rule)){update.skill=setting.skill;update.skills=setting.skills;}return 'text' in update||'skill' in update?update:'Изменений нет.';}
@@ -1081,25 +1145,47 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     for(const input of [situation,format,example])input.addEventListener('input',compose);target.addEventListener('change',compose);skill.element.addEventListener('skillchange',compose);
     form.addEventListener('submit',async event=>{
       event.preventDefault();problem('');const request=change();if(typeof request==='string'){problem(request);return;}
-      if(!rulesState.editing){showCommand(ruleCommand(request));return;}
+      if(!rulesState.editing){showCommand(ruleCommandFor(request));return;}
       submit.disabled=true;submit.textContent='Сохраняем…';
-      try{await sendRuleChange(request);dialog.close();announce(rule?'Правило изменено':'Правило добавлено');loadRules();}
-      catch(error){problem(ruleChangeProblem(error));if(!rulesState.editing){showCommand(ruleCommand(request));renderRules();}}
-      finally{if(dialog.open){submit.disabled=false;submitLabel();}}
+      try{await sendRuleChange(request);if(alive())dialog.close();announce(rule?'Правило изменено':'Правило добавлено');loadRules();}
+      catch(error){
+        let message=ruleChangeProblem(error);
+        // Somebody changed the rule meanwhile: take its new version and keep what is typed here.
+        if(error.code==='conflict'&&rule){
+          await loadRules();const fresh=ruleList().find(item=>item.id===rule.id);
+          if(!fresh)message='Правило удалили, пока форма была открыта. Скопируйте текст, закройте форму и добавьте правило заново.';
+          else if(fresh.updated_at!==rule.updated_at){
+            const differs=[];if(fresh.text!==rule.text)differs.push('другой текст: «'+cut(fresh.text,240)+'»');if(!sameRuleSkills(fresh,rule))differs.push('другие скиллы');
+            message='Правило изменили, пока форма была открыта'+(differs.length?'; в памяти теперь '+differs.join(' и '):'')+'. То, что в форме, осталось как было: нажмите «Сохранить» ещё раз, чтобы записать это поверх новой версии.';rule=fresh;
+          }
+        }
+        if(!alive()){rulesState.failure=message;renderRules();return;}
+        problem(message);if(!rulesState.editing){showCommand(ruleCommandFor(request));renderRules();}
+      }
+      finally{if(alive()){submit.disabled=false;submitLabel();}}
     });
     syncTemplate();compose();submitLabel();dialog.showModal();(rule?text:template==='skill'?situation:template==='naming'?format:text).focus();
   }
   function openRuleRemoval(rule){
-    const {dialog,form,body,foot}=ruleDialog('Удалить правило?',rule.id+' · '+ruleScopeText(rule));
-    body.append(make('p','rule-confirm','Агенты перестанут получать это правило, когда в следующий раз загрузят правила. Удаление нельзя отменить: вернуть правило можно, только добавив его заново.'),make('blockquote','rule-quote',cut(rule.text,500)));
+    rulesState.failure='';
+    const {dialog,form,body,foot,alive}=ruleDialog(rule.invalid?'Удалить повреждённую запись?':'Удалить правило?',rule.invalid?rule.id:rule.id+' · '+ruleScopeText(rule)),quote=make('blockquote','rule-quote',cut(rule.invalid||rule.text,500));
+    body.append(make('p','rule-confirm',rule.invalid?'Эта запись правила повреждена, и агенты её не получают. Удаление нельзя отменить.':'Агенты перестанут получать это правило, когда в следующий раз загрузят правила. Удаление нельзя отменить: вернуть правило можно, только добавив его заново.'),quote);
     const problem=ruleProblem(body),showCommand=ruleCommandBox(body),cancel=toolButton('Отмена',()=>dialog.close()),submit=make('button',rulesState.editing?'danger solid':'primary',rulesState.editing?'Удалить правило':'Показать команду');submit.type='submit';foot.append(cancel,submit);
     form.addEventListener('submit',async event=>{
       event.preventDefault();problem('');const request={action:'remove',id:rule.id,expected_updated_at:rule.updated_at};
-      if(!rulesState.editing){showCommand(ruleCommand(request));return;}
+      if(!rulesState.editing){showCommand(ruleCommandFor(request));return;}
       submit.disabled=true;
-      try{await sendRuleChange(request);dialog.close();announce('Правило удалено');loadRules();}
-      catch(error){problem(ruleChangeProblem(error));if(!rulesState.editing){submit.className='primary';submit.textContent='Показать команду';showCommand(ruleCommand(request));renderRules();}}
-      finally{if(dialog.open)submit.disabled=false;}
+      try{await sendRuleChange(request);if(alive())dialog.close();announce('Правило удалено');loadRules();}
+      catch(error){
+        let message=ruleChangeProblem(error);
+        if(error.code==='conflict'&&!rule.invalid){
+          await loadRules();const fresh=ruleList().find(item=>item.id===rule.id);
+          if(fresh&&fresh.updated_at!==rule.updated_at){rule=fresh;quote.textContent=cut(fresh.text,500);message='Правило изменили, пока вы подтверждали удаление. Выше — его новая версия: нажмите «Удалить правило» ещё раз, если всё ещё хотите удалить.';}
+        }else if(error.code==='not_found')loadRules();
+        if(!alive()){rulesState.failure=message;renderRules();return;}
+        problem(message);if(!rulesState.editing){submit.className='primary';submit.textContent='Показать команду';showCommand(ruleCommandFor(request));renderRules();}
+      }
+      finally{if(alive())submit.disabled=false;}
     });
     dialog.showModal();cancel.focus();
   }
@@ -1109,7 +1195,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   }
   function ruleSkillChip(label,name,agents){
     // Warns when an agent this chip is for does not have the skill installed.
-    const known=Boolean(rulesState.skills)&&!rulesState.skills.unavailable,info=name?rulesState.skillMap.get(name):null;
+    const known=skillsKnown(),info=name?rulesState.skillMap.get(name):null;
     const missing=known&&name&&info?agents.filter(agent=>knownAgentIds().includes(agent)&&!list(info.agents).includes(agent)):[];
     const chip=make('div','rule-skill'+(name?'':' none')+(name&&known&&(!info||missing.length)?' missing':''));chip.append(make('span','rule-skill-label',label),make('code','',name||'без скилла'));
     if(name&&known){
@@ -1130,8 +1216,9 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     if(ruleLength(rule.text)>360||String(rule.text).split('\n').length>6){text.classList.add('clamped');const more=toolButton('Показать полностью',()=>{const folded=text.classList.toggle('clamped');more.textContent=folded?'Показать полностью':'Свернуть';more.setAttribute('aria-expanded',String(!folded));},'rule-more');more.setAttribute('aria-expanded','false');card.append(more);}
     if(ruleHasSkill(rule))card.append(ruleSkillChips(rule));
     const bottom=make('div','rule-card-bottom'),meta=make('div','rule-meta'),actions=make('div','rule-actions');meta.append(make('span','','Изменено '+dateText(rule.updated_at)));
+    const author=changedBy(rule.changed_by);if(author){const who=make('span','','Кем: '+author);who.title=rule.changed_by;meta.append(who);}
     if(rule.source){const source=make('span','','Источник: '+cut(rule.source,70));source.title=rule.source;meta.append(source);}
-    const edit=toolButton('Изменить',()=>openRuleEditor({rule}),'small'),remove=toolButton('Удалить',()=>openRuleRemoval(rule),'small danger');edit.setAttribute('aria-label','Изменить правило '+rule.id);remove.setAttribute('aria-label','Удалить правило '+rule.id);
+    const edit=keyed(toolButton('Изменить',()=>openRuleEditor({rule}),'small'),'rule-edit:'+rule.id),remove=keyed(toolButton('Удалить',()=>openRuleRemoval(rule),'small danger'),'rule-remove:'+rule.id);edit.setAttribute('aria-label','Изменить правило '+rule.id);remove.setAttribute('aria-label','Удалить правило '+rule.id);
     actions.append(edit,remove);bottom.append(meta,actions);card.append(bottom);return card;
   }
   function renderRuleMode(root,saved='Изменения сразу сохраняются в памяти workspace. Агенты получат их при следующей загрузке правил: в новом чате, после сжатия контекста или при смене проекта.'){
@@ -1146,10 +1233,14 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   }
   function renderRuleStarters(root){
     const box=make('div','tools-empty rules-empty'),starters=make('div','rule-starters');box.append(ruleMark('rule'),make('h3','','Правил пока нет'),make('p','','Закрепите то, что агент должен делать всегда: формат имён, обязательные проверки, нужный скилл или любой промт.'));
-    for(const [key,title,description] of [['skill','Скилл для действия','«При создании pull request используй скилл pr-description.»'],['naming','Формат имён','«Называй ветки по формату REC-<номер>_<описание>.»'],['text','Свой текст','Любая постоянная инструкция или промт для агентов.']]){const button=toolButton('',()=>openRuleEditor({template:key}),'rule-starter');button.append(make('strong','',title),make('span','',description));starters.append(button);}
+    for(const [key,title,description] of [['skill','Скилл для действия','«При создании pull request используй скилл pr-description.»'],['naming','Формат имён','«Называй ветки по формату REC-<номер>_<описание>.»'],['text','Свой текст','Любая постоянная инструкция или промт для агентов.']]){const button=keyed(toolButton('',()=>openRuleEditor({template:key}),'rule-starter'),'rule-add:'+key);button.append(make('strong','',title),make('span','',description));starters.append(button);}
     box.append(starters);root.append(box);
   }
   function renderRules(){
+    const root=$('rules-content'),active=document.activeElement,key=active&&root.contains(active)&&active.dataset.focus||'';
+    renderRulesContent();if(key&&!$('rule-dialog').open)focusByKey(root,key,'rule-add');
+  }
+  function renderRulesContent(){
     const root=$('rules-content');root.replaceChildren();$('rules-panel').setAttribute('aria-busy',String(rulesState.loading));if(state.mode==='rules')$('data-note').textContent=rulesNote();
     const all=ruleList(),limit=rulesState.data?.limit_characters||20000,used=all.reduce((sum,rule)=>sum+ruleLength(rule.text),0);
     const heading=make('div','tools-heading rules-heading'),intro=make('div'),totals=make('div','rules-totals'),count=make('div','tools-total'),meter=make('div','rules-meter'+(used>limit*.85?' near':'')),bar=make('div','rules-meter-bar'),fill=make('i');
@@ -1162,8 +1253,14 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       if(failed)box.append(toolButton('Повторить загрузку',()=>loadRules(),'primary'));root.append(box);return;
     }
     if(rulesState.error)toolWarning(root,'Не удалось обновить правила: '+rulesState.error+' Показан предыдущий список.');
+    if(rulesState.failure)toolWarning(root,'Изменение не сохранено. '+rulesState.failure);
+    // A row that cannot be read is not a rule any more: agents do not get it, and only removing it helps.
+    for(const item of list(rulesState.data.invalid_rules).filter(item=>item&&typeof item.id==='string')){
+      const box=make('div','tools-warning rule-invalid'),remove=keyed(toolButton(rulesState.editing?'Удалить запись':'Команда удаления',()=>openRuleRemoval({id:item.id,updated_at:typeof item.updated_at==='string'?item.updated_at:'invalid',invalid:String(item.error||'Запись не читается.')}),'small'),'rule-remove:'+item.id);
+      box.setAttribute('role','status');box.append(make('span','','Запись правила «'+item.id+'» повреждена, и агенты её не получают: '+cut(String(item.error||'запись не читается'),200)),remove);root.append(box);
+    }
     renderRuleMode(root);
-    const actions=make('div','rules-actions');actions.append(toolButton('+ Новое правило',()=>openRuleEditor(),'primary'),toolButton('Скилл для действия',()=>openRuleEditor({template:'skill'})),toolButton('Формат имён',()=>openRuleEditor({template:'naming'})));root.append(actions);
+    const actions=make('div','rules-actions');actions.append(keyed(toolButton('+ Новое правило',()=>openRuleEditor(),'primary'),'rule-add'),keyed(toolButton('Скилл для действия',()=>openRuleEditor({template:'skill'})),'rule-add:skill'),keyed(toolButton('Формат имён',()=>openRuleEditor({template:'naming'})),'rule-add:naming'));root.append(actions);
     if(!all.length){renderRuleStarters(root);return;}
     const shown=all.filter(rule=>(!rulesState.scope||(rulesState.scope==='global'?rule.scope==='global':'project:'+rule.project_id===rulesState.scope))&&ruleMatches(rule));
     if(!shown.length){const box=make('div','tools-empty');box.append(ruleMark('rule'),make('h3','','Ничего не найдено'),make('p','','Измените запрос или область.'));root.append(box);return;}
@@ -1176,7 +1273,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 
 
   // Agents: who Richi works with on this computer and where each finds skills (richi skill-sources).
-  const agentsState={data:null,loading:false,error:'',request:0,query:'',selected:'',addingFolder:'',folderDraft:'',focusFolder:false,busy:false,problem:''};
+  const agentsState={data:null,loading:false,error:'',request:0,query:'',selected:'',addingFolder:'',folderDraft:'',focus:'',busy:false,problem:''};
   let agentsController=null;
   const agentsNote=()=>rulesState.editing?'Агенты · изменения сохраняются для этого компьютера':'Агенты · режим команд';
   const agentItems=()=>list(agentsState.data?.agents).filter(agent=>agent&&typeof agent.id==='string');
@@ -1185,16 +1282,10 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   const skillForms=['скилл','скилла','скиллов'];
   const agentSaved='Изменения сразу сохраняются в настройках Richi на этом компьютере и действуют во всех workspace.';
   const agentCommandHint='Выполните в терминале или передайте агенту. Команда меняет настройки агентов на этом компьютере.';
-  function agentSourceLabel(agent,source){
-    if(source.added)return agent.builtin?'Добавленная папка':'Папка скиллов';
-    if(source.kind==='system')return 'Встроенные скиллы';
-    if(source.layout==='claude-app')return 'Плагины claude.ai из приложения Claude';
-    return source.kind==='plugins'?'Плагины':'Свои скиллы';
-  }
   const agentFolderProblem=value=>!value?'Укажите папку со скиллами.':value.length>1000||!/^(~|~\/.*|\/.*)$/.test(value)?'Нужен полный путь или путь от домашней папки: /opt/skills или ~/skills.':'';
   // Rules that give this agent a skill, and whether the agent really has it.
   function agentRules(agent){
-    const known=Boolean(rulesState.skills)&&!rulesState.skills.unavailable;
+    const known=skillsKnown();
     return ruleList().map(rule=>({rule,skill:ruleSkillFor(rule,agent.id)})).filter(item=>item.skill).map(item=>{const info=rulesState.skillMap.get(item.skill);return {...item,missing:known&&(!info||!list(info.agents).includes(agent.id))};});
   }
   function agentMatches(agent){
@@ -1213,19 +1304,9 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     }catch(error){if(request!==agentsState.request)return;agentsState.error=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;}
     finally{clearTimeout(timeout);if(request===agentsState.request){agentsState.loading=false;agentsController=null;if(state.mode==='agents')renderAgents();}}
   }
-  function agentCommand(change){
-    const parts=['richi','skill-sources',change.action,change.id];
-    if(change.expected_updated_at)parts.push('--expected-updated-at',change.expected_updated_at);
-    if('name' in change)parts.push('--name',shellQuote(change.name));
-    for(const folder of list(change.folders))parts.push('--skills',shellQuote(folder));
-    if('variable' in change&&(change.variable||change.action==='update'))parts.push('--variable',shellQuote(change.variable||''));
-    if(change.manual_skills&&(change.action==='update'||change.manual_skills!=='none'))parts.push('--manual-skills',change.manual_skills);
-    for(const [key,flag] of [['add_folders','--add-skills'],['remove_folders','--remove-skills'],['disable','--disable'],['enable','--enable']])for(const value of list(change[key]))parts.push(flag,shellQuote(value));
-    return parts.join(' ');
-  }
   function agentChangeProblem(error){
     if(error.code==='not_editing'){storeRuleSecret('');rulesState.editing=false;rulesState.notice='expired';return 'Ключ редактирования больше не действует: карту открыли заново в другой вкладке. Чтобы сохранять здесь, снова выполните richi map.';}
-    if(error.code==='conflict')return 'Настройки этого агента изменили в другом окне. Нажмите «Обновить» и повторите.';
+    if(error.code==='conflict')return 'Настройки этого агента изменили в другом окне. Список обновлён: проверьте его и повторите изменение.';
     if(error.code==='exists')return /skill source/.test(error.message)?'Эта папка уже есть среди источников агента.':'Агент с таким ID уже есть.';
     if(error.code==='not_found')return 'Агент или источник не найден: список устарел. Нажмите «Обновить».';
     if(error.code==='limit')return 'Достигнут предел числа агентов или папок.';
@@ -1233,24 +1314,32 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     return error.message;
   }
   // An agents answer: the list, and the skill catalog it was counted from.
-  function setAgents(data){const {catalog,...listing}=data;agentsState.data=listing;if(catalog&&Array.isArray(catalog.skills))setSkills(catalog);}
-  const closeFolderForm=()=>{agentsState.addingFolder='';agentsState.folderDraft='';agentsState.focusFolder=false;};
+  function setAgents(data){const {catalog,...listing}=data;agentsState.data=listing;if(catalog&&Array.isArray(catalog.skills))setSkills(catalog);setMapAgents(listing.agents);}
+  // The answer to a saved change is the newest list: a list still on its way is older and is dropped.
+  function acceptAgents(data){agentsState.request++;if(agentsController){agentsController.abort();agentsController=null;}agentsState.loading=false;agentsState.error='';setAgents(data);}
+  const freshAgent=agent=>agentItems().find(item=>item.id===agent.id)||agent;
+  const closeFolderForm=()=>{agentsState.addingFolder='';agentsState.folderDraft='';};
   function openAgentCommand(change,title='Команда для терминала'){
     const {dialog,body,foot}=ruleDialog(title,'Вкладка открыта без ключа редактирования, поэтому изменение нужно выполнить командой.');
     ruleCommandBox(body,agentCommandHint)(agentCommand(change));foot.append(toolButton('Закрыть',()=>dialog.close(),'primary'));dialog.showModal();
   }
   // Save a change made right in the tab; without the edit key it becomes a command.
   async function applyAgentChange(change,done='Настройки агента сохранены'){
+    if(agentsState.busy)return false;
     const agent=agentItems().find(item=>item.id===change.id);if(agent?.updated_at&&change.action!=='add')change.expected_updated_at=agent.updated_at;
     if(!rulesState.editing){openAgentCommand(change);return false;}
     agentsState.busy=true;agentsState.problem='';renderAgents();
     try{
-      setAgents((await sendMapChange('/api/agents',change)).listing);announce(done);return true;
-    }catch(error){agentsState.problem=agentChangeProblem(error);if(!rulesState.editing)openAgentCommand(change);return false;}
+      acceptAgents((await sendMapChange('/api/agents',change)).listing);announce(done);return true;
+    }catch(error){
+      agentsState.problem=agentChangeProblem(error);if(error.code==='conflict'||error.code==='not_found')await loadAgents();
+      // A form the user opened meanwhile is theirs: the command waits in the tab's message instead.
+      if(!rulesState.editing&&!$('rule-dialog').open)openAgentCommand(change);return false;
+    }
     finally{agentsState.busy=false;renderAgents();}
   }
   function openAgentEditor(agent=null){
-    const {dialog,form,body,foot}=ruleDialog(agent?'Изменить агента':'Новый агент',agent?agent.name+' · '+agent.id:'Опишите агента, которого в Richi нет, чтобы правила могли называть скилл и для него.');
+    const {dialog,form,body,foot,alive}=ruleDialog(agent?'Изменить агента':'Новый агент',agent?agent.name+' · '+agent.id:'Опишите агента, которого в Richi нет, чтобы правила могли называть скилл и для него.');
     const name=make('input'),folder=make('input'),id=make('input'),variable=make('input'),manual=make('select');let idTouched=false;
     for(const input of [name,folder,id,variable]){input.type='text';input.autocomplete='off';input.spellcheck=false;}
     name.maxLength=60;name.placeholder='Gemini CLI';folder.maxLength=1000;folder.placeholder='~/.gemini/skills';id.maxLength=32;id.placeholder='gemini-cli';variable.maxLength=165;variable.placeholder='GEMINI_CLI=1';
@@ -1291,15 +1380,21 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       if(agent?.updated_at)request.expected_updated_at=agent.updated_at;
       if(!rulesState.editing){showCommand(agentCommand(request));return;}
       submit.disabled=true;submit.textContent='Сохраняем…';
-      try{setAgents((await sendMapChange('/api/agents',request)).listing);dialog.close();agentsState.selected=request.id;agentsState.problem='';announce(agent?'Агент изменён':'Агент добавлен');renderAgents();}
-      catch(error){problem(agentChangeProblem(error));if(!rulesState.editing){showCommand(agentCommand(request));renderAgents();}}
-      finally{if(dialog.open){submit.disabled=false;submit.textContent=rulesState.editing?(agent?'Сохранить':'Добавить агента'):'Показать команду';}}
+      try{acceptAgents((await sendMapChange('/api/agents',request)).listing);if(alive())dialog.close();agentsState.selected=request.id;agentsState.problem='';announce(agent?'Агент изменён':'Агент добавлен');renderAgents();}
+      catch(error){
+        const message=agentChangeProblem(error);
+        // Somebody changed the agent meanwhile: the next attempt goes against its new version.
+        if(agent&&error.code==='conflict'){await loadAgents();agent=freshAgent(agent);}
+        if(!alive()){agentsState.problem=message;renderAgents();return;}
+        problem(message);if(!rulesState.editing){showCommand(agentCommand(request));renderAgents();}
+      }
+      finally{if(alive()){submit.disabled=false;submit.textContent=rulesState.editing?(agent?'Сохранить':'Добавить агента'):'Показать команду';}}
     });
     dialog.showModal();name.focus();
   }
   function openAgentRemoval(agent){
     const rules=agentRules(agent).length,reset=agent.builtin;
-    const {dialog,form,body,foot}=ruleDialog(reset?'Сбросить к встроенным настройкам?':'Удалить агента?',agent.name+' · '+agent.id);
+    const {dialog,form,body,foot,alive}=ruleDialog(reset?'Сбросить к встроенным настройкам?':'Удалить агента?',agent.name+' · '+agent.id);
     body.append(make('p','rule-confirm',reset?'Выключенные источники скиллов снова включатся, а добавленные папки исчезнут из списка. Сами папки и скиллы на диске не меняются.':
       'Richi перестанет учитывать этого агента: он пропадёт из форм правил и списков скиллов. Его папки и скиллы на диске не меняются.'+(rules?' Правила, которые называют скилл для него ('+rules+'), останутся как есть.':'')));
     const problem=ruleProblem(body),showCommand=ruleCommandBox(body,agentCommandHint),cancel=toolButton('Отмена',()=>dialog.close()),label=reset?'Сбросить':'Удалить агента',submit=make('button',rulesState.editing?(reset?'primary':'danger solid'):'primary',rulesState.editing?label:'Показать команду');submit.type='submit';foot.append(cancel,submit);
@@ -1307,23 +1402,28 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       event.preventDefault();problem('');const request={action:'remove',id:agent.id,expected_updated_at:agent.updated_at};
       if(!rulesState.editing){showCommand(agentCommand(request));return;}
       submit.disabled=true;
-      try{setAgents((await sendMapChange('/api/agents',request)).listing);dialog.close();agentsState.problem='';announce(reset?'Настройки агента сброшены':'Агент удалён');renderAgents();}
-      catch(error){problem(agentChangeProblem(error));if(!rulesState.editing){submit.className='primary';submit.textContent='Показать команду';showCommand(agentCommand(request));renderAgents();}}
-      finally{if(dialog.open)submit.disabled=false;}
+      try{acceptAgents((await sendMapChange('/api/agents',request)).listing);if(alive())dialog.close();agentsState.problem='';announce(reset?'Настройки агента сброшены':'Агент удалён');renderAgents();}
+      catch(error){
+        const message=agentChangeProblem(error);
+        if(error.code==='conflict'){await loadAgents();agent=freshAgent(agent);}
+        if(!alive()){agentsState.problem=message;renderAgents();return;}
+        problem(message);if(!rulesState.editing){submit.className='primary';submit.textContent='Показать команду';showCommand(agentCommand(request));renderAgents();}
+      }
+      finally{if(alive())submit.disabled=false;}
     });
     dialog.showModal();cancel.focus();
   }
   function renderAgentDetail(agent){
     const box=make('section','agent-detail'),head=make('div','agent-head'),titles=make('div'),actions=make('div','agent-head-actions'),heading=make('h3','',agent.name);box.setAttribute('aria-label','Агент '+agent.name);
     const idLine=make('code','agent-id',agent.id);idLine.title='ID агента: так он называется в командах и правилах';titles.append(heading,idLine);
-    if(!agent.builtin)actions.append(toolButton('Изменить',()=>openAgentEditor(agent),'small'),toolButton('Удалить',()=>openAgentRemoval(agent),'small danger'));
-    else if(agent.updated_at)actions.append(toolButton('Сбросить к встроенным',()=>openAgentRemoval(agent),'small'));
+    if(!agent.builtin)actions.append(keyed(toolButton('Изменить',()=>openAgentEditor(agent),'small'),'edit:'+agent.id),keyed(toolButton('Удалить',()=>openAgentRemoval(agent),'small danger'),'remove-agent:'+agent.id));
+    else if(agent.updated_at)actions.append(keyed(toolButton('Сбросить к встроенным',()=>openAgentRemoval(agent),'small'),'reset:'+agent.id));
     head.append(titles,actions);box.append(head);
     const badges=make('div','agent-badges');badges.append(make('span','agent-badge'+(agent.builtin?'':' own'),agent.builtin?'Встроенный':'Свой'));
     badges.append(make('span','agent-badge'+(agent.detected?' ok':''),agent.detected?'Найден на компьютере':'Не найден на компьютере'));
     if(agent.connection==='configured')badges.append(make('span','agent-badge ok','Richi подключён'));
-    else if(agent.connection==='not_configured'){const badge=make('span','agent-badge warn','Richi не подключён');badge.title='Подключить: richi setup --agent '+agent.id;badges.append(badge);}
-    else if(agent.connection)badges.append(make('span','agent-badge warn','Подключение Richi нужно проверить'));
+    else if(agent.connection==='not_configured'){const badge=make('span','agent-badge warn','Richi не подключён');badge.title='Подключить: richi setup --agent '+agent.id+' --yes';badges.append(badge);}
+    else if(agent.connection){const badge=make('span','agent-badge warn','Подключение Richi нужно проверить');badge.title='Проверить: richi setup --agent '+agent.id+' --status';badges.append(badge);}
     else if(agent.builtin&&agentsState.data?.connections_problem){const badge=make('span','agent-badge','Подключение Richi неизвестно');badge.title=agentsState.data.connections_problem;badges.append(badge);}
     if(agent.builtin&&agent.updated_at)badges.append(make('span','agent-badge own','Есть ваши изменения'));
     box.append(badges);
@@ -1331,25 +1431,26 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     box.append(make('div','agent-section','Откуда брать скиллы'));
     for(const source of list(agent.sources)){
       const row=make('div','agent-source'+(source.enabled?'':' off')),toggle=make('input'),text=make('div'),label=agentSourceLabel(agent,source);
-      toggle.type='checkbox';toggle.className='agent-switch';toggle.setAttribute('role','switch');toggle.checked=source.enabled!==false;toggle.disabled=agentsState.busy;toggle.setAttribute('aria-label',label+': '+source.path);
+      toggle.type='checkbox';toggle.className='agent-switch';toggle.setAttribute('role','switch');toggle.checked=source.enabled!==false;toggle.disabled=agentsState.busy;toggle.dataset.focus='source:'+agent.id+':'+source.key;toggle.setAttribute('aria-label',label+': '+source.path);
       toggle.addEventListener('change',async()=>{const enabled=toggle.checked;if(!await applyAgentChange({action:'update',id:agent.id,[enabled?'enable':'disable']:[source.key]},enabled?'Источник включён':'Источник выключен'))toggle.checked=!enabled;});
       text.append(make('div','agent-source-name',label),make('div','agent-source-path',source.path));
       const count=make('span','agent-source-count',!source.enabled?'выключено':source.denied?'нет доступа':!source.exists?'папки нет':plural(Number(source.skills)||0,skillForms));
       row.append(toggle,text,count);
-      if(source.added&&(agent.builtin||list(agent.sources).length>1)){const remove=toolButton('×',()=>applyAgentChange({action:'update',id:agent.id,remove_folders:[source.key]},'Папка убрана'),'icon');remove.title='Убрать папку из источников';remove.setAttribute('aria-label','Убрать папку '+source.path);remove.disabled=agentsState.busy;row.append(remove);}
+      if(source.added&&(agent.builtin||list(agent.sources).length>1)){const remove=keyed(toolButton('×',async()=>{if(await applyAgentChange({action:'update',id:agent.id,remove_folders:[source.key]},'Папка убрана'))focusByKey($('agents-content'),'add-folder:'+agent.id);},'icon'),'remove:'+agent.id+':'+source.key);remove.title='Убрать папку из источников';remove.setAttribute('aria-label','Убрать папку '+source.path);remove.disabled=agentsState.busy;row.append(remove);}
       else row.append(make('span'));
       box.append(row);
     }
     if(agentsState.addingFolder===agent.id){
-      const formBox=make('form','agent-folder-form'),field=make('div','rule-field'),line=make('div','agent-folder-row'),input=make('input'),problem=make('div','rule-error');input.type='text';input.id='agent-folder-input';input.maxLength=1000;input.placeholder='~/work/team-skills';input.autocomplete='off';input.spellcheck=false;input.setAttribute('aria-label','Папка со скиллами');input.value=agentsState.folderDraft;problem.hidden=true;problem.setAttribute('role','alert');
-      const add=make('button','primary',rulesState.editing?'Добавить':'Показать команду');add.type='submit';line.append(input,add,toolButton('Отмена',()=>{closeFolderForm();renderAgents();}));
+      const formBox=make('form','agent-folder-form'),field=make('div','rule-field'),line=make('div','agent-folder-row'),input=make('input'),problem=make('div','rule-error');input.type='text';input.id='agent-folder-input';input.dataset.focus='folder-input';input.maxLength=1000;input.placeholder='~/work/team-skills';input.autocomplete='off';input.spellcheck=false;input.setAttribute('aria-label','Папка со скиллами');input.value=agentsState.folderDraft;problem.hidden=true;problem.setAttribute('role','alert');
+      const add=make('button','primary',agentsState.busy?'Сохраняем…':rulesState.editing?'Добавить':'Показать команду');add.type='submit';add.disabled=agentsState.busy;
+      line.append(input,add,keyed(toolButton('Отмена',()=>{closeFolderForm();agentsState.focus='add-folder:'+agent.id;renderAgents();}),'folder-cancel'));
       field.append(line,make('span','rule-field-hint','Папка, где каждый скилл лежит в своей подпапке с файлом SKILL.md.'),problem);formBox.append(field);formBox.noValidate=true;
       // The page is rebuilt whenever data arrives; what is being typed lives in the state, not in the field.
       input.addEventListener('input',()=>{agentsState.folderDraft=input.value;problem.hidden=true;});
-      formBox.addEventListener('submit',async event=>{event.preventDefault();const value=input.value.trim(),wrong=agentFolderProblem(value);if(wrong){problem.textContent=wrong;problem.hidden=false;return;}
-        if(await applyAgentChange({action:'update',id:agent.id,add_folders:[value]},'Папка добавлена')){closeFolderForm();renderAgents();}});
+      formBox.addEventListener('submit',async event=>{event.preventDefault();if(agentsState.busy)return;const value=input.value.trim(),wrong=agentFolderProblem(value);if(wrong){problem.textContent=wrong;problem.hidden=false;return;}
+        if(await applyAgentChange({action:'update',id:agent.id,add_folders:[value]},'Папка добавлена')){closeFolderForm();agentsState.focus='add-folder:'+agent.id;renderAgents();}});
       box.append(formBox);
-    }else{const row=make('div','agent-row-actions');row.append(toolButton('+ Добавить папку',()=>{agentsState.addingFolder=agent.id;agentsState.folderDraft='';agentsState.focusFolder=true;agentsState.problem='';renderAgents();},'small'));box.append(row);}
+    }else{const row=make('div','agent-row-actions');row.append(keyed(toolButton('+ Добавить папку',()=>{agentsState.addingFolder=agent.id;agentsState.folderDraft='';agentsState.focus='folder-input';agentsState.problem='';renderAgents();},'small'),'add-folder:'+agent.id));box.append(row);}
     box.append(make('div','agent-section','Как Richi узнаёт агента'));
     const lines=make('div','agent-lines'),line=(label,value)=>{const item=make('div');item.append(document.createTextNode(label+' '),make('code','',value));lines.append(item);};
     line('Идентификатор чата:','RICHI_CHAT_ID='+agent.id+':…');
@@ -1362,17 +1463,23 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     else if(!rules.length)box.append(make('div','agent-muted','Правила пока не называют скилл для этого агента.'));
     else for(const item of rules.slice(0,12)){
       const row=toolButton('',()=>{setMode('rules');$('search').value=item.rule.id;rulesState.query=item.rule.id;renderRules();},'agent-rule'),skill=make('span',item.missing?'agent-warn':'',item.skill+(item.missing?' · у агента такого нет':''));
-      row.append(make('code','',item.rule.id),skill);row.setAttribute('aria-label','Открыть правило '+item.rule.id);box.append(row);
+      row.append(make('code','',item.rule.id),skill);row.dataset.focus='agent-rule:'+item.rule.id;row.setAttribute('aria-label','Открыть правило '+item.rule.id);box.append(row);
     }
     if(rules.length>12)box.append(make('div','agent-muted','И ещё '+(rules.length-12)+'. Все правила — на вкладке «Правила».'));
     return box;
   }
   function renderAgents(){
-    const typing=document.activeElement?.id==='agent-folder-input'?[document.activeElement.selectionStart,document.activeElement.selectionEnd]:null;
+    const root=$('agents-content'),active=document.activeElement,inside=Boolean(active)&&root.contains(active);
+    // The user moved elsewhere while a control waited to get focus back: leave it where they put it.
+    if(!inside&&active&&active!==document.body)agentsState.focus='';
+    const key=agentsState.focus||(inside&&active.dataset.focus)||'',caret=inside&&active.id==='agent-folder-input'?[active.selectionStart,active.selectionEnd]:null;
     renderAgentsContent();
-    const field=$('agent-folder-input');
-    if(field&&(typing||agentsState.focusFolder)){field.focus();if(typing)field.setSelectionRange(typing[0],typing[1]);}
-    agentsState.focusFolder=false;
+    if(!key||$('rule-dialog').open)return;
+    const target=focusByKey(root,key);
+    if(target){agentsState.focus='';if(caret&&target.id==='agent-folder-input')target.setSelectionRange(caret[0],caret[1]);}
+    // A control is disabled while its change is being saved and takes focus back afterwards.
+    else if(agentsState.busy)agentsState.focus=key;
+    else{agentsState.focus='';focusByKey(root,'item:'+agentsState.selected,'add-agent');}
   }
   function renderAgentsContent(){
     const root=$('agents-content');root.replaceChildren();$('agents-panel').setAttribute('aria-busy',String(agentsState.loading));if(state.mode==='agents')$('data-note').textContent=agentsNote();
@@ -1390,13 +1497,13 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     if(!shown.some(agent=>agent.id===agentsState.selected))agentsState.selected=shown[0]?.id||'';
     for(const agent of shown){
       const rules=agentRules(agent),missing=rules.filter(item=>item.missing).length,button=toolButton('',()=>{agentsState.selected=agent.id;closeFolderForm();agentsState.problem='';renderAgents();},'agent-item');
-      button.setAttribute('aria-pressed',String(agent.id===agentsState.selected));button.dataset.agent=agent.id;
+      button.setAttribute('aria-pressed',String(agent.id===agentsState.selected));button.dataset.agent=agent.id;button.dataset.focus='item:'+agent.id;
       button.append(make('strong','',agent.name),make('code','',agent.id),make('span','',plural(Number(agent.skills)||0,skillForms)+' · '+plural(rules.length,['правило','правила','правил'])));
       if(missing)button.append(make('span','warn',plural(missing,['правило','правила','правил'])+' со скиллом, которого у агента нет'));
       column.append(button);
     }
     if(!shown.length)column.append(make('div','agent-muted','По запросу «'+agentsState.query+'» агентов нет.'));
-    column.append(toolButton('+ Добавить агента',()=>openAgentEditor(),'agent-add'));layout.append(column);
+    column.append(keyed(toolButton('+ Добавить агента',()=>openAgentEditor(),'agent-add'),'add-agent'));layout.append(column);
     const selected=shown.find(agent=>agent.id===agentsState.selected);
     if(selected)layout.append(renderAgentDetail(selected));
     root.append(layout);

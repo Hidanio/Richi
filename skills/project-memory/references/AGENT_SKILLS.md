@@ -47,8 +47,9 @@ absolute path or one under `~`, and repeat the option for several folders.
 `--variable NAME` or `NAME=VALUE` names an environment variable that the
 agent's shells set, so that `rules show` recognizes the agent; without it the
 agent passes `--agent ID`, or its chat ID starts with `ID:`. A process started
-from another agent's terminal carries both agents' variables; Richi then names
-neither, and the agent passes `--agent ID`. `--manual-skills
+from another agent's terminal carries the variables of both agents and may
+carry the other's chat identity; whenever the signs point to different agents,
+Richi names neither, and the agent passes `--agent ID`. `--manual-skills
 front-matter` leaves out skills whose `SKILL.md` says
 `disable-model-invocation: true`, because a rule cannot make the agent use a
 skill that only the user may invoke.

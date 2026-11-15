@@ -23,8 +23,7 @@ def synthetic_agent_sources(environ, home):
 
 
 # A third agent, described only by a registry entry, as a new integration would be.
-SYNTHETIC = agents.Agent(id="synthetic", name="Synthetic Agent",
-                         session_variables=("SYNTHETIC_SESSION_ID",), shell_variables={"SYNTHETIC_SHELL": "1"},
+SYNTHETIC = agents.Agent(id="synthetic", name="Synthetic Agent", variables={"SYNTHETIC_SHELL": "1"},
                          invocation="none", plugin_commands=False, sources=synthetic_agent_sources)
 
 
@@ -79,18 +78,35 @@ class RegistryTests(IsolatedHome):
                 self.assertNotIn(identifier, agents.builtin_ids())
         self.assertEqual(len({preset[0] for preset in agents.PRESETS}), len(agents.PRESETS))
 
-    def test_detection_prefers_chat_identity_then_session_then_shell(self):
+    def test_detection_names_an_agent_only_when_every_sign_agrees(self):
         self.assertIsNone(agents.detect({}))
-        self.assertEqual(agents.detect({"CLAUDECODE": "1"}), "claude")
-        # Codex started from a Claude Code terminal inherits CLAUDECODE but has its own session.
-        self.assertEqual(agents.detect({"CLAUDECODE": "1", "CODEX_THREAD_ID": "thread"}), "codex")
-        self.assertEqual(agents.detect({"RICHI_CHAT_ID": "claude:chat", "CODEX_THREAD_ID": "thread"}), "claude")
-        self.assertIsNone(agents.detect({"RICHI_CHAT_ID": "claude", "CLAUDECODE": "0"}))
-        self.assertIsNone(agents.detect({"RICHI_CHAT_ID": "unknown:chat"}))
+        for environment, agent in (({"CLAUDECODE": "1"}, "claude"), ({"CODEX_THREAD_ID": "thread"}, "codex"),
+                                   ({"RICHI_CHAT_ID": "claude:chat"}, "claude"),
+                                   ({"RICHI_CHAT_ID": "codex:chat", "CODEX_THREAD_ID": "thread"}, "codex"),
+                                   # A chat identity that names no agent says nothing either way.
+                                   ({"RICHI_CHAT_ID": "terminal:chat", "CLAUDECODE": "1"}, "claude")):
+            with self.subTest(environment=environment):
+                self.assertEqual(agents.detect(environment), agent)
+        # One agent started from another's terminal inherits its variables and chat identity. In
+        # either direction the signs disagree, and Richi names neither agent.
+        for environment in ({"CLAUDECODE": "1", "CODEX_THREAD_ID": "thread"},
+                            {"RICHI_CHAT_ID": "claude:chat", "CODEX_THREAD_ID": "thread"},
+                            {"RICHI_CHAT_ID": "codex:chat", "CLAUDECODE": "1"},
+                            {"RICHI_CHAT_ID": "claude:chat", "CLAUDECODE": "1", "CODEX_THREAD_ID": "thread"},
+                            {"RICHI_CHAT_ID": "claude", "CLAUDECODE": "0"}, {"RICHI_CHAT_ID": "unknown:chat"},
+                            {"CODEX_THREAD_ID": ""}):
+            with self.subTest(environment=environment):
+                self.assertIsNone(agents.detect(environment))
         self.assertEqual(agents.variables(agents.AGENTS[0]), ["CLAUDECODE=1"])
         self.assertEqual(agents.variables(agents.AGENTS[1]), ["CODEX_THREAD_ID"])
         for value in ("Claude", "-x", "a" * 33, "", None, "with space"):
             self.assertFalse(agents.valid_id(value))
+
+    def test_builtin_agents_are_the_ones_the_launcher_connects(self):
+        # `richi setup` and the registry are two lists of the same agents: a built-in agent the
+        # launcher cannot connect, or the reverse, would show a connection state nobody can change.
+        from richi_launcher import agent_adapters
+        self.assertEqual(set(agents.builtin_ids()), set(agent_adapters.AGENTS))
 
     def test_settings_live_in_the_launchers_configuration_directory(self):
         self.assertEqual(agents.settings_path(), config._platform_dirs()[0] / agents.SETTINGS_FILE)
@@ -134,7 +150,10 @@ class AnotherAgentTests(IsolatedHome):
                          (None, {"claude": "pr-description", "codex": "pr-description"}))
         every = self.add("every", "claude=x", "codex=x", "synthetic=x")["rule"]
         self.assertEqual((every["skill"], every["skills"]), ("x", None))
-        with mock.patch.dict(os.environ, {"SYNTHETIC_SESSION_ID": "session", "CLAUDECODE": "1"}):
+        with mock.patch.dict(os.environ, {"SYNTHETIC_SHELL": "1", "CLAUDECODE": "1"}):
+            unnamed = self.command("rules", "show")
+        self.assertEqual((unnamed["agent"], ["use_skill" in item for item in unnamed["rules"]]), (None, [False] * 3))
+        with mock.patch.dict(os.environ, {"SYNTHETIC_SHELL": "1"}):
             shown = self.command("rules", "show")
         self.assertEqual(shown["agent"], "synthetic")
         self.assertEqual({item["id"]: item["use_skill"] for item in shown["rules"]},
@@ -205,9 +224,10 @@ class AgentSettingsTests(IsolatedHome):
         self.assertIsNone(agents.detect({"GEMINI_CLI": "0"}))
         # Started from another agent's terminal, a process carries both agents' variables: Richi
         # then names neither, rather than give one agent the other's skills.
-        self.assertIsNone(agents.detect({"GEMINI_CLI": "1", "CLAUDECODE": "1"}))
-        self.assertEqual(agents.detect({"GEMINI_CLI": "1", "CODEX_THREAD_ID": "thread"}), "codex")
-        self.assertEqual(agents.detect({"RICHI_CHAT_ID": "gemini-cli:chat", "CLAUDECODE": "1"}), "gemini-cli")
+        for environment in ({"GEMINI_CLI": "1", "CLAUDECODE": "1"}, {"GEMINI_CLI": "1", "CODEX_THREAD_ID": "thread"},
+                            {"RICHI_CHAT_ID": "gemini-cli:chat", "CLAUDECODE": "1"}):
+            self.assertIsNone(agents.detect(environment))
+        self.assertEqual(agents.detect({"RICHI_CHAT_ID": "gemini-cli:chat", "GEMINI_CLI": "1"}), "gemini-cli")
         self.assertEqual(skill_catalog.catalog()["agents"][-1], {"id": "gemini-cli", "name": "Gemini CLI"})
         # Rules accept the new agent like a built-in one.
         store = self.root / "store" / "config.json"
@@ -327,10 +347,12 @@ class AgentSettingsTests(IsolatedHome):
                 ("add", "x", ["name"])):
             with self.subTest(action=action, options=options), self.assertRaises(agent_commands.AgentError):
                 agent_commands.change(action, identifier, options)
-        self.assertFalse(agents.settings_path().exists())
         with self.assertRaises(agent_commands.AgentError) as raised:
             agent_commands.change("add", "many", {"name": "Many", "folders": ["~/f%d" % n for n in range(21)]})
         self.assertEqual(raised.exception.code, "limit")
+        # A refused change and a reading leave nothing behind, not even the settings directory.
+        agent_commands.listing()
+        self.assertFalse(agents.settings_path().parent.exists())
 
 
 class UnreadableFolderTests(IsolatedHome):
@@ -352,6 +374,10 @@ class UnreadableFolderTests(IsolatedHome):
         self.assertEqual(skill_catalog.folder_state(self.home / "nothing"), "missing")
         self.assertEqual(skill_catalog.folder_state(self.home / ".claude" / "skills" / "pr-description" / "SKILL.md"),
                          "missing")
+
+
+class ListingTests(IsolatedHome):
+    """What the map reads: the agents, their connection and the skill catalog behind the counts."""
 
     def test_a_change_returns_the_whole_listing_once_when_asked(self):
         write_skill(self.home / "team" / "release", "---\nname: release\n---\n")

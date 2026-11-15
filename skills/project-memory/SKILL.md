@@ -52,6 +52,10 @@ standing rules, loaded with `rules show`.
    and on conflicts ask. Run it again after context compaction or restore and when
    work moves to another project. Before an action a rule constrains (branch, commit
    or PR naming, required checks), compare the concrete name or step with the rule.
+   A rule's `use_skill` is the skill to use whenever the rule applies; if `agent` is
+   null, run the command again with `--agent` and your agent ID. Tell the user when
+   the answer has `project_path_problem` (only global rules came back: the repository
+   is not registered) or `invalid_rules` (stored rules that cannot be read).
 
 ## Retrieve the evidence needed
 
