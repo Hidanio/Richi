@@ -1,4 +1,4 @@
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import closing, redirect_stderr, redirect_stdout
 import io
 import json
 import os
@@ -51,7 +51,14 @@ class IsolatedHome(unittest.TestCase):
         with redirect_stdout(out), redirect_stderr(err), mock.patch.object(sys, "stdin", io.StringIO("")):
             result = memory.main([*selectors, *map(str, argv)])
         self.assertEqual(result == 0, ok, out.getvalue() + err.getvalue())
-        return json.loads(out.getvalue() if ok else err.getvalue())
+        return self.answer(out.getvalue() if ok else err.getvalue())
+
+    def answer(self, text):
+        """The command's JSON; anything else in the stream, such as a warning, is shown as it is."""
+        try:
+            return json.loads(text)
+        except ValueError:
+            self.fail("The command printed something other than one JSON value: " + repr(text))
 
     def listed(self):
         return {agent["id"]: agent for agent in self.cli("skill-sources", "list")["agents"]}
@@ -166,7 +173,7 @@ class AnotherAgentTests(IsolatedHome):
         # A newer Richi may have stored a skill for an agent this one does not know.
         self.add("newer", "review")
         database = self.config.parent / "memory.sqlite3"
-        with sqlite3.connect(str(database)) as conn:
+        with closing(sqlite3.connect(str(database))) as conn, conn:
             row = json.loads(conn.execute("SELECT value FROM metadata WHERE key = 'rule:newer'").fetchone()[0])
             row["skills"] = {"cursor": "cursor-review"}
             conn.execute("UPDATE metadata SET value = ? WHERE key = 'rule:newer'", (json.dumps(row),))

@@ -1,5 +1,5 @@
 """Standing rules: scopes, guards, concurrency and isolation in synthetic stores."""
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import closing, redirect_stderr, redirect_stdout
 import hashlib
 import io
 import json
@@ -48,7 +48,14 @@ class RulesTests(unittest.TestCase):
         with redirect_stdout(out), redirect_stderr(err), mock.patch.object(sys, "stdin", io.StringIO(stdin or "")):
             result = memory.main(["--config", str(self.configs[store]), *map(str, argv)])
         self.assertEqual(result == 0, ok, out.getvalue() + err.getvalue())
-        return json.loads(out.getvalue() if ok else err.getvalue())
+        return self.answer(out.getvalue() if ok else err.getvalue())
+
+    def answer(self, text):
+        """The command's JSON; anything else in the stream, such as a warning, is shown as it is."""
+        try:
+            return json.loads(text)
+        except ValueError:
+            self.fail("The command printed something other than one JSON value: " + repr(text))
 
     def add(self, store, identifier, *scope, text="Rule text.", **options):
         argv = ["rules", "add", identifier, *scope, "--text", text]
@@ -176,7 +183,7 @@ class RulesTests(unittest.TestCase):
         database = self.configs["alpha"].parent / "memory.sqlite3"
         earlier = {key: value for key, value in cleared.items() if key not in {"skill", "skills"}}
         earlier["id"] = "earlier"
-        with sqlite3.connect(str(database)) as conn:
+        with closing(sqlite3.connect(str(database))) as conn, conn:
             conn.execute("INSERT INTO metadata(key, value) VALUES (?, ?)", ("rule:earlier", json.dumps(earlier)))
         listed = {item["id"]: item for item in self.command("alpha", "rules", "list")["rules"]}
         self.assertIsNone(listed["earlier"]["skill"])
@@ -346,7 +353,7 @@ class RulesTests(unittest.TestCase):
         self.assertEqual(self.command("alpha", "check")["status"], "ok")
         backup = self.root / "backup.sqlite3"
         self.command("alpha", "backup", "--output", backup)
-        with sqlite3.connect(str(backup)) as conn:
+        with closing(sqlite3.connect(str(backup))) as conn:
             rows = conn.execute("SELECT key FROM metadata WHERE key LIKE 'rule:%'").fetchall()
         self.assertEqual(rows, [("rule:marker",)])
 
@@ -357,7 +364,7 @@ class RulesTests(unittest.TestCase):
             self.command("alpha", "rules", view)
         self.assertEqual(database.stat().st_mtime_ns, before)
         kept = self.add("alpha", "kept", "--global", text="Reply in Russian.")
-        with sqlite3.connect(str(database)) as conn:
+        with closing(sqlite3.connect(str(database))) as conn, conn:
             for key, value in (("rule:broken", '{"id": "other"}'), ("rule:garbled", "{not json"),
                                ("rule:partial", '{"id": "partial", "updated_at": "v1", "text": 5}')):
                 conn.execute("INSERT INTO metadata(key, value) VALUES (?, ?)", (key, value))

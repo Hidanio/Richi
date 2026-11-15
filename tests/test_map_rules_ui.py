@@ -64,7 +64,11 @@ class RulesPageLogicTests(unittest.TestCase):
         with redirect_stdout(out), redirect_stderr(err), mock.patch.object(sys, "stdin", io.StringIO("")):
             result = memory.main(argv)
         self.assertEqual(result == 0, ok, command + "\n" + out.getvalue() + err.getvalue())
-        return json.loads(out.getvalue() if ok else err.getvalue())
+        text = out.getvalue() if ok else err.getvalue()
+        try:
+            return json.loads(text)
+        except ValueError:
+            self.fail(command + " printed something other than one JSON value: " + repr(text))
 
     def test_skills_are_read_and_sent_per_agent(self):
         requests = self.evaluate(r"""

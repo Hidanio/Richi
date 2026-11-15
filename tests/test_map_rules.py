@@ -1,4 +1,5 @@
 """The map changes standing rules only from a page opened by richi map; synthetic stores and homes only."""
+from contextlib import closing
 import html
 import http.client
 import json
@@ -389,7 +390,7 @@ class MapRulesAPITests(unittest.TestCase):
                           [{"id": "claude", "name": "Claude Code"}, {"id": "codex", "name": "Codex"}]))
         self.assertNotIn("invalid_rules", listing)
         self.change(secret, action="add", id="kept", scope="global", text="Stays.")
-        with sqlite3.connect(str(self.database)) as conn:
+        with closing(sqlite3.connect(str(self.database))) as conn, conn:
             conn.execute("INSERT INTO metadata(key, value) VALUES ('rule:broken', '{not json')")
         # A damaged row does not take the list down: it is named, and the page can remove it.
         listing = self.listed(secret)
