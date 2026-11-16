@@ -70,9 +70,41 @@ one on 1.0.1, therefore reaches the latest protocol-1 release with one
 skipped. Maintainers: see the [release contract](RELEASING.md#protocol-1-release-contract).
 
 The current runtime supports database schemas 1, 2 and 3. New stores are created
-at schema 3; existing stores need an explicit migration for tool cards. Runtime
-rollback does not downgrade a store, and older runtimes may not read it. Preserve
-the pre-migration backup. See [graph migration](../skills/project-memory/references/GRAPH.md).
+at schema 3; existing stores need an explicit migration for tool cards. See
+[graph migration](../skills/project-memory/references/GRAPH.md).
+
+<a id="forward-only"></a>
+### Stores upgrade forward only
+
+Richi promises one direction. Every published release updates to the latest one,
+every release reads the stores of all earlier schemas, and `richi migrate`
+upgrades such a store to the current schema. Nothing is promised the other way:
+an older release may not read a store that a newer one upgraded, and neither a
+package rollback nor a runtime switch downgrades a store.
+
+`migrate` therefore makes the way back itself. Before it changes anything, it
+writes a verified copy of the store to `backups/` beside the database, named
+after the schema the copy has (`memory-schema2-<time>.sqlite3`), and reports the
+path as `backup`. If the copy cannot be written or fails its integrity check,
+migration does not start. If migration fails later, its transaction is rolled
+back, the store is unchanged, and the error names the copy. Copies are never
+deleted automatically; `richi storage stats --files` shows what they occupy.
+
+The current release still reads the copy, so the data can go back without
+changing the installed version. Stop the map and every Richi command that uses
+the workspace, and move the database together with its `-wal` and `-shm` files
+aside; `richi config show` reports the database path. Then write the copy back
+and check the result:
+
+```sh
+richi --db /path/to/backups/memory-schema2-20261115T101500000000Z.sqlite3 backup --output /path/to/memory.sqlite3
+richi check
+```
+
+`backup` verifies what it wrote and refuses a path that still has a database or
+its `-wal` and `-shm` files: SQLite would replay such files into the copy. Records
+written after the migration are not in the copy. Migration does not touch the
+captured Git bytes in `artifacts/git/`, and the copy does not contain them.
 
 <a id="schema-support"></a>
 The manager records verified database-schema support per installed generation.

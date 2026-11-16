@@ -306,7 +306,7 @@ def initialize(conn, path):
     # Validate before changing even the journal mode of an existing database.
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     if version in {1, 2}:
-        raise MemoryError("Existing schema {} requires an explicit migrate command; make a backup first".format(version))
+        raise MemoryError("Existing schema {} requires an explicit migrate command, which backs up the store first".format(version))
     if version not in {0, SCHEMA}:
         backend(conn)
     if version == 0 and conn.execute(
@@ -580,10 +580,18 @@ def context(conn, args):
             "selection": "Entries linked to the project first, then direct neighbors; newest updated first within each group."}
 
 
-def backup(conn, database, output):
-    destination = Path(output).expanduser().resolve() if output else database.parent / "backups" / (database.stem + "-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + ".sqlite3")
+def backup(conn, database, output, label=None):
+    """Write a verified copy of the store. label, a short word such as schema2,
+    goes into the default file name so that a copy can be told from the others."""
+    name = database.stem + ("-" + label if label else "") + "-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    destination = Path(output).expanduser().resolve() if output else database.parent / "backups" / (name + ".sqlite3")
     if destination in {database, Path(str(database) + "-wal"), Path(str(database) + "-shm")}:
         raise MemoryError("Backup destination must differ from the active database and sidecar files")
+    # SQLite would replay such a file into the new copy as if it were its own.
+    for suffix in ("-wal", "-shm"):
+        if not os.path.lexists(str(destination)) and os.path.lexists(str(destination) + suffix):
+            raise MemoryError("Backup destination has a leftover " + destination.name + suffix +
+                              " file of another database beside it; move it aside first")
     destination.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(str(destination), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     os.close(fd)
