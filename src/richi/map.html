@@ -1109,8 +1109,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const situation=make('input'),situations=make('datalist');situation.type='text';situation.maxLength=200;situation.placeholder='например, создании pull request';situations.id='rule-situations';situation.setAttribute('list',situations.id);skillSituations.forEach(value=>situations.append(new Option(value)));
     const situationField=ruleField('Когда применять',situation,'Попадёт в текст: «При … используй скилл …».');situationField.append(situations);
     const target=make('select'),format=make('input'),example=make('input');namingTargets.forEach(([label])=>target.add(new Option(label,label)));
-    for(const input of [format,example]){input.type='text';input.maxLength=300;input.spellcheck=false;input.autocomplete='off';}format.placeholder='REC-<номер>_<описание>';example.placeholder='REC-1234_fix_login';
-    const namingRow=make('div','rule-field-row');namingRow.append(ruleField('Что называть',target),ruleField('Формат',format,'Постоянные части и <заполнители>.'),ruleField('Пример',example,'Необязательно.'));
+    for(const input of [format,example]){input.type='text';input.maxLength=300;input.spellcheck=false;input.autocomplete='off';}format.placeholder='<ключ задачи>_<описание>';example.placeholder='PROJ-1234_fix_login';
+    const namingRow=make('div','rule-field-row');namingRow.append(ruleField('Что называть',target),ruleField('Формат',format,'Постоянные части и <заполнители>. То, что меняется от задачи к задаче или от проекта к проекту, пишите заполнителем.'),ruleField('Пример',example,'Необязательно.'));
     const skill=ruleSkillPicker(rule),skillField=ruleField('Скилл',skill.element,null,skill.focusTarget);
     const text=make('textarea'),counter=make('div','rule-counter'),own=make('span'),total=make('span');text.rows=6;text.value=rule?.text||'';text.placeholder='Например: отвечай пользователю на русском языке, а код и команды оставляй как есть.';counter.append(own,total);
     const textField=ruleField('Текст правила',text,'Агент получит этот текст дословно. Одна инструкция на правило.');textField.insertBefore(counter,textField.lastChild);
@@ -1247,7 +1247,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   }
   function renderRuleStarters(root){
     const box=make('div','tools-empty rules-empty'),starters=make('div','rule-starters');box.append(ruleMark('rule'),make('h3','','Правил пока нет'),make('p','','Закрепите то, что агент должен делать всегда: формат имён, обязательные проверки, нужный скилл или любой промт.'));
-    for(const [key,title,description] of [['skill','Скилл для действия','«При создании pull request используй скилл pr-description.»'],['naming','Формат имён','«Называй ветки по формату REC-<номер>_<описание>.»'],['text','Свой текст','Любая постоянная инструкция или промт для агентов.']]){const button=keyed(toolButton('',()=>openRuleEditor({template:key}),'rule-starter'),'rule-add:'+key);button.append(make('strong','',title),make('span','',description));starters.append(button);}
+    for(const [key,title,description] of [['skill','Скилл для действия','«При создании pull request используй скилл pr-description.»'],['naming','Формат имён','«Называй ветки по формату <ключ задачи>_<описание>.»'],['text','Свой текст','Любая постоянная инструкция или промт для агентов.']]){const button=keyed(toolButton('',()=>openRuleEditor({template:key}),'rule-starter'),'rule-add:'+key);button.append(make('strong','',title),make('span','',description));starters.append(button);}
     box.append(starters);root.append(box);
   }
   function renderRules(){
