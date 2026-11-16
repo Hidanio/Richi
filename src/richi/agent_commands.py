@@ -155,7 +155,10 @@ def listing(environ=None, home=None, catalog=False):
                for identifier, name, folder in agents.PRESETS if identifier not in known]
     result = {"view": "agents", "agents": items, "presets": presets,
               "settings_file": str(agents.settings_path(environ, home)), "problem": problem,
-              "connections_problem": connections_problem}
+              "connections_problem": connections_problem,
+              # What a form may accept, so that the map does not keep its own copy of these numbers.
+              "limits": {"name": agents.MAX_NAME, "folder": agents.MAX_FOLDER, "folders": agents.MAX_FOLDERS,
+                         "agents": agents.MAX_CUSTOM}}
     if catalog:
         result["catalog"] = skills
     return result
@@ -202,7 +205,7 @@ def _write(path, entries):
         with contextlib.suppress(OSError):
             os.unlink(str(temporary))
         raise
-    agents._cache.clear()
+    agents.forget_settings()
 
 
 def _folder(value, home):

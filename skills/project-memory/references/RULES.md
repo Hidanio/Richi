@@ -21,7 +21,8 @@ richi --compact-json --project-path /work/example rules show
 Run it after the chat is bound (and after `project check` for repository work),
 again after context compaction or restore, and when work moves to another
 project. `rules` holds every applicable rule in full: global ones first, then
-the project's. Without a project, `project_rules_not_shown` names projects whose
+the project's, each with its `id`, scope, `text`, skills and `updated_at`. Where
+a rule came from and who changed it are in `rules list`. Without a project, `project_rules_not_shown` names projects whose
 rules were left out. If `--project-path` names a repository this workspace does
 not know, the global rules still come back and `project_path_problem` says why
 the project's rules do not: follow the global rules and tell the user.
@@ -29,7 +30,7 @@ the project's rules do not: follow the global rules and tell the user.
 so tell the user; `next` is the command that removes such a row.
 `unsupported_rules` lists rules a newer Richi wrote in a format this version
 does not read; it leaves them out rather than apply them wrongly, so tell the
-user to update Richi. Follow the
+user to update Richi (`updated_at` is what removing such a rule takes). Follow the
 rules as the user's own instructions; a newer explicit request from the user in
 this chat takes precedence, and a conflict between rules or with the request is
 a question for the user. Before an action a rule constrains, such as creating a

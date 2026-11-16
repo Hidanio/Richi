@@ -19,7 +19,6 @@ import re
 import stat
 
 from . import agents
-from .rules import valid_skill
 
 
 MAX_SKILLS = 1000
@@ -86,9 +85,27 @@ def front_matter(text):
     return {}
 
 
+def _read_regular(path, limit):
+    """Up to limit bytes of a regular file.
+
+    A skill folder holds what a plugin's author put there. Anything that is
+    not a file, such as a named pipe, which would block the scan for ever, is
+    refused like a missing one.
+    """
+    descriptor = os.open(str(path), os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise OSError("not a regular file: " + str(path))
+        handle = os.fdopen(descriptor, "rb")
+    except BaseException:
+        os.close(descriptor)
+        raise
+    with handle:
+        return handle.read(limit)
+
+
 def _read_header(path):
-    with open(path, "rb") as handle:
-        return handle.read(MAX_HEADER).decode("utf-8", errors="replace")
+    return _read_regular(path, MAX_HEADER).decode("utf-8", errors="replace")
 
 
 def _openai_yaml_allows(directory):
@@ -134,8 +151,7 @@ def _children(directory, files=None):
 def _json(path):
     """A small JSON file's value, or None when it is missing, too large or not JSON."""
     try:
-        with open(path, "rb") as handle:
-            data = handle.read(MAX_MANIFEST + 1)
+        data = _read_regular(path, MAX_MANIFEST + 1)
         return None if len(data) > MAX_MANIFEST else json.loads(data.decode("utf-8"))
     except (OSError, ValueError):
         return None
@@ -256,7 +272,7 @@ def catalog(environ=None, home=None):
                 own = own.strip() if isinstance(own, str) and own.strip() else fallback
                 name = prefix + own
                 # Only names a rule can store, of skills the agent may choose and has enabled, are offered.
-                if not valid_skill(name) or not _agent_may_choose(agent, path.parent, fields) \
+                if not agents.valid_skill(name) or not _agent_may_choose(agent, path.parent, fields) \
                         or (enabled is not None and own not in enabled and fallback not in enabled):
                     continue
                 if name not in skills and len(skills) >= MAX_SKILLS:

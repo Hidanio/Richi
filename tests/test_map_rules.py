@@ -8,6 +8,8 @@ from pathlib import Path
 import re
 import sqlite3
 import stat
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -32,8 +34,8 @@ def clean_environment(test, home):
                 or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "BROWSER",
                            "XDG_CONFIG_HOME"}]:
         del os.environ[key]
-    agents._cache.clear()
-    test.addCleanup(agents._cache.clear)
+    agents.forget_settings()
+    test.addCleanup(agents.forget_settings)
 
 
 class SkillCatalogTests(unittest.TestCase):
@@ -382,6 +384,34 @@ class MapRulesAPITests(unittest.TestCase):
         self.assertEqual((renamed["source"], renamed["changed_by"]), ("richi map", "richi map"))
         self.change(secret, 400, action="update", id="naming", expected_updated_at=renamed["updated_at"], source="x")
 
+    def test_a_worker_is_fed_and_read_within_one_budget(self):
+        request = b"x" * 1_000_000
+
+        def worker(code):
+            return subprocess.Popen([sys.executable, "-I", "-c", code], stdin=subprocess.PIPE,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        # A worker that reads everything gets all of it, although it is far more than a pipe holds.
+        status, output, _error = serve._read_worker_output(
+            worker("import sys; sys.stdout.write(str(len(sys.stdin.buffer.read())))"),
+            label="test", timeout=30, maximum=100, request=request)
+        self.assertEqual((status, output), (0, b"1000000"))
+        # One that answers without reading is heard, not replaced by a broken pipe.
+        status, output, error = serve._read_worker_output(
+            worker("import sys; sys.stderr.write('refused'); sys.exit(3)"),
+            label="test", timeout=30, maximum=100, request=request)
+        self.assertEqual((status, output, error), (3, b"", b"refused"))
+        # One that neither reads nor answers costs the budget, not the thread.
+        started = time.monotonic()
+        with self.assertRaises(TimeoutError):
+            serve._read_worker_output(worker("import time; time.sleep(60)"), label="test", timeout=1, maximum=100,
+                                      request=request)
+        self.assertLess(time.monotonic() - started, 10)
+        # No request at all still closes the worker's input.
+        status, output, _error = serve._read_worker_output(
+            worker("import sys; sys.stdout.write(repr(sys.stdin.read()))"), label="test", timeout=30, maximum=100,
+            request=b"")
+        self.assertEqual((status, output), (0, b"''"))
+
     def test_the_rules_answer_carries_what_the_form_needs(self):
         secret = self.secret()
         listing = self.listed()
@@ -413,6 +443,17 @@ class MapRulesAPITests(unittest.TestCase):
             with self.subTest(path=path, raw=raw[:40]):
                 status, payload = self.request("POST", path, headers=header, raw=raw)
                 self.assertEqual((status, "error" in payload), (expected, True), payload)
+        # A change the rules command refuses is answered with its refusal whatever its size: escaped
+        # for the worker, this body is larger than a pipe holds and still within what the command reads.
+        def sent_as_typed(letters):
+            # A page sends text as UTF-8; the server escapes it for the worker, three times as long here.
+            body = {"action": "add", "id": "s", "scope": "global", "text": "x", "unexpected": "я" * letters}
+            return self.request("POST", "/api/rules", headers=header, raw=json.dumps(body, ensure_ascii=False).encode("utf-8"))
+        status, payload = sent_as_typed(15000)
+        self.assertEqual((status, "fields only" in payload["error"]), (400, True), payload)
+        # Beyond what the command reads, the server says so itself.
+        status, payload = sent_as_typed(30000)
+        self.assertEqual((status, payload.get("code")), (413, "limit"), payload)
         # Without the secret a body is not parsed at all, and a ticket is never this long.
         self.assertEqual(self.request("POST", "/api/rules", raw=nested)[0], 403)
         self.assertEqual(self.request("POST", "/api/session", raw=nested)[1]["code"], "ticket_invalid")

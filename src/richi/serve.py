@@ -335,13 +335,18 @@ def _git_worker():
 
 
 def _read_worker_output(process, *, label, timeout, maximum, request=None):
-    """Drain both pipes within one budget and always reap the owned worker."""
+    """Feed the request and drain both pipes within one budget, and always reap the owned worker."""
     selector = selectors.DefaultSelector()
     output, size = {"stdout": [], "stderr": []}, 0
     deadline = time.monotonic() + timeout
+    pending = memoryview(request) if request else None
     try:
-        if request is not None:
-            process.stdin.write(request)
+        if pending is not None:
+            # Written as the worker reads it. A request larger than the pipe must neither block this
+            # thread outside the budget nor, when the worker stops reading, hide the worker's answer.
+            os.set_blocking(process.stdin.fileno(), False)
+            selector.register(process.stdin, selectors.EVENT_WRITE, "stdin")
+        elif request is not None:
             process.stdin.close()
         selector.register(process.stdout, selectors.EVENT_READ, "stdout")
         selector.register(process.stderr, selectors.EVENT_READ, "stderr")
@@ -350,6 +355,20 @@ def _read_worker_output(process, *, label, timeout, maximum, request=None):
             if remaining <= 0:
                 raise TimeoutError(label + " timed out")
             for key, _ in selector.select(min(remaining, 0.2)):
+                if key.data == "stdin":
+                    try:
+                        pending = pending[os.write(key.fileobj.fileno(), pending[:65536]):]
+                    except BlockingIOError:
+                        continue
+                    except BrokenPipeError:
+                        pending = pending[:0]
+                    if not pending:
+                        selector.unregister(key.fileobj)
+                        try:
+                            process.stdin.close()
+                        except OSError:
+                            pass
+                    continue
                 chunk = os.read(key.fileobj.fileno(), 65536)
                 if not chunk:
                     selector.unregister(key.fileobj)
@@ -716,12 +735,16 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 with agents_lock:
                     status, payload = agent_change(body)
                 return self.send_data(status, payload)
+            change = rules_change(body)
+            if len(change) > rules.MAX_CHANGE:
+                # More than the rules command reads; escaping makes non-ASCII text several times longer.
+                return self.send_data(413, {"error": "The rule change is too large", "code": "limit"})
             if not rules_lock.acquire(timeout=RULES_WORKER_TIMEOUT + 5):
                 return self.send_data(503, {"error": "Another rule change is in progress; try again", "code": "busy"})
             try:
                 status, payload = _run_rules_request(database, ["rules", "apply", "--json", "-"], runtime,
                                                      config_file, workspace, config_required,
-                                                     stdin=rules_change(body))
+                                                     stdin=change)
             finally:
                 rules_lock.release()
             return self.send_data(status, payload)

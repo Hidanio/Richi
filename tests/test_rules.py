@@ -30,7 +30,7 @@ class RulesTests(unittest.TestCase):
         for key in [key for key in os.environ if key.startswith("RICHI_")
                     or key in {"CODEX_THREAD_ID", "CLAUDECODE", "XDG_CONFIG_HOME"}]:
             del os.environ[key]
-        agents._cache.clear()
+        agents.forget_settings()
         self.configs, self.repos = {}, {}
         for name in ("alpha", "beta"):
             store = self.root / name
@@ -79,7 +79,11 @@ class RulesTests(unittest.TestCase):
         self.assertEqual([rule["id"] for rule in scoped["rules"]], ["alpha-global", "zeta-global", "branch-naming"])
         self.assertEqual(scoped["rules"][2]["text"], long_text.strip())
         self.assertNotIn("project_rules_not_shown", scoped)
-        self.assertEqual(scoped["rules"][1]["source"], "claude:example")
+        # An agent gets what it needs to follow a rule and to change it; where the rule came from
+        # and who changed it stay in rules list.
+        self.assertEqual(sorted(scoped["rules"][1]), sorted(rules.SHOWN))
+        listed = {rule["id"]: rule for rule in self.command("alpha", "rules", "list")["rules"]}
+        self.assertEqual(listed["zeta-global"]["source"], "claude:example")
         explicit = self.command("alpha", "rules", "show", "--project", "tools")
         self.assertEqual([rule["id"] for rule in explicit["rules"]], ["alpha-global", "zeta-global", "tools-only"])
         listing = self.command("alpha", "rules", "list")
@@ -151,7 +155,8 @@ class RulesTests(unittest.TestCase):
                          ("Second wording.", None, rule["created_at"]))
         self.assertNotEqual(changed["updated_at"], rule["updated_at"])
         self.command("alpha", "rules", "remove", "naming", "--expected-updated-at", rule["updated_at"], ok=False)
-        self.assertEqual(self.command("alpha", "rules", "show")["rules"], [changed])
+        self.assertEqual(self.command("alpha", "rules", "show")["rules"], [{field: changed[field] for field in rules.SHOWN}])
+        self.assertEqual(self.command("alpha", "rules", "list")["rules"], [changed])
         removed = self.command("alpha", "rules", "remove", "naming", "--expected-updated-at", changed["updated_at"])
         self.assertEqual(removed["results"][0]["status"], "removed")
         self.assertEqual(self.command("alpha", "rules", "show")["rules"], [])
@@ -376,7 +381,9 @@ class RulesTests(unittest.TestCase):
         for view in ("show", "list"):
             with self.subTest(view=view):
                 shown = self.command("alpha", "rules", view)
-                self.assertEqual([(rule["id"], rule["when"]) for rule in shown["rules"]], [("kept", "pull-request")])
+                # The stored record keeps the field; an agent is not handed what this version cannot explain.
+                self.assertEqual([(rule["id"], rule.get("when")) for rule in shown["rules"]],
+                                 [("kept", "pull-request" if view == "list" else None)])
                 self.assertEqual([(item["id"], item["updated_at"], item["next"]) for item in shown["invalid_rules"]], [
                     ("broken", "invalid", "richi rules remove broken --expected-updated-at invalid"),
                     ("garbled", "invalid", "richi rules remove garbled --expected-updated-at invalid"),
@@ -491,10 +498,13 @@ class RulesTests(unittest.TestCase):
         for view in ("show", "list"):
             with self.subTest(view=view):
                 listed = self.command("alpha", "rules", view)
-                self.assertEqual([(rule["id"], rule["requires"], rule["note"]) for rule in listed["rules"]],
-                                 [("plain", rules.FORMAT, "kept")])
+                self.assertEqual([rule["id"] for rule in listed["rules"]], ["plain"])
+                if view == "list":
+                    self.assertEqual((listed["rules"][0]["requires"], listed["rules"][0]["note"]), (rules.FORMAT, "kept"))
+                # The version is there for a user who removes the rule instead of updating Richi.
                 self.assertEqual(listed["unsupported_rules"],
                                  [{"id": "paused", "requires": rules.FORMAT + 1, "next": "richi update",
+                                   "updated_at": paused["updated_at"],
                                    "error": listed["unsupported_rules"][0]["error"]}])
                 self.assertIn("format %d" % (rules.FORMAT + 1), listed["unsupported_rules"][0]["error"])
                 self.assertNotIn("invalid_rules", listed)
@@ -509,9 +519,74 @@ class RulesTests(unittest.TestCase):
         damaged = self.command("alpha", "rules", "list")
         self.assertEqual(([rule["id"] for rule in damaged["rules"]], [item["id"] for item in damaged["invalid_rules"]]),
                          ([], ["plain"]))
-        removed = self.command("alpha", "rules", "remove", "paused", "--expected-updated-at", paused["updated_at"])
+        removed = self.command("alpha", "rules", "remove", "paused", "--expected-updated-at",
+                               damaged["unsupported_rules"][0]["updated_at"])
         self.assertEqual(removed["results"], [{"id": "paused", "status": "removed"}])
         self.assertNotIn("unsupported_rules", self.command("alpha", "rules", "list"))
+
+    def test_input_is_read_before_the_store_is_locked(self):
+        database = self.configs["alpha"].parent / "memory.sqlite3"
+        change = self.root / "change.json"
+        change.write_text(json.dumps({"action": "add", "id": "filed", "scope": "global", "text": "From a file."}))
+        waited = []
+
+        class Waiting(io.StringIO):
+            """Standard input of a command whose text is still being typed."""
+
+            def read(inner, *args):
+                # Another writer gets in now: the command has not locked the store while it waits.
+                with closing(sqlite3.connect(str(database), timeout=0, isolation_level=None)) as other:
+                    other.execute("BEGIN IMMEDIATE")
+                    other.execute("ROLLBACK")
+                waited.append(True)
+                return super().read(*args)
+
+        for argv, text in ((["rules", "add", "typed", "--global", "--text", "-"], "Typed slowly.\n"),
+                           (["rules", "apply", "--json", "-"],
+                            json.dumps({"action": "add", "id": "applied", "scope": "global", "text": "Applied."}))):
+            with self.subTest(argv=argv):
+                out, err = io.StringIO(), io.StringIO()
+                with redirect_stdout(out), redirect_stderr(err), mock.patch.object(sys, "stdin", Waiting(text)):
+                    self.assertEqual(memory.main(["--config", str(self.configs["alpha"]), *argv]), 0, err.getvalue())
+        self.assertEqual(len(waited), 2)
+        self.command("alpha", "rules", "apply", "--json", change)
+        self.assertEqual([rule["id"] for rule in self.command("alpha", "rules", "list")["rules"]],
+                         ["applied", "filed", "typed"])
+
+    def test_one_stored_rule_is_bounded_whatever_it_carries(self):
+        kept = self.add("alpha", "kept", "--global", text="Reply in Russian.")
+        self.add("alpha", "heavy", "--global", text="Short.")
+        # A field this version does not know may be large; a record beyond the bound is damage.
+        self.stored("alpha", "rule:kept", notes="n" * (rules.MAX_STORED - 1000))
+        self.stored("alpha", "rule:heavy", notes="n" * rules.MAX_STORED)
+        shown = self.command("alpha", "rules", "show")
+        self.assertEqual([sorted(rule) for rule in shown["rules"]], [sorted(rules.SHOWN)])
+        self.assertLess(len(json.dumps(shown)), 3000)
+        listed = self.command("alpha", "rules", "list")
+        self.assertEqual(([rule["id"] for rule in listed["rules"]], [item["id"] for item in listed["invalid_rules"]]),
+                         (["kept"], ["heavy"]))
+        self.assertIn(str(rules.MAX_STORED), listed["invalid_rules"][0]["error"])
+        # A change that would push a record over the bound is refused instead of making it unreadable.
+        refused = self.command("alpha", "rules", "update", "kept", "--expected-updated-at", kept["updated_at"],
+                               "--text", "x" * rules.MAX_TEXT, ok=False)
+        self.assertEqual(refused["code"], "limit")
+        self.assertEqual([rule["id"] for rule in self.command("alpha", "rules", "list")["rules"]], ["kept"])
+
+    def test_a_change_names_the_author_it_is_given(self):
+        database = self.configs["alpha"].parent / "memory.sqlite3"
+        # change() reads nothing from the environment: a command resolves the author once and passes it.
+        with mock.patch.dict(os.environ, {"RICHI_CHAT_ID": "claude:ambient", "CLAUDECODE": "1"}), \
+                closing(memory.connect(database)) as conn, memory.transaction(conn):
+            unnamed = rules.change(conn, {"action": "add", "id": "unnamed", "scope": "global", "text": "x"}, memory)
+            named = rules.change(conn, {"action": "add", "id": "named", "scope": "global", "text": "x"}, memory,
+                                 author=rules.Author("codex:chat", "codex"))
+            self.assertEqual(rules.current_author(), rules.Author("claude:ambient", "claude"))
+        self.assertEqual((unnamed["rule"]["changed_by"], named["rule"]["changed_by"]), (None, "codex:chat"))
+        self.assertEqual(rules.current_author({"RICHI_RULES_ACTOR": "richi map", "CLAUDECODE": "1"}),
+                         rules.Author("richi map", None))
+        entries = self.command("alpha", "rules", "log")["entries"]
+        self.assertEqual([(entry["id"], entry["by"], entry["agent"]) for entry in entries],
+                         [("named", "codex:chat", "codex"), ("unnamed", None, None)])
 
     def test_the_change_log_can_be_cleared(self):
         secret = self.add("alpha", "secret", "--global", text="The staging token is EXAMPLE-0000.")

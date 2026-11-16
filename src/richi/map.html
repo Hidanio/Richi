@@ -820,7 +820,6 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   // Standing rules (richi rules): the user's instructions agents load at the start of a chat.
   const viewModes=['map','encyclopedia','tools','rules','agents'];
   const RULE_SECRET_KEY='richi-map-edit-secret',RULE_HEADER='X-Richi-Map-Secret',RULE_SOURCE='richi map';
-  const RULE_NAME=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/;
   // rules-agents-pure: begin. No DOM here: tests/test_map_rules_ui.py runs these lines under Node.
   // Agents as the server last listed them (a rules, skills or agents answer). A rule may also
   // name agents this list lacks, and those are kept and shown as they are.
@@ -889,6 +888,41 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   const SOURCE_LABELS={'claude-app':'Плагины claude.ai из приложения Claude',system:'Встроенные скиллы',plugins:'Плагины',skills:'Свои скиллы'};
   // A source is named by its own key where Richi knows it, else by its kind.
   const agentSourceLabel=(agent,source)=>source.added?(agent.builtin?'Добавленная папка':'Папка скиллов'):SOURCE_LABELS[source.key]||SOURCE_LABELS[source.kind]||SOURCE_LABELS.skills;
+  // What the forms check before sending; the server checks again. tests/test_map_rules_ui.py holds
+  // these against the Python validators, so the two cannot drift apart unnoticed.
+  const RULE_NAME=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/;
+  const AGENT_ID=/^[a-z][a-z0-9-]{0,31}$/,AGENT_VARIABLE=/^[A-Za-z_][A-Za-z0-9_]{0,63}(=[^\x00-\x1f\x7f]{1,100})?$/;
+  const agentFolderOk=(value,limit)=>typeof value==='string'&&value.length>0&&value.length<=limit&&/^(~|~\/.*|\/.*)$/.test(value);
+  // What an edit sends: only what differs from the version the form was opened with (opened), named
+  // against the latest version known (rule). After a conflict the two differ, and a retry then keeps
+  // the other change to whatever this form left alone. null: nothing was changed here.
+  function ruleUpdate(opened,rule,text,setting){
+    const update={action:'update',id:rule.id,expected_updated_at:rule.updated_at};
+    if(text!==opened.text)update.text=text;
+    if(!sameRuleSkills(setting,opened)){update.skill=setting.skill;update.skills=setting.skills;}
+    return 'text' in update||'skill' in update?update:null;
+  }
+  // Every form saves the same way: send the change, then close the form, or say what went wrong
+  // and, once the edit key has stopped working, show the command instead. The form may have been
+  // closed or replaced before the answer came (alive); then the tab carries the message.
+  // steps: send, saved(answer), explain(error) -> text, failed(error) -> a better text or '' (it
+  // may reload what the form edits), lost(text), problem(text), commands(), label(), busy.
+  async function saveFromForm(panel,submit,steps){
+    submit.disabled=true;if(steps.busy)submit.textContent=steps.busy;
+    let answer,failure=null;
+    try{answer=await steps.send();}catch(error){failure=error;}
+    if(failure){
+      try{
+        const explained=steps.explain(failure),message=(steps.failed?await steps.failed(failure):'')||explained;
+        if(!panel.alive())steps.lost(message);
+        else{steps.problem(message);if(!rulesState.editing)steps.commands();}
+      }finally{if(panel.alive()){submit.disabled=false;steps.label();}}
+      return;
+    }
+    // Saved. Whatever happens while the page takes the answer in is not a failed save.
+    if(panel.alive())panel.dialog.close();
+    steps.saved(answer);
+  }
   // rules-agents-pure: end.
   const ruleTemplates={
     text:{label:'Свой текст',hint:'Любая постоянная инструкция или промт.'},
@@ -1006,21 +1040,6 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     dialog.onclose=()=>{const active=document.activeElement;if(instance===dialogInstance&&(!active||active===document.body||!active.isConnected||dialog.contains(active)))restoreTabFocus(opener);};
     // alive: a save answers later, and by then the user may have closed this form or opened another.
     return {dialog,form,body,foot,alive:()=>instance===dialogInstance&&dialog.open};
-  }
-  // Every form saves the same way: send the change, then close the form, or say what went wrong
-  // and, once the edit key has stopped working, show the command instead. The form may have been
-  // closed or replaced before the answer came (alive); then the tab carries the message.
-  // steps: send, saved(answer), explain(error) -> text, failed(error) -> a better text or '' (it
-  // may reload what the form edits), lost(text), problem(text), commands(), label(), busy.
-  async function saveFromForm(panel,submit,steps){
-    submit.disabled=true;if(steps.busy)submit.textContent=steps.busy;
-    try{const answer=await steps.send();if(panel.alive())panel.dialog.close();steps.saved(answer);}
-    catch(error){
-      const explained=steps.explain(error),message=(steps.failed?await steps.failed(error):'')||explained;
-      if(!panel.alive()){steps.lost(message);return;}
-      steps.problem(message);if(!rulesState.editing)steps.commands();
-    }
-    finally{if(panel.alive()){submit.disabled=false;steps.label();}}
   }
   const ruleCommandFor=change=>ruleCommand(change,state.mapStore)||'# Карта ещё не сообщила, какое хранилище она показывает. Нажмите «Обновить» и повторите.';
   function ruleProblem(parent){const box=make('div','rule-error');box.setAttribute('role','alert');box.hidden=true;parent.append(box);return text=>{box.textContent=text||'';box.hidden=!text;};}
@@ -1155,8 +1174,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       if(!value.trim())return 'Напишите текст правила.';if(value.trim()==='-')return 'Текст из одного дефиса команда прочитала бы как «возьми текст из stdin». Напишите правило словами.';if(ruleLength(value)>limit)return 'Текст длиннее '+limit+' символов. Разделите его на несколько правил.';
       if(skill.names().some(name=>!RULE_NAME.test(name)))return 'Имя скилла: латиница, цифры, «.», «_», «:» или «-», до 100 символов, начиная с буквы или цифры.';
       if(!rule&&template==='skill'&&!ruleHasSkill(setting))return 'Выберите скилл.';
-      // Only what was changed here is sent, so a retry after a conflict keeps the other change to fields left alone.
-      if(rule){const update={action:'update',id:rule.id,expected_updated_at:rule.updated_at};if(value!==opened.text)update.text=value;if(!sameRuleSkills(setting,opened)){update.skill=setting.skill;update.skills=setting.skills;}return 'text' in update||'skill' in update?update:'Изменений нет.';}
+      if(rule)return ruleUpdate(opened,rule,value,setting)||'Изменений нет.';
       const id=idInput.value.trim();if(!RULE_NAME.test(id))return 'ID: 1–100 символов — латиница, цифры, «.», «_», «:» или «-», начиная с буквы или цифры.';
       if(ruleList().some(item=>item.id===id))return 'Правило с ID «'+id+'» уже есть.';const scope=scopeValue();if(!scope)return 'Выберите проект.';
       const add={action:'add',id,scope:scope.scope,text:value};if(scope.project)add.project=scope.project;if(setting.skill)add.skill=setting.skill;if(setting.skills)add.skills=setting.skills;return add;
@@ -1292,12 +1310,13 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   let agentsController=null;
   const agentsNote=()=>rulesState.editing?'Агенты · изменения сохраняются для этого компьютера':'Агенты · режим команд';
   const agentItems=()=>list(agentsState.data?.agents).filter(agent=>agent&&typeof agent.id==='string');
-  const AGENT_ID=/^[a-z][a-z0-9-]{0,31}$/,AGENT_VARIABLE=/^[A-Za-z_][A-Za-z0-9_]{0,63}(=[^\x00-\x1f\x7f]{1,100})?$/;
   const plural=(n,forms)=>{const a=n%10,b=n%100;return n.toLocaleString('ru-RU')+' '+(a===1&&b!==11?forms[0]:a>=2&&a<=4&&(b<12||b>14)?forms[1]:forms[2]);};
   const skillForms=['скилл','скилла','скиллов'];
   const agentSaved='Изменения сразу сохраняются в настройках Richi на этом компьютере и действуют во всех workspace.';
   const agentCommandHint='Выполните в терминале или передайте агенту. Команда меняет настройки агентов на этом компьютере.';
-  const agentFolderProblem=value=>!value?'Укажите папку со скиллами.':value.length>1000||!/^(~|~\/.*|\/.*)$/.test(value)?'Нужен полный путь или путь от домашней папки: /opt/skills или ~/skills.':'';
+  // The numbers a form may accept come with the agents answer; the fallback serves a page that has none yet.
+  const agentLimit=(name,fallback)=>Number(agentsState.data?.limits?.[name])||fallback;
+  const agentFolderProblem=value=>!value?'Укажите папку со скиллами.':!agentFolderOk(value,agentLimit('folder',1000))?'Нужен полный путь или путь от домашней папки: /opt/skills или ~/skills.':'';
   // Rules that give this agent a skill, and whether the agent really has it.
   function agentRules(agent){
     const known=skillsKnown();
@@ -1357,7 +1376,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const panel=ruleDialog(agent?'Изменить агента':'Новый агент',agent?agent.name+' · '+agent.id:'Опишите агента, которого в Richi нет, чтобы правила могли называть скилл и для него.'),{dialog,form,body,foot}=panel;
     const name=make('input'),folder=make('input'),id=make('input'),variable=make('input'),manual=make('select');let idTouched=false;
     for(const input of [name,folder,id,variable]){input.type='text';input.autocomplete='off';input.spellcheck=false;}
-    name.maxLength=60;name.placeholder='Gemini CLI';folder.maxLength=1000;folder.placeholder='~/.gemini/skills';id.maxLength=32;id.placeholder='gemini-cli';variable.maxLength=165;variable.placeholder='GEMINI_CLI=1';
+    name.maxLength=agentLimit('name',60);name.placeholder='Gemini CLI';folder.maxLength=agentLimit('folder',1000);folder.placeholder='~/.gemini/skills';id.maxLength=32;id.placeholder='gemini-cli';variable.maxLength=165;variable.placeholder='GEMINI_CLI=1';
     manual.add(new Option('Показывать все скиллы','none'));manual.add(new Option('Скрывать скиллы с disable-model-invocation: true','front-matter'));
     const taken=()=>new Set(agentItems().map(item=>item.id));
     const slug=value=>{let base=ruleSlug(value).slice(0,28).replace(/-+$/,'');if(!/^[a-z]/.test(base))return '';let result=base,index=2;while(taken().has(result))result=base+'-'+index++;return result;};
@@ -1438,7 +1457,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     box.append(make('div','agent-section','Откуда брать скиллы'));
     for(const source of list(agent.sources)){
       const row=make('div','agent-source'+(source.enabled?'':' off')),toggle=make('input'),text=make('div'),label=agentSourceLabel(agent,source);
-      toggle.type='checkbox';toggle.className='agent-switch';toggle.setAttribute('role','switch');toggle.checked=source.enabled!==false;toggle.disabled=agentsState.busy;toggle.dataset.focus='source:'+agent.id+':'+source.key;toggle.setAttribute('aria-label',label+': '+source.path);
+      toggle.type='checkbox';toggle.className='agent-switch';toggle.setAttribute('role','switch');toggle.checked=source.enabled!==false;toggle.disabled=agentsState.busy;keyed(toggle,'source:'+agent.id+':'+source.key);toggle.setAttribute('aria-label',label+': '+source.path);
       toggle.addEventListener('change',async()=>{const enabled=toggle.checked;if(!await applyAgentChange({action:'update',id:agent.id,[enabled?'enable':'disable']:[source.key]},enabled?'Источник включён':'Источник выключен'))toggle.checked=!enabled;});
       text.append(make('div','agent-source-name',label),make('div','agent-source-path',source.path));
       const count=make('span','agent-source-count',!source.enabled?'выключено':source.denied?'нет доступа':!source.exists?'папки нет':plural(Number(source.skills)||0,skillForms));
@@ -1448,7 +1467,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       box.append(row);
     }
     if(agentsState.addingFolder===agent.id){
-      const formBox=make('form','agent-folder-form'),field=make('div','rule-field'),line=make('div','agent-folder-row'),input=make('input'),problem=make('div','rule-error');input.type='text';input.id='agent-folder-input';input.dataset.focus='folder-input';input.maxLength=1000;input.placeholder='~/work/team-skills';input.autocomplete='off';input.spellcheck=false;input.setAttribute('aria-label','Папка со скиллами');input.value=agentsState.folderDraft;problem.hidden=true;problem.setAttribute('role','alert');
+      const formBox=make('form','agent-folder-form'),field=make('div','rule-field'),line=make('div','agent-folder-row'),input=make('input'),problem=make('div','rule-error');input.type='text';input.id='agent-folder-input';keyed(input,'folder-input');input.maxLength=agentLimit('folder',1000);input.placeholder='~/work/team-skills';input.autocomplete='off';input.spellcheck=false;input.setAttribute('aria-label','Папка со скиллами');input.value=agentsState.folderDraft;problem.hidden=true;problem.setAttribute('role','alert');
       const add=make('button','primary',agentsState.busy?'Сохраняем…':rulesState.editing?'Добавить':'Показать команду');add.type='submit';add.disabled=agentsState.busy;
       line.append(input,add,keyed(toolButton('Отмена',()=>{closeFolderForm();agentsState.focus='add-folder:'+agent.id;renderAgents();}),'folder-cancel'));
       field.append(line,make('span','rule-field-hint','Папка, где каждый скилл лежит в своей подпапке с файлом SKILL.md.'),problem);formBox.append(field);formBox.noValidate=true;
@@ -1470,7 +1489,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     else if(!rules.length)box.append(make('div','agent-muted','Правила пока не называют скилл для этого агента.'));
     else for(const item of rules.slice(0,12)){
       const row=toolButton('',()=>{setMode('rules');$('search').value=item.rule.id;rulesState.query=item.rule.id;renderRules();},'agent-rule'),skill=make('span',item.missing?'agent-warn':'',item.skill+(item.missing?' · у агента такого нет':''));
-      row.append(make('code','',item.rule.id),skill);row.dataset.focus='agent-rule:'+item.rule.id;row.setAttribute('aria-label','Открыть правило '+item.rule.id);box.append(row);
+      row.append(make('code','',item.rule.id),skill);keyed(row,'agent-rule:'+item.rule.id);row.setAttribute('aria-label','Открыть правило '+item.rule.id);box.append(row);
     }
     if(rules.length>12)box.append(make('div','agent-muted','И ещё '+(rules.length-12)+'. Все правила — на вкладке «Правила».'));
     return box;
@@ -1504,7 +1523,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     if(!shown.some(agent=>agent.id===agentsState.selected))agentsState.selected=shown[0]?.id||'';
     for(const agent of shown){
       const rules=agentRules(agent),missing=rules.filter(item=>item.missing).length,button=toolButton('',()=>{agentsState.selected=agent.id;closeFolderForm();agentsState.problem='';renderAgents();},'agent-item');
-      button.setAttribute('aria-pressed',String(agent.id===agentsState.selected));button.dataset.agent=agent.id;button.dataset.focus='item:'+agent.id;
+      button.setAttribute('aria-pressed',String(agent.id===agentsState.selected));button.dataset.agent=agent.id;keyed(button,'item:'+agent.id);
       button.append(make('strong','',agent.name),make('code','',agent.id),make('span','',plural(Number(agent.skills)||0,skillForms)+' · '+plural(rules.length,['правило','правила','правил'])));
       if(missing)button.append(make('span','warn',plural(missing,['правило','правила','правил'])+' со скиллом, которого у агента нет'));
       column.append(button);

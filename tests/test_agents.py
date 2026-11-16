@@ -6,10 +6,11 @@ from pathlib import Path
 import sqlite3
 import sys
 import tempfile
+import threading
 import unittest
 from unittest import mock
 
-from richi import agent_commands, agents, memory, skill_catalog
+from richi import agent_commands, agents, memory, rules, skill_catalog
 from richi_launcher import config
 
 
@@ -42,8 +43,8 @@ class IsolatedHome(unittest.TestCase):
         for key in [key for key in os.environ if key.startswith("RICHI_")
                     or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "XDG_CONFIG_HOME"}]:
             del os.environ[key]
-        agents._cache.clear()
-        self.addCleanup(agents._cache.clear)
+        agents.forget_settings()
+        self.addCleanup(agents.forget_settings)
 
     def cli(self, *argv, ok=True, config_file=None):
         out, err = io.StringIO(), io.StringIO()
@@ -318,7 +319,7 @@ class AgentSettingsTests(IsolatedHome):
         settings = json.loads(agents.settings_path().read_text(encoding="utf-8"))
         settings["agents"]["claude"]["future"] = {"keep": True}
         agents.settings_path().write_text(json.dumps(settings), encoding="utf-8")
-        agents._cache.clear()
+        agents.forget_settings()
         kept = self.cli("skill-sources", "update", "claude", "--expected-updated-at", newer["updated_at"],
                         "--enable", "plugins")["agent"]
         stored = json.loads(agents.settings_path().read_text(encoding="utf-8"))["agents"]["claude"]
@@ -340,7 +341,7 @@ class AgentSettingsTests(IsolatedHome):
                                                                 "folders": [{"path": "relative", "enabled": True}]}}})):
             with self.subTest(text=text[:30]):
                 path.write_text(text, encoding="utf-8")
-                agents._cache.clear()
+                agents.forget_settings()
                 listed = self.cli("skill-sources", "list")
                 self.assertEqual([agent["id"] for agent in listed["agents"]], ["claude", "codex"])
                 self.assertIn(str(path), listed["problem"])
@@ -351,7 +352,7 @@ class AgentSettingsTests(IsolatedHome):
         # Settings a newer Richi wrote for a built-in agent this one lacks are kept and ignored.
         path.write_text(json.dumps({"version": 1, "agents": {"future": {"updated_at": "t", "disabled": ["skills"]}}}),
                         encoding="utf-8")
-        agents._cache.clear()
+        agents.forget_settings()
         self.assertEqual((agents.ids(), self.cli("skill-sources", "list")["problem"]), (("claude", "codex"), None))
         self.cli("skill-sources", "update", "claude", "--disable", "skills")
         self.assertIn("future", json.loads(path.read_text(encoding="utf-8"))["agents"])
@@ -398,6 +399,27 @@ class UnreadableFolderTests(IsolatedHome):
 
 class ListingTests(IsolatedHome):
     """What the map reads: the agents, their connection and the skill catalog behind the counts."""
+
+    def test_a_skill_file_that_is_not_a_file_is_skipped(self):
+        skills = self.home / ".claude" / "skills"
+        write_skill(skills / "real", "---\nname: real\n---\n")
+        (skills / "pipe").mkdir()
+        # Nobody will ever write to it: reading it as a file would wait for ever.
+        os.mkfifo(str(skills / "pipe" / "SKILL.md"))
+        (skills / "folder" / "SKILL.md").mkdir(parents=True)
+        found = []
+        scan = threading.Thread(target=lambda: found.append(skill_catalog.catalog({}, self.home)), daemon=True)
+        scan.start()
+        scan.join(10)
+        self.assertFalse(scan.is_alive(), "the scan is still waiting on the named pipe")
+        self.assertEqual([skill["name"] for skill in found[0]["skills"]], ["real"])
+
+    def test_the_listing_gives_the_limits_a_form_needs(self):
+        self.assertEqual(agent_commands.listing()["limits"],
+                         {"name": agents.MAX_NAME, "folder": agents.MAX_FOLDER, "folders": agents.MAX_FOLDERS,
+                          "agents": agents.MAX_CUSTOM})
+        # The skill name pattern belongs to the agents, and rules use that one.
+        self.assertIs(rules.valid_skill, agents.valid_skill)
 
     def test_a_change_returns_the_whole_listing_once_when_asked(self):
         write_skill(self.home / "team" / "release", "---\nname: release\n---\n")

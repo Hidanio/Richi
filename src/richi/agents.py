@@ -155,6 +155,16 @@ def valid_id(value):
     return isinstance(value, str) and ID.fullmatch(value) is not None
 
 
+# A skill as an agent lists it, such as plugin:skill. Rules store such names
+# and the skill catalog offers only names of this shape.
+SKILL = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}\Z")
+SKILL_HELP = "Skill name: 1-100 letters, digits, '.', '_', ':' or '-', starting with a letter or digit"
+
+
+def valid_skill(value):
+    return isinstance(value, str) and SKILL.fullmatch(value) is not None
+
+
 def _one_line(value, limit):
     # No control characters and no lone surrogates: the value is written to a UTF-8 file.
     return (isinstance(value, str) and 0 < len(value) <= limit and value == value.strip()
@@ -243,6 +253,11 @@ def check_settings(data):
 
 
 _cache = {}
+
+
+def forget_settings():
+    """Read the settings file again on the next use: its writer and tests with a new home call this."""
+    _cache.clear()
 
 
 def load_settings(environ=None, home=None):

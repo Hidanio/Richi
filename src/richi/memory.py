@@ -859,6 +859,8 @@ def run(args, cli=None):
             return storage.run(conn, args, sys.modules[__name__], database)
         writing = getattr(args, "action", None) in {"put", "upsert"}
         items = payload(args.json) if writing else None
+        # Like a payload, a rule change is read before the store is locked: it may wait for stdin.
+        rule_request = rules.read_request(args, sys.modules[__name__]) if writing_rules else None
         checked_project = unmatched_path = None
         loading_rules = args.command == "rules" and args.action == "show" and args.project is None
         with transaction(conn, write=writing or source_attach or adding_project or applying_scan or building_index or writing_rules):
@@ -883,7 +885,8 @@ def run(args, cli=None):
                             raise MemoryError("Relation must include checked project " + project["id"])
             if args.command == "rules":
                 return rules.run(conn, args, sys.modules[__name__], workspace=settings.workspace,
-                                 checked_project=checked_project, unmatched_path=unmatched_path)
+                                 checked_project=checked_project, unmatched_path=unmatched_path,
+                                 request=rule_request)
             if scanning:
                 from .projects import project_scan
                 result = project_scan(conn, args.path, apply=args.apply, max_depth=args.max_depth)

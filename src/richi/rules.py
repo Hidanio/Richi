@@ -24,6 +24,7 @@ import os
 import re
 import shlex
 import sys
+from typing import NamedTuple, Optional
 
 from . import agents
 
@@ -34,13 +35,20 @@ SCOPES = ("global", "project")
 # IDs of rules and names of skills (as an agent lists them, e.g. plugin:skill) share one shape.
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}\Z")
 ID_HELP = "Stable rule ID: 1-100 letters, digits, '.', '_', ':' or '-', starting with a letter or digit"
-SKILL_HELP = "Skill name: 1-100 letters, digits, '.', '_', ':' or '-', starting with a letter or digit"
+SKILL_HELP = agents.SKILL_HELP
+valid_skill = agents.valid_skill
 MAX_TEXT = 2000
 # Agents load every applicable rule in full, so the whole set stays small.
 MAX_TOTAL = 20000
 MAX_SOURCE = 500
 MAX_CHANGE = 100000
 MAX_LOG = 200
+# One stored rule with everything it carries. The limits above count the text; this one keeps a
+# field this version does not know, or a hand-edited row, from growing without bound.
+MAX_STORED = 50000
+# What `rules show` gives an agent: what it needs to follow a rule and to change it. The stored
+# record has more (where the rule came from, who changed it, fields of a newer Richi); rules list has it all.
+SHOWN = ("id", "scope", "project_id", "text", "skill", "skills", "updated_at")
 # The rule format this version reads. Raise it, and write it as a rule's `requires`, with the
 # first field that changes when or whether a rule applies: older versions then skip that rule.
 FORMAT = 1
@@ -69,10 +77,6 @@ def rule_id(value):
     if not isinstance(value, str) or not _NAME.fullmatch(value):
         raise ValueError(ID_HELP)
     return value
-
-
-def valid_skill(value):
-    return isinstance(value, str) and _NAME.fullmatch(value) is not None
 
 
 class Unsupported(ValueError):
@@ -247,19 +251,30 @@ def _source(value, api):
     return value
 
 
-def actor():
+class Author(NamedTuple):
+    """Who makes a change: the chat identity or the map (by), and the agent whose shell it is."""
+    by: Optional[str] = None
+    agent: Optional[str] = None
+
+
+def current_author(environ=None):
     """Who makes this change, as far as Richi can tell: the map, or the chat whose shell runs the command.
 
     It is a record for the user's review, not a proof: anything that can run
-    the command can also choose its environment.
+    the command can also choose its environment. A command reads it once,
+    here, and hands it to change().
     """
-    value = os.environ.get("RICHI_RULES_ACTOR") or os.environ.get("RICHI_CHAT_ID") or ""
-    value = "".join(ch for ch in value if ord(ch) >= 32)[:200]
-    return value or None
+    environ = os.environ if environ is None else environ
+    marked = environ.get("RICHI_RULES_ACTOR")
+    value = "".join(ch for ch in (marked or environ.get("RICHI_CHAT_ID") or "") if ord(ch) >= 32)[:200]
+    # The map's server may have been started from an agent's shell; a change made in the page is not that agent's.
+    return Author(value or None, None if marked else agents.detect(environ))
 
 
 def _decode(key, value):
     """The stored rule, or ValueError. Fields this version does not know are kept."""
+    if len(value) > MAX_STORED:
+        raise ValueError("the stored record is larger than %d characters" % MAX_STORED)
     record = json.loads(value)
     if not isinstance(record, dict):
         raise ValueError("not an object")
@@ -319,7 +334,9 @@ def scan(conn):
         try:
             rules.append(_decode(key, value))
         except Unsupported as exc:
-            unsupported.append({"id": identifier, "requires": exc.level, "error": str(exc), "next": "richi update"})
+            # updated_at: what removing the rule takes, for a user who will not update.
+            unsupported.append({"id": identifier, "requires": exc.level, "error": str(exc),
+                                "updated_at": _stored_version(value), "next": "richi update"})
         except (ValueError, TypeError, KeyError, RecursionError) as exc:
             version = _stored_version(value)
             invalid.append({"id": identifier, "error": str(exc) or type(exc).__name__, "updated_at": version,
@@ -328,7 +345,7 @@ def scan(conn):
     return rules, invalid, unsupported
 
 
-def load(conn, api=None):
+def load(conn):
     """Every stored rule this version serves."""
     return scan(conn)[0]
 
@@ -361,17 +378,19 @@ def _check_total(conn, api, replaced=None, added=""):
                        "shorten or remove rules first" % (MAX_TOTAL, total), "limit")
 
 
-def _store(conn, rule):
+def _store(conn, rule, api):
+    value = json.dumps(rule, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    if len(value) > MAX_STORED:
+        # It could not be read back: _decode refuses a record of this size.
+        raise _failure(api, "The rule with all it stores would exceed %d characters" % MAX_STORED, "limit")
     conn.execute("INSERT INTO metadata(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                 (PREFIX + rule["id"], json.dumps(rule, ensure_ascii=False, sort_keys=True, separators=(",", ":"))))
+                 (PREFIX + rule["id"], value))
 
 
-def _record(conn, api, action, identifier, before, after):
+def _record(conn, api, action, identifier, before, after, author):
     """Keep the change in the log, and only the latest MAX_LOG changes."""
     at = api.now()
-    # The map's server may have been started from an agent's shell; a change made in the page is not that agent's.
-    entry = {"at": at, "id": identifier, "action": action, "by": actor(),
-             "agent": None if os.environ.get("RICHI_RULES_ACTOR") else agents.detect(),
+    entry = {"at": at, "id": identifier, "action": action, "by": author.by, "agent": author.agent,
              "before": before, "after": after}
     conn.execute("INSERT INTO metadata(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                  (LOG_PREFIX + at + ":" + identifier, json.dumps(entry, ensure_ascii=False, sort_keys=True,
@@ -416,7 +435,8 @@ def show(conn, api, workspace, project_id, agent=None, unmatched_path=None):
     rules, invalid, unsupported = scan(conn)
     if project_id is not None:
         _project(conn, project_id, api)
-    applicable = [rule for rule in rules if rule["scope"] == "global" or rule["project_id"] == project_id]
+    applicable = [{field: rule[field] for field in SHOWN} for rule in rules
+                  if rule["scope"] == "global" or rule["project_id"] == project_id]
     if agent is not None:
         applicable = [dict(rule, use_skill=skill_for(rule, agent)) for rule in applicable]
     result = {"view": "rules", "workspace": workspace, "project": project_id, "agent": agent, "rules": applicable,
@@ -444,8 +464,14 @@ def _stdin_text(stdin):
     return text[:-1] if text.endswith("\n") else text
 
 
-def _request(args, api, stdin):
-    """The change object of an add, update, remove or apply command."""
+def read_request(args, api, stdin=None):
+    """The change object of an add, update, remove or apply command; None for any other.
+
+    It may wait for standard input or a file, so it is read before the store
+    is locked for writing: a command waiting for its text keeps nobody out.
+    """
+    if args.action not in {"add", "update", "remove", "apply"}:
+        return None
     if args.action == "apply":
         try:
             if args.json == "-":
@@ -476,8 +502,12 @@ def _request(args, api, stdin):
     return request
 
 
-def change(conn, request, api, checked_project=None):
-    """Add, update or remove one rule as the change object says; checked_project is the --project-path project."""
+def change(conn, request, api, checked_project=None, author=Author()):
+    """Add, update or remove one rule as the change object says.
+
+    checked_project is the --project-path project; author is who makes the
+    change (current_author), recorded with the rule and in the change log.
+    """
     if not isinstance(request, dict) or request.get("action") not in CHANGE_FIELDS \
             or set(request) - CHANGE_FIELDS[request["action"]]:
         raise api.MemoryError("A rule change is an object with action add, update or remove, id and that "
@@ -504,10 +534,10 @@ def change(conn, request, api, checked_project=None):
         rule = {"id": identifier, "scope": scope,
                 "project_id": _project(conn, project, api) if scope == "project" else None,
                 "text": text, "skill": skill, "skills": skills, "source": _source(request.get("source"), api),
-                "changed_by": actor(), "created_at": timestamp, "updated_at": timestamp}
+                "changed_by": author.by, "created_at": timestamp, "updated_at": timestamp}
         _check_total(conn, api, added=text)
-        _store(conn, rule)
-        _record(conn, api, "created", identifier, None, rule)
+        _store(conn, rule, api)
+        _record(conn, api, "created", identifier, None, rule, author)
         return {"results": [{"id": identifier, "status": "created"}], "rule": rule}
     if row is None:
         raise api.NotFoundError("Unknown rule: " + identifier + "; see rules list")
@@ -522,7 +552,7 @@ def change(conn, request, api, checked_project=None):
             raise api.MemoryError(problem + "; remove it with " + _removal(identifier, _stored_version(row[1]))) from exc
         _check_version(identifier, _stored_version(row[1]), expected, api)
         conn.execute("DELETE FROM metadata WHERE 1=1 AND key = ?", (row[0],))
-        _record(conn, api, "removed", identifier, {"id": identifier, "unreadable": row[1][:MAX_TEXT * 2]}, None)
+        _record(conn, api, "removed", identifier, {"id": identifier, "unreadable": row[1][:MAX_TEXT * 2]}, None, author)
         return {"results": [{"id": identifier, "status": "removed"}], "rule": None}
     if checked_project is not None and rule["scope"] == "project" and rule["project_id"] != checked_project:
         raise api.MemoryError("Rule " + rule["id"] + " belongs to project " + rule["project_id"]
@@ -530,7 +560,7 @@ def change(conn, request, api, checked_project=None):
     _check_version(identifier, rule["updated_at"], expected, api)
     if action == "remove":
         conn.execute("DELETE FROM metadata WHERE 1=1 AND key = ?", (row[0],))
-        _record(conn, api, "removed", identifier, rule, None)
+        _record(conn, api, "removed", identifier, rule, None, author)
         return {"results": [{"id": identifier, "status": "removed"}], "rule": rule}
     if not {"text", "skill", "skills", "source"} & set(request):
         raise api.MemoryError("Nothing to change; give the text, the skills, the source or several")
@@ -546,14 +576,18 @@ def change(conn, request, api, checked_project=None):
     if changed == rule:
         return {"results": [{"id": identifier, "status": "unchanged"}], "rule": rule}
     _check_total(conn, api, replaced=identifier, added=changed["text"])
-    changed.update(changed_by=actor(), updated_at=api.now())
-    _store(conn, changed)
-    _record(conn, api, "updated", identifier, rule, changed)
+    changed.update(changed_by=author.by, updated_at=api.now())
+    _store(conn, changed, api)
+    _record(conn, api, "updated", identifier, rule, changed, author)
     return {"results": [{"id": identifier, "status": "updated"}], "rule": changed}
 
 
-def run(conn, args, api, workspace=None, checked_project=None, stdin=None, unmatched_path=None):
-    """Run a rules command; checked_project is the --project-path project ID."""
+def run(conn, args, api, workspace=None, checked_project=None, stdin=None, unmatched_path=None, request=None):
+    """Run a rules command; checked_project is the --project-path project ID.
+
+    request is the change read beforehand (read_request); the caller that
+    locks the store passes it, so that no input is awaited under the lock.
+    """
     project_id = getattr(args, "project", None) or checked_project
     if args.action == "show":
         return show(conn, api, workspace, project_id, args.agent or agents.detect(), unmatched_path)
@@ -573,4 +607,6 @@ def run(conn, args, api, workspace=None, checked_project=None, stdin=None, unmat
         return _left_out({"view": "rules", "workspace": workspace, "rules": rules, "agents": agents.describe(),
                           "projects": projects, "characters": sum(len(rule["text"]) for rule in rules),
                           "limit_characters": MAX_TOTAL}, invalid, unsupported)
-    return change(conn, _request(args, api, stdin), api, checked_project)
+    if request is None:
+        request = read_request(args, api, stdin)
+    return change(conn, request, api, checked_project, current_author())

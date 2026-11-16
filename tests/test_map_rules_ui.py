@@ -22,6 +22,8 @@ PRELUDE = r"""
 const assert = require('node:assert/strict');
 const list = value => Array.isArray(value) ? value : [];
 const RULE_SOURCE = %s;
+// Whether the page may save; the forms read it when a save fails.
+const rulesState = {editing: true};
 """
 TRICKY = "--global\n'single' \"double\" $HOME `date` \\ -"
 
@@ -40,8 +42,8 @@ class RulesPageLogicTests(unittest.TestCase):
         for key in [key for key in os.environ if key.startswith("RICHI_")
                     or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "XDG_CONFIG_HOME"}]:
             del os.environ[key]
-        agents._cache.clear()
-        self.addCleanup(agents._cache.clear)
+        agents.forget_settings()
+        self.addCleanup(agents.forget_settings)
 
     def evaluate(self, script):
         """Run the page's DOM-free lines under Node; what the script prints, as JSON."""
@@ -199,6 +201,96 @@ console.log(JSON.stringify({
                          [("~/.gemini/skills", False), ("/opt/team skills", True)])
         self.run_command(commands["adjust"])
         self.assertEqual(self.run_command(commands["remove"], VERSION=updated["updated_at"])["results"][0]["status"], "removed")
+
+    def test_the_forms_check_what_the_commands_check(self):
+        samples = {
+            "id": ["gemini-cli", "x1", "Gemini", "-x", "a" * 32, "a" * 33, "", "a b", "1x"],
+            "variable": ["GEMINI_CLI", "GEMINI_CLI=1", "_x", "1BAD", "A B", "A=", "A=" + "v" * 100, "A=" + "v" * 101,
+                         "A=значение", "A=two words", "A" * 64, "A" * 65],
+            "name": ["pr-description", "plugin:skill", "x.y_z", "two words", "-x", "a" * 100, "a" * 101, "", "скилл"],
+            "folder": ["~", "~/skills", "/opt/team skills", "/", "relative", "~x", "", "./x",
+                       "/" + "a" * (agents.MAX_FOLDER - 1), "/" + "a" * agents.MAX_FOLDER],
+        }
+        page = self.evaluate(r"""
+const samples=%s,limit=%d;
+console.log(JSON.stringify({id:samples.id.map(value=>AGENT_ID.test(value)),variable:samples.variable.map(value=>AGENT_VARIABLE.test(value)),
+  name:samples.name.map(value=>RULE_NAME.test(value)),folder:samples.folder.map(value=>agentFolderOk(value,limit))}));
+""" % (json.dumps(samples), agents.MAX_FOLDER))
+        self.assertEqual(page, {
+            "id": [agents.valid_id(value) for value in samples["id"]],
+            "variable": [agents.valid_variable(value) for value in samples["variable"]],
+            # One shape serves rule IDs and skill names.
+            "name": [agents.valid_skill(value) for value in samples["name"]],
+            "folder": [agents.valid_folder(value) for value in samples["folder"]]})
+        for value, valid in zip(samples["name"], page["name"]):
+            with self.subTest(rule_id=value):
+                try:
+                    rules.rule_id(value)
+                    accepted = True
+                except ValueError:
+                    accepted = False
+                self.assertEqual(accepted, valid)
+
+    def test_a_retry_after_a_conflict_sends_only_what_the_form_changed(self):
+        self.evaluate(r"""
+setMapAgents([{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'}]);
+const opened={id:'review',text:'Review code.',skill:null,skills:null,updated_at:'v1'};
+// Meanwhile another window gave the rule a skill for one agent.
+const fresh={...opened,skills:{codex:'review-helper'},updated_at:'v2'};
+const unchangedSkills=skillRequest(opened.skill,{claude:null,codex:null});
+// The form changed the text only: the retry names the new version and leaves the skills alone.
+assert.deepEqual(ruleUpdate(opened,fresh,'Review code carefully.',unchangedSkills),
+  {action:'update',id:'review',expected_updated_at:'v2',text:'Review code carefully.'});
+// It changed the skills too: both changes go, as the form shows them.
+assert.deepEqual(ruleUpdate(opened,fresh,'Review code carefully.',skillRequest(null,'code-review')),
+  {action:'update',id:'review',expected_updated_at:'v2',text:'Review code carefully.',skill:'code-review',skills:null});
+// Nothing was changed in the form, whatever happened elsewhere.
+assert.equal(ruleUpdate(opened,fresh,'Review code.',unchangedSkills),null);
+assert.equal(ruleUpdate(opened,opened,'Review code.',skillRequest(null,'')),null);
+""")
+
+    def test_saving_from_a_form_reports_what_really_happened(self):
+        self.evaluate(r"""
+function form(alive=true){
+  const log=[],submit={disabled:false,textContent:'Сохранить'};
+  const panel={open:alive,alive(){return this.open;},dialog:{close(){log.push('closed');panel.open=false;}}};
+  const steps=extra=>({busy:'Сохраняем…',send:async()=>({ok:true}),saved:answer=>log.push('saved:'+answer.ok),
+    explain:error=>'explained:'+error.message,problem:text=>log.push('problem:'+text),lost:text=>log.push('lost:'+text),
+    commands:()=>log.push('commands'),label:()=>{submit.textContent='Сохранить';},...extra});
+  return {log,submit,panel,steps};
+}
+(async()=>{
+  // Saved: the form closes and the answer is taken in.
+  let f=form();await saveFromForm(f.panel,f.submit,f.steps());
+  assert.deepEqual(f.log,['closed','saved:true']);
+  // Saved after the user closed the form: nothing is closed twice.
+  f=form(false);await saveFromForm(f.panel,f.submit,f.steps());
+  assert.deepEqual(f.log,['saved:true']);
+  // Refused: the form stays, says why and can be sent again.
+  f=form();await saveFromForm(f.panel,f.submit,f.steps({send:async()=>{throw new Error('conflict');}}));
+  assert.deepEqual(f.log,['problem:explained:conflict']);
+  assert.deepEqual([f.submit.disabled,f.submit.textContent,f.panel.open],[false,'Сохранить',true]);
+  // A better explanation, found by looking again, replaces the plain one.
+  f=form();await saveFromForm(f.panel,f.submit,f.steps({send:async()=>{throw new Error('conflict');},failed:async()=>'reloaded'}));
+  assert.deepEqual(f.log,['problem:reloaded']);
+  // Refused after the form was closed: the tab carries the message.
+  f=form(false);await saveFromForm(f.panel,f.submit,f.steps({send:async()=>{throw new Error('gone');}}));
+  assert.deepEqual(f.log,['lost:explained:gone']);
+  // The edit key stopped working: the form offers the command instead.
+  rulesState.editing=false;
+  f=form();await saveFromForm(f.panel,f.submit,f.steps({send:async()=>{throw new Error('not editing');}}));
+  assert.deepEqual(f.log,['problem:explained:not editing','commands']);
+  rulesState.editing=true;
+  // A failure while the page takes a successful answer in is not a failed save.
+  f=form();
+  await assert.rejects(saveFromForm(f.panel,f.submit,f.steps({saved:()=>{throw new Error('render');}})),/render/);
+  assert.deepEqual(f.log,['closed']);
+  // While it is being sent the button cannot send it again.
+  f=form();let release;const sending=saveFromForm(f.panel,f.submit,f.steps({send:()=>new Promise(resolve=>{release=resolve;})}));
+  assert.deepEqual([f.submit.disabled,f.submit.textContent],[true,'Сохраняем…']);
+  release({ok:true});await sending;
+})().catch(error=>{console.error(error);process.exitCode=1;});
+""")
 
 
 if __name__ == "__main__":

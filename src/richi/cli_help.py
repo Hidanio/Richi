@@ -556,8 +556,9 @@ DETAILS = {
         examples=(("", "richi rules show"), ("", "richi --project-path /path/to/service rules show"),
                   ("As a particular agent", "richi rules show --agent codex"))),
     "rules list": dict(about="""
-        Lists every stored rule of the workspace with its version and the total
-        size; agents load rules in full, so the total is limited. agents lists the
+        Lists every stored rule of the workspace as it is stored, with where it
+        came from, who changed it last and the total size; agents load rules in
+        full, so the total is limited. agents lists the
         agents a rule may name a skill for, projects the registered projects, and
         invalid_rules the stored rules that cannot be read, each with the command
         that removes it.""",
