@@ -1,0 +1,114 @@
+{
+  "description": "Entirely synthetic engineering knowledge; no production snapshots or workplace IDs. The store records issue keys of several trackers.",
+  "project": [
+    {"id": "atlas", "name": "Atlas", "source": "Synthetic evaluation fixture"}
+  ],
+  "entry": [
+    {
+      "id": "task:DEMO-17", "kind": "task", "title": "DEMO-17 cache warmup",
+      "summary": "Added cache warmup; deployment has not been verified.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "implemented",
+      "sources": [{"reference": "https://example.test/evidence/task:DEMO-17", "type": "synthetic"}],
+      "verified_at": "2020-01-01", "jira_key": "DEMO-17"
+    },
+    {
+      "id": "work:retry-budget", "kind": "task", "title": "Gateway retry budget",
+      "summary": "Capped retries per request after the incident review.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/work:retry-budget", "type": "synthetic"}],
+      "verified_at": "2020-01-01", "jira_key": "AB#123"
+    },
+    {
+      "id": "work:retry-budget-audit", "kind": "task", "title": "Gateway retry budget audit",
+      "summary": "A later work item with a longer number.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/work:retry-budget-audit", "type": "synthetic"}],
+      "verified_at": "2020-01-01", "jira_key": "AB#1234"
+    },
+    {
+      "id": "work:flaky-upload", "kind": "task", "title": "Flaky upload test",
+      "summary": "The upload test waited for a fixed delay; it now waits for the event.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/work:flaky-upload", "type": "synthetic"}],
+      "verified_at": "2020-01-01", "jira_key": "#77"
+    },
+    {
+      "id": "work:flaky-download", "kind": "task", "title": "Flaky download test",
+      "summary": "A separate issue with a longer number.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/work:flaky-download", "type": "synthetic"}],
+      "verified_at": "2020-01-01", "jira_key": "#770"
+    },
+    {
+      "id": "work:search-rollout", "kind": "task", "title": "Постепенное включение поиска",
+      "summary": "Поиск включён для десятой части запросов.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "implemented",
+      "sources": [{"reference": "https://example.test/evidence/work:search-rollout", "type": "synthetic"}],
+      "verified_at": "2020-01-01", "jira_key": "ПРОЕКТ-12"
+    },
+    {
+      "id": "work:billing-export", "kind": "task", "title": "Billing export format",
+      "summary": "The export keeps one row per invoice line.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/work:billing-export", "type": "synthetic"}],
+      "verified_at": "2020-01-01", "jira_key": "CU-8669abc"
+    },
+    {
+      "id": "work:web-shell", "kind": "task", "title": "Web shell navigation",
+      "summary": "Navigation moved into the shared shell.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/work:web-shell", "type": "synthetic"}],
+      "verified_at": "2020-01-01", "jira_key": "APP.WEB-12"
+    },
+    {
+      "id": "task:OPS-7", "kind": "task", "title": "Rotate the signing certificate",
+      "summary": "The certificate is rotated by the release job.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/task:OPS-7", "type": "synthetic"}],
+      "verified_at": "2020-01-01"
+    },
+    {
+      "id": "work:gateway-timeout", "kind": "task", "title": "Gateway timeout",
+      "summary": "Raised the upstream timeout after profiling.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/work:gateway-timeout", "type": "synthetic"}],
+      "verified_at": "2020-01-01", "jira_key": "HTTP-12"
+    },
+    {
+      "id": "decision:pool", "kind": "decision", "title": "Connection pool size",
+      "summary": "After AB#123 and ПРОЕКТ-12 the pool was resized.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/decision:pool", "type": "synthetic"}],
+      "verified_at": "2020-01-01"
+    },
+    {
+      "id": "fact:server-push", "kind": "fact", "title": "http2 push stays disabled",
+      "summary": "Server push is off for every route.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/fact:server-push", "type": "synthetic"}],
+      "verified_at": "2020-01-01"
+    },
+    {
+      "id": "fact:wheel-digest", "kind": "fact", "title": "sha256 digest of the release wheel",
+      "summary": "The manifest stores the digest next to the file name.",
+      "project_ids": ["atlas"], "knowledge_state": "confirmed", "work_state": "done",
+      "sources": [{"reference": "https://example.test/evidence/fact:wheel-digest", "type": "synthetic"}],
+      "verified_at": "2020-01-01"
+    }
+  ],
+  "cases": [
+    {"id": "jira-key-still-exact", "query": "DEMO-17", "expected_refs": ["entry:task:DEMO-17"], "expected_first": "entry:task:DEMO-17"},
+    {"id": "hash-key-with-prefix", "query": "AB#123", "expected_refs": ["entry:work:retry-budget", "entry:decision:pool"], "expected_first": "entry:work:retry-budget", "excluded_refs": ["entry:work:retry-budget-audit"]},
+    {"id": "bare-hash-key-in-question", "query": "что сломалось в #77?", "expected_refs": ["entry:work:flaky-upload"], "expected_first": "entry:work:flaky-upload", "excluded_refs": ["entry:work:flaky-download"]},
+    {"id": "cyrillic-key-compact-spelling", "query": "ПРОЕКТ12", "expected_refs": ["entry:work:search-rollout", "entry:decision:pool"], "expected_first": "entry:work:search-rollout"},
+    {"id": "alphanumeric-key", "query": "cu-8669abc export", "expected_refs": ["entry:work:billing-export"], "expected_first": "entry:work:billing-export"},
+    {"id": "dotted-key", "query": "APP.WEB-12", "expected_refs": ["entry:work:web-shell"], "expected_first": "entry:work:web-shell"},
+    {"id": "key-declared-by-task-id", "query": "OPS-7 certificate", "expected_refs": ["entry:task:OPS-7"], "expected_first": "entry:task:OPS-7"},
+    {"id": "unknown-number-of-hash-series", "query": "AB#999 gateway retry budget", "expected_no_match": true},
+    {"id": "unknown-number-of-cyrillic-series", "query": "ПРОЕКТ-999 включение поиска", "expected_no_match": true},
+    {"id": "unknown-number-of-id-series", "query": "OPS-8 signing certificate", "expected_no_match": true},
+    {"id": "technical-token-outside-any-series", "query": "sha256 digest", "expected_refs": ["entry:fact:wheel-digest"], "expected_first": "entry:fact:wheel-digest"},
+    {"id": "technical-token-inside-recorded-series", "query": "http2 push", "expected_refs": ["entry:fact:server-push"], "excluded_refs": ["entry:work:gateway-timeout"]},
+    {"id": "unknown-number-of-colliding-series", "query": "http404 gateway timeout", "expected_no_match": true}
+  ]
+}

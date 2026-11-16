@@ -245,7 +245,7 @@ DETAILS = {
                   ("An explicit database file", "richi --db /path/to/memory.sqlite3 init")),
         see=("workspace create", "check", "migrate"), guide="CLI.md"),
     "recall": dict(about="""
-        Searches IDs, titles, summaries, Jira keys, tags and aliases of entries and
+        Searches IDs, titles, summaries, issue keys, tags and aliases of entries and
         entities, then adds one hop of explicit graph links. Matching is lexical:
         try other words or the other language when a paraphrase misses. --project
         boosts that project without hiding others; use --where for a strict scope.
@@ -288,7 +288,7 @@ DETAILS = {
                   ("More room for long records", "richi fetch --ref entry:task:ABC-123 --max-chars 40000")),
         see=("discover", "entry get", "records")),
     "search": dict(about="""
-        Matches any query word as a prefix in IDs, titles, summaries, Jira keys,
+        Matches any query word as a prefix in IDs, titles, summaries, issue keys,
         tags and aliases and returns whole entries, best match first. --project
         and --where are strict. Hypotheses are included; superseded entries need
         --include-superseded. Prefer recall for questions; search suits short

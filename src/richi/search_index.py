@@ -27,6 +27,7 @@ MAX_RECORD_CHARS = 262144
 MAX_RECORD_KEYS = 16384
 MAX_KEY_CHARS = 4096
 MAX_RECORD_KEY_BYTES = 1048576
+MAX_ISSUE_KEYS = 2000
 FILTER_INDEXES = {
     "richi_search_entries_state_kind": ("entries", "knowledge_state, kind"),
     "richi_search_entries_state_work": ("entries", "knowledge_state, work_state"),
@@ -272,12 +273,15 @@ def _query_parts(query):
     return recall.normalize(query).strip(), words
 
 
+def _batches(values):
+    # Stay below the older SQLite 999-variable limit even with many alias spans.
+    values = sorted(set(values))
+    return [values[start:start + 400] for start in range(0, len(values), 400)]
+
+
 def _equal_ids(conn, family, field, values):
     result = set()
-    values = sorted(set(values))
-    # Stay below the older SQLite 999-variable limit even with many alias spans.
-    for start in range(0, len(values), 400):
-        batch = values[start:start + 400]
+    for batch in _batches(values):
         result.update(row[0] for row in conn.execute(
             "SELECT r.id FROM " + KEYS + " k JOIN " + RECORDS + " r ON r.record = k.record "
             "WHERE k.field = ? AND k.key IN (" + ",".join("?" for _ in batch) + ")",
@@ -347,4 +351,63 @@ def entity_ids(conn, query, terms, keys):
     prefixes.update(variant for key in keys for variant in recall.key_variants(key))
     for prefix in prefixes:
         result.update(_prefix_ids(conn, "entity", prefix))
+    # A key need not be one lexical token: AB#123 is indexed as "ab" and "123",
+    # and a record that holds the key holds every one of them. Only the last
+    # token can continue in the text (123-rc); the others are whole tokens there.
+    for key in keys:
+        for variant in recall.key_variants(key):
+            tokens = recall.WORDS.findall(variant)
+            if tokens and tokens != [variant]:
+                whole = [_equal_ids(conn, "entity", "token", [token]) for token in tokens[:-1]]
+                result.update(_prefix_ids(conn, "entity", tokens[-1]).intersection(*whole))
     return result
+
+
+def indexed_issue_keys(conn, variants, series):
+    """Recorded issue keys among candidate spellings and series, or None to scan.
+
+    The answer equals recall's scan of every record. Keys of a dirty record may
+    be stale, so the index speaks for clean records only and dirty ones are
+    read directly. A series lookup is a range of keys that continue the prefix
+    with ASCII digits alone.
+    """
+    from . import recall
+
+    _, families, _, ready = _schema(conn)
+    if not ready or len(variants) > MAX_ISSUE_KEYS:
+        return None
+    source = " FROM " + KEYS + " k JOIN " + RECORDS + " r ON r.record = k.record WHERE k.field = ? AND "
+    clean = " AND NOT EXISTS (SELECT 1 FROM " + DIRTY + " d WHERE d.family = ? AND d.id = r.id)"
+    # A key is recorded as the jira_key of an entry or as a task:/jira: ID.
+    places = [("entry", "jira", ("",))] + [(family, "id", ("task:", "jira:")) for family in families.values()]
+    found = set()
+    for family, field, leads in places:
+        wanted = {lead + variant: variant for lead in leads for variant in variants}
+        for batch in _batches(wanted):
+            found.update(wanted[row[0]] for row in conn.execute(
+                "SELECT DISTINCT k.key" + source + "k.key IN (" + ",".join("?" for _ in batch) + ")" + clean,
+                [FIELDS[family][field], *batch, family]))
+    # DEMO42 belongs to the series "demo-" too: a series has the spellings of its keys.
+    probes = [(prefix, family, field, lead + spelling[:-1])
+              for prefix in series for spelling in recall.key_variants(prefix + "0")
+              for family, field, leads in places for lead in leads]
+    exists = ("EXISTS (SELECT 1" + source + "k.key >= ? AND k.key < ? AND substr(k.key, ?) NOT GLOB '*[^0-9]*'" +
+              clean + ")")
+    found_series = set()
+    for start in range(0, len(probes), 100):
+        batch = probes[start:start + 100]
+        row = conn.execute("SELECT " + ", ".join(exists for _ in batch), [
+            value for _, family, field, first in batch
+            for value in (FIELDS[family][field], first + "0", first + ":", len(first) + 1, family)]).fetchone()
+        found_series.update(probe[0] for probe, hit in zip(batch, row) if hit)
+    identities, jira_keys = [], []
+    for table, family in families.items():
+        dirty = [row[0] for row in conn.execute("SELECT id FROM " + DIRTY + " WHERE family = ?", (family,))]
+        for batch in _batches(dirty):
+            for row in conn.execute("SELECT id, " + ("jira_key" if family == "entry" else "NULL") + " FROM " + table +
+                                    " WHERE id IN (" + ",".join("?" for _ in batch) + ")", batch):
+                identities.append(row[0])
+                jira_keys.append(row[1])
+    dirty_variants, dirty_series = recall.issue_key_hits(
+        recall.declared_issue_keys(identities, jira_keys), variants, series)
+    return found | dirty_variants, found_series | dirty_series

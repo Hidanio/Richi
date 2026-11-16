@@ -59,7 +59,7 @@ source. Usage is established by a **confirmed, sourced `uses_tool` edge from an
 entry to a tool**. A direct task link is allowed when the task itself provides
 the evidence. A linked detail may lead to its task through a confirmed, sourced
 `part_of` edge in the direction shown. Record actual project memberships on the
-entries; neither a shared tag, the same Jira key nor arbitrary graph proximity
+entries; neither a shared tag, the same issue key nor arbitrary graph proximity
 proves usage. For a child-linked task to appear under a project, both the usage
 entry and task must belong to that project; a parent's membership does not
 silently broaden the child's scope.

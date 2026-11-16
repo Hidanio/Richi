@@ -4,7 +4,7 @@
 
 English | [Русский](CLI.ru.md)
 
-SQLite stores the project map, relationships and working experience: tasks, research, attempts, decisions, facts and instructions. A Jira ID is optional. Records help answer “have we ever done X,” find the outcome and understand why a decision was made.
+SQLite stores the project map, relationships and working experience: tasks, research, attempts, decisions, facts and instructions. An issue key of any tracker is optional. Records help answer “have we ever done X,” find the outcome and understand why a decision was made.
 
 The encyclopedia stores definitions of project terms as `concept` nodes in the same
 database. One term may have several meanings across contexts and versions;
@@ -206,7 +206,7 @@ richi search 'старое решение' --include-superseded
 richi context --project service-example --limit 30
 ```
 
-Search covers ID, title, summary, Jira key, tags and aliases. Query words are treated as literals; user-supplied FTS/SQL syntax is not executed. One prefix word match is sufficient; results sort by FTS5 BM25, then recency. Quotes, parentheses and punctuation are safely split into words; a query without words returns an empty list. Query length is limited to 2000 characters and 64 words. The result limit is 1–200, default 20. Common words in a long question may produce irrelevant results: short concepts and several formulations are useful.
+Search covers ID, title, summary, issue key (`jira_key`), tags and aliases. Query words are treated as literals; user-supplied FTS/SQL syntax is not executed. One prefix word match is sufficient; results sort by FTS5 BM25, then recency. Quotes, parentheses and punctuation are safely split into words; a query without words returns an empty list. Query length is limited to 2000 characters and 64 words. The result limit is 1–200, default 20. Common words in a long question may produce irrelevant results: short concepts and several formulations are useful.
 
 This is lexical retrieval, not embedding search. There are no automatic Russian inflections, translation, synonyms or paraphrase understanding. Add alternative formulations and Russian/English terms to `aliases`; try several queries when looking for past work. No result means only that no record was found, not proof that the work never happened.
 

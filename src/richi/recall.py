@@ -1,5 +1,7 @@
 """Bounded, explainable recall over existing records; no writes or network calls."""
 
+import bisect
+import functools
 import json
 import re
 
@@ -33,8 +35,16 @@ make makes made making doing done describe show shows shown get gets got
 attempt attempts attempted attempting test tested testing investigate investigated
 investigating check checked checking
 """.split())
-JIRA = re.compile(r"(?<![\w])([A-Za-z][A-Za-z0-9_]{1,20}-\d+|[A-Za-z][A-Za-z_]{1,20}\d+)(?![\w])")
 WORDS = re.compile(r"[^\W_]+(?:[-_.:/][^\W_]+)*", re.UNICODE)
+# The form of a token never makes it an issue key: python3, sha256 and gemma-4
+# are words unless the store records them. A record declares a key through its
+# jira_key or through a task:/jira: ID. A key holds a number and something
+# besides it, as tracker keys do: jira_key "N/A", task:backup and a bare 17
+# must not turn ordinary words and numbers into keys.
+ISSUE_ID = re.compile(r"(?:task|jira):(.+)")
+ISSUE_KEY = re.compile(r"[0-9][^0-9]|[^0-9][0-9]")
+ISSUE_SERIES = re.compile(r"(.*[^0-9])[0-9]+")
+ISSUE_KEY_CHARS = 128
 CURRENT = re.compile(
     r"\b(?:сейчас|сегодня|текущ\w*|актуальн\w*|последн\w*|замерж\w*|выпущен\w*|"
     r"развернут\w*|влито|current|currently|latest|now|today|deployed|released|merged)\b|"
@@ -183,28 +193,115 @@ def phrase(value):
     return " ".join(WORDS.findall(normalize(value)))
 
 
-def terms_for(query):
+def terms_for(conn, query):
     # An issue key is one routing key, never an OR search for a generic prefix.
-    keys = sorted({canonical_key(match.group(1)) for match in JIRA.finditer(query)})
-    remainder = JIRA.sub(" ", query)
+    # Only the store can say which tokens are keys; the rest are words.
+    text = normalize(query)
+    keys, spans = issue_keys(conn, text)
+    for start, end in spans:
+        text = text[:start] + " " * (end - start) + text[end:]
     terms = []
-    for term in WORDS.findall(normalize(remainder)):
+    for term in WORDS.findall(text):
         if term not in STOPWORDS and len(term) > 1 and term not in terms:
             terms.append(term)
     return terms[:64], keys
+
+
+def issue_keys(conn, text):
+    """Recorded issue keys in a normalized query: canonical keys and their spans.
+
+    A key occurs as a run without whitespace, bounded like matches_key(). It
+    is a key in either spelling the store records, whatever its format (AB#123,
+    #123, ПРОЕКТ-12), or as another number of a recorded series: DEMO-999999
+    beside a recorded DEMO-42 is an unknown issue, not generic words. The
+    leftmost longest run wins, so a key is found inside a URL or a branch
+    name. A query without digits needs no lookup at all.
+    """
+    candidates = []
+    for chunk in re.finditer(r"\S+", text):
+        value = chunk.group(0)
+        starts = [match.start() for match in re.finditer(r"(?<!\w)(?=.)", value)]
+        ends = [match.start() for match in re.finditer(r"(?<=.)(?!\w)", value)]
+        for start in starts:
+            longest = bisect.bisect_right(ends, start + ISSUE_KEY_CHARS)
+            for end in reversed(ends[bisect.bisect_right(ends, start):longest]):
+                if ISSUE_KEY.search(value, start, end):
+                    key = canonical_key(value[start:end])
+                    candidates.append((chunk.start() + start, chunk.start() + end, key, issue_series(key)))
+    if not candidates:
+        return [], []
+    recorded, series = recorded_issue_keys(
+        conn, {variant for _, _, key, _ in candidates for variant in key_variants(key)},
+        {prefix for _, _, _, prefix in candidates if prefix})
+    keys, spans, covered = set(), [], 0
+    for start, end, key, prefix in candidates:
+        if start >= covered and (recorded.intersection(key_variants(key)) or prefix in series):
+            keys.add(key)
+            spans.append((start, end))
+            covered = end
+    return sorted(keys), spans
+
+
+def issue_series(key):
+    # DEMO-42 belongs to the series "demo-"; a bare number belongs to none.
+    match = ISSUE_SERIES.fullmatch(key)
+    return match.group(1) if match else None
+
+
+def declared_issue_keys(identities, jira_keys):
+    """Normalized keys that records declare, in the spelling they were written."""
+    declared = {normalize(value) for value in jira_keys if value}
+    for value in identities:
+        match = ISSUE_ID.fullmatch(normalize(value))
+        if match:
+            declared.add(match.group(1))
+    return {key for key in declared if ISSUE_KEY.search(key)}
+
+
+def issue_key_hits(declared, variants, series):
+    """The candidate spellings and series that these declared keys confirm."""
+    if series:
+        series = series & {issue_series(canonical_key(key)) for key in declared}
+    return variants & declared, series
+
+
+def recorded_issue_keys(conn, variants, series):
+    """Which candidate spellings and series the store records, in any knowledge state.
+
+    The optional search index answers with point lookups. Otherwise index-only
+    reads suffice: entries_jira covers jira_key and the primary keys cover IDs.
+    GLOB narrows IDs without SQL lower/NOCASE, whose case rules differ from
+    normalize(); its ? admits the long s and the Kelvin sign, which casefold
+    to s and k.
+    """
+    from . import search_index
+    found = search_index.indexed_issue_keys(conn, variants, series)
+    if found is not None:
+        return found
+    jira_keys = [row[0] for row in conn.execute(
+        "SELECT DISTINCT jira_key FROM entries WHERE 1=1 AND jira_key IS NOT NULL AND jira_key GLOB '*[0-9]*'")]
+    identities = []
+    for table in ("entries", "entities"):
+        if table_exists(conn, table):
+            identities.extend(row[0] for row in conn.execute(
+                "SELECT id FROM " + table + " WHERE 1=1 AND "
+                "(id GLOB '[tT][aA]??:*[0-9]*' OR id GLOB '[jJ][iI][rR][aA]:*[0-9]*')"))
+    return issue_key_hits(declared_issue_keys(identities, jira_keys), variants, series)
 
 
 def canonical_key(value):
     value = value.casefold()
     if "-" in value:
         return value
-    match = re.fullmatch(r"([a-z][a-z_]+)(\d+)", value)
+    match = re.fullmatch(r"([^\W\d_][^\W\d]+)([0-9]+)", value)
     return match.group(1) + "-" + match.group(2) if match else value
 
 
 def key_variants(key):
     # Keep the numeric suffix intact: ABC-17 / ABC17 never matches ABC-170.
-    return (key, key.replace("-", ""))
+    # Only a letters-number key has a compact spelling: REL-1-2 is not REL12.
+    compact = key.replace("-", "")
+    return (key, compact) if compact != key and canonical_key(compact) == key else (key,)
 
 
 def decode(row, arrays=("sources", "tags", "aliases")):
@@ -218,26 +315,41 @@ def table_exists(conn, name):
     return conn.execute("SELECT 1 FROM sqlite_master WHERE 1=1 AND type = 'table' AND name = ?", (name,)).fetchone() is not None
 
 
+@functools.lru_cache(maxsize=256)
+def key_pattern(keys):
+    """Every spelling of the keys, and one expression that finds any of them as a whole key."""
+    spellings = tuple(variant for key in keys for variant in key_variants(key))
+    return spellings, re.compile(r"(?<![\w])(?:" + "|".join(map(re.escape, spellings)) + r")(?![\w])")
+
+
+def holds_key(text, keys):
+    # Few texts contain a spelling at all; the plain test spares the rest the expression.
+    spellings, pattern = key_pattern(tuple(keys))
+    return any(spelling in text for spelling in spellings) and pattern.search(text) is not None
+
+
 def matches_key(record, keys):
     if not keys:
         return True
     texts = [record.get(field, "") for field in ("id", "jira_key", "title", "summary")]
     texts += record.get("aliases", [])
-    return any(re.search(r"(?<![\w])" + re.escape(variant) + r"(?![\w])", normalize(text))
-               for key in keys for variant in key_variants(key) for text in texts)
+    return any(holds_key(normalize(text), keys) for text in texts)
 
 
 def matches_term(term, text):
     # A meaningful term must start at a lexical boundary. Prefix matching keeps
     # the same recall affordance as FTS without accepting arbitrary infixes.
-    return bool(re.search(r"(?<![^\W_])" + re.escape(term), text))
+    # Terms with digits are whole tokens: 30 must not match ATL-3010 or 300.
+    end = r"(?![^\W_])" if any(char.isdigit() for char in term) else ""
+    return bool(re.search(r"(?<![^\W_])" + re.escape(term) + end, text))
 
 
 def technical_subjects(query):
     # Explicit names/identifiers provide a stronger anchor than question verbs:
     # mixed-case names, acronyms, qualified names and version-bearing tokens.
+    # Recognized issue keys need no removal: the subject guard is off with them.
     result = []
-    for raw in WORDS.findall(JIRA.sub(" ", query)):
+    for raw in WORDS.findall(query):
         term = normalize(raw)
         if term in STOPWORDS or len(term) < 2 or not re.search(r"[A-Za-z]", raw):
             continue
@@ -351,10 +463,13 @@ def lexical(record, query, terms, keys, family):
         if points:
             score += points
             matched.append(term)
+    mentions = [title, summary, identity] + [normalize(value) for value in record.get("aliases", [])] if keys else []
     for key in keys:
         # Whole Jira keys may be mentioned in another record's evidence or summary.
-        patterns = [r"(?<![\w])" + re.escape(variant) + r"(?![\w])" for variant in key_variants(key)]
-        if any(re.search(pattern, text) for pattern in patterns for text in (title, summary, " ".join(aliases), identity)):
+        # Aliases are read as written, and a jira_key that holds the key among other
+        # text is a mention too, so no record passes the guard with no score.
+        texts = mentions if record_key in key_variants(key) else mentions + [record_key]
+        if any(holds_key(text, (key,)) for text in texts):
             score += 25
             matched.append(key)
     if matched:
@@ -472,18 +587,40 @@ def candidates(conn, query, terms, keys, states, project, api, trace=None, selec
         expression = " OR ".join('"' + word.replace('"', '""') + '"*' for word in terms)
         key_expressions = ['"' + variant.replace('"', '""') + '"' for key in keys for variant in key_variants(key)]
         expression = " OR ".join(key_expressions) if keys else expression
-        rows = conn.execute("""
-            SELECT e.id
+        # A term with a digit matches whole tokens only (matches_term). Without its
+        # prefix star, rows that merely start with it cannot fill the shortlist.
+        expression = re.sub(r'("[^"]*\d[^"]*")\*', r"\1", expression)
+
+        def shortlist(columns, limit):
+            return conn.execute("""
+            SELECT """ + columns + """
             FROM entries e
                 JOIN entries_fts ON entries_fts.rowid = e.rowid
             WHERE 1=1 AND entries_fts MATCH ? AND e.knowledge_state IN (""" + states_sql + ") AND (" + clause + """ )
             ORDER BY bm25(entries_fts, 8.0, 6.0, 1.0, 10.0, 3.0, 5.0), e.id
             LIMIT ?
-        """, [expression] + states + values + [CANDIDATE_LIMIT + 1]).fetchall()
+        """, [expression] + states + values + [limit])
+
+        if keys:
+            # FTS cannot spell every key: it keeps only "12" of #12, and the phrase
+            # for DEMO-42 also matches "demo 42". Take the ranked rows that hold a
+            # key themselves, so no other row crowds them out of the shortlist.
+            rows, fetched, cursor = [], 0, shortlist("e.id, e.jira_key, e.title, e.summary, e.aliases", -1)
+            for row in cursor:
+                fetched += 1
+                if matches_key(decode(row, ("aliases",)), keys):
+                    rows.append(row)
+                    if len(rows) > CANDIDATE_LIMIT:
+                        break
+            cursor.close()
+            discarded_weak += fetched - len(rows)
+        else:
+            rows = shortlist("e.id", CANDIDATE_LIMIT + 1).fetchall()
+            fetched = len(rows)
         fts_truncated = len(rows) > CANDIDATE_LIMIT
         fts_ranks = {row[0]: rank for rank, row in enumerate(rows[:CANDIDATE_LIMIT])}
         if trace:
-            trace.counts.update(fts_rows_fetched=len(rows), fts_shortlisted=len(fts_ranks))
+            trace.counts.update(fts_rows_fetched=fetched, fts_shortlisted=len(fts_ranks))
 
     # Preserve all FTS exceptions without loading/scoring unrelated full texts.
     for row, probe in entry_candidate_rows(conn, query, keys, states, fts_ranks, has_fts, trace, selection_filter):
@@ -708,7 +845,7 @@ def _recall(conn, args, api, *, bounded=True):
         if trace and trace.expected and trace.expected["direct_stage"] == "not_evaluated":
             if not selection_filter.matches_ref(conn, trace.expected["ref"]):
                 trace.expected["direct_stage"] = "filtered_where"
-    terms, keys = terms_for(query)
+    terms, keys = terms_for(conn, query)
     options = {"selection_filter": selection_filter} if selection_filter else {}
     direct_by_ref, fts_truncated, backend, discarded_weak = candidates(conn, query, terms, keys, states, project, api, trace, **options)
     direct = rank(direct_by_ref.values())

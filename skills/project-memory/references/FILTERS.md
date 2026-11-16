@@ -82,8 +82,9 @@ and filter indexes atomically. It does not change knowledge, history, sources,
 schema version or runtime selection. Existing stores are never upgraded by a
 read command or by selecting a new runtime. Filters work without this index.
 
-The index routes normalized IDs, Jira keys and aliases and narrows entity lexical
-candidates. Full scoring, state checks and graph rules remain authoritative;
+The index routes normalized IDs, issue keys and aliases, tells recall which query
+tokens are recorded issue keys, and narrows entity lexical candidates. Full
+scoring, state checks and graph rules remain authoritative;
 an exact hit does not discard other candidates. New writes refresh their keys
 inside the write transaction. SQL triggers mark writes from older runtimes dirty,
 so readers include those records through a fallback until refreshed or rebuilt.

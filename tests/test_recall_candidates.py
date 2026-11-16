@@ -218,7 +218,7 @@ class RecallCandidateTests(unittest.TestCase):
         self.assertTrue(value["truncated"])
 
     def shortlist(self, query):
-        terms, keys = recall.terms_for(query)
+        terms, keys = recall.terms_for(self.conn, query)
         expressions = ['"' + word.replace('"', '""') + '"*' for word in terms]
         if keys:
             expressions = ['"' + variant + '"' for key in keys for variant in recall.key_variants(key)]

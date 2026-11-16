@@ -57,7 +57,7 @@ class IndexedGateParityTests(unittest.TestCase):
         self.assertEqual(len(entries) + len(entities), 240)
         failures = []
         for query in queries:
-            terms, keys = recall.terms_for(query)
+            terms, keys = recall.terms_for(self.conn, query)
             entity_ids = search_index.entity_ids(self.conn, query, terms, keys)
             entry_ids = search_index.entry_ids(self.conn, query, keys)
             # This corpus fits the index limits; do not silently bypass the gate
@@ -86,7 +86,7 @@ class IndexedGateParityTests(unittest.TestCase):
             for route in ("route-αβγ", "Straße route", "Ёлка.route"):
                 self.conn.execute("UPDATE " + table + " SET aliases = ? WHERE id = ?",
                                   (json.dumps([route]), "old-writer"))
-                terms, keys = recall.terms_for(route)
+                terms, keys = recall.terms_for(self.conn, route)
                 ids = (search_index.entry_ids(self.conn, route, keys) if family == "entry" else
                        search_index.entity_ids(self.conn, route, terms, keys))
                 self.assertIn("old-writer", ids)

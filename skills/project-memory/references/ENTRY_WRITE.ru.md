@@ -45,7 +45,7 @@ richi --compact-json --project-path /work/example entry get task:EXAMPLE-42
 |---|---|
 | `kind` | `task`, `decision`, `fact`, `note`, `investigation`, `experiment`, `procedure` |
 | `project_ids` | ID существующих проектов; по умолчанию `[]` для действительно общих знаний |
-| `jira_key` | Необязательный реальный ключ Jira; никогда не придумывай его |
+| `jira_key` | Необязательный реальный ключ задачи из любого трекера в том написании, которое использует трекер (`ABC-123`, `AB#123`, `#123`); никогда не придумывай его. Recall считает токен ключом задачи, только если его объявила запись: см. [RECALL.ru.md](RECALL.ru.md#issue-keys) |
 | `knowledge_state` | `confirmed`, `hypothesis` (по умолчанию), `superseded` |
 | `work_state` | `planned`, `in_progress`, `implemented`, `merged`, `released`, `blocked`, `done` или `null` |
 | `sources` | Объекты с обязательным `reference`; необязательными `label`, `type`, `observed_at`, `revision`, `locator`, `sha256`, `git`; по умолчанию `[]` |
