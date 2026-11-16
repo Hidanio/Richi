@@ -313,6 +313,19 @@ class AgentSettingsTests(IsolatedHome):
                             "--enable", "skills", "--remove-skills", "~/team")["agent"]
         self.assertEqual((restored["updated_at"], restored["skills"]), (None, 1))
         self.assertEqual(json.loads(agents.settings_path().read_text(encoding="utf-8")), {"version": 1, "agents": {}})
+        # A field that a newer Richi stored for the agent is not this version's to drop with the last adjustment.
+        newer = self.cli("skill-sources", "update", "claude", "--disable", "plugins")["agent"]
+        settings = json.loads(agents.settings_path().read_text(encoding="utf-8"))
+        settings["agents"]["claude"]["future"] = {"keep": True}
+        agents.settings_path().write_text(json.dumps(settings), encoding="utf-8")
+        agents._cache.clear()
+        kept = self.cli("skill-sources", "update", "claude", "--expected-updated-at", newer["updated_at"],
+                        "--enable", "plugins")["agent"]
+        stored = json.loads(agents.settings_path().read_text(encoding="utf-8"))["agents"]["claude"]
+        self.assertEqual((stored["future"], sorted(stored), all(source["enabled"] for source in kept["sources"])),
+                         ({"keep": True}, ["future", "updated_at"], True))
+        self.cli("skill-sources", "remove", "claude", "--expected-updated-at", kept["updated_at"])
+        self.assertEqual(json.loads(agents.settings_path().read_text(encoding="utf-8")), {"version": 1, "agents": {}})
         again = self.cli("skill-sources", "update", "claude", "--disable", "claude-app")["agent"]
         reset = self.cli("skill-sources", "remove", "claude", "--expected-updated-at", again["updated_at"])
         self.assertEqual((reset["results"][0]["status"], reset["agent"]["updated_at"]), ("reset", None))

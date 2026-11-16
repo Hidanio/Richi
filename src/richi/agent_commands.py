@@ -336,7 +336,9 @@ def _updated(identifier, options, builtin, current, environ, home):
         raise AgentError("Nothing to change; give a source to switch, a folder to add or remove, or a new name")
     if entry == (current or {}):
         return "unchanged", current
-    if builtin and not entry.get("folders") and not entry.get("disabled"):
+    # A built-in agent left without adjustments needs no stored entry, unless the entry holds
+    # something else: a field a newer Richi wrote is not this version's to drop.
+    if builtin and not set(entry) - {"created_at", "updated_at"}:
         return "updated", None
     entry["updated_at"] = _now()
     return "updated", entry

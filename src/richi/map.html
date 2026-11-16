@@ -856,7 +856,9 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   // command without them would change whatever store the terminal currently uses, so none is composed.
   function ruleCommand(change,store){
     const selector=list(store).map(shellQuote);if(!selector.length)return '';
-    const parts=['richi',...selector,'rules',change.action,change.id];
+    // Only a damaged row has an ID that needs quoting; one that begins with a dash is read as the
+    // ID only after --, at the end of the command.
+    const parts=['richi',...selector,'rules',change.action],dashed=String(change.id).startsWith('-');if(!dashed)parts.push(shellQuote(change.id));
     if(change.action==='add')parts.push(change.scope==='global'?'--global':commandOption('--project',change.project));
     else parts.push(commandOption('--expected-updated-at',change.expected_updated_at));
     if('text' in change)parts.push(commandOption('--text',change.text));
@@ -865,6 +867,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       for(const option of options.length?options:[''])parts.push(commandOption('--skill',option));
     }
     if(change.action==='add')parts.push(commandOption('--source',RULE_SOURCE));
+    if(dashed)parts.push('--',shellQuote(change.id));
     return parts.join(' ');
   }
   function agentCommand(change){
@@ -948,7 +951,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       if(!response.ok)throw new Error(data&&data.error||'Сервер вернул HTTP '+response.status);if(!data||!Array.isArray(data.rules))throw new Error('Неожиданный формат ответа сервера');
       if(request!==rulesState.request)return;
       if(sent!==ruleSecret){rulesState.loading=false;loadRules();return;}
-      rulesState.data=data;setMapAgents(data.agents);setMapEditing(data.editing===true,sent);
+      rulesState.data=data;rulesState.failure='';setMapAgents(data.agents);setMapEditing(data.editing===true,sent);
     }catch(error){if(request!==rulesState.request)return;rulesState.error=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;}
     finally{clearTimeout(timeout);if(request===rulesState.request){rulesState.loading=false;rulesController=null;if(state.mode==='rules'){renderProjectOptions();renderRules();}if(state.mode==='agents')renderAgents();}}
     if(!rulesState.skills&&state.mode!=='agents')loadSkills();
@@ -1004,12 +1007,27 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     // alive: a save answers later, and by then the user may have closed this form or opened another.
     return {dialog,form,body,foot,alive:()=>instance===dialogInstance&&dialog.open};
   }
+  // Every form saves the same way: send the change, then close the form, or say what went wrong
+  // and, once the edit key has stopped working, show the command instead. The form may have been
+  // closed or replaced before the answer came (alive); then the tab carries the message.
+  // steps: send, saved(answer), explain(error) -> text, failed(error) -> a better text or '' (it
+  // may reload what the form edits), lost(text), problem(text), commands(), label(), busy.
+  async function saveFromForm(panel,submit,steps){
+    submit.disabled=true;if(steps.busy)submit.textContent=steps.busy;
+    try{const answer=await steps.send();if(panel.alive())panel.dialog.close();steps.saved(answer);}
+    catch(error){
+      const explained=steps.explain(error),message=(steps.failed?await steps.failed(error):'')||explained;
+      if(!panel.alive()){steps.lost(message);return;}
+      steps.problem(message);if(!rulesState.editing)steps.commands();
+    }
+    finally{if(panel.alive()){submit.disabled=false;steps.label();}}
+  }
   const ruleCommandFor=change=>ruleCommand(change,state.mapStore)||'# Карта ещё не сообщила, какое хранилище она показывает. Нажмите «Обновить» и повторите.';
   function ruleProblem(parent){const box=make('div','rule-error');box.setAttribute('role','alert');box.hidden=true;parent.append(box);return text=>{box.textContent=text||'';box.hidden=!text;};}
   function ruleCommandBox(parent,hint=''){
     const box=make('div','rule-command');box.hidden=true;const pre=make('pre');
     const copy=toolButton('Скопировать команду',async()=>{try{await navigator.clipboard.writeText(pre.textContent);copy.textContent='Скопировано';setTimeout(()=>copy.textContent='Скопировать команду',1600);}catch{copy.textContent='Выделите текст';}},'small');
-    box.append(make('div','rule-field-hint',hint||(list(state.mapStore)[0]==='--workspace'?'Выполните в терминале или передайте агенту. Команда меняет правила workspace «'+state.mapStore[1]+'».':'Выполните в терминале. Команда называет файл хранилища, которое показывает карта; чат агента, привязанный к workspace, такую команду не примет.')),pre,copy);parent.append(box);
+    box.append(make('div','rule-field-hint',hint||(list(state.mapStore).length===2&&state.mapStore[0]==='--workspace'?'Выполните в терминале или передайте агенту. Команда меняет правила workspace «'+state.mapStore[1]+'».':'Выполните в терминале. Команда называет файл хранилища, которое показывает карта; чат агента, привязанный к workspace, такую команду не примет.')),pre,copy);parent.append(box);
     return command=>{pre.textContent=command;box.hidden=false;box.scrollIntoView({block:'nearest'});};
   }
   function skillSelect(agent,current){
@@ -1083,8 +1101,9 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     return parts.length?'используй скилл '+pieces.slice(0,-1).join(', ')+' и '+pieces[pieces.length-1]:'';
   }
   function openRuleEditor(options={}){
-    let rule=options.rule||null,template=rule?'text':options.template||'text',textTouched=Boolean(rule),idTouched=false;rulesState.failure='';
-    const {dialog,form,body,foot,alive}=ruleDialog(rule?'Изменить правило':'Новое правило',rule?rule.id+' · '+ruleScopeText(rule):'Агенты загрузят его в начале каждого подходящего чата.');
+    // opened: the version this form was built from; rule: the latest one known, whose version a save names.
+    let rule=options.rule||null,template=rule?'text':options.template||'text',textTouched=Boolean(rule),idTouched=false;const opened=rule;rulesState.failure='';
+    const panel=ruleDialog(rule?'Изменить правило':'Новое правило',rule?rule.id+' · '+ruleScopeText(rule):'Агенты загрузят его в начале каждого подходящего чата.'),{dialog,form,body,foot}=panel;
     const templateRow=make('div','rule-templates'),templateButtons=new Map();templateRow.setAttribute('role','group');templateRow.setAttribute('aria-label','Шаблон правила');
     for(const [key,item] of Object.entries(ruleTemplates)){const button=toolButton('',()=>{template=key;syncTemplate();compose();},'rule-template');button.append(make('strong','',item.label),make('span','',item.hint));templateButtons.set(key,button);templateRow.append(button);}
     const situation=make('input'),situations=make('datalist');situation.type='text';situation.maxLength=200;situation.placeholder='например, создании pull request';situations.id='rule-situations';situation.setAttribute('list',situations.id);skillSituations.forEach(value=>situations.append(new Option(value)));
@@ -1136,7 +1155,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       if(!value.trim())return 'Напишите текст правила.';if(value.trim()==='-')return 'Текст из одного дефиса команда прочитала бы как «возьми текст из stdin». Напишите правило словами.';if(ruleLength(value)>limit)return 'Текст длиннее '+limit+' символов. Разделите его на несколько правил.';
       if(skill.names().some(name=>!RULE_NAME.test(name)))return 'Имя скилла: латиница, цифры, «.», «_», «:» или «-», до 100 символов, начиная с буквы или цифры.';
       if(!rule&&template==='skill'&&!ruleHasSkill(setting))return 'Выберите скилл.';
-      if(rule){const update={action:'update',id:rule.id,expected_updated_at:rule.updated_at};if(value!==rule.text)update.text=value;if(!sameRuleSkills(setting,rule)){update.skill=setting.skill;update.skills=setting.skills;}return 'text' in update||'skill' in update?update:'Изменений нет.';}
+      // Only what was changed here is sent, so a retry after a conflict keeps the other change to fields left alone.
+      if(rule){const update={action:'update',id:rule.id,expected_updated_at:rule.updated_at};if(value!==opened.text)update.text=value;if(!sameRuleSkills(setting,opened)){update.skill=setting.skill;update.skills=setting.skills;}return 'text' in update||'skill' in update?update:'Изменений нет.';}
       const id=idInput.value.trim();if(!RULE_NAME.test(id))return 'ID: 1–100 символов — латиница, цифры, «.», «_», «:» или «-», начиная с буквы или цифры.';
       if(ruleList().some(item=>item.id===id))return 'Правило с ID «'+id+'» уже есть.';const scope=scopeValue();if(!scope)return 'Выберите проект.';
       const add={action:'add',id,scope:scope.scope,text:value};if(scope.project)add.project=scope.project;if(setting.skill)add.skill=setting.skill;if(setting.skills)add.skills=setting.skills;return add;
@@ -1146,46 +1166,40 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     form.addEventListener('submit',async event=>{
       event.preventDefault();problem('');const request=change();if(typeof request==='string'){problem(request);return;}
       if(!rulesState.editing){showCommand(ruleCommandFor(request));return;}
-      submit.disabled=true;submit.textContent='Сохраняем…';
-      try{await sendRuleChange(request);if(alive())dialog.close();announce(rule?'Правило изменено':'Правило добавлено');loadRules();}
-      catch(error){
-        let message=ruleChangeProblem(error);
+      await saveFromForm(panel,submit,{busy:'Сохраняем…',send:()=>sendRuleChange(request),explain:ruleChangeProblem,problem,label:submitLabel,
+        saved:()=>{announce(rule?'Правило изменено':'Правило добавлено');loadRules();},
         // Somebody changed the rule meanwhile: take its new version and keep what is typed here.
-        if(error.code==='conflict'&&rule){
+        failed:async error=>{
+          if(error.code!=='conflict'||!rule)return '';
           await loadRules();const fresh=ruleList().find(item=>item.id===rule.id);
-          if(!fresh)message='Правило удалили, пока форма была открыта. Скопируйте текст, закройте форму и добавьте правило заново.';
-          else if(fresh.updated_at!==rule.updated_at){
-            const differs=[];if(fresh.text!==rule.text)differs.push('другой текст: «'+cut(fresh.text,240)+'»');if(!sameRuleSkills(fresh,rule))differs.push('другие скиллы');
-            message='Правило изменили, пока форма была открыта'+(differs.length?'; в памяти теперь '+differs.join(' и '):'')+'. То, что в форме, осталось как было: нажмите «Сохранить» ещё раз, чтобы записать это поверх новой версии.';rule=fresh;
-          }
-        }
-        if(!alive()){rulesState.failure=message;renderRules();return;}
-        problem(message);if(!rulesState.editing){showCommand(ruleCommandFor(request));renderRules();}
-      }
-      finally{if(alive()){submit.disabled=false;submitLabel();}}
+          if(!fresh)return 'Правило удалили, пока форма была открыта. Скопируйте текст, закройте форму и добавьте правило заново.';
+          if(fresh.updated_at===rule.updated_at)return '';
+          const differs=[];if(fresh.text!==rule.text)differs.push('другой текст: «'+cut(fresh.text,240)+'»');if(!sameRuleSkills(fresh,rule))differs.push('другие скиллы');rule=fresh;
+          return 'Правило изменили, пока форма была открыта'+(differs.length?'; в памяти теперь '+differs.join(' и '):'')+'. Нажмите «Сохранить» ещё раз: запишется только то, что вы изменили в этой форме, остальное останется как в новой версии.';
+        },
+        lost:message=>{rulesState.failure=message;renderRules();},commands:()=>{showCommand(ruleCommandFor(request));renderRules();}});
     });
     syncTemplate();compose();submitLabel();dialog.showModal();(rule?text:template==='skill'?situation:template==='naming'?format:text).focus();
   }
   function openRuleRemoval(rule){
     rulesState.failure='';
-    const {dialog,form,body,foot,alive}=ruleDialog(rule.invalid?'Удалить повреждённую запись?':'Удалить правило?',rule.invalid?rule.id:rule.id+' · '+ruleScopeText(rule)),quote=make('blockquote','rule-quote',cut(rule.invalid||rule.text,500));
+    const panel=ruleDialog(rule.invalid?'Удалить повреждённую запись?':'Удалить правило?',rule.invalid?rule.id:rule.id+' · '+ruleScopeText(rule)),{dialog,form,body,foot}=panel,quote=make('blockquote','rule-quote',cut(rule.invalid||rule.text,500));
     body.append(make('p','rule-confirm',rule.invalid?'Эта запись правила повреждена, и агенты её не получают. Удаление нельзя отменить.':'Агенты перестанут получать это правило, когда в следующий раз загрузят правила. Удаление нельзя отменить: вернуть правило можно, только добавив его заново.'),quote);
     const problem=ruleProblem(body),showCommand=ruleCommandBox(body),cancel=toolButton('Отмена',()=>dialog.close()),submit=make('button',rulesState.editing?'danger solid':'primary',rulesState.editing?'Удалить правило':'Показать команду');submit.type='submit';foot.append(cancel,submit);
     form.addEventListener('submit',async event=>{
       event.preventDefault();problem('');const request={action:'remove',id:rule.id,expected_updated_at:rule.updated_at};
       if(!rulesState.editing){showCommand(ruleCommandFor(request));return;}
-      submit.disabled=true;
-      try{await sendRuleChange(request);if(alive())dialog.close();announce('Правило удалено');loadRules();}
-      catch(error){
-        let message=ruleChangeProblem(error);
-        if(error.code==='conflict'&&!rule.invalid){
+      await saveFromForm(panel,submit,{send:()=>sendRuleChange(request),explain:ruleChangeProblem,problem,
+        saved:()=>{announce('Правило удалено');loadRules();},
+        failed:async error=>{
+          if(error.code!=='not_found'&&(error.code!=='conflict'||rule.invalid))return '';
           await loadRules();const fresh=ruleList().find(item=>item.id===rule.id);
-          if(fresh&&fresh.updated_at!==rule.updated_at){rule=fresh;quote.textContent=cut(fresh.text,500);message='Правило изменили, пока вы подтверждали удаление. Выше — его новая версия: нажмите «Удалить правило» ещё раз, если всё ещё хотите удалить.';}
-        }else if(error.code==='not_found')loadRules();
-        if(!alive()){rulesState.failure=message;renderRules();return;}
-        problem(message);if(!rulesState.editing){submit.className='primary';submit.textContent='Показать команду';showCommand(ruleCommandFor(request));renderRules();}
-      }
-      finally{if(alive())submit.disabled=false;}
+          if(error.code!=='conflict'||!fresh||fresh.updated_at===rule.updated_at)return '';
+          rule=fresh;quote.textContent=cut(fresh.text,500);
+          return 'Правило изменили, пока вы подтверждали удаление. Выше — его новая версия: нажмите «Удалить правило» ещё раз, если всё ещё хотите удалить.';
+        },
+        lost:message=>{rulesState.failure=message;renderRules();},commands:()=>{submit.className='primary';showCommand(ruleCommandFor(request));renderRules();},
+        label:()=>{submit.textContent=rulesState.editing?'Удалить правило':'Показать команду';}});
     });
     dialog.showModal();cancel.focus();
   }
@@ -1259,6 +1273,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       const box=make('div','tools-warning rule-invalid'),remove=keyed(toolButton(rulesState.editing?'Удалить запись':'Команда удаления',()=>openRuleRemoval({id:item.id,updated_at:typeof item.updated_at==='string'?item.updated_at:'invalid',invalid:String(item.error||'Запись не читается.')}),'small'),'rule-remove:'+item.id);
       box.setAttribute('role','status');box.append(make('span','','Запись правила «'+item.id+'» повреждена, и агенты её не получают: '+cut(String(item.error||'запись не читается'),200)),remove);root.append(box);
     }
+    for(const item of list(rulesState.data.unsupported_rules).filter(item=>item&&typeof item.id==='string'))toolWarning(root,'Правило «'+item.id+'» записано более новой версией Richi, и эта версия его агентам не отдаёт. Обновите Richi: richi update.');
     renderRuleMode(root);
     const actions=make('div','rules-actions');actions.append(keyed(toolButton('+ Новое правило',()=>openRuleEditor(),'primary'),'rule-add'),keyed(toolButton('Скилл для действия',()=>openRuleEditor({template:'skill'})),'rule-add:skill'),keyed(toolButton('Формат имён',()=>openRuleEditor({template:'naming'})),'rule-add:naming'));root.append(actions);
     if(!all.length){renderRuleStarters(root);return;}
@@ -1339,7 +1354,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     finally{agentsState.busy=false;renderAgents();}
   }
   function openAgentEditor(agent=null){
-    const {dialog,form,body,foot,alive}=ruleDialog(agent?'Изменить агента':'Новый агент',agent?agent.name+' · '+agent.id:'Опишите агента, которого в Richi нет, чтобы правила могли называть скилл и для него.');
+    const panel=ruleDialog(agent?'Изменить агента':'Новый агент',agent?agent.name+' · '+agent.id:'Опишите агента, которого в Richi нет, чтобы правила могли называть скилл и для него.'),{dialog,form,body,foot}=panel;
     const name=make('input'),folder=make('input'),id=make('input'),variable=make('input'),manual=make('select');let idTouched=false;
     for(const input of [name,folder,id,variable]){input.type='text';input.autocomplete='off';input.spellcheck=false;}
     name.maxLength=60;name.placeholder='Gemini CLI';folder.maxLength=1000;folder.placeholder='~/.gemini/skills';id.maxLength=32;id.placeholder='gemini-cli';variable.maxLength=165;variable.placeholder='GEMINI_CLI=1';
@@ -1379,37 +1394,29 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       event.preventDefault();problem('');const request=change();if(typeof request==='string'){problem(request);return;}
       if(agent?.updated_at)request.expected_updated_at=agent.updated_at;
       if(!rulesState.editing){showCommand(agentCommand(request));return;}
-      submit.disabled=true;submit.textContent='Сохраняем…';
-      try{acceptAgents((await sendMapChange('/api/agents',request)).listing);if(alive())dialog.close();agentsState.selected=request.id;agentsState.problem='';announce(agent?'Агент изменён':'Агент добавлен');renderAgents();}
-      catch(error){
-        const message=agentChangeProblem(error);
+      await saveFromForm(panel,submit,{busy:'Сохраняем…',send:()=>sendMapChange('/api/agents',request),explain:agentChangeProblem,problem,
+        saved:answer=>{acceptAgents(answer.listing);agentsState.selected=request.id;agentsState.problem='';announce(agent?'Агент изменён':'Агент добавлен');renderAgents();},
         // Somebody changed the agent meanwhile: the next attempt goes against its new version.
-        if(agent&&error.code==='conflict'){await loadAgents();agent=freshAgent(agent);}
-        if(!alive()){agentsState.problem=message;renderAgents();return;}
-        problem(message);if(!rulesState.editing){showCommand(agentCommand(request));renderAgents();}
-      }
-      finally{if(alive()){submit.disabled=false;submit.textContent=rulesState.editing?(agent?'Сохранить':'Добавить агента'):'Показать команду';}}
+        failed:async error=>{if(agent&&error.code==='conflict'){await loadAgents();agent=freshAgent(agent);}return '';},
+        lost:message=>{agentsState.problem=message;renderAgents();},commands:()=>{showCommand(agentCommand(request));renderAgents();},
+        label:()=>{submit.textContent=rulesState.editing?(agent?'Сохранить':'Добавить агента'):'Показать команду';}});
     });
     dialog.showModal();name.focus();
   }
   function openAgentRemoval(agent){
     const rules=agentRules(agent).length,reset=agent.builtin;
-    const {dialog,form,body,foot,alive}=ruleDialog(reset?'Сбросить к встроенным настройкам?':'Удалить агента?',agent.name+' · '+agent.id);
+    const panel=ruleDialog(reset?'Сбросить к встроенным настройкам?':'Удалить агента?',agent.name+' · '+agent.id),{dialog,form,body,foot}=panel;
     body.append(make('p','rule-confirm',reset?'Выключенные источники скиллов снова включатся, а добавленные папки исчезнут из списка. Сами папки и скиллы на диске не меняются.':
       'Richi перестанет учитывать этого агента: он пропадёт из форм правил и списков скиллов. Его папки и скиллы на диске не меняются.'+(rules?' Правила, которые называют скилл для него ('+rules+'), останутся как есть.':'')));
     const problem=ruleProblem(body),showCommand=ruleCommandBox(body,agentCommandHint),cancel=toolButton('Отмена',()=>dialog.close()),label=reset?'Сбросить':'Удалить агента',submit=make('button',rulesState.editing?(reset?'primary':'danger solid'):'primary',rulesState.editing?label:'Показать команду');submit.type='submit';foot.append(cancel,submit);
     form.addEventListener('submit',async event=>{
       event.preventDefault();problem('');const request={action:'remove',id:agent.id,expected_updated_at:agent.updated_at};
       if(!rulesState.editing){showCommand(agentCommand(request));return;}
-      submit.disabled=true;
-      try{acceptAgents((await sendMapChange('/api/agents',request)).listing);if(alive())dialog.close();agentsState.problem='';announce(reset?'Настройки агента сброшены':'Агент удалён');renderAgents();}
-      catch(error){
-        const message=agentChangeProblem(error);
-        if(error.code==='conflict'){await loadAgents();agent=freshAgent(agent);}
-        if(!alive()){agentsState.problem=message;renderAgents();return;}
-        problem(message);if(!rulesState.editing){submit.className='primary';submit.textContent='Показать команду';showCommand(agentCommand(request));renderAgents();}
-      }
-      finally{if(alive())submit.disabled=false;}
+      await saveFromForm(panel,submit,{send:()=>sendMapChange('/api/agents',request),explain:agentChangeProblem,problem,
+        saved:answer=>{acceptAgents(answer.listing);agentsState.problem='';announce(reset?'Настройки агента сброшены':'Агент удалён');renderAgents();},
+        failed:async error=>{if(error.code==='conflict'){await loadAgents();agent=freshAgent(agent);}return '';},
+        lost:message=>{agentsState.problem=message;renderAgents();},commands:()=>{submit.className='primary';showCommand(agentCommand(request));renderAgents();},
+        label:()=>{submit.textContent=rulesState.editing?label:'Показать команду';}});
     });
     dialog.showModal();cancel.focus();
   }

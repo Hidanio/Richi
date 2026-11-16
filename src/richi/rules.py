@@ -10,7 +10,10 @@ Each rule is one `rule:<id>` row of the store's metadata table. Every supported
 schema has that table, so rules need no migration, and backups and workspace
 copies carry them. A row keeps the fields this version does not know, so a
 store that a newer Richi wrote stays readable and editable; a row that cannot
-be read is reported and skipped, never allowed to hide the other rules.
+be read is reported and skipped, never allowed to hide the other rules. A
+field that changes what a rule means must not be ignored that way: a rule that
+has one says so in `requires`, the format a reader has to know, and a version
+that does not know it leaves the rule out and reports it instead of serving it.
 
 Rules are instructions agents obey, so every change is also kept in a short
 log (`rule-log:` rows): the rule before and after, when, and the chat that
@@ -19,6 +22,7 @@ made the change, as far as Richi can tell.
 import json
 import os
 import re
+import shlex
 import sys
 
 from . import agents
@@ -37,6 +41,9 @@ MAX_TOTAL = 20000
 MAX_SOURCE = 500
 MAX_CHANGE = 100000
 MAX_LOG = 200
+# The rule format this version reads. Raise it, and write it as a rule's `requires`, with the
+# first field that changes when or whether a rule applies: older versions then skip that rule.
+FORMAT = 1
 # Fields this version understands, in the order commands print them. A stored
 # rule must have the REQUIRED ones; any other field it has is kept as it is.
 KNOWN = ("id", "scope", "project_id", "text", "skill", "skills", "source", "changed_by", "created_at", "updated_at")
@@ -66,6 +73,14 @@ def rule_id(value):
 
 def valid_skill(value):
     return isinstance(value, str) and _NAME.fullmatch(value) is not None
+
+
+class Unsupported(ValueError):
+    """A stored rule that only a newer Richi may serve."""
+
+    def __init__(self, level):
+        super().__init__("needs a Richi that reads rule format %d; this one reads format %d" % (level, FORMAT))
+        self.level = level
 
 
 def _failure(api, message, code):
@@ -134,7 +149,8 @@ def add_commands(commands, api):
                              "an empty value removes them")
     update.add_argument("--source", help="New source; an empty value removes it")
     remove = actions.add_parser("remove", help="Delete a rule; requires the version from show or list")
-    remove.add_argument("id", type=_argument_id, help="ID of the rule to delete")
+    # Not checked as an ID: a row that cannot be read is removed by whatever its key holds.
+    remove.add_argument("id", help="ID of the rule to delete")
     remove.add_argument("--expected-updated-at", required=True, metavar="TIMESTAMP",
                         help="The rule's updated_at as last read; a newer version is a conflict")
     apply = actions.add_parser("apply", help="Add, update or remove a rule described by a JSON object")
@@ -142,13 +158,15 @@ def add_commands(commands, api):
                        help="File with one change object: action (add, update or remove), id and that action's "
                             "fields; - reads it from stdin")
     log = actions.add_parser("log", help="Show recent rule changes: who changed what, with the rule before and after")
-    log.add_argument("--id", type=_argument_id, help="Only the changes of this rule")
+    log.add_argument("--id", help="Only the changes of this rule")
     log.add_argument("--entries", metavar="N", type=_argument_entries, default=20,
                      help="How many of the latest changes to show, 1-%d (default: %%(default)s)" % MAX_LOG)
+    clear = actions.add_parser("clear-log", help="Delete the recorded rule changes, all or those of one rule")
+    clear.add_argument("--id", help="Only the changes of this rule")
 
 
 def writes(args):
-    return args.command == "rules" and args.action in {"add", "update", "remove", "apply"}
+    return args.command == "rules" and args.action in {"add", "update", "remove", "apply", "clear-log"}
 
 
 def _storable(value):
@@ -243,8 +261,15 @@ def actor():
 def _decode(key, value):
     """The stored rule, or ValueError. Fields this version does not know are kept."""
     record = json.loads(value)
-    if not isinstance(record, dict) or not set(REQUIRED) <= set(record) or not isinstance(record["id"], str) \
-            or PREFIX + record["id"] != key:
+    if not isinstance(record, dict):
+        raise ValueError("not an object")
+    # First of all: a newer format may also change the fields checked below.
+    level = record.get("requires", FORMAT)
+    if type(level) is not int or level < 1:
+        raise ValueError("invalid requires")
+    if level > FORMAT:
+        raise Unsupported(level)
+    if not set(REQUIRED) <= set(record) or not isinstance(record["id"], str) or PREFIX + record["id"] != key:
         raise ValueError("a required field is missing or the ID does not match")
     rule_id(record["id"])
     if not isinstance(record["text"], str) or not isinstance(record["updated_at"], str):
@@ -257,7 +282,8 @@ def _decode(key, value):
                                or not all(agents.valid_id(agent) for agent in skills)
                                or any(name is not None and not valid_skill(name) for name in skills.values())):
         raise ValueError("invalid skills")
-    if record["scope"] not in SCOPES or (record["scope"] == "project") != isinstance(record["project_id"], str):
+    scope, project = record["scope"], record["project_id"]
+    if not ((scope == "global" and project is None) or (scope == "project" and isinstance(project, str))):
         raise ValueError("invalid scope")
     rule = {field: record.get(field) for field in KNOWN}
     rule.update((field, content) for field, content in record.items() if field not in KNOWN)
@@ -273,25 +299,47 @@ def _stored_version(value):
     return version if isinstance(version, str) else "invalid"
 
 
+def _removal(identifier, version):
+    """The command that removes a row by its key, whatever the key holds."""
+    words = ["richi", "rules", "remove", shlex.quote(identifier), "--expected-updated-at", shlex.quote(version)]
+    if identifier.startswith("-"):
+        # Only after -- is a word that begins with a dash read as the ID.
+        words = words[:3] + words[4:] + ["--", words[3]]
+    return " ".join(words)
+
+
 def scan(conn):
-    """(rules: global first, then by project and ID; rows that cannot be read)."""
+    """(rules: global first, then by project and ID; rows that cannot be read; rules a newer Richi must serve)."""
     rows = conn.execute("SELECT key, value FROM metadata WHERE 1=1 AND key LIKE 'rule:%' ORDER BY key").fetchall()
-    rules, invalid = [], []
+    rules, invalid, unsupported = [], [], []
     for key, value in rows:
         if not key.startswith(PREFIX):
             continue
+        identifier = key[len(PREFIX):]
         try:
             rules.append(_decode(key, value))
+        except Unsupported as exc:
+            unsupported.append({"id": identifier, "requires": exc.level, "error": str(exc), "next": "richi update"})
         except (ValueError, TypeError, KeyError, RecursionError) as exc:
             version = _stored_version(value)
-            invalid.append({"id": key[len(PREFIX):], "error": str(exc) or type(exc).__name__, "updated_at": version,
-                            "next": "richi rules remove " + key[len(PREFIX):] + " --expected-updated-at " + version})
-    return sorted(rules, key=lambda rule: (rule["scope"] != "global", rule["project_id"] or "", rule["id"])), invalid
+            invalid.append({"id": identifier, "error": str(exc) or type(exc).__name__, "updated_at": version,
+                            "next": _removal(identifier, version)})
+    rules.sort(key=lambda rule: (rule["scope"] != "global", rule["project_id"] or "", rule["id"]))
+    return rules, invalid, unsupported
 
 
 def load(conn, api=None):
-    """Every stored rule that can be read."""
+    """Every stored rule this version serves."""
     return scan(conn)[0]
+
+
+def _left_out(result, invalid, unsupported):
+    """Say which stored rules are not among the returned ones: the user set them, and agents do not get them."""
+    if invalid:
+        result["invalid_rules"] = invalid
+    if unsupported:
+        result["unsupported_rules"] = unsupported
+    return result
 
 
 def _project(conn, project_id, api):
@@ -348,8 +396,24 @@ def log(conn, identifier=None, entries=20):
     return {"view": "rules-log", "entries": found, "kept": MAX_LOG}
 
 
+def clear_log(conn, identifier=None):
+    """Delete the recorded changes, all or one rule's: the log keeps rule texts, removed rules included."""
+    rows = conn.execute("SELECT key, value FROM metadata WHERE 1=1 AND key LIKE 'rule-log:%'").fetchall()
+    keys = []
+    for key, value in rows:
+        try:
+            entry = json.loads(value)
+        except (ValueError, RecursionError):
+            entry = None
+        # An entry that cannot be read belongs to no rule, so only clearing everything removes it.
+        if identifier is None or (isinstance(entry, dict) and entry.get("id") == identifier):
+            keys.append((key,))
+    conn.executemany("DELETE FROM metadata WHERE 1=1 AND key = ?", keys)
+    return {"view": "rules-log", "results": [{"status": "cleared", "entries": len(keys)}]}
+
+
 def show(conn, api, workspace, project_id, agent=None, unmatched_path=None):
-    rules, invalid = scan(conn)
+    rules, invalid, unsupported = scan(conn)
     if project_id is not None:
         _project(conn, project_id, api)
     applicable = [rule for rule in rules if rule["scope"] == "global" or rule["project_id"] == project_id]
@@ -371,10 +435,7 @@ def show(conn, api, workspace, project_id, agent=None, unmatched_path=None):
             "error": unmatched_path,
             "next": "These are the global rules only. Ask the user whether this repository belongs to the "
                     "workspace (richi project add PATH registers it), or pass --project ID."}
-    if invalid:
-        # Tell the user: a rule they set is not reaching agents.
-        result["invalid_rules"] = invalid
-    return result
+    return _left_out(result, invalid, unsupported)
 
 
 def _stdin_text(stdin):
@@ -421,12 +482,13 @@ def change(conn, request, api, checked_project=None):
             or set(request) - CHANGE_FIELDS[request["action"]]:
         raise api.MemoryError("A rule change is an object with action add, update or remove, id and that "
                               "action's fields only")
-    action = request["action"]
-    try:
-        identifier = rule_id(request.get("id"))
-    except ValueError as exc:
-        raise api.MemoryError(str(exc)) from exc
+    action, identifier = request["action"], request.get("id")
+    if not isinstance(identifier, str):
+        raise api.MemoryError(ID_HELP)
     row = conn.execute("SELECT key, value FROM metadata WHERE 1=1 AND key = ?", (PREFIX + identifier,)).fetchone()
+    # Only removal takes a key that is not an ID: such a row cannot be read and must not stay forever.
+    if _NAME.fullmatch(identifier) is None and not (action == "remove" and row is not None):
+        raise api.MemoryError(ID_HELP)
     if action == "add":
         if row is not None:
             raise _failure(api, "Rule " + identifier + " already exists; change it with rules update", "exists")
@@ -453,10 +515,11 @@ def change(conn, request, api, checked_project=None):
     try:
         rule = _decode(row[0], row[1])
     except (ValueError, TypeError, KeyError, RecursionError) as exc:
-        # A row that cannot be read can still be removed, so that it does not stay forever.
+        # A row this version cannot read or may not serve can still be removed, but not changed.
         if action != "remove":
-            raise api.MemoryError("Invalid stored rule " + identifier + ": " + str(exc) + "; remove it with rules "
-                                  "remove " + identifier + " --expected-updated-at " + _stored_version(row[1])) from exc
+            problem = ("Rule " + identifier + " " + str(exc) + "; update Richi to change it"
+                       if isinstance(exc, Unsupported) else "Invalid stored rule " + identifier + ": " + str(exc))
+            raise api.MemoryError(problem + "; remove it with " + _removal(identifier, _stored_version(row[1]))) from exc
         _check_version(identifier, _stored_version(row[1]), expected, api)
         conn.execute("DELETE FROM metadata WHERE 1=1 AND key = ?", (row[0],))
         _record(conn, api, "removed", identifier, {"id": identifier, "unreadable": row[1][:MAX_TEXT * 2]}, None)
@@ -496,8 +559,10 @@ def run(conn, args, api, workspace=None, checked_project=None, stdin=None, unmat
         return show(conn, api, workspace, project_id, args.agent or agents.detect(), unmatched_path)
     if args.action == "log":
         return log(conn, args.id, args.entries)
+    if args.action == "clear-log":
+        return clear_log(conn, args.id)
     if args.action == "list":
-        rules, invalid = scan(conn)
+        rules, invalid, unsupported = scan(conn)
         if args.global_scope:
             rules = [rule for rule in rules if rule["scope"] == "global"]
         elif args.project is not None:
@@ -505,10 +570,7 @@ def run(conn, args, api, workspace=None, checked_project=None, stdin=None, unmat
             rules = [rule for rule in rules if rule["project_id"] == args.project]
         projects = [{"id": row[0], "name": row[1]}
                     for row in conn.execute("SELECT id, name FROM projects WHERE 1=1 ORDER BY id")]
-        result = {"view": "rules", "workspace": workspace, "rules": rules, "agents": agents.describe(),
-                  "projects": projects, "characters": sum(len(rule["text"]) for rule in rules),
-                  "limit_characters": MAX_TOTAL}
-        if invalid:
-            result["invalid_rules"] = invalid
-        return result
+        return _left_out({"view": "rules", "workspace": workspace, "rules": rules, "agents": agents.describe(),
+                          "projects": projects, "characters": sum(len(rule["text"]) for rule in rules),
+                          "limit_characters": MAX_TOTAL}, invalid, unsupported)
     return change(conn, _request(args, api, stdin), api, checked_project)

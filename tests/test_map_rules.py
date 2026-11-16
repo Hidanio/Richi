@@ -552,21 +552,29 @@ class MapRulesAPITests(unittest.TestCase):
         self.assertEqual(catalog["skills"], [{"name": "pr-description", "description": "Writes pull request descriptions.",
                                               "kind": "skills", "agents": ["codex"]}])
         self.assertNotIn("roots", catalog)
-        self.assertEqual(health["store_arguments"], ["--db", str(self.database)])
+        self.assertEqual(health["store_arguments"], ["--workspace", "default", "--db", str(self.database)])
 
     def test_a_command_names_the_workspace_only_when_the_name_leads_to_this_store(self):
         own = config.resolve_settings(workspace="default").database
-        by_file = ["--db", str(self.database)]
+        # The default workspace is named with the file: --db alone is refused in a terminal whose
+        # current workspace is a named one.
+        by_file = ["--workspace", "default", "--db", str(self.database)]
         self.assertEqual(serve.store_arguments(own, None, "default"), ["--workspace", "default"])
         # A map started with --db keeps the workspace's name and shows another file.
         self.assertEqual(serve.store_arguments(self.database, None, "default"), by_file)
         # What selected storage for the map's own process says nothing about the user's terminal.
-        with mock.patch.dict(os.environ, {"RICHI_DB": str(self.database)}):
+        with mock.patch.dict(os.environ, {"RICHI_DB": str(self.database), "RICHI_DATA_DIR": str(self.root)}):
             self.assertEqual(serve.store_arguments(self.database, None, "default"), by_file)
             self.assertEqual(serve.store_arguments(own, None, "default"), ["--workspace", "default"])
-            self.assertEqual(os.environ["RICHI_DB"], str(self.database))
+            # The launcher resolves a name with the variables it is given, the process's own by default.
+            self.assertEqual((config.resolve_settings(workspace="default").database,
+                              config.resolve_settings(workspace="default", environ={}).database), (self.database, own))
         settings = self.root / "config.json"
-        self.assertEqual(serve.store_arguments(self.database, settings, None, True), ["--config", str(settings), *by_file])
+        self.assertEqual(serve.store_arguments(self.database, settings, None, True),
+                         ["--config", str(settings), "--db", str(self.database)])
+        # An installed launcher older than this runtime cannot resolve the name by itself: the file is named.
+        with mock.patch.object(serve, "resolve_settings", lambda workspace=None: config.resolve_settings(workspace=workspace)):
+            self.assertEqual(serve.store_arguments(own, None, "default"), ["--workspace", "default", "--db", str(own)])
         for workspace in ("no-such-workspace", "Not A Name", None):
             self.assertEqual(serve.store_arguments(self.database, None, workspace), by_file)
 

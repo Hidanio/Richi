@@ -55,7 +55,8 @@ standing rules, loaded with `rules show`.
    A rule's `use_skill` is the skill to use whenever the rule applies; if `agent` is
    null, run the command again with `--agent` and your agent ID. Tell the user when
    the answer has `project_path_problem` (only global rules came back: the repository
-   is not registered) or `invalid_rules` (stored rules that cannot be read).
+   is not registered), `invalid_rules` (stored rules that cannot be read) or
+   `unsupported_rules` (rules that need a newer Richi).
 
 ## Retrieve the evidence needed
 

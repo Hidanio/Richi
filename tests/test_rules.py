@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shlex
 import sqlite3
 import subprocess
 import sys
@@ -434,6 +435,102 @@ class RulesTests(unittest.TestCase):
         self.assertEqual([rule["id"] for rule in self.command("alpha", "rules", "list")["rules"]],
                          ["extra-0", "extra-1", "extra-2", "extra-3", "other"])
         self.assertEqual(self.command("alpha", "check")["status"], "ok")
+
+    def stored(self, store, key, value=None, **changes):
+        """Write a metadata row directly, as a hand edit or another Richi version would; value None edits the row."""
+        database = self.configs[store].parent / "memory.sqlite3"
+        with closing(sqlite3.connect(str(database))) as conn, conn:
+            if value is None:
+                row = json.loads(conn.execute("SELECT value FROM metadata WHERE key = ?", (key,)).fetchone()[0])
+                row.update(changes)
+                value = json.dumps(row)
+            conn.execute("INSERT INTO metadata(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                         (key, value))
+
+    def test_a_row_of_any_shape_or_key_is_listed_and_can_be_removed(self):
+        self.add("alpha", "first", "--global")
+        self.add("alpha", "second", "--global")
+        self.add("alpha", "third", "--project", "service")
+        # Each of these once took every rules command down, or could not be removed.
+        self.stored("alpha", "rule:second", project_id=5)
+        self.stored("alpha", "rule:third", project_id=["service"])
+        self.stored("alpha", "rule:two words", "{}")
+        self.stored("alpha", "rule:-dash", "[1]")
+        self.stored("alpha", "rule:", '"text"')
+        for view in ("show", "list"):
+            with self.subTest(view=view):
+                listed = self.command("alpha", "rules", view)
+                self.assertEqual([rule["id"] for rule in listed["rules"]], ["first"])
+                self.assertEqual({item["id"]: item["next"] for item in listed["invalid_rules"]}, {
+                    "": "richi rules remove '' --expected-updated-at invalid",
+                    "-dash": "richi rules remove --expected-updated-at invalid -- -dash",
+                    "second": "richi rules remove second --expected-updated-at " + listed["invalid_rules"][2]["updated_at"],
+                    "third": "richi rules remove third --expected-updated-at " + listed["invalid_rules"][3]["updated_at"],
+                    "two words": "richi rules remove 'two words' --expected-updated-at invalid"})
+        # A key that is not an ID is accepted only to remove the row that has it.
+        for argv in (["rules", "remove", "no such row", "--expected-updated-at", "invalid"],
+                     ["rules", "update", "two words", "--expected-updated-at", "invalid", "--text", "x"],
+                     ["rules", "add", "two words", "--global", "--text", "x"]):
+            self.command("alpha", *argv, ok=False)
+        self.assertEqual(self.command("alpha", "rules", "remove", "two words", "--expected-updated-at", "other",
+                                      ok=False)["code"], "conflict")
+        # The command each row names removes it, as a shell would split it.
+        for item in listed["invalid_rules"]:
+            words = shlex.split(item["next"])
+            self.assertEqual(words[0], "richi")
+            self.assertEqual(self.command("alpha", *words[1:])["results"], [{"id": item["id"], "status": "removed"}])
+        self.assertNotIn("invalid_rules", self.command("alpha", "rules", "list"))
+
+    def test_a_rule_that_needs_a_newer_format_is_left_out_not_served(self):
+        paused = self.add("alpha", "paused", "--global", text="Use the old flow.")
+        self.add("alpha", "plain", "--global", text="Reply in Russian.")
+        # A newer Richi marks a rule whose new field changes whether it applies; here, a pause.
+        self.stored("alpha", "rule:paused", requires=rules.FORMAT + 1, enabled=False)
+        # A marker this version satisfies changes nothing, and the fields beside it are kept.
+        self.stored("alpha", "rule:plain", requires=rules.FORMAT, note="kept")
+        for view in ("show", "list"):
+            with self.subTest(view=view):
+                listed = self.command("alpha", "rules", view)
+                self.assertEqual([(rule["id"], rule["requires"], rule["note"]) for rule in listed["rules"]],
+                                 [("plain", rules.FORMAT, "kept")])
+                self.assertEqual(listed["unsupported_rules"],
+                                 [{"id": "paused", "requires": rules.FORMAT + 1, "next": "richi update",
+                                   "error": listed["unsupported_rules"][0]["error"]}])
+                self.assertIn("format %d" % (rules.FORMAT + 1), listed["unsupported_rules"][0]["error"])
+                self.assertNotIn("invalid_rules", listed)
+        # It can be removed, with its own version, but not changed by a version that would drop its meaning.
+        refused = self.command("alpha", "rules", "update", "paused", "--expected-updated-at", paused["updated_at"],
+                               "--text", "x", ok=False)["error"]
+        self.assertIn("update Richi", refused)
+        self.assertEqual(self.command("alpha", "rules", "add", "paused", "--global", "--text", "x", ok=False)["code"],
+                         "exists")
+        # A marker of the wrong type is damage, not a newer format.
+        self.stored("alpha", "rule:plain", requires="2")
+        damaged = self.command("alpha", "rules", "list")
+        self.assertEqual(([rule["id"] for rule in damaged["rules"]], [item["id"] for item in damaged["invalid_rules"]]),
+                         ([], ["plain"]))
+        removed = self.command("alpha", "rules", "remove", "paused", "--expected-updated-at", paused["updated_at"])
+        self.assertEqual(removed["results"], [{"id": "paused", "status": "removed"}])
+        self.assertNotIn("unsupported_rules", self.command("alpha", "rules", "list"))
+
+    def test_the_change_log_can_be_cleared(self):
+        secret = self.add("alpha", "secret", "--global", text="The staging token is EXAMPLE-0000.")
+        self.add("alpha", "names", "--global", text="Name branches by task.")
+        self.command("alpha", "rules", "remove", "secret", "--expected-updated-at", secret["updated_at"])
+        self.add("beta", "other", "--global")
+        # A removed rule's text stays in the log until the user clears it.
+        self.assertIn("EXAMPLE-0000", json.dumps(self.command("alpha", "rules", "log")))
+        cleared = self.command("alpha", "rules", "clear-log", "--id", "secret")
+        self.assertEqual(cleared, {"view": "rules-log", "results": [{"status": "cleared", "entries": 2}]})
+        left = self.command("alpha", "rules", "log")["entries"]
+        self.assertEqual([entry["id"] for entry in left], ["names"])
+        self.assertNotIn("EXAMPLE-0000", json.dumps(left))
+        self.assertEqual(self.command("alpha", "rules", "clear-log", "--id", "secret")["results"][0]["entries"], 0)
+        self.assertEqual(self.command("alpha", "rules", "clear-log")["results"][0]["entries"], 1)
+        self.assertEqual(self.command("alpha", "rules", "log")["entries"], [])
+        # The rules themselves and another workspace's log are untouched.
+        self.assertEqual([rule["id"] for rule in self.command("alpha", "rules", "list")["rules"]], ["names"])
+        self.assertEqual(len(self.command("beta", "rules", "log")["entries"]), 1)
 
 
 class RulesIntegrationTests(unittest.TestCase):

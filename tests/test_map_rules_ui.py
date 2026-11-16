@@ -1,11 +1,12 @@
 """The page's own logic for rules and agents: skills per agent, and commands the real CLI accepts."""
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import closing, redirect_stderr, redirect_stdout
 import io
 import json
 import os
 from pathlib import Path
 import shlex
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -147,12 +148,17 @@ for(const unknown of [undefined,null,[],{workspace:'team'}])assert.equal(ruleCom
 assert.equal(ruleCommand(removal,['--workspace','team']),'richi --workspace team rules remove x --expected-updated-at=v');
 assert.equal(ruleCommand(removal,['--config','/etc/r c.json','--db','/x']),
   "richi --config '/etc/r c.json' --db /x rules remove x --expected-updated-at=v");
+// A damaged row is removed by whatever its key holds; a key with a leading dash goes after --.
+assert.equal(ruleCommand({...removal,id:'two words'},['--db','/x']),"richi --db /x rules remove 'two words' --expected-updated-at=v");
+assert.equal(ruleCommand({...removal,id:'-dash'},['--db','/x']),'richi --db /x rules remove --expected-updated-at=v -- -dash');
 console.log(JSON.stringify({
   tricky:ruleCommand({action:'add',id:'tricky',scope:'global',text,skill:'pr-description',skills:{codex:'code-review'}},store),
   dashed:ruleCommand({action:'add',id:'dashed',scope:'project',project:'service',text:'- one instruction'},store),
   update:ruleCommand({action:'update',id:'tricky',expected_updated_at:'VERSION',text:'-x',skill:'pr-description',skills:{codex:null}},store),
   clear:ruleCommand({action:'update',id:'tricky',expected_updated_at:'VERSION',skill:null,skills:null},store),
-  remove:ruleCommand({action:'remove',id:'tricky',expected_updated_at:'VERSION'},store)}));
+  remove:ruleCommand({action:'remove',id:'tricky',expected_updated_at:'VERSION'},store),
+  oddSpaced:ruleCommand({action:'remove',id:'two words',expected_updated_at:'invalid'},store),
+  oddDashed:ruleCommand({action:'remove',id:'-dash',expected_updated_at:'invalid'},store)}));
 """ % (json.dumps(str(database)), json.dumps(TRICKY)))
         self.assertTrue(all(command.startswith("richi --db '" + str(database) + "' rules ") for command in commands.values()))
         tricky = self.run_command(commands["tricky"])["rule"]
@@ -166,6 +172,10 @@ console.log(JSON.stringify({
         self.assertEqual((cleared["skill"], cleared["skills"]), (None, None))
         self.assertEqual(self.run_command(commands["remove"], ok=False, VERSION=updated["updated_at"])["code"], "conflict")
         self.assertEqual(self.run_command(commands["remove"], VERSION=cleared["updated_at"])["results"][0]["status"], "removed")
+        with closing(sqlite3.connect(str(database))) as conn, conn:
+            conn.executemany("INSERT INTO metadata(key, value) VALUES (?, '{}')", [("rule:two words",), ("rule:-dash",)])
+        for name in ("oddSpaced", "oddDashed"):
+            self.assertEqual(self.run_command(commands[name])["results"][0]["status"], "removed")
 
     def test_a_composed_agent_command_is_accepted_as_written(self):
         (self.home / ".gemini" / "skills").mkdir(parents=True)

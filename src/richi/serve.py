@@ -517,8 +517,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 capabilities=None, store=None):
     database = Path(database).expanduser().resolve()
     # Without a resolved answer, the file itself is the one selector that cannot name another store.
-    store = list(store) if store is not None else [*config_arguments(config_file, config_required),
-                                                    "--db", str(database)]
+    store = list(store) if store is not None else store_arguments(database, config_file, None, config_required)
     runtime = runtime or current_runtime()
     # A running map may withdraw a capability it can no longer provide.
     capabilities = list(CAPABILITIES) if capabilities is None else capabilities
@@ -770,11 +769,6 @@ def config_arguments(config_file, required=False):
     return []
 
 
-# What selects storage for a process: a terminal the user opens later has none of them.
-STORAGE_VARIABLES = ("RICHI_DB", "RICHI_DATA_DIR", "RICHI_CONFIG", "RICHI_WORKSPACE", "RICHI_ACTIVE_CONFIG",
-                     "RICHI_ACTIVE_WORKSPACE")
-
-
 def store_arguments(database, config_file=None, workspace=None, config_required=False):
     """The global options with which a `richi` command reaches the store this map shows.
 
@@ -782,20 +776,22 @@ def store_arguments(database, config_file=None, workspace=None, config_required=
     enough only when, in a terminal that selects no storage of its own, it
     leads to this very database: a map started for an explicit --db or --config
     may carry a workspace's name and still show another file, and a command for
-    it names that file. Call before threads start: the name is resolved with
-    this process's own storage variables set aside.
+    it names that file. The name is therefore resolved without this process's
+    own storage variables.
     """
     database = Path(database)
     if workspace is not None:
-        saved = {key: os.environ.pop(key) for key in STORAGE_VARIABLES if key in os.environ}
         try:
-            if resolve_settings(workspace=workspace).database == database:
+            if resolve_settings(workspace=workspace, environ={}).database == database:
                 return ["--workspace", workspace]
-        except ConfigError:
+        except (ConfigError, TypeError):
+            # TypeError: an installed launcher older than this runtime cannot resolve a name
+            # apart from the process environment, so the command names the file.
             pass
-        finally:
-            os.environ.update(saved)
-    return [*config_arguments(config_file, config_required), "--db", str(database)]
+    selected = config_arguments(config_file, config_required)
+    # Without a configuration file this is the default workspace with another database. Naming
+    # it keeps the command valid where the terminal's current workspace is one that forbids --db.
+    return [*(selected or ["--workspace", "default"]), "--db", str(database)]
 
 
 def source_fingerprint(package=None):

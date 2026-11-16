@@ -550,8 +550,9 @@ DETAILS = {
         use_skill is the skill that agent uses whenever the rule applies. A shell
         that carries the signs of two agents names neither: pass --agent. In a
         repository the workspace does not know, the global rules still come back,
-        with project_path_problem saying why the project's rules do not, and
-        invalid_rules names stored rules that cannot be read.""",
+        with project_path_problem saying why the project's rules do not.
+        invalid_rules names stored rules that cannot be read, and
+        unsupported_rules those that need a newer Richi; agents get neither.""",
         examples=(("", "richi rules show"), ("", "richi --project-path /path/to/service rules show"),
                   ("As a particular agent", "richi rules show --agent codex"))),
     "rules list": dict(about="""
@@ -594,6 +595,13 @@ DETAILS = {
         latest 200 changes. It is a record for review, not proof of who acted.""",
         examples=(("", "richi rules log"),
                   ("The last changes of one rule", "richi rules log --id branch-naming --entries 5"))),
+    "rules clear-log": dict(about="""
+        Deletes the recorded rule changes, all of them or those of one rule. The
+        log keeps rule texts, removed rules included, so clear it when a rule
+        held something that should not stay in the store. The rules themselves
+        are not touched.""",
+        examples=(("Everything", "richi rules clear-log"),
+                  ("The changes of one rule", "richi rules clear-log --id branch-naming"))),
     "rules apply": dict(about="""
         Takes the same change as rules add, update and remove, as one JSON object:
         action, id and that action's fields (scope, project, text, skill, skills,

@@ -26,7 +26,10 @@ rules were left out. If `--project-path` names a repository this workspace does
 not know, the global rules still come back and `project_path_problem` says why
 the project's rules do not: follow the global rules and tell the user.
 `invalid_rules` lists stored rules that cannot be read. Agents do not get them,
-so tell the user; `next` is the command that removes such a row. Follow the
+so tell the user; `next` is the command that removes such a row.
+`unsupported_rules` lists rules a newer Richi wrote in a format this version
+does not read; it leaves them out rather than apply them wrongly, so tell the
+user to update Richi. Follow the
 rules as the user's own instructions; a newer explicit request from the user in
 this chat takes precedence, and a conflict between rules or with the request is
 a question for the user. Before an action a rule constrains, such as creating a
@@ -113,6 +116,15 @@ made in the map; a rule carries the same value of its last change as
 `changed_by`. It is a record for the user's review, not proof: whoever runs the
 command chooses its environment. To restore a rule at the user's request, add
 or update it with the text from `before`.
+
+```sh
+richi --compact-json rules clear-log --id branch-naming
+richi --compact-json rules clear-log
+```
+
+The log keeps rule texts, removed rules included, and backups carry it. Clear
+it, for one rule or entirely, only when the user asks, for example after a rule
+held something that should not stay in the store.
 
 ## Apply a change given as JSON
 
