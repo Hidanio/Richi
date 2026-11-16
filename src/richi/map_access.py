@@ -11,6 +11,8 @@ edit secret, keeps the secret in its session storage and sends it with every
 change. A ticket seen afterwards is spent, and opening the map again replaces
 the secret. A page opened without a valid one, such as a bookmark or an
 earlier tab, still shows the rules and composes the commands that change them.
+The ticket and the secret belong to one store: stores kept in one directory do
+not share them.
 
 Where the browser would receive the ticket as a command-line argument, which
 other local users can list, the map is opened through a private redirect file
@@ -19,6 +21,7 @@ snap or flatpak package) cannot read that file, so when the ticket is still
 unused after FALLBACK_SECONDS the map's plain address is opened as well: the
 map always appears, there composing commands instead of saving.
 """
+import hashlib
 import hmac
 import html
 import json
@@ -28,19 +31,16 @@ import re
 import secrets
 import stat
 import sys
-import threading
 import time
 import webbrowser
 
+from . import private_files
 
-SECRET_FILE = "map-edit-secret"
-TICKET_FILE = "map-edit-ticket"
-REDIRECT_FILE = "map-open.html"
+
 TICKET_SECONDS = 120
 FALLBACK_SECONDS = 5
 HEADER = "X-Richi-Map-Secret"
 _TOKEN = re.compile(r"[0-9a-f]{64}\Z")
-_redeeming = threading.Lock()
 
 
 def runtime_dir(database, create=False):
@@ -48,6 +48,24 @@ def runtime_dir(database, create=False):
     if create:
         directory.mkdir(mode=0o700, exist_ok=True)
     return directory
+
+
+def _file(database, name, suffix="", create=False):
+    """A file of this store's map. The directory may serve several stores, so the name carries the store."""
+    store = hashlib.sha256(os.fsencode(str(Path(database).resolve()))).hexdigest()[:16]
+    return runtime_dir(database, create) / (name + "-" + store + suffix)
+
+
+def ticket_path(database, create=False):
+    return _file(database, "map-edit-ticket", create=create)
+
+
+def secret_path(database, create=False):
+    return _file(database, "map-edit-secret", create=create)
+
+
+def redirect_path(database, create=False):
+    return _file(database, "map-open", ".html", create)
 
 
 def _read_private(path):
@@ -65,25 +83,9 @@ def _read_private(path):
         os.close(descriptor)
 
 
-def _write_private(path, text):
-    """Replace the file atomically with one only this user can read."""
-    temporary = path.with_name("." + path.name + "." + secrets.token_hex(6) + ".tmp")
-    descriptor = os.open(str(temporary), os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            handle.write(text)
-        os.replace(str(temporary), str(path))
-    except BaseException:
-        try:
-            os.unlink(str(temporary))
-        except OSError:
-            pass
-        raise
-
-
 def secret(database):
     """The current edit secret of this store's map, or None when there is no usable one."""
-    value = (_read_private(runtime_dir(database) / SECRET_FILE) or "").strip()
+    value = (_read_private(secret_path(database)) or "").strip()
     return value if _TOKEN.fullmatch(value) else None
 
 
@@ -91,7 +93,7 @@ def _new_secret(database):
     # Each opened page gets a new secret, so a secret that leaked stops
     # working when the user next opens the map; earlier pages compose commands.
     value = secrets.token_hex(32)
-    _write_private(runtime_dir(database, create=True) / SECRET_FILE, value + "\n")
+    private_files.replace(secret_path(database, create=True), value + "\n")
     return value
 
 
@@ -105,17 +107,27 @@ def authorized(database, value):
 def issue_ticket(database, now=None):
     ticket = secrets.token_hex(32)
     expires = (time.time() if now is None else now) + TICKET_SECONDS
-    _write_private(runtime_dir(database, create=True) / TICKET_FILE,
-                   json.dumps({"ticket": ticket, "expires": expires}))
+    path = ticket_path(database, create=True)
+    # Not while a page redeems the previous ticket: this one would be taken for it and deleted.
+    with private_files.locked(path):
+        private_files.replace(path, json.dumps({"ticket": ticket, "expires": expires}))
     return ticket
 
 
 def redeem(database, ticket, now=None):
-    """The edit secret for a valid unspent ticket, else None. A ticket works once."""
+    """The edit secret for a valid unspent ticket, else None. A ticket works once.
+
+    OSError when the secret cannot be written or the ticket cannot be spent:
+    no secret is given out then, and the caller says so instead of calling
+    the ticket invalid.
+    """
     if not isinstance(ticket, str) or not _TOKEN.fullmatch(ticket):
         return None
-    with _redeeming:
-        path = runtime_dir(database) / TICKET_FILE
+    path = ticket_path(database)
+    if not path.parent.is_dir():
+        return None
+    # One at a time, also against a new ticket being issued by another process.
+    with private_files.locked(path):
         try:
             issued = json.loads(_read_private(path) or "null")
             expected, expires = issued["ticket"], float(issued["expires"])
@@ -123,13 +135,19 @@ def redeem(database, ticket, now=None):
             return None
         if not isinstance(expected, str) or not hmac.compare_digest(expected, ticket):
             return None
+        if expires < (time.time() if now is None else now):
+            try:
+                os.unlink(str(path))
+            except OSError:
+                pass
+            return None
+        # The secret first: a ticket is spent only once there is something to give for it.
+        value = _new_secret(database)
         try:
             os.unlink(str(path))
         except FileNotFoundError:
             return None
-        if expires < (time.time() if now is None else now):
-            return None
-        return _new_secret(database)
+        return value
 
 
 def _argument_safe():
@@ -152,7 +170,7 @@ def _tell_system_browser(url):
 def _unused(database, ticket):
     """Whether this ticket is still the one waiting to be redeemed."""
     try:
-        return json.loads(_read_private(runtime_dir(database) / TICKET_FILE) or "null")["ticket"] == ticket
+        return json.loads(_read_private(ticket_path(database)) or "null")["ticket"] == ticket
     except (ValueError, TypeError, KeyError):
         return False
 
@@ -173,9 +191,9 @@ def open_browser(address, database, opener=None, wait=FALLBACK_SECONDS, sleep=ti
     # Anywhere else a browser would get the URL as an argument: it gets the path of a private file instead.
     opener = opener or webbrowser.open
     try:
-        redirect = runtime_dir(database, create=True) / REDIRECT_FILE
+        redirect = redirect_path(database, create=True)
         link = html.escape(target, quote=True)
-        _write_private(redirect, '<!doctype html><meta charset="utf-8"><meta name="referrer" content="no-referrer">'
+        private_files.replace(redirect, '<!doctype html><meta charset="utf-8"><meta name="referrer" content="no-referrer">'
                                  '<meta http-equiv="refresh" content="0;url=' + link + '"><title>Richi</title>'
                                  '<p><a href="' + link + '">Открыть карту Richi</a></p>\n')
     except OSError:

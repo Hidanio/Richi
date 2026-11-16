@@ -326,7 +326,7 @@ class MapControlTests(unittest.TestCase):
         # file: the ticket stays unused, so the map's plain address is opened as well.
         self.assertEqual(len(targets), 2)
         self.assertEqual(targets[1], maps.url(self.port))
-        self.assertTrue(targets[0].startswith("file://") and targets[0].endswith("/runtime/map-open.html"), targets)
+        self.assertRegex(targets[0], r"\Afile://.*/runtime/map-open-[0-9a-f]{16}\.html\Z")
         redirect = Path(unquote(urlsplit(targets[0]).path))
         self.assertIn(maps.url(self.port) + "#ticket=", redirect.read_text(encoding="utf-8"))
         with mock.patch.object(maps.control, "listens", return_value=None):

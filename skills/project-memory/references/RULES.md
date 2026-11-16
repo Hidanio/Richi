@@ -48,7 +48,9 @@ another's terminal carries the signs of both, and Richi then names neither, so
 that no agent is given another's skill. When `agent` comes back null, run the
 command again with `--agent ID` and your own agent ID. Without an agent, a
 rule's `skills` maps an agent ID to a skill of its own that replaces `skill`
-for that agent.
+for that agent. An ID that neither Richi nor any rule knows is still answered,
+with each rule's skill for every agent, and `agent_problem` lists the known
+agents: check the ID, because a misspelt one misses the agent's own skills.
 
 ## Add a rule the user asked to keep
 
@@ -73,8 +75,8 @@ the saved rule. When the user names a skill to use for some work, give it as
 skill asks every agent to use that skill whenever the rule applies. When the
 agents use different skills for it, give one per agent as `--skill AGENT=NAME`
 with an agent ID Richi knows; a plain `--skill NAME` beside them is for the other
-agents. When every known agent gets the same skill, the rule stores it once, as
-the skill for every agent.
+agents, including ones this computer does not list. Without a plain one, a skill
+that every known agent is given is stored once, as the skill for every agent.
 
 The ID is 1–100 letters, digits, `.`, `_`, `:` or `-`, starting with a letter or
 digit; an existing ID is rejected. `--project` must name a project registered in

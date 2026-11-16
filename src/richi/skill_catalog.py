@@ -21,6 +21,7 @@ import stat
 from . import agents
 
 
+# How many skills the list names. The counts go on past it, so that they stay true.
 MAX_SKILLS = 1000
 MAX_HEADER = 32768
 MAX_DESCRIPTION = 600
@@ -46,16 +47,39 @@ def folder_state(path):
     return "ok" if os.access(path, os.R_OK | os.X_OK) else "denied"
 
 
+_COMMENT = re.compile(r"(?:^|\s)#")
+
+
 def _scalar(value):
+    """A YAML scalar as text: without its quotes, and without the comment after it."""
     value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
-        inner = value[1:-1]
-        return inner.replace("''", "'") if value[0] == "'" else inner.replace('\\"', '"')
+    quote = value[:1]
+    if quote not in ("'", '"') or not value[1:]:
+        # In a plain scalar a comment begins with a "#" that follows white space.
+        return _COMMENT.split(value, 1)[0].rstrip()
+    index = 1
+    while index < len(value):
+        if quote == "'" and value.startswith("''", index) or quote == '"' and value[index] == "\\":
+            # '' is a quote inside single quotes; a backslash escapes the next character inside double ones.
+            index += 2
+        elif value[index] == quote:
+            rest = value[index + 1:].strip()
+            if rest and not rest.startswith("#"):
+                break
+            inner = value[1:index]
+            return inner.replace("''", "'") if quote == "'" else inner.replace('\\"', '"')
+        else:
+            index += 1
     return value
 
 
-def front_matter(text):
-    """The top-level scalar fields of a SKILL.md YAML header (a small, safe subset)."""
+def front_matter(text, cut=False):
+    """The top-level scalar fields of a SKILL.md YAML header (a small, safe subset).
+
+    cut: the text is only the beginning of the file. A header that does not
+    end within it still gives the fields read so far: a skill that says it is
+    not for the agent to choose says so near the top.
+    """
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return {}
@@ -82,7 +106,7 @@ def front_matter(text):
                 value += " " + lines[index].strip()
                 index += 1
             fields[key] = _scalar(value)
-    return {}
+    return fields if cut else {}
 
 
 def _read_regular(path, limit):
@@ -105,13 +129,17 @@ def _read_regular(path, limit):
 
 
 def _read_header(path):
-    return _read_regular(path, MAX_HEADER).decode("utf-8", errors="replace")
+    """(the beginning of a text file, whether the file goes on past it)."""
+    data = _read_regular(path, MAX_HEADER + 1)
+    text = data[:MAX_HEADER].decode("utf-8", errors="replace")
+    # Some editors begin a file with a byte order mark, which is not part of its first line.
+    return text[1:] if text.startswith("\ufeff") else text, len(data) > MAX_HEADER
 
 
 def _openai_yaml_allows(directory):
     """False when agents/openai.yaml keeps the agent (such as Codex) from choosing the skill itself."""
     try:
-        text = _read_header(directory / "agents" / "openai.yaml")
+        text, _cut = _read_header(directory / "agents" / "openai.yaml")
     except OSError:
         return True
     section = None
@@ -123,7 +151,7 @@ def _openai_yaml_allows(directory):
         elif section == "policy" and ":" in line:
             key, value = line.split(":", 1)
             if key.strip() == "allow_implicit_invocation":
-                return _scalar(value.split(" #", 1)[0]).lower() != "false"
+                return _scalar(value).lower() != "false"
     return True
 
 
@@ -153,7 +181,8 @@ def _json(path):
     try:
         data = _read_regular(path, MAX_MANIFEST + 1)
         return None if len(data) > MAX_MANIFEST else json.loads(data.decode("utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
+        # RecursionError: brackets nested deeper than the parser goes. A plugin's author wrote the file.
         return None
 
 
@@ -248,24 +277,27 @@ def catalog(environ=None, home=None):
 
     roots lists every skill source of every agent, in registry order, with
     whether its directory exists (or may not be read: denied), whether the
-    user switched it off and how many skills it gives its agent.
+    user switched it off and how many skills it gives its agent; totals has
+    the number of skills each agent has in all. The list itself names at most
+    MAX_SKILLS skills and says so in truncated; the counts include the rest.
     """
     environ = os.environ if environ is None else environ
     home = Path(home) if home is not None else Path.home()
-    skills, seen_roots, truncated = {}, [], False
+    skills, seen_roots, truncated, totals = {}, [], False, {}
     for agent in agents.registry(environ, home):
+        every = set()
         for source in agent.sources(environ, home):
             state = folder_state(source.path)
             entry = {"agent": agent.id, "key": source.key, "kind": source.kind, "layout": source.layout,
                      "path": str(source.path), "exists": state == "ok", "denied": state == "denied",
                      "enabled": source.enabled, "added": source.added, "skills": 0}
             seen_roots.append(entry)
-            if not entry["exists"] or not source.enabled or truncated:
+            if not entry["exists"] or not source.enabled:
                 continue
             found = set()
             for prefix, path, fallback, enabled in _candidates(agent, source.layout, source.path):
                 try:
-                    fields = front_matter(_read_header(path))
+                    fields = front_matter(*_read_header(path))
                 except OSError:
                     continue
                 own = fields.get("name")
@@ -275,9 +307,11 @@ def catalog(environ=None, home=None):
                 if not agents.valid_skill(name) or not _agent_may_choose(agent, path.parent, fields) \
                         or (enabled is not None and own not in enabled and fallback not in enabled):
                     continue
+                found.add(name)
                 if name not in skills and len(skills) >= MAX_SKILLS:
+                    # Counted for its source and its agent, but the list is full.
                     truncated = True
-                    break
+                    continue
                 skill = skills.setdefault(name, {"name": name, "description": "", "kind": source.kind, "agents": []})
                 if not skill["description"]:
                     description = " ".join(str(fields.get("description") or "").split())
@@ -285,7 +319,9 @@ def catalog(environ=None, home=None):
                                             if len(description) > MAX_DESCRIPTION else description)
                 if agent.id not in skill["agents"]:
                     skill["agents"].append(agent.id)
-                found.add(name)
             entry["skills"] = len(found)
+            every |= found
+        totals[agent.id] = len(every)
     ordered = sorted(skills.values(), key=lambda skill: (KINDS.index(skill["kind"]), skill["name"].lower()))
-    return {"skills": ordered, "roots": seen_roots, "agents": agents.describe(environ, home), "truncated": truncated}
+    return {"skills": ordered, "roots": seen_roots, "agents": agents.describe(environ, home), "totals": totals,
+            "truncated": truncated}

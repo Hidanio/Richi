@@ -1,5 +1,6 @@
 """Standing rules: scopes, guards, concurrency and isolation in synthetic stores."""
 from contextlib import closing, redirect_stderr, redirect_stdout
+import functools
 import hashlib
 import io
 import json
@@ -133,6 +134,10 @@ class RulesTests(unittest.TestCase):
             self.add("alpha", "r%d" % index, "--global", text="x" * per_rule)
         error = self.command("alpha", "rules", "add", "extra", "--global", "--text", "y", ok=False)
         self.assertIn("at most %d characters in all" % rules.MAX_TOTAL, error["error"])
+        # Which limit it is travels beside the code, so that nobody has to read the message.
+        self.assertEqual((error["code"], error["subject"]), ("limit", "rules"))
+        long = self.command("alpha", "rules", "add", "long", "--global", "--text", "y" * (rules.MAX_TEXT + 1), ok=False)
+        self.assertEqual((long["code"], long["subject"]), ("limit", "text"))
         rule = self.command("alpha", "rules", "list")["rules"][0]
         self.command("alpha", "rules", "update", rule["id"], "--expected-updated-at", rule["updated_at"],
                      "--text", "short")
@@ -443,6 +448,111 @@ class RulesTests(unittest.TestCase):
                          ["extra-0", "extra-1", "extra-2", "extra-3", "other"])
         self.assertEqual(self.command("alpha", "check")["status"], "ok")
 
+    def test_a_skill_for_every_agent_stays_beside_one_for_each_known_agent(self):
+        def add(identifier, *skills):
+            argv = ["rules", "add", identifier, "--global", "--text", "Review code."]
+            for skill in skills:
+                argv += ["--skill", skill]
+            return self.command("alpha", *argv)["rule"]
+
+        # The plain skill is for the agents this computer does not list; it once vanished without a word.
+        beside = add("beside", "general", "claude=special", "codex=special")
+        self.assertEqual((beside["skill"], beside["skills"]), ("general", {"claude": "special", "codex": "special"}))
+        without = add("without", "general", "claude=", "codex=")
+        self.assertEqual((without["skill"], without["skills"]), ("general", {"claude": None, "codex": None}))
+        # The map sends the same request as one object.
+        sent = {"action": "add", "id": "page", "scope": "global", "text": "Review code.", "skill": "general",
+                "skills": {"claude": "special", "codex": "special"}}
+        page = self.command("alpha", "rules", "apply", "--json", "-", stdin=json.dumps(sent))["rule"]
+        self.assertEqual((page["skill"], page["skills"]), (beside["skill"], beside["skills"]))
+        changed = self.command("alpha", "rules", "update", "without", "--expected-updated-at", without["updated_at"],
+                               "--skill", "other", "--skill", "claude=own", "--skill", "codex=own")["rule"]
+        self.assertEqual((changed["skill"], changed["skills"]), ("other", {"claude": "own", "codex": "own"}))
+
+        def used(agent):
+            shown = self.command("alpha", "rules", "show", "--agent", agent)
+            return shown, {rule["id"]: rule["use_skill"] for rule in shown["rules"]}
+
+        self.assertEqual(used("codex")[1], {"beside": "special", "page": "special", "without": "own"})
+        # An agent nobody lists here gets the skill for every agent, and is told that nothing knows
+        # its ID: most likely it is a misspelt one, and a known agent would then miss its own skill.
+        shown, skills = used("cluade")
+        self.assertEqual(skills, {"beside": "general", "page": "general", "without": "other"})
+        self.assertEqual((shown["agent"], shown["agent_problem"]["known"]),
+                         ("cluade", [{"id": "claude", "name": "Claude Code"}, {"id": "codex", "name": "Codex"}]))
+        self.assertIn("cluade", shown["agent_problem"]["error"])
+        self.assertIn("--agent", shown["agent_problem"]["next"])
+        self.assertNotIn("agent_problem", used("codex")[0])
+        self.assertNotIn("agent_problem", self.command("alpha", "rules", "show"))
+        # An ID that a rule names is not unknown: another computer or a newer Richi has that agent.
+        self.stored("alpha", "rule:beside", skills={"claude": "special", "codex": "special", "cursor": "own"})
+        shown, skills = used("cursor")
+        self.assertEqual((skills["beside"], skills["page"]), ("own", "general"))
+        self.assertNotIn("agent_problem", shown)
+
+    def test_half_a_surrogate_pair_in_a_stored_row_does_not_hide_the_rules(self):
+        self.add("alpha", "kept", "--global", text="Reply in Russian.")
+        # A whole pair spelt as two escapes is an ordinary character.
+        self.stored("alpha", "rule:kept", note="\ud83d\ude00")
+        broken = self.add("alpha", "broken", "--global")
+        # JSON may spell half of a pair as an escape; such text can be neither printed nor stored
+        # again. Any field may hold it, also one this version does not know.
+        for field in ("text", "source", "updated_at", "future"):
+            with self.subTest(field=field):
+                self.stored("alpha", "rule:broken", json.dumps(dict(broken, **{field: "half \ud800 pair"})))
+                for view in ("show", "list"):
+                    listed = self.command("alpha", "rules", view)
+                    self.assertEqual([rule["id"] for rule in listed["rules"]], ["kept"])
+                    self.assertEqual([(item["id"], item["updated_at"]) for item in listed["invalid_rules"]],
+                                     [("broken", "invalid")])
+                    self.assertIn("surrogate", listed["invalid_rules"][0]["error"])
+                self.assertIn("surrogate", self.command("alpha", "rules", "update", "broken", "--expected-updated-at",
+                                                        "invalid", "--text", "x", ok=False)["error"])
+        # The row is removed by the command it names, and the log of that removal can be read.
+        words = shlex.split(listed["invalid_rules"][0]["next"])
+        self.assertEqual(self.command("alpha", *words[1:])["results"], [{"id": "broken", "status": "removed"}])
+        self.assertNotIn("invalid_rules", self.command("alpha", "rules", "list"))
+        self.assertEqual(self.command("alpha", "rules", "log", "--id", "broken")["entries"][0]["action"], "removed")
+        # A log entry written elsewhere with such text is passed over, and clearing the log removes it.
+        self.stored("alpha", "rule-log:9999:broken", json.dumps({"at": "9999", "id": "broken", "by": "\ud800"}))
+        self.assertEqual([entry["at"] for entry in self.command("alpha", "rules", "log")["entries"]
+                          if entry["at"] == "9999"], [])
+        self.command("alpha", "rules", "clear-log")
+        database = self.configs["alpha"].parent / "memory.sqlite3"
+        with closing(sqlite3.connect(str(database))) as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM metadata WHERE key LIKE 'rule-log:%'").fetchone()[0], 0)
+
+    def test_a_change_that_is_not_one_is_refused_in_words(self):
+        self.add("alpha", "kept", "--global")
+        # Each of these once ended in an error of Python instead of a refusal: a value that cannot
+        # be a dictionary key, and text that is not UTF-8 on its way to SQLite or into a message.
+        for change in ({"action": ["add"], "id": "x"}, {"action": {"add": 1}, "id": "x"}, {"action": 5, "id": "x"},
+                       {"action": "remove", "id": "half \ud800", "expected_updated_at": "t"},
+                       {"action": "remove", "id": "kept", "expected_updated_at": "half \ud800"},
+                       {"action": "remove", "id": "kept", "expected_updated_at": ["t"]},
+                       {"action": "update", "id": "kept", "expected_updated_at": {"t": 1}, "text": "x"},
+                       {"action": "add", "id": "x", "scope": "project", "project": "half \ud800", "text": "x"},
+                       {"action": "add", "id": "x", "scope": "global", "text": "half \ud800"},
+                       {"action": "add", "id": "x", "scope": "global", "text": "x", "source": "half \ud800"}):
+            with self.subTest(change=change):
+                failed = self.command("alpha", "rules", "apply", "--json", "-", ok=False, stdin=json.dumps(change))
+                for word in ("codec", "unhashable", "surrogates not allowed"):
+                    self.assertNotIn(word, failed["error"])
+        self.assertEqual([rule["id"] for rule in self.command("alpha", "rules", "list")["rules"]], ["kept"])
+
+    def test_a_store_that_another_command_holds_is_reported_as_busy(self):
+        database = self.configs["alpha"].parent / "memory.sqlite3"
+        # The command waits for the lock as long as its timeout says; here that is a moment.
+        impatient = functools.partial(memory.connect, timeout=0.2)
+        with closing(sqlite3.connect(str(database), isolation_level=None)) as holder:
+            holder.execute("BEGIN IMMEDIATE")
+            with mock.patch.object(memory, "connect", impatient):
+                failed = self.command("alpha", "rules", "add", "late", "--global", "--text", "x", ok=False)
+            holder.execute("ROLLBACK")
+        # A code of its own: the command was right, and trying again helps.
+        self.assertEqual(failed, {"error": "database is locked", "code": "busy"})
+        self.add("alpha", "late", "--global")
+
     def stored(self, store, key, value=None, **changes):
         """Write a metadata row directly, as a hand edit or another Richi version would; value None edits the row."""
         database = self.configs[store].parent / "memory.sqlite3"
@@ -569,7 +679,7 @@ class RulesTests(unittest.TestCase):
         # A change that would push a record over the bound is refused instead of making it unreadable.
         refused = self.command("alpha", "rules", "update", "kept", "--expected-updated-at", kept["updated_at"],
                                "--text", "x" * rules.MAX_TEXT, ok=False)
-        self.assertEqual(refused["code"], "limit")
+        self.assertEqual((refused["code"], refused["subject"]), ("limit", "record"))
         self.assertEqual([rule["id"] for rule in self.command("alpha", "rules", "list")["rules"]], ["kept"])
 
     def test_a_change_names_the_author_it_is_given(self):

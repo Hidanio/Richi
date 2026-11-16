@@ -16,7 +16,7 @@ import time
 import unittest
 from unittest import mock
 
-from richi import agents, map_access, memory, rules, serve, skill_catalog
+from richi import agent_commands, agents, map_access, memory, private_files, rules, serve, skill_catalog
 from richi_launcher import config
 
 
@@ -52,6 +52,77 @@ class SkillCatalogTests(unittest.TestCase):
         for text in ("No header", "---\nname: unterminated\n", ""):
             with self.subTest(text=text):
                 self.assertEqual(skill_catalog.front_matter(text), {})
+        # A comment after a value is not part of it; a "#" inside a word or inside quotes is.
+        commented = ("---\nname: review # the name\ndisable-model-invocation: true # user only\n"
+                     "description: 'Fixes #1' # why\nlink: a#b\nempty: # nothing\nquoted: \"it \\\\\" # tail\n---\n")
+        self.assertEqual(skill_catalog.front_matter(commented),
+                         {"name": "review", "disable-model-invocation": "true", "description": "Fixes #1",
+                          "link": "a#b", "empty": "", "quoted": "it \\\\"})
+        # Only the beginning of a long file is read: what it holds still counts.
+        self.assertEqual(skill_catalog.front_matter("---\nname: a\ndisable-model-invocation: true\nnotes: cut he", cut=True),
+                         {"name": "a", "disable-model-invocation": "true", "notes": "cut he"})
+
+    def test_a_skill_only_the_user_invokes_stays_out_however_its_header_is_written(self):
+        manual = "disable-model-invocation: true"
+        with tempfile.TemporaryDirectory(prefix="richi-skills-") as temporary:
+            home = Path(temporary)
+            claude, codex = home / ".claude" / "skills", home / ".agents" / "skills"
+            write_skill(claude / "plain-manual", "---\nname: plain-manual\n" + manual + "\n---\n")
+            write_skill(claude / "bom-manual", "\ufeff---\nname: bom-manual\n" + manual + "\n---\n")
+            write_skill(claude / "comment-manual", "---\nname: comment-manual\n" + manual + " # user only\n---\n")
+            # A header longer than what is read of the file.
+            write_skill(claude / "long-manual", "---\nname: long-manual\n" + manual + "\nnotes: >\n"
+                        + "  note\n" * skill_catalog.MAX_HEADER + "---\n")
+            write_skill(claude / "bom-offered", "\ufeff---\nname: bom-offered\ndescription: With a mark\n---\n")
+            write_skill(claude / "folder-name", "---\nname: named # not the folder's name\n---\n")
+            write_skill(codex / "codex-manual", "---\nname: codex-manual\n---\n")
+            (codex / "codex-manual" / "agents").mkdir()
+            (codex / "codex-manual" / "agents" / "openai.yaml").write_text(
+                "\ufeffpolicy:\n  allow_implicit_invocation: false # the user asks for it\n", encoding="utf-8")
+            result = skill_catalog.catalog({}, home)
+            self.assertEqual({skill["name"]: skill["description"] for skill in result["skills"]},
+                             {"bom-offered": "With a mark", "named": ""})
+            # Nothing beyond the bound is read: a field after it is not seen, the ones before it are.
+            write_skill(claude / "late", "---\nname: early\npadding: " + "x" * 100 + "\ndescription: Late\n---\n")
+            with mock.patch.object(skill_catalog, "MAX_HEADER", 64):
+                bounded = {skill["name"]: skill["description"] for skill in skill_catalog.catalog({}, home)["skills"]}
+            self.assertEqual(bounded.get("early"), "")
+            self.assertEqual({skill["name"]: skill["description"] for skill in skill_catalog.catalog({}, home)["skills"]}
+                             ["early"], "Late")
+
+    def test_a_full_list_is_cut_while_every_agent_is_still_counted(self):
+        with tempfile.TemporaryDirectory(prefix="richi-skills-") as temporary:
+            home = Path(temporary)
+            for name in ("a1", "a2", "a3", "a4"):
+                write_skill(home / ".claude" / "skills" / name, "---\nname: " + name + "\n---\n")
+            for name in ("a1", "c1", "c2"):
+                write_skill(home / ".agents" / "skills" / name, "---\nname: " + name + "\n---\n")
+            full = skill_catalog.catalog({}, home)
+            with mock.patch.object(skill_catalog, "MAX_SKILLS", 3):
+                cut = skill_catalog.catalog({}, home)
+                listed = {agent["id"]: (agent["skills"], [source["skills"] for source in agent["sources"]][0])
+                          for agent in agent_commands.listing({}, home)["agents"]}
+        self.assertEqual((len(full["skills"]), full["truncated"], full["totals"]), (6, False, {"claude": 4, "codex": 3}))
+        self.assertEqual(([skill["name"] for skill in cut["skills"]], cut["truncated"]), (["a1", "a2", "a3"], True))
+        # The agent read second is not left with nothing: its skills are counted, and a skill that
+        # made the list names every agent that has it.
+        self.assertEqual(cut["totals"], {"claude": 4, "codex": 3})
+        self.assertEqual(cut["skills"][0]["agents"], ["claude", "codex"])
+        self.assertEqual(listed, {"claude": (4, 4), "codex": (3, 3)})
+
+    def test_a_plugin_manifest_made_to_break_the_parser_is_passed_over(self):
+        with tempfile.TemporaryDirectory(prefix="richi-skills-") as temporary:
+            home = Path(temporary)
+            rpm = home / agents.CLAUDE_APP / "account-1" / "organization-1" / "rpm"
+            for name, manifest in (("deep", "[" * 100000 + "]" * 100000), ("fine", json.dumps({"name": "engineering"}))):
+                (rpm / name / ".claude-plugin").mkdir(parents=True)
+                (rpm / name / ".claude-plugin" / "plugin.json").write_text(manifest, encoding="utf-8")
+                write_skill(rpm / name / "skills" / "review", "---\nname: review\n---\n")
+            (rpm / "manifest.json").write_text("[" * 100000 + "]" * 100000, encoding="utf-8")
+            # What a plugin's author wrote must not take the lists down.
+            result = skill_catalog.catalog({}, home)
+            self.assertEqual([skill["name"] for skill in result["skills"]], ["engineering:review"])
+            self.assertEqual(agent_commands.listing({}, home)["agents"][0]["skills"], 1)
 
     def test_catalog_merges_agents_and_offers_only_storable_names(self):
         with tempfile.TemporaryDirectory(prefix="richi-skills-") as temporary:
@@ -175,18 +246,19 @@ class MapAccessTests(unittest.TestCase):
         self.root = Path(temporary.name).resolve()
         self.database = self.root / "memory.sqlite3"
         self.runtime = self.root / "runtime"
+        self.ticket, self.key = map_access.ticket_path(self.database), map_access.secret_path(self.database)
 
     def mode(self, path):
         return stat.S_IMODE(path.stat().st_mode)
 
     def test_a_ticket_is_redeemed_once_for_a_private_rotating_secret(self):
         ticket = map_access.issue_ticket(self.database)
-        self.assertEqual((self.mode(self.runtime), self.mode(self.runtime / map_access.TICKET_FILE)), (0o700, 0o600))
+        self.assertEqual((self.mode(self.runtime), self.mode(self.ticket), self.ticket.parent), (0o700, 0o600, self.runtime))
         self.assertIsNone(map_access.redeem(self.database, "0" * 64))
         self.assertIsNone(map_access.redeem(self.database, "not a ticket"))
         first = map_access.redeem(self.database, ticket)
         self.assertRegex(first, r"\A[0-9a-f]{64}\Z")
-        self.assertEqual(self.mode(self.runtime / map_access.SECRET_FILE), 0o600)
+        self.assertEqual(self.mode(self.key), 0o600)
         self.assertIsNone(map_access.redeem(self.database, ticket))
         self.assertTrue(map_access.authorized(self.database, first))
         for value in (None, "", "f" * 64, first.upper(), first + "0"):
@@ -201,17 +273,72 @@ class MapAccessTests(unittest.TestCase):
     def test_expired_or_exposed_files_grant_nothing(self):
         expired = map_access.issue_ticket(self.database, now=time.time() - map_access.TICKET_SECONDS - 1)
         self.assertIsNone(map_access.redeem(self.database, expired))
-        self.assertFalse((self.runtime / map_access.TICKET_FILE).exists())
+        self.assertFalse(self.ticket.exists())
         exposed = map_access.issue_ticket(self.database)
-        os.chmod(str(self.runtime / map_access.TICKET_FILE), 0o644)
+        os.chmod(str(self.ticket), 0o644)
         self.assertIsNone(map_access.redeem(self.database, exposed))
         value = map_access.redeem(self.database, map_access.issue_ticket(self.database))
-        os.chmod(str(self.runtime / map_access.SECRET_FILE), 0o644)
+        os.chmod(str(self.key), 0o644)
         self.assertFalse(map_access.authorized(self.database, value))
         self.assertIsNone(map_access.secret(self.database))
 
+    def test_stores_in_one_directory_do_not_share_the_ticket_or_the_secret(self):
+        other = self.root / "other.sqlite3"
+        first = map_access.redeem(self.database, map_access.issue_ticket(self.database))
+        ticket = map_access.issue_ticket(other)
+        # Another store's ticket opens nothing here, and stays good for its own map.
+        self.assertIsNone(map_access.redeem(self.database, ticket))
+        second = map_access.redeem(other, ticket)
+        self.assertRegex(second, r"\A[0-9a-f]{64}\Z")
+        # Opening the other store's map leaves this one's page editing.
+        self.assertEqual((map_access.authorized(self.database, first), map_access.authorized(self.database, second),
+                          map_access.authorized(other, second), map_access.authorized(other, first)),
+                         (True, False, True, False))
+        self.assertNotEqual(map_access.redirect_path(self.database), map_access.redirect_path(other))
+        # The same store under another spelling of its path is the same store.
+        link = self.root / "link"
+        link.symlink_to(self.root)
+        self.assertTrue(map_access.authorized(link / "memory.sqlite3", first))
+
+    def test_a_ticket_is_spent_only_for_a_secret_that_was_given(self):
+        before = map_access.redeem(self.database, map_access.issue_ticket(self.database))
+        ticket = map_access.issue_ticket(self.database)
+        # The secret cannot be written: the failure is the caller's to report, and the ticket is still good.
+        with mock.patch.object(private_files, "replace", side_effect=PermissionError(13, "Permission denied")):
+            with self.assertRaises(OSError):
+                map_access.redeem(self.database, ticket)
+        self.assertTrue(self.ticket.exists())
+        self.assertTrue(map_access.authorized(self.database, before))
+        after = map_access.redeem(self.database, ticket)
+        self.assertEqual((map_access.authorized(self.database, after), map_access.authorized(self.database, before),
+                          self.ticket.exists()), (True, False, False))
+        # Without a place for the files there is no ticket to redeem.
+        self.assertIsNone(map_access.redeem(self.root / "nowhere" / "memory.sqlite3", "0" * 64))
+
+    def test_a_new_ticket_waits_while_the_previous_one_is_redeemed(self):
+        first = map_access.issue_ticket(self.database)
+        issued, reading = [], threading.Event()
+        read = map_access._read_private
+
+        def slow_read(path):
+            # The page's request has read the ticket; a second `richi map` now issues another one.
+            value = read(path)
+            if not reading.is_set():
+                reading.set()
+                issuer.start()
+                issuer.join(0.5)
+                self.assertTrue(issuer.is_alive(), "a ticket was issued in the middle of redeeming another")
+            return value
+        issuer = threading.Thread(target=lambda: issued.append(map_access.issue_ticket(self.database)), daemon=True)
+        with mock.patch.object(map_access, "_read_private", slow_read):
+            self.assertIsNotNone(map_access.redeem(self.database, first))
+        issuer.join(10)
+        # The ticket issued meanwhile was not deleted for the first one: its page gets its secret.
+        self.assertEqual(len(issued), 1)
+        self.assertIsNotNone(map_access.redeem(self.database, issued[0]))
+
     def test_the_browser_gets_the_ticket_outside_its_arguments(self):
-        address, redirect, opened = "http://127.0.0.1:1/", self.runtime / map_access.REDIRECT_FILE, []
+        address, redirect, opened = "http://127.0.0.1:1/", map_access.redirect_path(self.database), []
         with_ticket = r"\Ahttp://127\.0\.0\.1:1/#ticket=[0-9a-f]{64}\Z"
 
         def opens(url):
@@ -256,7 +383,7 @@ class MapAccessTests(unittest.TestCase):
         self.assertEqual(opened, [address])
 
     def test_a_browser_that_cannot_read_the_redirect_still_gets_the_map(self):
-        address, redirect = "http://127.0.0.1:1/", (self.runtime / map_access.REDIRECT_FILE).as_uri()
+        address, redirect = "http://127.0.0.1:1/", map_access.redirect_path(self.database).as_uri()
         with mock.patch.object(map_access.sys, "platform", "linux"):
             # A sandboxed browser shows an error for the private file and never redeems the ticket.
             opened, naps = [], []
@@ -267,7 +394,7 @@ class MapAccessTests(unittest.TestCase):
             opened = []
 
             def redeeming(_seconds):
-                ticket = json.loads((self.runtime / map_access.TICKET_FILE).read_text())["ticket"]
+                ticket = json.loads(self.ticket.read_text())["ticket"]
                 self.assertIsNotNone(map_access.redeem(self.database, ticket))
             map_access.open_browser(address, self.database, lambda url: opened.append(url) or True, wait=60,
                                     sleep=redeeming)
@@ -582,6 +709,103 @@ class MapRulesAPITests(unittest.TestCase):
                 self.assertEqual(self.request("POST", "/api/agents", agent, **options)[0], expected)
         self.assertEqual(self.request("PUT", "/api/agents", agent, header)[0], 405)
         self.assertEqual(self.request("POST", "/api/agents?x=1", agent, header)[0], 405)
+
+    def test_a_change_that_is_not_one_is_answered_not_dropped(self):
+        header = {map_access.HEADER: self.secret()}
+        lone = "half \ud800"
+        # Each of these once closed the connection without an answer, or blamed the runtime.
+        for path, body in (
+                ("/api/agents", {"action": ["add"], "id": "s"}), ("/api/agents", {"action": {}, "id": "s"}),
+                ("/api/agents", {"action": "add", "id": "s", "name": "S", "folders": ["~/x"], "variable": "A=" + lone}),
+                ("/api/agents", {"action": "update", "id": "claude", "disable": [lone]}),
+                ("/api/agents", {"action": "update", "id": "claude", "expected_updated_at": lone, "disable": ["skills"]}),
+                ("/api/rules", {"action": ["add"], "id": "s"}),
+                ("/api/rules", {"action": "remove", "id": lone, "expected_updated_at": "t"}),
+                ("/api/rules", {"action": "remove", "id": "s", "expected_updated_at": lone})):
+            with self.subTest(path=path, body=body):
+                status, payload = self.request("POST", path, body, header)
+                self.assertIn(status, (400, 404, 409), payload)
+                for word in ("codec", "unhashable", "runtime"):
+                    self.assertNotIn(word, payload["error"])
+        # A refused change leaves nothing behind, not even the settings directory.
+        self.assertFalse(agents.settings_path().parent.exists())
+        self.assertEqual((self.listed()["rules"], [agent["id"] for agent in self.agents()["agents"]]),
+                         ([], ["claude", "codex"]))
+
+    def test_a_failure_nobody_foresaw_is_answered_too(self):
+        header = {map_access.HEADER: self.secret()}
+        # The server's log keeps the traceback; here it would only be noise.
+        with mock.patch.object(self.server, "handle_error"):
+            with mock.patch.object(serve.agent_commands, "listing", side_effect=RuntimeError("inner detail")):
+                status, payload = self.request("GET", "/api/agents")
+            self.assertEqual((status, payload), (500, {"error": "The map could not answer: RuntimeError",
+                                                       "code": "internal"}))
+            with mock.patch.object(serve, "agent_change", side_effect=KeyError("inner detail")):
+                status, payload = self.request("POST", "/api/agents", {"action": "remove", "id": "x"}, header)
+            self.assertEqual((status, payload["code"]), (500, "internal"))
+        self.assertEqual(self.request("GET", "/api/agents")[0], 200)
+
+    def test_a_map_that_cannot_write_its_key_says_so(self):
+        ticket = map_access.issue_ticket(self.database)
+        with mock.patch.object(private_files, "replace", side_effect=PermissionError(13, "Permission denied")):
+            status, payload = self.request("POST", "/api/session", {"ticket": ticket})
+        self.assertEqual((status, payload["code"]), (503, "unavailable"), payload)
+        self.assertIn("Permission denied", payload["error"])
+        # The ticket was not spent on a secret nobody got.
+        self.assertEqual(self.request("POST", "/api/session", {"ticket": ticket})[0], 200)
+
+    def test_a_change_does_not_wait_behind_readings(self):
+        secret = self.secret()
+        started, release, answers = threading.Event(), threading.Event(), []
+        run = serve._run_rules_request
+
+        def slow_reading(database, operation, *arguments, **options):
+            if operation == ["rules", "list"]:
+                started.set()
+                release.wait(30)
+            return run(database, operation, *arguments, **options)
+        with mock.patch.object(serve, "_run_rules_request", slow_reading), mock.patch.object(serve, "TURN_TIMEOUT", 1):
+            reader = threading.Thread(target=lambda: answers.append(self.request("GET", "/api/rules")), daemon=True)
+            reader.start()
+            self.assertTrue(started.wait(10))
+            # Any client of the port may read; the user's change has a turn of its own.
+            self.change(secret, action="add", id="saved", scope="global", text="Saved while a reading waited.")
+            # Another reading waits for the first one, and is told to try again when its time is up.
+            self.assertEqual(self.request("GET", "/api/rules"), (503, {"error": "The rules are being read; try again",
+                                                                       "code": "busy"}))
+            release.set()
+            reader.join(30)
+        self.assertEqual([rule["id"] for rule in answers[0][1]["rules"]], ["saved"])
+
+    def test_a_store_that_another_command_holds_is_busy_not_a_bad_request(self):
+        secret = self.secret()
+        # What the rules command prints when SQLite gives up waiting for the store.
+        code = ("import json, sys; sys.stdin.read(); "
+                "sys.stderr.write(json.dumps({'error': 'database is locked', 'code': 'busy'})); sys.exit(1)")
+        with mock.patch.object(serve, "runtime_command", return_value=[sys.executable, "-I", "-c", code]):
+            payload = self.change(secret, 503, action="add", id="late", scope="global", text="x")
+        self.assertEqual(payload, {"error": "database is locked", "code": "busy"})
+
+    def test_a_reading_page_is_not_told_where_the_settings_are(self):
+        secret = self.secret()
+        path = agents.settings_path()
+        path.parent.mkdir(parents=True)
+        for text, reason in (("{not json", "Expecting"),
+                             ('{"version":1,"agents":{"x":' + "[" * 100000 + "]" * 100000 + "}}", "nested too deeply")):
+            with self.subTest(reason=reason):
+                path.write_text(text, encoding="utf-8")
+                agents.forget_settings()
+                reading, editing = self.agents(), self.agents(secret)
+                # The path names the user; a page that only reads learns that there is a problem, not where.
+                self.assertTrue(reading["problem"])
+                self.assertNotIn(str(self.root), json.dumps(reading))
+                self.assertIn(str(path), editing["problem"])
+                self.assertIn(reason, editing["problem"])
+                self.assertEqual([agent["id"] for agent in reading["agents"]], ["claude", "codex"])
+                refused = self.agent_change(secret, 409, action="update", id="claude", disable=["skills"])
+                self.assertEqual((refused["code"], reason in refused["error"]), ("settings", True))
+                self.assertEqual(self.listed()["agents"], [{"id": "claude", "name": "Claude Code"},
+                                                           {"id": "codex", "name": "Codex"}])
 
     def test_health_and_installed_skills(self):
         status, health = self.request("GET", "/api/health")

@@ -548,7 +548,8 @@ DETAILS = {
         with --project-path or --project. When the agent running the command is
         known (detected from its shell, or given with --agent), each rule's
         use_skill is the skill that agent uses whenever the rule applies. A shell
-        that carries the signs of two agents names neither: pass --agent. In a
+        that carries the signs of two agents names neither: pass --agent. An ID
+        that no agent and no rule has is answered with agent_problem. In a
         repository the workspace does not know, the global rules still come back,
         with project_path_problem saying why the project's rules do not.
         invalid_rules names stored rules that cannot be read, and
@@ -626,7 +627,8 @@ DETAILS = {
         For each agent: whether it is built in, whether it looks installed, its
         skill sources with their folders and skill counts, and updated_at, the
         version of your settings for it (null when you changed nothing). presets
-        lists well-known agents you could add.""",
+        lists well-known agents you could add; unknown_agents, settings of an
+        agent that only a newer Richi has, which this version keeps and ignores.""",
         examples=(("", "richi skill-sources list"),)),
     "skill-sources add": dict(about="""
         Describes an agent Richi does not have built in. The ID is permanent: rules

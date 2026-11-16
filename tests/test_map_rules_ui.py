@@ -115,6 +115,20 @@ assert.deepEqual([{key:'claude-app',kind:'plugins'},{key:'plugins',kind:'plugins
   .map(source=>agentSourceLabel({builtin:true},source)),
   ['Плагины claude.ai из приложения Claude','Плагины','Встроенные скиллы','Свои скиллы','Свои скиллы','Добавленная папка']);
 assert.equal(agentSourceLabel({builtin:false},{key:'~/x',added:true}),'Папка скиллов');
+// The every-agent skill that no listed agent uses still belongs to the rule: the card names it.
+assert.equal(ruleOtherSkill({skill:'general',skills:{claude:'special',codex:'special'}}),'general');
+assert.equal(ruleOtherSkill({skill:'general',skills:{claude:'special',codex:null}}),'general');
+assert.equal(ruleOtherSkill({skill:'general',skills:{codex:'special'}}),null);
+assert.equal(ruleOtherSkill({skill:null,skills:{claude:'a',codex:'b'}}),null);
+assert.equal(ruleOtherSkill({skill:'general'}),null);
+// The words a skill rule is composed of, and the ID suggested from a text.
+assert.equal(skillPhrase({skill:'pr-description'}),'используй скилл pr-description');
+assert.equal(skillPhrase({skill:null,skills:{claude:'a'}}),'в Claude Code используй скилл a');
+assert.equal(skillPhrase({skill:null,skills:{claude:'a',codex:'b'}}),'используй скилл a в Claude Code и b в Codex');
+assert.equal(skillPhrase({}),'');
+assert.equal(ruleSlug('Отвечай на русском языке, а код оставляй'),'otvechay-na-russkom-yazyke-a');
+assert.equal(ruleSlug('  --PR: описание!  '),'pr-opisanie');
+assert.equal(ruleSlug(''),'');
 // What the server makes of each choice is checked against the choice itself.
 const chosen=[['review',{claude:'review',codex:'code-review'}],['review',{claude:'review',codex:null}],
   ['review',{claude:'a',codex:'a'}],[null,{claude:'a',codex:null}],[null,'shared'],['review','']];
@@ -133,6 +147,10 @@ console.log(JSON.stringify(chosen.map(([base,choice])=>({base,choice,request:ski
                                              "expected_updated_at": created["updated_at"]}, memory)["rule"]
                 wanted = choice if isinstance(choice, dict) else dict.fromkeys(agents.ids(), choice or None)
                 self.assertEqual({agent: rules.skill_for(stored, agent) for agent in wanted}, wanted)
+                # An agent this computer does not list: the per-agent lists leave it the rule's
+                # every-agent skill, and one list for everybody gives it that choice too.
+                self.assertEqual(rules.skill_for(stored, "unlisted"),
+                                 case["base"] if isinstance(choice, dict) else choice or None)
 
     def test_a_composed_command_names_the_store_and_survives_a_shell(self):
         database = self.root / "my store" / "memory.sqlite3"
@@ -247,6 +265,49 @@ assert.deepEqual(ruleUpdate(opened,fresh,'Review code carefully.',skillRequest(n
 // Nothing was changed in the form, whatever happened elsewhere.
 assert.equal(ruleUpdate(opened,fresh,'Review code.',unchangedSkills),null);
 assert.equal(ruleUpdate(opened,opened,'Review code.',skillRequest(null,'')),null);
+// The same for an own agent. Its form changed the variable only.
+const agent={id:'gem',name:'Foo',variables:['GEM=1'],manual_skills:'none',updated_at:'a1'};
+const typed={name:'Foo',variable:'GEM=2',manual_skills:'none'};
+assert.deepEqual(agentUpdate(agent,agent,typed),{action:'update',id:'gem',variable:'GEM=2',expected_updated_at:'a1'});
+// Meanwhile another window renamed the agent: the retry names the new version and does not undo the rename.
+const renamed={...agent,name:'Bar',updated_at:'a2'};
+assert.deepEqual(agentUpdate(agent,renamed,typed),{action:'update',id:'gem',variable:'GEM=2',expected_updated_at:'a2'});
+assert.equal(agentDifference(agent,renamed),'имя «Bar»');
+assert.equal(agentDifference(agent,{...agent,variables:[],manual_skills:'front-matter'}),'переменной больше нет, скиллы только по вызову скрываются');
+assert.equal(agentDifference(agent,agent),'');
+// Nothing was changed in the form; a cleared variable is sent as an empty one; a form may change everything.
+assert.equal(agentUpdate(agent,renamed,{name:'Foo',variable:'GEM=1',manual_skills:'none'}),null);
+assert.deepEqual(agentUpdate(agent,agent,{name:'Gem',variable:'',manual_skills:'front-matter'}),
+  {action:'update',id:'gem',name:'Gem',variable:'',manual_skills:'front-matter',expected_updated_at:'a1'});
+""")
+
+    def test_a_refusal_is_told_by_its_code_not_by_its_wording(self):
+        self.evaluate(r"""
+const refusal=(code,subject,message='Some English text')=>Object.assign(new Error(message),{code,subject});
+// One code covers three limits of a rule; the wording of the message decides nothing.
+assert.match(ruleRefusal(refusal('limit','rules','Text in all')),/Все правила workspace/);
+assert.match(ruleRefusal(refusal('limit','record')),/слишком велико/);
+assert.match(ruleRefusal(refusal('limit','text','Rules of one workspace may hold at most 20000 characters in all')),/Текст правила длиннее/);
+assert.match(ruleRefusal(refusal('limit')),/Текст правила длиннее/);
+assert.match(ruleRefusal(refusal('conflict')),/изменили после загрузки/);
+// An agent and a skill source share codes too.
+assert.match(agentRefusal(refusal('exists','source')),/папка уже есть/);
+assert.match(agentRefusal(refusal('exists','agent','claude is built into Richi; adjust its skill sources with skill-sources update')),/Агент с таким ID/);
+assert.match(agentRefusal(refusal('limit','folders')),/папок/);
+assert.match(agentRefusal(refusal('limit','agents')),/агентов/);
+assert.match(agentRefusal(refusal('not_found','source')),/Источник не найден/);
+assert.match(agentRefusal(refusal('not_found','agent')),/Агент не найден/);
+assert.match(agentRefusal(refusal('settings'),'/home/u/agents.json'),/\/home\/u\/agents\.json/);
+assert.match(agentRefusal(refusal('settings')),/agents\.json/);
+// What is not about the change itself reads the same on every form.
+for(const explain of [ruleRefusal,agentRefusal]){
+  assert.match(explain(refusal('busy')),/Повторите через несколько секунд/);
+  assert.match(explain(refusal('timeout')),/могло сохраниться/);
+  assert.match(explain(refusal('offline')),/richi map/);
+  assert.match(explain(Object.assign(new Error('aborted'),{name:'AbortError'})),/не ответил за 60 секунд/);
+  // A code the page has no words for is shown as the server put it.
+  assert.equal(explain(refusal('internal',undefined,'The map could not answer: TypeError')),'The map could not answer: TypeError');
+}
 """)
 
     def test_saving_from_a_form_reports_what_really_happened(self):

@@ -10,7 +10,7 @@ import threading
 import unittest
 from unittest import mock
 
-from richi import agent_commands, agents, memory, rules, skill_catalog
+from richi import agent_commands, agents, memory, private_files, rules, skill_catalog
 from richi_launcher import config
 
 
@@ -119,8 +119,12 @@ class RegistryTests(IsolatedHome):
     def test_settings_live_in_the_launchers_configuration_directory(self):
         self.assertEqual(agents.settings_path(), config._platform_dirs()[0] / agents.SETTINGS_FILE)
         self.assertEqual(agents.settings_path({}, self.home).name, "agents.json")
+        (self.root / "real").mkdir()
+        (self.root / "link").symlink_to(self.root / "real")
         with mock.patch.object(agents.sys, "platform", "linux"), mock.patch.object(config.sys, "platform", "linux"):
-            for configured in (None, str(self.root / "xdg"), "relative"):
+            # A link or ".." in the configured directory names the same place for both.
+            for configured in (None, str(self.root / "xdg"), "relative", str(self.root / "link"),
+                               str(self.root / "real" / ".." / "other")):
                 environment = {} if configured is None else {"XDG_CONFIG_HOME": configured}
                 with self.subTest(configured=configured), mock.patch.dict(os.environ, environment):
                     self.assertEqual(agents.settings_path(), config._platform_dirs()[0] / agents.SETTINGS_FILE)
@@ -272,6 +276,17 @@ class AgentSettingsTests(IsolatedHome):
                                 (["--remove-skills", "~/team", "--remove-skills", "~/.gemini/skills"], None)):
             with self.subTest(arguments=arguments):
                 self.assertEqual(self.cli("skill-sources", "update", "gemini-cli", *version, *arguments, ok=False).get("code"), code)
+        # What an exists, not_found or limit refusal is about travels beside its code.
+        for arguments, subject in ((["update", "gemini-cli", *version, "--add-skills", "~/team"], "source"),
+                                   (["update", "gemini-cli", *version, "--enable", "nothing"], "source"),
+                                   (["add", "gemini-cli", "--name", "Again", "--skills", "~/x"], "agent"),
+                                   (["add", "claude", "--name", "Mine", "--skills", "~/x"], "agent"),
+                                   (["update", "cursor", "--name", "Cursor"], "agent"),
+                                   (["update", "gemini-cli", *version]
+                                    + [word for number in range(agents.MAX_FOLDERS) for word in ("--add-skills", "~/f%d" % number)],
+                                    "folders")):
+            with self.subTest(arguments=arguments[:4]):
+                self.assertEqual(self.cli("skill-sources", *arguments, ok=False)["subject"], subject)
         cleared = self.cli("skill-sources", "update", "gemini-cli", *version, "--variable", "", "--remove-skills", "~/team",
                            "--enable", "~/.gemini/skills")["agent"]
         self.assertEqual((cleared["variables"], [source["key"] for source in cleared["sources"]]),
@@ -353,9 +368,91 @@ class AgentSettingsTests(IsolatedHome):
         path.write_text(json.dumps({"version": 1, "agents": {"future": {"updated_at": "t", "disabled": ["skills"]}}}),
                         encoding="utf-8")
         agents.forget_settings()
-        self.assertEqual((agents.ids(), self.cli("skill-sources", "list")["problem"]), (("claude", "codex"), None))
+        listed = self.cli("skill-sources", "list")
+        self.assertEqual((agents.ids(), listed["problem"]), (("claude", "codex"), None))
+        # They are named with what removing them takes, and adding or changing that agent says the same.
+        remove = "richi skill-sources remove future --expected-updated-at t"
+        self.assertEqual(listed["unknown_agents"], [{"id": "future", "updated_at": "t", "next": remove}])
+        for arguments, code in ((["add", "future", "--name", "Future", "--skills", "~/x"], "exists"),
+                                (["update", "future", "--expected-updated-at", "t", "--name", "Future"], "not_found")):
+            with self.subTest(arguments=arguments):
+                refused = self.cli("skill-sources", *arguments, ok=False)
+                self.assertEqual((refused.get("code"), remove in refused["error"], "newer Richi" in refused["error"]),
+                                 (code, True, True))
         self.cli("skill-sources", "update", "claude", "--disable", "skills")
         self.assertIn("future", json.loads(path.read_text(encoding="utf-8"))["agents"])
+        self.cli(*remove.split()[1:])
+        self.assertNotIn("unknown_agents", self.cli("skill-sources", "list"))
+        # Brackets nested deeper than the parser goes are damage like any other.
+        path.write_text('{"version":1,"agents":{"x":' + "[" * 100000 + "]" * 100000 + "}}", encoding="utf-8")
+        agents.forget_settings()
+        self.assertIn("nested too deeply", self.cli("skill-sources", "list")["problem"])
+        refused = self.cli("skill-sources", "update", "claude", "--disable", "skills", ok=False)
+        self.assertEqual((refused["code"], "nested too deeply" in refused["error"]), ("settings", True))
+
+    def test_settings_changed_by_another_process_are_read_again(self):
+        self.cli("skill-sources", "add", "first", "--name", "First", "--skills", "~/team")
+        self.assertEqual(agents.ids(), ("claude", "codex", "first"))
+        # A map that runs for days learns what a command wrote from the file itself, not from being told.
+        path = agents.settings_path()
+        settings = json.loads(path.read_text(encoding="utf-8"))
+        settings["agents"]["second"] = dict(settings["agents"]["first"], name="Second")
+        path.write_text(json.dumps(settings), encoding="utf-8")
+        self.assertEqual(agents.ids(), ("claude", "codex", "first", "second"))
+        path.unlink()
+        self.assertEqual(agents.ids(), ("claude", "codex"))
+
+    def test_one_writer_changes_the_settings_at_a_time(self):
+        self.cli("skill-sources", "add", "first", "--name", "First", "--skills", "~/team")
+        path, reading = agents.settings_path(), threading.Event()
+        read = agent_commands._read
+
+        def seen(*arguments):
+            reading.set()
+            return read(*arguments)
+        writer = threading.Thread(target=lambda: agent_commands.change("add", "second", {"name": "Second",
+                                                                                         "folders": ["~/team"]}),
+                                  daemon=True)
+        # Another process is between reading the file and replacing it: this change must wait, or
+        # the whole file it writes from an older reading would drop the other one's agent.
+        with mock.patch.object(agent_commands, "_read", seen):
+            with private_files.locked(path):
+                writer.start()
+                self.assertFalse(reading.wait(0.5), "the settings were read while another writer held them")
+            writer.join(10)
+        self.assertTrue(reading.is_set())
+        self.assertEqual(agents.ids(), ("claude", "codex", "first", "second"))
+
+    def test_the_settings_are_bounded(self):
+        self.cli("skill-sources", "add", "first", "--name", "First", "--skills", "~/team")
+        path = agents.settings_path()
+        with mock.patch.object(agents, "MAX_CUSTOM", 1):
+            refused = self.cli("skill-sources", "add", "second", "--name", "Second", "--skills", "~/team", ok=False)
+            self.assertEqual((refused["code"], refused["subject"]), ("limit", "agents"))
+        self.cli("skill-sources", "add", "second", "--name", "Second", "--skills", "~/team")
+        # A file with more agents than Richi keeps, or larger than it reads, is damage: reported, not used.
+        for limit, value in (("MAX_CUSTOM", 1), ("MAX_SETTINGS", path.stat().st_size - 1)):
+            with self.subTest(limit=limit), mock.patch.object(agents, limit, value):
+                agents.forget_settings()
+                listed = self.cli("skill-sources", "list")
+                self.assertEqual(([agent["id"] for agent in listed["agents"]], str(path) in listed["problem"]),
+                                 (["claude", "codex"], True))
+                self.assertEqual(self.cli("skill-sources", "update", "claude", "--disable", "skills", ok=False)["code"],
+                                 "settings")
+        agents.forget_settings()
+        self.assertEqual(agents.ids(), ("claude", "codex", "first", "second"))
+
+    def test_a_folder_stored_for_a_builtin_agent_is_listed_once(self):
+        adjusted = self.cli("skill-sources", "update", "claude", "--add-skills", "~/team")["agent"]
+        # A folder that is already a built-in source cannot be added; one that got into the file
+        # anyway, written by hand or by a Richi with other sources, is not listed a second time.
+        path = agents.settings_path()
+        settings = json.loads(path.read_text(encoding="utf-8"))
+        settings["agents"]["claude"]["folders"].append({"path": "~/.claude/skills", "enabled": True})
+        path.write_text(json.dumps(settings), encoding="utf-8")
+        claude = self.listed()["claude"]
+        self.assertEqual([source["key"] for source in claude["sources"]], ["skills", "plugins", "claude-app", "~/team"])
+        self.assertEqual((claude["skills"], adjusted["skills"]), (2, 2))
 
     def test_changes_are_validated_for_every_caller(self):
         for action, identifier, options in (
@@ -365,9 +462,18 @@ class AgentSettingsTests(IsolatedHome):
                 ("add", "x", {"name": "X", "folders": ["~/x"], "variable": "A B"}),
                 ("update", "claude", {"expected_updated_at": 5, "disable": ["skills"]}),
                 ("update", "claude", {"disable": "skills"}), ("drop", "claude", {}), ("add", 5, {}),
-                ("add", "x", ["name"])):
+                ("add", "x", ["name"]), (["add"], "x", {}), ({"add": 1}, "x", {}), (None, "x", {}),
+                # Half of a surrogate pair cannot be written to the settings file.
+                ("add", "x", {"name": "X", "folders": ["~/x"], "variable": "A=half \ud800"}),
+                ("add", "x", {"name": "half \ud800", "folders": ["~/x"]})):
             with self.subTest(action=action, options=options), self.assertRaises(agent_commands.AgentError):
                 agent_commands.change(action, identifier, options)
+        # Bytes of a command line that are not text arrive as such halves.
+        self.assertIsNone(self.cli("skill-sources", "add", "x", "--name", "X", "--skills", "~/x", "--variable",
+                                   "A=\udcff", ok=False).get("code"))
+        # ~//x is a folder under the home directory, as its ~ says, not /x.
+        self.assertEqual(agent_commands._folder("~//x/", self.home), "~/x")
+        self.assertEqual(agents.folder_path("~//x", self.home), self.home / "x")
         with self.assertRaises(agent_commands.AgentError) as raised:
             agent_commands.change("add", "many", {"name": "Many", "folders": ["~/f%d" % n for n in range(21)]})
         self.assertEqual(raised.exception.code, "limit")
@@ -415,9 +521,7 @@ class ListingTests(IsolatedHome):
         self.assertEqual([skill["name"] for skill in found[0]["skills"]], ["real"])
 
     def test_the_listing_gives_the_limits_a_form_needs(self):
-        self.assertEqual(agent_commands.listing()["limits"],
-                         {"name": agents.MAX_NAME, "folder": agents.MAX_FOLDER, "folders": agents.MAX_FOLDERS,
-                          "agents": agents.MAX_CUSTOM})
+        self.assertEqual(agent_commands.listing()["limits"], {"name": agents.MAX_NAME, "folder": agents.MAX_FOLDER})
         # The skill name pattern belongs to the agents, and rules use that one.
         self.assertIs(rules.valid_skill, agents.valid_skill)
 

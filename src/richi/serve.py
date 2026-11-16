@@ -6,10 +6,11 @@ user's standing rules and to the user's agent settings (which agents there
 are and where each finds skills), and only from a page opened by `richi map`
 (map_access).
 
-Like the knowledge itself, the rules, the agents and the names and
+Like the knowledge itself, the rules, the agents with their skill folders (as
+the user wrote them, under the home directory as ~/...) and the names and
 descriptions of this user's installed skills are readable by any client of the
-loopback port; paths of the user's files are given only to a page that may
-edit.
+loopback port. Where the agent settings are kept, and why they could not be
+read, is told only to a page that may edit.
 """
 
 import argparse
@@ -146,7 +147,9 @@ RULES_BODY_LIMIT = 64 * 1024
 RULES_WORKER_TIMEOUT = 20
 RULES_WORKER_OUTPUT_LIMIT = 1024 * 1024
 # Error codes of a refused change and the HTTP status the map answers with; any other code is 400.
-CHANGE_ERROR_STATUS = {"not_found": 404, "conflict": 409, "exists": 409, "settings": 409}
+CHANGE_ERROR_STATUS = {"not_found": 404, "conflict": 409, "exists": 409, "settings": 409, "busy": 503}
+# How long a request waits for its turn: reading for another reading, a change for another change.
+TURN_TIMEOUT = RULES_WORKER_TIMEOUT + 5
 RULES_SOURCE = "richi map"
 CHANGES_ONLY = "The map changes only standing rules and agent settings"
 
@@ -470,18 +473,25 @@ def agent_change(body):
         return 200, public_agents(agent_commands.change(body.get("action"), body.get("id"), options, full=True),
                                   editing=True)
     except agent_commands.AgentError as exc:
-        return CHANGE_ERROR_STATUS.get(exc.code, 400), {"error": str(exc), "code": exc.code}
+        payload = {"error": str(exc), "code": exc.code}
+        if exc.subject is not None:
+            payload["subject"] = exc.subject
+        return CHANGE_ERROR_STATUS.get(exc.code, 400), payload
     except OSError as exc:
         return 503, {"error": "Agent settings could not be saved: " + str(exc), "code": "unavailable"}
 
 
 def public_agents(payload, editing):
-    """An agents answer as the map gives it: without folder internals, and without paths for a page that only reads."""
+    """An agents answer as the map gives it: without folder internals, and for a page that
+    only reads without the place of the settings file."""
     listing = payload.get("listing", payload)
     if "catalog" in listing:
         listing["catalog"] = {key: value for key, value in listing["catalog"].items() if key != "roots"}
     if not editing:
         listing.pop("settings_file", None)
+        if listing.get("problem"):
+            # The full text names the file, and the user with it.
+            listing["problem"] = "Agent settings are ignored: the settings file cannot be used"
     return payload
 
 
@@ -543,11 +553,14 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
     export_lock = threading.Lock()
     tools_lock = threading.Lock()
     git_lock = threading.Lock()
-    rules_lock = threading.Lock()
-    agents_lock = threading.Lock()
+    # Readings take turns among themselves and changes among themselves. Any client of the port
+    # may read, so a change, which only the user's page makes, never waits behind readings.
+    rules_read_lock, rules_lock = threading.Lock(), threading.Lock()
+    agents_read_lock, agents_lock = threading.Lock(), threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "ProjectMemoryMap/4"
+        answered = False
 
         def setup(self):
             # Bound draining of idle requests before a runtime transition.
@@ -558,9 +571,27 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
             # Do not log knowledge content or search terms.
             pass
 
+        def answer(self, method):
+            """Run one request. A failure nobody foresaw is answered too, not left as a closed connection."""
+            self.answered = False
+            try:
+                return method()
+            except (ConnectionError, socket.timeout):
+                # The client is gone or silent: there is nobody to answer.
+                raise
+            except Exception as exc:
+                if not self.answered:
+                    self.send_data(500, {"error": "The map could not answer: " + type(exc).__name__,
+                                         "code": "internal"})
+                # Still raised: the server's log keeps the traceback.
+                raise
+
         def send_data(self, status, data, content_type="application/json; charset=utf-8"):
             if not isinstance(data, bytes):
-                data = json.dumps(data, ensure_ascii=False).encode("utf-8")
+                # backslashreplace: half of a surrogate pair, which a request may carry and a message
+                # may quote, is not UTF-8; as \udXXX it is still the same JSON string.
+                data = json.dumps(data, ensure_ascii=False).encode("utf-8", "backslashreplace")
+            self.answered = True
             self.send_response(status)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(data)))
@@ -584,6 +615,9 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
             return self.headers.get("Sec-Fetch-Site") != "cross-site"
 
         def do_GET(self):
+            return self.answer(self.get)
+
+        def get(self):
             if not self.allowed_origin():
                 return self.send_data(403, {"error": "Only same-origin loopback access is allowed"})
             url = urlsplit(self.path)
@@ -617,21 +651,21 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 finally:
                     git_lock.release()
             if url.path == "/api/rules" and not url.query:
-                # One rules worker at a time, readers included: a burst of requests waits instead of forking.
-                if not rules_lock.acquire(timeout=RULES_WORKER_TIMEOUT + 5):
-                    return self.send_data(503, {"error": "The rules are being read or changed; try again", "code": "busy"})
+                # One reading worker at a time: a burst of requests waits instead of forking.
+                if not rules_read_lock.acquire(timeout=TURN_TIMEOUT):
+                    return self.send_data(503, {"error": "The rules are being read; try again", "code": "busy"})
                 try:
                     status, payload = _run_rules_request(database, ["rules", "list"], runtime, config_file, workspace,
                                                          config_required)
                 finally:
-                    rules_lock.release()
+                    rules_read_lock.release()
                 if status == 200:
                     payload["editing"] = map_access.authorized(database, self.headers.get(map_access.HEADER))
                     payload["limit_text"] = rules.MAX_TEXT
                 return self.send_data(status, payload)
             if url.path in {"/api/agents", "/api/skills"} and not url.query:
-                # Both scan this user's skill folders: one scan at a time.
-                if not agents_lock.acquire(timeout=RULES_WORKER_TIMEOUT + 5):
+                # Both scan this user's skill folders: one such reading at a time.
+                if not agents_read_lock.acquire(timeout=TURN_TIMEOUT):
                     return self.send_data(503, {"error": "Skills are being read; try again", "code": "busy"})
                 try:
                     if url.path == "/api/skills":
@@ -644,7 +678,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 except OSError:
                     return self.send_data(503, {"error": "Agents and skills are unavailable"})
                 finally:
-                    agents_lock.release()
+                    agents_read_lock.release()
             if url.path not in {"/api/graph", "/api/tools"}:
                 return self.send_data(404, {"error": "Not found"})
             try:
@@ -677,7 +711,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 request_lock.release()
 
         def do_HEAD(self):
-            self.do_GET()
+            return self.answer(self.get)
 
         def read_change(self):
             """The body of a same-origin change request as bytes, or None after answering it."""
@@ -709,6 +743,9 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 return None
 
         def do_POST(self):
+            return self.answer(self.post)
+
+        def post(self):
             path = urlsplit(self.path)
             if path.path not in {"/api/session", "/api/rules", "/api/agents"} or path.query:
                 return self.send_data(405, {"error": CHANGES_ONLY})
@@ -720,7 +757,12 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 body = self.parse_change(raw) if len(raw) <= 256 else {}
                 if body is None:
                     return None
-                value = map_access.redeem(database, body.get("ticket") if isinstance(body, dict) else None)
+                try:
+                    value = map_access.redeem(database, body.get("ticket") if isinstance(body, dict) else None)
+                except OSError as exc:
+                    # Not the ticket's fault: the files beside the store cannot be written.
+                    return self.send_data(503, {"error": "The edit key could not be issued: " + (exc.strerror or str(exc)),
+                                                "code": "unavailable"})
                 if value is None:
                     return self.send_data(403, {"error": "This edit ticket is invalid, expired or already used; open the map again with richi map",
                                                 "code": "ticket_invalid"})
@@ -732,14 +774,19 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
             if body is None:
                 return None
             if path.path == "/api/agents":
-                with agents_lock:
+                if not agents_lock.acquire(timeout=TURN_TIMEOUT):
+                    return self.send_data(503, {"error": "Another change of the agents is in progress; try again",
+                                                "code": "busy"})
+                try:
                     status, payload = agent_change(body)
+                finally:
+                    agents_lock.release()
                 return self.send_data(status, payload)
             change = rules_change(body)
             if len(change) > rules.MAX_CHANGE:
                 # More than the rules command reads; escaping makes non-ASCII text several times longer.
                 return self.send_data(413, {"error": "The rule change is too large", "code": "limit"})
-            if not rules_lock.acquire(timeout=RULES_WORKER_TIMEOUT + 5):
+            if not rules_lock.acquire(timeout=TURN_TIMEOUT):
                 return self.send_data(503, {"error": "Another rule change is in progress; try again", "code": "busy"})
             try:
                 status, payload = _run_rules_request(database, ["rules", "apply", "--json", "-"], runtime,

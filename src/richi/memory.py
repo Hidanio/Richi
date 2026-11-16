@@ -963,6 +963,18 @@ def run(args, cli=None):
         conn.close()
 
 
+def _store_busy(exc):
+    """Whether SQLite gave up waiting for a lock that another connection holds."""
+    if not isinstance(exc, sqlite3.OperationalError):
+        return False
+    code = getattr(exc, "sqlite_errorcode", None)
+    if code is not None:
+        # The primary result code: SQLITE_BUSY is 5, SQLITE_LOCKED is 6.
+        return (code & 0xFF) in (5, 6)
+    # Python reports the code only from 3.11; this is its text.
+    return "is locked" in str(exc)
+
+
 def main(argv=None):
     try:
         cli = parser()
@@ -990,6 +1002,9 @@ def main(argv=None):
         payload = {"error": str(exc)}
         if isinstance(exc, MemoryError) and exc.code:
             payload["code"] = exc.code
+        elif _store_busy(exc):
+            # Not a mistake in the command: another one holds the store, and trying again helps.
+            payload["code"] = "busy"
         payload.update(getattr(exc, "details", None) or {})
         print(json.dumps(payload, ensure_ascii=False), file=sys.stderr)
         return 1

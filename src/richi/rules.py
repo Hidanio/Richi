@@ -21,7 +21,6 @@ made the change, as far as Richi can tell.
 """
 import json
 import os
-import re
 import shlex
 import sys
 from typing import NamedTuple, Optional
@@ -31,9 +30,8 @@ from . import agents
 
 PREFIX = "rule:"
 LOG_PREFIX = "rule-log:"
-SCOPES = ("global", "project")
 # IDs of rules and names of skills (as an agent lists them, e.g. plugin:skill) share one shape.
-_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}\Z")
+_NAME = agents.SKILL
 ID_HELP = "Stable rule ID: 1-100 letters, digits, '.', '_', ':' or '-', starting with a letter or digit"
 SKILL_HELP = agents.SKILL_HELP
 valid_skill = agents.valid_skill
@@ -87,10 +85,16 @@ class Unsupported(ValueError):
         self.level = level
 
 
-def _failure(api, message, code):
-    """A command error with a stable code, so the map can tell a conflict from bad input."""
+def _failure(api, message, code, subject=None):
+    """A command error with a stable code, so the map can tell a conflict from bad input.
+
+    subject says which of the things a code covers the error is about (for
+    limit: text, rules or record), so that nobody has to read the message.
+    """
     error = api.MemoryError(message)
     error.code = code
+    if subject is not None:
+        error.details = {"subject": subject}
     return error
 
 
@@ -187,7 +191,8 @@ def _text(value, api):
     if not _storable(value):
         raise api.MemoryError("Rule text must not contain an unpaired surrogate character")
     if len(value) > MAX_TEXT:
-        raise _failure(api, "Rule text must be at most %d characters; keep one rule per instruction" % MAX_TEXT, "limit")
+        raise _failure(api, "Rule text must be at most %d characters; keep one rule per instruction" % MAX_TEXT,
+                       "limit", "text")
     return value
 
 
@@ -218,9 +223,10 @@ def _skill_options(values, api):
 def _skill_setting(shared, own, api, kept=()):
     """(skill for every agent, skills per agent or None) as a rule stores them.
 
-    An agent may be a known one or one the rule already names (kept). Agents
-    that would get the same skill share it: when every known agent names the
-    same one, it is stored as the skill for every agent.
+    An agent may be a known one or one the rule already names (kept). A skill
+    given for every agent stays that, also when each known agent gets another
+    one: it is for the agents this computer does not list. Without one, a
+    skill that every known agent names becomes the skill for every agent.
     """
     if own is not None and not isinstance(own, dict):
         raise api.MemoryError("skills maps an agent ID to its skill")
@@ -230,7 +236,7 @@ def _skill_setting(shared, own, api, kept=()):
         raise api.MemoryError("Unknown agent in skills: " + ", ".join(unknown) + "; known agents: "
                               + ", ".join(agents.ids()))
     shared, own = _skill(shared, api), {agent: _skill(name, api) for agent, name in (own or {}).items()}
-    if own and set(agents.ids()) <= set(own) and len(set(own.values())) == 1:
+    if shared is None and own and set(agents.ids()) <= set(own) and len(set(own.values())) == 1:
         shared, own = next(iter(own.values())), {}
     own = {agent: name for agent, name in own.items() if name != shared}
     return shared, (dict(sorted(own.items())) or None)
@@ -271,11 +277,23 @@ def current_author(environ=None):
     return Author(value or None, None if marked else agents.detect(environ))
 
 
+def _parsed(value):
+    """The JSON value of a stored row; ValueError also when it could not be written out again.
+
+    JSON may spell half of a surrogate pair as an escape. Text that holds one
+    can be neither printed nor stored as UTF-8, so such a row is unreadable.
+    """
+    record = json.loads(value)
+    if not _storable(json.dumps(record, ensure_ascii=False)):
+        raise ValueError("holds an unpaired surrogate character")
+    return record
+
+
 def _decode(key, value):
     """The stored rule, or ValueError. Fields this version does not know are kept."""
     if len(value) > MAX_STORED:
         raise ValueError("the stored record is larger than %d characters" % MAX_STORED)
-    record = json.loads(value)
+    record = _parsed(value)
     if not isinstance(record, dict):
         raise ValueError("not an object")
     # First of all: a newer format may also change the fields checked below.
@@ -308,7 +326,7 @@ def _decode(key, value):
 def _stored_version(value):
     """What `rules remove --expected-updated-at` takes for a row that cannot be read."""
     try:
-        version = json.loads(value)["updated_at"]
+        version = _parsed(value)["updated_at"]
     except (ValueError, TypeError, KeyError, RecursionError):
         return "invalid"
     return version if isinstance(version, str) else "invalid"
@@ -375,14 +393,14 @@ def _check_total(conn, api, replaced=None, added=""):
     total = sum(len(rule["text"]) for rule in load(conn) if rule["id"] != replaced) + len(added)
     if total > MAX_TOTAL:
         raise _failure(api, "Rules of one workspace may hold at most %d characters in all (would be %d); "
-                       "shorten or remove rules first" % (MAX_TOTAL, total), "limit")
+                       "shorten or remove rules first" % (MAX_TOTAL, total), "limit", "rules")
 
 
 def _store(conn, rule, api):
     value = json.dumps(rule, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     if len(value) > MAX_STORED:
         # It could not be read back: _decode refuses a record of this size.
-        raise _failure(api, "The rule with all it stores would exceed %d characters" % MAX_STORED, "limit")
+        raise _failure(api, "The rule with all it stores would exceed %d characters" % MAX_STORED, "limit", "record")
     conn.execute("INSERT INTO metadata(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                  (PREFIX + rule["id"], value))
 
@@ -405,8 +423,8 @@ def log(conn, identifier=None, entries=20):
     found = []
     for (value,) in rows:
         try:
-            entry = json.loads(value)
-        except (ValueError, RecursionError):
+            entry = _parsed(value)
+        except (ValueError, TypeError, RecursionError):
             continue
         if isinstance(entry, dict) and (identifier is None or entry.get("id") == identifier):
             found.append(entry)
@@ -421,8 +439,8 @@ def clear_log(conn, identifier=None):
     keys = []
     for key, value in rows:
         try:
-            entry = json.loads(value)
-        except (ValueError, RecursionError):
+            entry = _parsed(value)
+        except (ValueError, TypeError, RecursionError):
             entry = None
         # An entry that cannot be read belongs to no rule, so only clearing everything removes it.
         if identifier is None or (isinstance(entry, dict) and entry.get("id") == identifier):
@@ -449,6 +467,13 @@ def show(conn, api, workspace, project_id, agent=None, unmatched_path=None):
             result["project_rules_not_shown"] = {
                 "projects": others,
                 "next": "richi --project-path PATH rules show (for work in one of these projects)"}
+    if agent is not None and agent not in agents.ids() and not any(agent in (rule["skills"] or {}) for rule in rules):
+        # Most likely a misspelt ID: the caller would silently get another agent's skills, or none.
+        result["agent_problem"] = {
+            "error": "Unknown agent ID: " + agent + "; no agent here and no rule has it",
+            "known": agents.describe(),
+            "next": "use_skill is each rule's skill for every agent. If you are one of the known agents, "
+                    "run the command again with --agent and its ID."}
     if unmatched_path is not None:
         # The global rules above still bind the agent in a repository this workspace does not know.
         result["project_path_problem"] = {
@@ -508,13 +533,17 @@ def change(conn, request, api, checked_project=None, author=Author()):
     checked_project is the --project-path project; author is who makes the
     change (current_author), recorded with the rule and in the change log.
     """
-    if not isinstance(request, dict) or request.get("action") not in CHANGE_FIELDS \
-            or set(request) - CHANGE_FIELDS[request["action"]]:
+    action = request.get("action") if isinstance(request, dict) else None
+    # A string first: any other JSON value is not an action, and one that cannot be hashed is not a key.
+    if not isinstance(action, str) or action not in CHANGE_FIELDS or set(request) - CHANGE_FIELDS[action]:
         raise api.MemoryError("A rule change is an object with action add, update or remove, id and that "
                               "action's fields only")
-    action, identifier = request["action"], request.get("id")
-    if not isinstance(identifier, str):
+    identifier, expected = request.get("id"), request.get("expected_updated_at")
+    # Text that cannot be UTF-8 reaches neither the store nor a message.
+    if not isinstance(identifier, str) or not _storable(identifier):
         raise api.MemoryError(ID_HELP)
+    if expected is not None and (not isinstance(expected, str) or not _storable(expected)):
+        raise api.MemoryError("expected_updated_at is the rule's updated_at as last read")
     row = conn.execute("SELECT key, value FROM metadata WHERE 1=1 AND key = ?", (PREFIX + identifier,)).fetchone()
     # Only removal takes a key that is not an ID: such a row cannot be read and must not stay forever.
     if _NAME.fullmatch(identifier) is None and not (action == "remove" and row is not None):
@@ -523,7 +552,8 @@ def change(conn, request, api, checked_project=None, author=Author()):
         if row is not None:
             raise _failure(api, "Rule " + identifier + " already exists; change it with rules update", "exists")
         scope, project = request.get("scope"), request.get("project")
-        if not (scope == "global" and project is None) and not (scope == "project" and isinstance(project, str)):
+        if not (scope == "global" and project is None) \
+                and not (scope == "project" and isinstance(project, str) and _storable(project)):
             raise api.MemoryError("Choose scope global, or scope project with a project")
         if scope == "project" and checked_project is not None and project != checked_project:
             raise api.MemoryError("Rule for project " + project + " does not match the checked project "
@@ -541,7 +571,6 @@ def change(conn, request, api, checked_project=None, author=Author()):
         return {"results": [{"id": identifier, "status": "created"}], "rule": rule}
     if row is None:
         raise api.NotFoundError("Unknown rule: " + identifier + "; see rules list")
-    expected = request.get("expected_updated_at")
     try:
         rule = _decode(row[0], row[1])
     except (ValueError, TypeError, KeyError, RecursionError) as exc:

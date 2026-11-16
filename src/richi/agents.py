@@ -50,8 +50,10 @@ VARIABLE_HELP = ("Environment variable NAME or NAME=VALUE: NAME marks the agent'
                  "NAME=VALUE when it has that value")
 # How an agent's skill says that only the user may invoke it.
 MANUAL_SKILLS = ("none", "front-matter")
-_SOURCE_KEY = re.compile(r"[a-z][a-z0-9-]{0,31}\Z")
-_VARIABLE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}(=[^\x00-\x1f\x7f]{1,100})?\Z")
+# A built-in skill source is named by a short word of the same shape as an agent ID.
+_SOURCE_KEY = ID
+# The value is one line that can be written as UTF-8: no control characters, no half of a surrogate pair.
+_VARIABLE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}(=[^\x00-\x1f\x7f\ud800-\udfff]{1,100})?\Z")
 # Where the Claude desktop app keeps the claude.ai plugins and built-in skills
 # it passes to Claude Code (CLAUDE_CODE_PLUGIN_ATTRIBUTION and
 # CLAUDE_CODE_DESKTOP_SKILLS_PLUGIN_DIR in that process; shells do not get them).
@@ -187,7 +189,8 @@ def valid_variable(value):
 def folder_path(text, home):
     """The directory a stored folder names; ~ is the user's home."""
     if text == "~" or text.startswith("~/"):
-        return Path(home) / text[2:]
+        # Whatever follows ~/ stays under the home directory: a second slash does not make it absolute.
+        return Path(home) / text[2:].lstrip("/")
     return Path(text)
 
 
@@ -196,13 +199,25 @@ def builtin_ids():
 
 
 def settings_path(environ=None, home=None):
-    """agents.json in Richi's configuration directory (richi_launcher.config._platform_dirs)."""
+    """agents.json in Richi's configuration directory.
+
+    The launcher decides where that directory is (richi_launcher.config._platform_dirs),
+    but only for the process's own environment and home. This is the same
+    rule for a given environment and home; a test keeps the two equal.
+    """
     environ = os.environ if environ is None else environ
     home = Path(home) if home is not None else Path.home()
     if sys.platform == "darwin":
         return home / "Library" / "Application Support" / "Richi" / SETTINGS_FILE
     configured = environ.get("XDG_CONFIG_HOME")
-    base = Path(configured) if configured and Path(configured).is_absolute() else home / ".config"
+    base = home / ".config"
+    if configured and Path(configured).is_absolute():
+        base = Path(configured)
+        try:
+            # As the launcher names it: with links and ".." resolved.
+            base = base.resolve()
+        except (OSError, RuntimeError):
+            pass
     return base / "richi" / SETTINGS_FILE
 
 
@@ -279,8 +294,10 @@ def load_settings(environ=None, home=None):
         if info.st_size > MAX_SETTINGS:
             raise ValueError("the file is larger than %d bytes" % MAX_SETTINGS)
         entries, problem = check_settings(json.loads(path.read_text(encoding="utf-8"))), None
-    except (OSError, ValueError) as exc:
-        entries, problem = {}, "Agent settings are ignored: " + str(path) + ": " + str(exc) + "; fix or remove the file"
+    except (OSError, ValueError, RecursionError) as exc:
+        # RecursionError: brackets nested deeper than the parser goes.
+        reason = "nested too deeply" if isinstance(exc, RecursionError) else str(exc)
+        entries, problem = {}, "Agent settings are ignored: " + str(path) + ": " + reason + "; fix or remove the file"
     _cache.clear()
     _cache[str(path)] = (signature, entries, problem)
     return entries, problem
