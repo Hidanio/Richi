@@ -390,15 +390,15 @@ class RulesTests(unittest.TestCase):
                 self.assertEqual([(rule["id"], rule.get("when")) for rule in shown["rules"]],
                                  [("kept", "pull-request" if view == "list" else None)])
                 self.assertEqual([(item["id"], item["updated_at"], item["next"]) for item in shown["invalid_rules"]], [
-                    ("broken", "invalid", "richi rules remove broken --expected-updated-at invalid"),
-                    ("garbled", "invalid", "richi rules remove garbled --expected-updated-at invalid"),
-                    ("partial", "v1", "richi rules remove partial --expected-updated-at v1")])
+                    ("broken", "invalid", "richi rules remove broken --expected-updated-at=invalid"),
+                    ("garbled", "invalid", "richi rules remove garbled --expected-updated-at=invalid"),
+                    ("partial", "v1", "richi rules remove partial --expected-updated-at=v1")])
                 self.assertTrue(all(item["error"] for item in shown["invalid_rules"]))
         updated = self.command("alpha", "rules", "update", "kept", "--expected-updated-at", kept["updated_at"],
                                "--text", "Reply in English.")["rule"]
         self.assertEqual((updated["text"], updated["when"]), ("Reply in English.", "pull-request"))
         # A damaged row cannot be changed, only removed, and with the version the listing names.
-        self.assertIn("rules remove broken --expected-updated-at invalid",
+        self.assertIn("rules remove broken --expected-updated-at=invalid",
                       self.command("alpha", "rules", "update", "broken", "--expected-updated-at", "invalid",
                                    "--text", "x", ok=False)["error"])
         self.assertEqual(self.command("alpha", "rules", "remove", "partial", "--expected-updated-at", "invalid",
@@ -489,6 +489,15 @@ class RulesTests(unittest.TestCase):
         shown, skills = used("cursor")
         self.assertEqual((skills["beside"], skills["page"]), ("own", "general"))
         self.assertNotIn("agent_problem", shown)
+        # Without one, the same skill for every known agent is the action's skill: agents added later
+        # get it too. An empty one beside per-agent skills could only mean "none for the others",
+        # which a rule cannot keep apart from no skill, so it is refused rather than ignored.
+        same = add("same-for-all", "claude=pr", "codex=pr")
+        self.assertEqual((same["skill"], same["skills"]), ("pr", None))
+        refused = self.command("alpha", "rules", "add", "empty-beside", "--global", "--text", "x", "--skill", "",
+                               "--skill", "claude=pr", "--skill", "codex=pr", ok=False)
+        self.assertIn("empty --skill", refused["error"])
+        self.assertEqual(used("cursor")[1]["same-for-all"], "pr")
 
     def test_half_a_surrogate_pair_in_a_stored_row_does_not_hide_the_rules(self):
         self.add("alpha", "kept", "--global", text="Reply in Russian.")
@@ -540,6 +549,145 @@ class RulesTests(unittest.TestCase):
                     self.assertNotIn(word, failed["error"])
         self.assertEqual([rule["id"] for rule in self.command("alpha", "rules", "list")["rules"]], ["kept"])
 
+    def test_rows_other_programs_wrote_are_reported_not_fatal(self):
+        kept = self.add("alpha", "kept", "--global", text="Reply in Russian.")
+        database = self.configs["alpha"].parent / "memory.sqlite3"
+
+        def row(identifier, **changes):
+            return json.dumps(dict(kept, id=identifier, **changes))
+        with closing(sqlite3.connect(str(database))) as conn, conn:
+            # Numbers JSON cannot write back (Infinity, NaN): JSON reads them, nobody can print them.
+            conn.execute("INSERT INTO metadata(key, value) VALUES ('rule:huge', ?)", (row("huge").replace(
+                '"source": null', '"source": 1e999'),))
+            conn.execute("INSERT INTO metadata(key, value) VALUES ('rule:nan', ?)", (row("nan").replace(
+                '"source": null', '"source": NaN'),))
+            # Bytes that are not UTF-8, as text and as a BLOB, in the value and in the key.
+            conn.execute("INSERT INTO metadata(key, value) VALUES ('rule:latin', CAST(? AS TEXT))",
+                         (json.dumps(dict(kept, id="latin", text="caf\u00e9"), ensure_ascii=False).encode("latin-1"),))
+            conn.execute("INSERT INTO metadata(key, value) VALUES ('rule:blob', ?)", (b"\xff\x00 not json",))
+            conn.execute("INSERT INTO metadata(key, value) VALUES (CAST(? AS TEXT), ?)", (b"rule:bad\xff", row("x")))
+            # A key and a version far longer than any Richi writes.
+            conn.execute("INSERT INTO metadata(key, value) VALUES (?, ?)", ("rule:" + "k" * 600, "{}"))
+            conn.execute("INSERT INTO metadata(key, value) VALUES ('rule:old', ?)",
+                         (json.dumps({"id": "old", "updated_at": "v" * 600000}),))
+            # Log entries alike: they are passed over, and clearing the log removes them.
+            conn.execute("INSERT INTO metadata(key, value) VALUES ('rule-log:9999:latin', CAST(? AS TEXT))",
+                         (b"\xff",))
+            # A key of another spelling is no rule.
+            conn.execute("INSERT INTO metadata(key, value) VALUES ('RULE:upper', '{}')")
+        for view in ("show", "list"):
+            with self.subTest(view=view):
+                listed = self.command("alpha", "rules", view)
+                self.assertEqual([rule["id"] for rule in listed["rules"]], ["kept"])
+                invalid = {item["id"]: item for item in listed["invalid_rules"]}
+                self.assertEqual(sorted(invalid), sorted(["huge", "nan", "latin", "blob", "bad\\xff", "old",
+                                                          "k" * 200 + "\u2026"]))
+                self.assertLess(len(json.dumps(listed)), 20000)
+                self.assertIn("not finite", invalid["nan"]["error"])
+                self.assertIn("not UTF-8", invalid["latin"]["error"])
+                self.assertEqual(invalid["old"]["updated_at"], "invalid")
+                self.assertNotIn("next", invalid["k" * 200 + "\u2026"])
+        # The log is read past an entry that is not text.
+        self.assertEqual([entry["id"] for entry in self.command("alpha", "rules", "log")["entries"]], ["kept"])
+        # Each row Richi can name is removed by the command it names, as a shell would split it.
+        for item in listed["invalid_rules"]:
+            if "next" in item:
+                words = shlex.split(item["next"])
+                self.assertEqual(self.command("alpha", *words[1:])["results"], [{"id": item["id"], "status": "removed"}])
+        self.assertEqual([item["id"] for item in self.command("alpha", "rules", "list")["invalid_rules"]],
+                         ["k" * 200 + "\u2026"])
+        self.command("alpha", "rules", "clear-log")
+        with closing(sqlite3.connect(str(database))) as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM metadata WHERE key LIKE 'rule-log:%'").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT count(*) FROM metadata WHERE key = 'RULE:upper'").fetchone()[0], 1)
+
+    def test_text_a_shell_could_not_decode_is_kept_out_of_the_store(self):
+        # A byte the shell could not decode arrives as half of a surrogate pair.
+        with mock.patch.dict(os.environ, {"RICHI_RULES_ACTOR": "map\udcff"}):
+            added = self.add("alpha", "actor", "--global")
+        self.assertEqual(added["changed_by"], "map")
+        for view in ("show", "list"):
+            failed = self.command("alpha", "rules", view, "--project", "x\udcff", ok=False)
+            self.assertEqual(failed["code"], "not_found")
+            self.assertNotIn("codec", failed["error"])
+
+    def test_a_change_that_is_json_null_is_refused_without_reading_again(self):
+        # Once read for null, a second read inside the write transaction found nothing on a pipe and
+        # would have waited for a terminal while the store was locked.
+        failed = self.command("alpha", "rules", "apply", "--json", "-", stdin="null", ok=False)
+        self.assertIn("A rule change is an object", failed["error"])
+        expected = self.command("alpha", "rules", "apply", "--json", "-", ok=False, stdin=json.dumps(
+            {"action": "remove", "id": self.add("alpha", "typed", "--global")["id"], "expected_updated_at": 5}))
+        self.assertNotIn("code", expected)
+        self.assertIn("expected_updated_at", expected["error"])
+
+    def test_list_and_log_say_what_they_leave_out(self):
+        self.add("alpha", "global", "--global", text="a" * 10)
+        self.add("alpha", "service", "--project", "service", text="b" * 20)
+        # The size is the workspace's, beside the workspace's limit, whatever the list shows.
+        for scope in ([], ["--global"], ["--project", "service"]):
+            listed = self.command("alpha", "rules", "list", *scope)
+            self.assertEqual((listed["characters"], listed["limit_characters"]), (30, rules.MAX_TOTAL))
+        self.assertEqual(len(self.command("alpha", "rules", "list", "--global")["rules"]), 1)
+        log = self.command("alpha", "rules", "log", "--entries", "1")
+        self.assertEqual((len(log["entries"]), log["more"]), (1, True))
+        self.assertFalse(self.command("alpha", "rules", "log", "--entries", "2")["more"])
+        self.assertFalse(self.command("alpha", "rules", "log", "--id", "global")["more"])
+        # A project nobody registered is an error, not an empty list.
+        self.assertEqual(self.command("alpha", "rules", "show", "--project", "missing", ok=False)["code"], "not_found")
+        self.assertEqual(self.command("alpha", "rules", "list", "--project", "missing", ok=False)["code"], "not_found")
+
+    def test_an_update_or_removal_needs_the_version(self):
+        rule = self.add("alpha", "versioned", "--global")
+        for change in ({"action": "update", "id": "versioned", "text": "y"}, {"action": "remove", "id": "versioned"}):
+            with self.subTest(action=change["action"]):
+                failed = self.command("alpha", "rules", "apply", "--json", "-", stdin=json.dumps(change), ok=False)
+                self.assertEqual(failed["code"], "conflict")
+        self.assertEqual(self.command("alpha", "rules", "list")["rules"][0]["text"], rule["text"])
+
+    def test_a_complete_row_with_one_wrong_field_is_not_served(self):
+        good = self.add("alpha", "good", "--global")
+        # Each row is complete but for one field; no damaged row in the other tests reached these checks.
+        broken = {"other-id": {"id": "someone-else"}, "text": {"text": 5}, "version": {"updated_at": 5},
+                  "skill": {"skill": "two words"}, "skills": {"skills": {"codex": "two words"}},
+                  "agent": {"skills": {"Codex": "x"}}, "empty-skills": {"skills": {}},
+                  "requires-0": {"requires": 0}, "requires-true": {"requires": True},
+                  "global-project": {"project_id": "service"}}
+        for name, changes in broken.items():
+            self.stored("alpha", "rule:" + name, json.dumps({**good, "id": name, **changes}))
+        self.stored("alpha", "rule:two words", json.dumps({**good, "id": "two words"}))
+        self.stored("alpha", "rule:no-created", json.dumps({key: value for key, value in good.items()
+                                                            if key != "created_at"} | {"id": "no-created"}))
+        listed = self.command("alpha", "rules", "list")
+        self.assertEqual([rule["id"] for rule in listed["rules"]], ["good"])
+        self.assertEqual(sorted(item["id"] for item in listed["invalid_rules"]),
+                         sorted([*broken, "two words", "no-created"]))
+
+    def test_clearing_one_rules_log_keeps_entries_nobody_can_read(self):
+        self.add("alpha", "cleared", "--global")
+        self.stored("alpha", "rule-log:0000:unreadable", "{not json")
+        self.assertEqual(self.command("alpha", "rules", "clear-log", "--id", "cleared")["results"][0]["entries"], 1)
+        database = self.configs["alpha"].parent / "memory.sqlite3"
+        with closing(sqlite3.connect(str(database))) as conn:
+            self.assertEqual(conn.execute("SELECT key FROM metadata WHERE key LIKE 'rule-log:%'").fetchall(),
+                             [("rule-log:0000:unreadable",)])
+
+    def test_unusable_agent_settings_are_named_where_rules_need_agents(self):
+        settings = agents.settings_path()
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        settings.write_text("{not json", encoding="utf-8")
+        agents.forget_settings()
+        self.addCleanup(agents.forget_settings)
+        for view in ("show", "list"):
+            problem = self.command("alpha", "rules", view)["agent_settings_problem"]
+            self.assertIn(str(settings), problem["error"])
+        failed = self.command("alpha", "rules", "add", "own", "--global", "--text", "x", "--skill", "gemini-cli=r",
+                              ok=False)
+        self.assertIn("Unknown agent in skills: gemini-cli", failed["error"])
+        self.assertIn(str(settings), failed["error"])
+        settings.unlink()
+        self.assertNotIn("agent_settings_problem", self.command("alpha", "rules", "show"))
+
     def test_a_store_that_another_command_holds_is_reported_as_busy(self):
         database = self.configs["alpha"].parent / "memory.sqlite3"
         # The command waits for the lock as long as its timeout says; here that is a moment.
@@ -552,6 +700,10 @@ class RulesTests(unittest.TestCase):
         # A code of its own: the command was right, and trying again helps.
         self.assertEqual(failed, {"error": "database is locked", "code": "busy"})
         self.add("alpha", "late", "--global")
+        # Only SQLite's busy is; other errors that mention a lock are not.
+        for message in ("database table is locked", "no such table: is locked", "database is locked (5)"):
+            self.assertFalse(memory._store_busy(sqlite3.OperationalError(message)), message)
+        self.assertFalse(memory._store_busy(ValueError("database is locked")))
 
     def stored(self, store, key, value=None, **changes):
         """Write a metadata row directly, as a hand edit or another Richi version would; value None edits the row."""
@@ -574,16 +726,19 @@ class RulesTests(unittest.TestCase):
         self.stored("alpha", "rule:two words", "{}")
         self.stored("alpha", "rule:-dash", "[1]")
         self.stored("alpha", "rule:", '"text"')
+        # zsh would run a word that begins with "=" as the path of that command.
+        self.stored("alpha", "rule:=ls", "[2]")
         for view in ("show", "list"):
             with self.subTest(view=view):
                 listed = self.command("alpha", "rules", view)
                 self.assertEqual([rule["id"] for rule in listed["rules"]], ["first"])
                 self.assertEqual({item["id"]: item["next"] for item in listed["invalid_rules"]}, {
-                    "": "richi rules remove '' --expected-updated-at invalid",
-                    "-dash": "richi rules remove --expected-updated-at invalid -- -dash",
-                    "second": "richi rules remove second --expected-updated-at " + listed["invalid_rules"][2]["updated_at"],
-                    "third": "richi rules remove third --expected-updated-at " + listed["invalid_rules"][3]["updated_at"],
-                    "two words": "richi rules remove 'two words' --expected-updated-at invalid"})
+                    "": "richi rules remove '' --expected-updated-at=invalid",
+                    "-dash": "richi rules remove --expected-updated-at=invalid -- -dash",
+                    "=ls": "richi rules remove '=ls' --expected-updated-at=invalid",
+                    "second": "richi rules remove second --expected-updated-at=" + listed["invalid_rules"][3]["updated_at"],
+                    "third": "richi rules remove third --expected-updated-at=" + listed["invalid_rules"][4]["updated_at"],
+                    "two words": "richi rules remove 'two words' --expected-updated-at=invalid"})
         # A key that is not an ID is accepted only to remove the row that has it.
         for argv in (["rules", "remove", "no such row", "--expected-updated-at", "invalid"],
                      ["rules", "update", "two words", "--expected-updated-at", "invalid", "--text", "x"],
@@ -726,6 +881,8 @@ class RulesIntegrationTests(unittest.TestCase):
                 mock.patch.object(config.sys, "platform", "linux"):
             self.assertEqual(chats.current_chat("chat")["next_commands"][0], "richi chat bind --current")
             bound = chats.bind_chat("chat", "default")
+            # The commands themselves: compared only with the list, an empty list would pass.
+            self.assertEqual(chats.RULES_COMMANDS, ["richi rules show", "richi --project-path PATH rules show"])
             self.assertEqual(bound["next_commands"], chats.RULES_COMMANDS)
             current = chats.current_chat("chat")
             self.assertEqual(current["next_commands"], chats.RULES_COMMANDS)

@@ -379,7 +379,10 @@ def _main(argv=None):
                         workspace=settings.workspace, restart=args.action == "restart")
         if not args.no_open:
             # The page opened here may also change standing rules (map_access).
-            result["browser_opened"] = map_access.open_browser(result["url"], database)
+            problems = []
+            result["browser_opened"] = map_access.open_browser(result["url"], database, problems=problems)
+            if problems:
+                result["editing_problem"] = problems[0]
         print(json.dumps(result, ensure_ascii=False))
         return 0
     except MapRefused as exc:

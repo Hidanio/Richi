@@ -8,10 +8,14 @@ one-time ticket next to the store, readable only by the user, and opens the
 map with that ticket in the URL fragment, which browsers never send to a
 server. The page redeems the ticket once, within TICKET_SECONDS, for a new
 edit secret, keeps the secret in its session storage and sends it with every
-change. A ticket seen afterwards is spent, and opening the map again replaces
-the secret. A page opened without a valid one, such as a bookmark or an
-earlier tab, still shows the rules and composes the commands that change them.
-The ticket and the secret belong to one store: stores kept in one directory do
+change and every reading of the rules and the agents, which tells it whether
+it may edit. A ticket seen afterwards is spent, and opening the map again
+replaces the secret. The secret also ends with the map: a map that stops, or
+starts other than by handing itself over, forgets it (forget_secret), so a
+page left open cannot hand a still valid key to whatever answers on that port
+later. A page opened without a valid one, such as a bookmark or an earlier
+tab, still shows the rules and composes the commands that change them. The
+ticket and the secret belong to one store: stores kept in one directory do
 not share them.
 
 Where the browser would receive the ticket as a command-line argument, which
@@ -21,6 +25,7 @@ snap or flatpak package) cannot read that file, so when the ticket is still
 unused after FALLBACK_SECONDS the map's plain address is opened as well: the
 map always appears, there composing commands instead of saving.
 """
+import errno
 import hashlib
 import hmac
 import html
@@ -39,6 +44,8 @@ from . import private_files
 
 TICKET_SECONDS = 120
 FALLBACK_SECONDS = 5
+# How long issuing or redeeming a ticket waits for the other; each holds the lock for a moment.
+LOCK_SECONDS = 10
 HEADER = "X-Richi-Map-Secret"
 _TOKEN = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -69,11 +76,19 @@ def redirect_path(database, create=False):
 
 
 def _read_private(path):
-    """The file's text if it is a regular file only this user can read, else None."""
+    """The file's text if it is a regular file only this user can read, else None.
+
+    OSError when the file is there but cannot be read now, such as with too
+    many open files: that says nothing about the key, so it is not taken for
+    "no key" (a page would drop a key that still works).
+    """
     try:
         descriptor = os.open(str(path), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-    except OSError:
-        return None
+    except OSError as exc:
+        # Missing, or a link (O_NOFOLLOW refuses one with ELOOP, on some systems EMLINK): no usable file.
+        if isinstance(exc, (FileNotFoundError, NotADirectoryError)) or exc.errno in (errno.ELOOP, errno.EMLINK):
+            return None
+        raise
     try:
         info = os.fstat(descriptor)
         if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
@@ -84,7 +99,7 @@ def _read_private(path):
 
 
 def secret(database):
-    """The current edit secret of this store's map, or None when there is no usable one."""
+    """The current edit secret of this store's map, or None when there is no usable one; OSError (_read_private)."""
     value = (_read_private(secret_path(database)) or "").strip()
     return value if _TOKEN.fullmatch(value) else None
 
@@ -95,6 +110,14 @@ def _new_secret(database):
     value = secrets.token_hex(32)
     private_files.replace(secret_path(database, create=True), value + "\n")
     return value
+
+
+def forget_secret(database):
+    """End the edit key of this store's map: its pages compose commands until richi map opens a new one."""
+    try:
+        os.unlink(str(secret_path(database)))
+    except FileNotFoundError:
+        pass
 
 
 def authorized(database, value):
@@ -109,7 +132,7 @@ def issue_ticket(database, now=None):
     expires = (time.time() if now is None else now) + TICKET_SECONDS
     path = ticket_path(database, create=True)
     # Not while a page redeems the previous ticket: this one would be taken for it and deleted.
-    with private_files.locked(path):
+    with private_files.locked(path, LOCK_SECONDS):
         private_files.replace(path, json.dumps({"ticket": ticket, "expires": expires}))
     return ticket
 
@@ -127,7 +150,7 @@ def redeem(database, ticket, now=None):
     if not path.parent.is_dir():
         return None
     # One at a time, also against a new ticket being issued by another process.
-    with private_files.locked(path):
+    with private_files.locked(path, LOCK_SECONDS):
         try:
             issued = json.loads(_read_private(path) or "null")
             expected, expires = issued["ticket"], float(issued["expires"])
@@ -173,17 +196,24 @@ def _unused(database, ticket):
         return json.loads(_read_private(ticket_path(database)) or "null")["ticket"] == ticket
     except (ValueError, TypeError, KeyError):
         return False
+    except OSError:
+        # Unknown for now: the wait goes on, and at its end the plain address is opened anyway.
+        return True
 
 
-def open_browser(address, database, opener=None, wait=FALLBACK_SECONDS, sleep=time.sleep):
+def open_browser(address, database, opener=None, wait=FALLBACK_SECONDS, sleep=time.sleep, problems=None):
     """Open the map so that this page may change rules; returns whether a browser was opened.
 
-    opener replaces the browser in tests: it takes the URL and says whether it opened.
+    opener replaces the browser in tests: it takes the URL and says whether it
+    opened. problems, a list, receives why the page cannot edit, if it cannot.
     """
     try:
         ticket = issue_ticket(database)
-    except OSError:
+    except OSError as exc:
         # Without a ticket the map still opens; it composes commands instead of saving.
+        if problems is not None:
+            problems.append("The edit ticket could not be written beside the store (" + (exc.strerror or str(exc))
+                            + "), so this page composes commands instead of saving changes")
         return (opener or webbrowser.open)(address)
     target = address + "#ticket=" + ticket
     if _argument_safe() and (opener or _tell_system_browser)(target):

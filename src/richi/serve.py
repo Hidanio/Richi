@@ -10,7 +10,8 @@ Like the knowledge itself, the rules, the agents with their skill folders (as
 the user wrote them, under the home directory as ~/...) and the names and
 descriptions of this user's installed skills are readable by any client of the
 loopback port. Where the agent settings are kept, and why they could not be
-read, is told only to a page that may edit.
+read, is told only to a page that may edit. The edit key ends with the map
+process (map_access.forget_secret), unless it hands itself over to new code.
 """
 
 import argparse
@@ -56,6 +57,9 @@ GENERATION_ENV = "RICHI_INSTALLATION_GENERATION"
 PROBE_ANSWER = "richi-map-handoff:"
 LISTEN_FD = "listen_fd"
 LISTEN_FD_ENV = "RICHI_MAP_LISTEN_FD"
+# Set by a map for the process that replaces it (a reload or a hand-off): that one keeps the edit
+# key, and any other map process that starts for the store ends it.
+RESTARTED_ENV = "RICHI_MAP_RESTARTED"
 HANDOFF_FEATURES = (LISTEN_FD,)
 
 
@@ -152,6 +156,24 @@ CHANGE_ERROR_STATUS = {"not_found": 404, "conflict": 409, "exists": 409, "settin
 TURN_TIMEOUT = RULES_WORKER_TIMEOUT + 5
 RULES_SOURCE = "richi map"
 CHANGES_ONLY = "The map changes only standing rules and agent settings"
+# What a page that may not edit is told about agent settings that cannot be used: the full text names the file.
+SETTINGS_PROBLEM = "The agent settings cannot be used now"
+# No change the page sends nests deeper; a deeper body is refused before anything else reads it.
+BODY_DEPTH = 16
+# parse_change's answer for a body it refused, apart from any JSON value (null included).
+INVALID = object()
+
+
+def _shallow(value, limit):
+    """Whether no list or object in the value nests deeper than limit."""
+    stack = [(value, 0)]
+    while stack:
+        item, depth = stack.pop()
+        if isinstance(item, (dict, list)):
+            if depth >= limit:
+                return False
+            stack.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
+    return True
 
 
 class LoopbackHTTPServer(ThreadingHTTPServer):
@@ -491,7 +513,7 @@ def public_agents(payload, editing):
         listing.pop("settings_file", None)
         if listing.get("problem"):
             # The full text names the file, and the user with it.
-            listing["problem"] = "Agent settings are ignored: the settings file cannot be used"
+            listing["problem"] = SETTINGS_PROBLEM
     return payload
 
 
@@ -581,10 +603,24 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 raise
             except Exception as exc:
                 if not self.answered:
-                    self.send_data(500, {"error": "The map could not answer: " + type(exc).__name__,
-                                         "code": "internal"})
+                    try:
+                        self.send_data(500, {"error": "The map could not answer: " + type(exc).__name__,
+                                             "code": "internal"})
+                    except (ConnectionError, socket.timeout):
+                        # The client left meanwhile; the failure to log is still the one above.
+                        pass
                 # Still raised: the server's log keeps the traceback.
                 raise
+
+        def edit_key(self):
+            """Whether the request carries this map's edit key; None after answering that the key cannot be read now."""
+            try:
+                return map_access.authorized(database, self.headers.get(map_access.HEADER))
+            except OSError as exc:
+                # Not "no key": the page would drop a key that still works.
+                self.send_data(503, {"error": "The edit key could not be read: " + (exc.strerror or str(exc)),
+                                     "code": "unavailable"})
+                return None
 
         def send_data(self, status, data, content_type="application/json; charset=utf-8"):
             if not isinstance(data, bytes):
@@ -651,6 +687,9 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 finally:
                     git_lock.release()
             if url.path == "/api/rules" and not url.query:
+                editing = self.edit_key()
+                if editing is None:
+                    return None
                 # One reading worker at a time: a burst of requests waits instead of forking.
                 if not rules_read_lock.acquire(timeout=TURN_TIMEOUT):
                     return self.send_data(503, {"error": "The rules are being read; try again", "code": "busy"})
@@ -660,10 +699,15 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 finally:
                     rules_read_lock.release()
                 if status == 200:
-                    payload["editing"] = map_access.authorized(database, self.headers.get(map_access.HEADER))
+                    payload["editing"] = editing
                     payload["limit_text"] = rules.MAX_TEXT
+                    if not editing and isinstance(payload.get("agent_settings_problem"), dict):
+                        payload["agent_settings_problem"]["error"] = SETTINGS_PROBLEM
                 return self.send_data(status, payload)
             if url.path in {"/api/agents", "/api/skills"} and not url.query:
+                editing = self.edit_key() if url.path == "/api/agents" else False
+                if editing is None:
+                    return None
                 # Both scan this user's skill folders: one such reading at a time.
                 if not agents_read_lock.acquire(timeout=TURN_TIMEOUT):
                     return self.send_data(503, {"error": "Skills are being read; try again", "code": "busy"})
@@ -671,7 +715,6 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                     if url.path == "/api/skills":
                         catalog = skill_catalog.catalog()
                         return self.send_data(200, {key: value for key, value in catalog.items() if key != "roots"})
-                    editing = map_access.authorized(database, self.headers.get(map_access.HEADER))
                     payload = public_agents(agent_commands.listing(catalog=True), editing)
                     payload["editing"] = editing
                     return self.send_data(200, payload)
@@ -734,13 +777,17 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
             return self.rfile.read(length)
 
         def parse_change(self, raw):
-            """The JSON value of a request body, or None after answering 400; reached only by an entitled request."""
+            """The JSON value of a request body, or INVALID after answering 400; reached only by an entitled request."""
             try:
-                return json.loads(raw.decode("utf-8"))
+                value = json.loads(raw.decode("utf-8"))
             except (ValueError, UnicodeError, RecursionError):
                 # RecursionError: brackets nested deeper than the parser goes.
+                value = INVALID
+            # Some Pythons parse brackets far deeper than they can write back; no change nests that deep.
+            if value is INVALID or not _shallow(value, BODY_DEPTH):
                 self.send_data(400, {"error": "Invalid JSON", "code": "invalid_request"})
-                return None
+                return INVALID
+            return value
 
         def do_POST(self):
             return self.answer(self.post)
@@ -755,7 +802,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
             if path.path == "/api/session":
                 # A ticket is 64 hexadecimal characters: nothing longer is parsed without the secret.
                 body = self.parse_change(raw) if len(raw) <= 256 else {}
-                if body is None:
+                if body is INVALID:
                     return None
                 try:
                     value = map_access.redeem(database, body.get("ticket") if isinstance(body, dict) else None)
@@ -767,11 +814,14 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                     return self.send_data(403, {"error": "This edit ticket is invalid, expired or already used; open the map again with richi map",
                                                 "code": "ticket_invalid"})
                 return self.send_data(200, {"secret": value})
-            if not map_access.authorized(database, self.headers.get(map_access.HEADER)):
+            editing = self.edit_key()
+            if editing is None:
+                return None
+            if not editing:
                 return self.send_data(403, {"error": "Open the map with richi map to change rules or agents here",
                                             "code": "not_editing"})
             body = self.parse_change(raw)
-            if body is None:
+            if body is INVALID:
                 return None
             if path.path == "/api/agents":
                 if not agents_lock.acquire(timeout=TURN_TIMEOUT):
@@ -1053,6 +1103,13 @@ def _keep_listening(server):
         return None
 
 
+def _forget_secret(database):
+    try:
+        map_access.forget_secret(database)
+    except OSError as exc:
+        print("The previous edit key could not be removed: " + (exc.strerror or str(exc)), flush=True)
+
+
 def _main(argv=None):
     parser = Parser(description=__doc__)
     parser.add_argument("--db", type=Path)
@@ -1074,8 +1131,9 @@ def _main(argv=None):
         parser.error("Cannot read the database: " + str(database))
     if schema not in (2, 3):
         parser.error("The map requires schema 2 or 3; run richi backup and richi migrate")
-    # Taken before anything copies the environment: no child may see it.
+    # Taken before anything copies the environment: no child may see them.
     listener = inherited_listener(args.port)
+    restarted = os.environ.pop(RESTARTED_ENV, None) == "1"
     runtime = current_runtime()
     config_required = args.config is not None or "RICHI_CONFIG" in os.environ
     initial_source = source_fingerprint(runtime.package) if runtime.mode == "dev" else None
@@ -1120,6 +1178,10 @@ def _main(argv=None):
                            + refused.value + "); it was left alone")
         restore_handoff()
         parser.error("Cannot listen on port %d: %s. Choose another --port." % (args.port, problem))
+    if not restarted:
+        # A key from an earlier map process ends here: pages still holding it compose commands, and
+        # the page this start opens gets a new one.
+        _forget_secret(database)
     server.daemon_threads = False
     registration = maps.register(args.port) if follower is not None else None
 
@@ -1177,6 +1239,8 @@ def _main(argv=None):
             if registration is not None:
                 maps.unregister(registration)
             restore_handoff()
+            # Whatever answers on this port next must not be handed a key that still works.
+            _forget_secret(database)
     if not restarting:
         return
     # Replace this process, preserving its PID and URL. No supervisor or old
@@ -1200,6 +1264,8 @@ def _main(argv=None):
         # A late request must not terminate the process before the new map
         # installs its handler; an ignored signal stays ignored across exec.
         signal.signal(handoff_signal, signal.SIG_IGN)
+    # The same map goes on: its pages keep their edit key.
+    environment[RESTARTED_ENV] = "1"
     os.execve(command[0], command, environment)
 
 

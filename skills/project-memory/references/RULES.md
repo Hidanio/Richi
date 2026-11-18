@@ -28,6 +28,9 @@ not know, the global rules still come back and `project_path_problem` says why
 the project's rules do not: follow the global rules and tell the user.
 `invalid_rules` lists stored rules that cannot be read. Agents do not get them,
 so tell the user; `next` is the command that removes such a row.
+`agent_settings_problem` says that the user's agent settings cannot be used now:
+until they are fixed, the user's own agents are unknown and get no skills of
+their own, so tell the user.
 `unsupported_rules` lists rules a newer Richi wrote in a format this version
 does not read; it leaves them out rather than apply them wrongly, so tell the
 user to update Richi (`updated_at` is what removing such a rule takes). Follow the
@@ -76,7 +79,9 @@ skill asks every agent to use that skill whenever the rule applies. When the
 agents use different skills for it, give one per agent as `--skill AGENT=NAME`
 with an agent ID Richi knows; a plain `--skill NAME` beside them is for the other
 agents, including ones this computer does not list. Without a plain one, a skill
-that every known agent is given is stored once, as the skill for every agent.
+that every known agent is given is the skill of the action: it is stored once, as
+the skill for every agent, so agents added later get it too. An empty `--skill`
+removes a rule's skills and is given alone.
 
 The ID is 1–100 letters, digits, `.`, `_`, `:` or `-`, starting with a letter or
 digit; an existing ID is rejected. `--project` must name a project registered in
@@ -85,8 +90,8 @@ characters, and all rules of a workspace together at most 20000, because agents
 load them in full. `--text -` reads the text from stdin, without the newline
 that ends it; write a text that begins with a dash as `--text="- ..."`.
 `rules list` shows every rule of the workspace (`--global` or `--project ID`
-narrows it) with the total size, the registered `projects` and, when there are
-any, `invalid_rules`.
+narrows it) with the total size of all of them in `characters`, the registered
+`projects` and, when there are any, `invalid_rules`.
 
 ## Change or remove a rule
 
@@ -111,8 +116,9 @@ richi --compact-json rules log
 richi --compact-json rules log --id branch-naming --entries 5
 ```
 
-Every change of a rule is kept in the workspace, the latest 200 of them, newest
-first: `at`, the rule `id`, `action` (`created`, `updated` or `removed`), `by`,
+Every change of a rule is kept in the workspace, the latest 200 of them. The
+command shows 20 (`--entries` up to 200), newest first, and `more` says whether
+older ones are kept: `at`, the rule `id`, `action` (`created`, `updated` or `removed`), `by`,
 the detected `agent`, and the rule `before` and `after` the change. `by` is the
 chat identity of the shell that ran the command, or `richi map` for a change
 made in the map; a rule carries the same value of its last change as

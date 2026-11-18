@@ -553,13 +553,16 @@ DETAILS = {
         repository the workspace does not know, the global rules still come back,
         with project_path_problem saying why the project's rules do not.
         invalid_rules names stored rules that cannot be read, and
-        unsupported_rules those that need a newer Richi; agents get neither.""",
+        unsupported_rules those that need a newer Richi; agents get neither.
+        agent_settings_problem says that the agent settings cannot be used now,
+        so the user's own agents are unknown.""",
         examples=(("", "richi rules show"), ("", "richi --project-path /path/to/service rules show"),
                   ("As a particular agent", "richi rules show --agent codex"))),
     "rules list": dict(about="""
         Lists every stored rule of the workspace as it is stored, with where it
-        came from, who changed it last and the total size; agents load rules in
-        full, so the total is limited. agents lists the
+        came from, who changed it last and the total size of all rules (also with
+        --global or --project); agents load rules in full, so the total is
+        limited. agents lists the
         agents a rule may name a skill for, projects the registered projects, and
         invalid_rules the stored rules that cannot be read, each with the command
         that removes it.""",
@@ -567,8 +570,10 @@ DETAILS = {
                   ("", "richi rules list --project service"))),
     "rules add": dict(about="""
         Creates a rule only when the user explicitly asks for a standing rule, in
-        the user's words, one instruction per rule. --skill names a skill for every
-        agent; AGENT=NAME names one for that agent only. Write a text that begins
+        the user's words, one instruction per rule. --skill NAME names a skill for
+        every agent, agents added later included; AGENT=NAME replaces it for one
+        agent. The same skill given to every agent Richi knows is the skill of the
+        action and is stored as the skill for every agent. Write a text that begins
         with a dash as --text="- ...".""",
         examples=(("", 'richi rules add no-agent-prefix --global --text "Never prefix branch names with the agent name."'),
                   ("A skill for every agent",
@@ -594,7 +599,8 @@ DETAILS = {
         Shows the latest changes of rules, newest first: when, which rule, the
         action, who made it (the chat identity of the shell that ran the command,
         or richi map), and the rule before and after. The workspace keeps the
-        latest 200 changes. It is a record for review, not proof of who acted.""",
+        latest 200 changes; more says whether older ones exist than those shown.
+        It is a record for review, not proof of who acted.""",
         examples=(("", "richi rules log"),
                   ("The last changes of one rule", "richi rules log --id branch-naming --entries 5"))),
     "rules clear-log": dict(about="""

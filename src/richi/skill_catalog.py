@@ -12,7 +12,6 @@ skill (or a plugin command, for an agent that lists those as skills) is named
 as the agents name it, "plugin:skill". Skills an agent never chooses by
 itself, only when the user invokes them, are left out for it.
 """
-import json
 import os
 from pathlib import Path
 import re
@@ -47,7 +46,8 @@ def folder_state(path):
     return "ok" if os.access(path, os.R_OK | os.X_OK) else "denied"
 
 
-_COMMENT = re.compile(r"(?:^|\s)#")
+# YAML's white space is a space or a tab; other spaces, such as a no-break space, are text.
+_COMMENT = re.compile(r"(?:^|[ \t])#")
 
 
 def _scalar(value):
@@ -73,23 +73,36 @@ def _scalar(value):
     return value
 
 
+def _nested(line):
+    """Whether an indented line opens a nested mapping or list rather than continuing a text."""
+    line = line.strip()
+    return line == "-" or line.startswith(("- ", "#")) or ": " in line or line.endswith(":")
+
+
 def front_matter(text, cut=False):
     """The top-level scalar fields of a SKILL.md YAML header (a small, safe subset).
 
     cut: the text is only the beginning of the file. A header that does not
-    end within it still gives the fields read so far: a skill that says it is
-    not for the agent to choose says so near the top.
+    end within it still gives the fields read so far, without the last line,
+    which may be cut in two: a skill that says it is not for the agent to
+    choose says so near the top. Prose read so far, a line that is no field,
+    means the file opens with a Markdown rule, not a header.
     """
+    if cut:
+        text = text[:text.rfind("\n") + 1]
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return {}
-    fields, index = {}, 1
+    fields, index, prose = {}, 1, False
     while index < len(lines):
         line = lines[index]
         if line.strip() in {"---", "..."}:
             return fields
         index += 1
-        if not line or line[0] in " \t#" or ":" not in line:
+        if not line or line[0] in " \t#":
+            continue
+        if ":" not in line:
+            prose = True
             continue
         key, value = line.split(":", 1)
         key, value = key.strip(), value.strip()
@@ -100,13 +113,14 @@ def front_matter(text, cut=False):
                 index += 1
             joiner = " " if value[0] == ">" else "\n"
             fields[key] = joiner.join(part for part in block if part).strip()
-        elif value:
-            # A plain scalar may continue on indented lines.
+        elif value or (index < len(lines) and lines[index][:1] in " \t" and lines[index].strip()
+                       and not _nested(lines[index])):
+            # A plain scalar may continue on indented lines, or begin on the line after its key.
             while index < len(lines) and lines[index][:1] in " \t" and lines[index].strip():
                 value += " " + lines[index].strip()
                 index += 1
             fields[key] = _scalar(value)
-    return fields if cut else {}
+    return fields if cut and not prose else {}
 
 
 def _read_regular(path, limit):
@@ -180,7 +194,7 @@ def _json(path):
     """A small JSON file's value, or None when it is missing, too large or not JSON."""
     try:
         data = _read_regular(path, MAX_MANIFEST + 1)
-        return None if len(data) > MAX_MANIFEST else json.loads(data.decode("utf-8"))
+        return None if len(data) > MAX_MANIFEST else agents.parse_json(data.decode("utf-8"))
     except (OSError, ValueError, RecursionError):
         # RecursionError: brackets nested deeper than the parser goes. A plugin's author wrote the file.
         return None
@@ -272,8 +286,11 @@ def _candidates(agent, layout, root):
                 yield name + ":", command, command.stem, enabled
 
 
-def catalog(environ=None, home=None):
+def catalog(environ=None, home=None, registry=None):
     """Skills by name with their description, kind and the agents that have them.
+
+    registry: the agents when the caller has them already (agents.registry),
+    so that one answer describes one version of the agent settings.
 
     roots lists every skill source of every agent, in registry order, with
     whether its directory exists (or may not be read: denied), whether the
@@ -284,7 +301,8 @@ def catalog(environ=None, home=None):
     environ = os.environ if environ is None else environ
     home = Path(home) if home is not None else Path.home()
     skills, seen_roots, truncated, totals = {}, [], False, {}
-    for agent in agents.registry(environ, home):
+    listed = agents.registry(environ, home) if registry is None else registry
+    for agent in listed:
         every = set()
         for source in agent.sources(environ, home):
             state = folder_state(source.path)
@@ -323,5 +341,5 @@ def catalog(environ=None, home=None):
             every |= found
         totals[agent.id] = len(every)
     ordered = sorted(skills.values(), key=lambda skill: (KINDS.index(skill["kind"]), skill["name"].lower()))
-    return {"skills": ordered, "roots": seen_roots, "agents": agents.describe(environ, home), "totals": totals,
-            "truncated": truncated}
+    return {"skills": ordered, "roots": seen_roots, "totals": totals, "truncated": truncated,
+            "agents": [{"id": agent.id, "name": agent.name} for agent in listed]}

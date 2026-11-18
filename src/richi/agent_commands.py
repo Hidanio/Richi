@@ -11,10 +11,14 @@ import copy
 import json
 import os
 from pathlib import Path
-import shlex
 
 from . import agents, private_files, skill_catalog
 from .memory import now
+from .output import shell_word
+
+
+# How long a change waits while another process changes the settings; holders keep the lock for milliseconds.
+LOCK_SECONDS = 10
 
 
 # What each change may carry; `skill-sources` options and the map send exactly these.
@@ -25,10 +29,10 @@ OPTIONS = {"add": {"name", "folders", "variable", "manual_skills"},
 
 
 class AgentError(ValueError):
-    """A refused change with a stable code: invalid, exists, not_found, conflict, limit, builtin, settings.
+    """A refused change with a stable code: invalid, exists, not_found, conflict, limit, builtin, settings, busy.
 
     subject says what an exists, not_found or limit error is about: the agent
-    (for limit: agents) or one of its skill sources (for limit: folders).
+    or one of its skill sources; for limit: agents, folders or size (the file).
     """
 
     def __init__(self, message, code="invalid", subject=None):
@@ -122,14 +126,16 @@ def listing(environ=None, home=None, catalog=False):
     real = environ is None and home is None
     environ = os.environ if environ is None else environ
     home = Path(home) if home is not None else Path.home()
+    # Read once: the list, the skill counts and unknown_agents below describe one version of the file.
     entries, problem = agents.load_settings(environ, home)
-    skills = skill_catalog.catalog(environ, home)
+    registry = agents.registry(environ, home, entries)
+    skills = skill_catalog.catalog(environ, home, registry)
     totals, roots = skills["totals"], {}
     for root in skills["roots"]:
         roots.setdefault(root["agent"], []).append(root)
     launcher, connections_problem = _launcher_agents() if real else ({}, None)
     items = []
-    for agent in agents.registry(environ, home):
+    for agent in registry:
         own = roots.get(agent.id, [])
         detected, connection = launcher.get(agent.id, (_looks_installed(own, home), None))
         items.append({
@@ -168,7 +174,8 @@ def listing(environ=None, home=None, catalog=False):
 
 
 def _removal(identifier, entry):
-    return "richi skill-sources remove " + identifier + " --expected-updated-at " + shlex.quote(entry["updated_at"])
+    # After "=": a version that begins with a dash is still read as the version.
+    return "richi skill-sources remove " + identifier + " --expected-updated-at=" + shell_word(entry["updated_at"])
 
 
 def _read(path):
@@ -180,16 +187,25 @@ def _read(path):
     try:
         if len(data) > agents.MAX_SETTINGS:
             raise ValueError("the file is larger than %d bytes" % agents.MAX_SETTINGS)
-        return agents.check_settings(json.loads(data.decode("utf-8")))
+        return agents.check_settings(agents.parse_json(data.decode("utf-8")))
     except (ValueError, RecursionError) as exc:
         reason = "nested too deeply" if isinstance(exc, RecursionError) else str(exc)
         raise AgentError("Cannot change agent settings: " + str(path) + ": " + reason
                          + "; fix or remove the file", "settings") from exc
 
 
+def _serialized(entries):
+    return json.dumps({"version": agents.SETTINGS_VERSION, "agents": entries}, ensure_ascii=False, indent=2,
+                      sort_keys=True) + "\n"
+
+
 def _write(path, entries):
-    private_files.replace(path, json.dumps({"version": agents.SETTINGS_VERSION, "agents": entries},
-                                           ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    text = _serialized(entries)
+    # Richi would refuse to read a larger file and forget every setting in it.
+    if len(text.encode("utf-8")) > agents.MAX_SETTINGS:
+        raise AgentError("The agent settings would be larger than %d bytes, more than Richi reads; remove an agent "
+                         "or a skill folder first" % agents.MAX_SETTINGS, "limit", "size")
+    private_files.replace(path, text)
     agents.forget_settings()
 
 
@@ -388,20 +404,25 @@ def change(action, identifier, options=None, environ=None, home=None, full=False
     if expected is not None and not isinstance(expected, str):
         raise AgentError("expected_updated_at must be a string")
     path = agents.settings_path(environ, home)
-    # A refused change leaves nothing behind: the directory and the lock appear with the first write.
+    # A change refused before the settings directory exists creates neither the directory nor the lock
+    # file. Once there, the lock file stays: two writers must always lock the same file.
     if not path.parent.is_dir():
         status, entry = _apply(action, identifier, options, {}, environ, home)
         if status != "unchanged":
-            path.parent.mkdir(parents=True, exist_ok=True)
-    with private_files.locked(path) if path.parent.is_dir() else contextlib.nullcontext():
-        entries = _read(path)
-        status, entry = _apply(action, identifier, options, entries, environ, home)
-        if status != "unchanged":
-            if entry is None:
-                entries.pop(identifier, None)
-            else:
-                entries[identifier] = entry
-            _write(path, entries)
+            # Private, as the launcher makes Richi's configuration directory.
+            path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    try:
+        with private_files.locked(path, LOCK_SECONDS) if path.parent.is_dir() else contextlib.nullcontext():
+            entries = _read(path)
+            status, entry = _apply(action, identifier, options, entries, environ, home)
+            if status != "unchanged":
+                if entry is None:
+                    entries.pop(identifier, None)
+                else:
+                    entries[identifier] = entry
+                _write(path, entries)
+    except TimeoutError as exc:
+        raise AgentError("Another change of the agent settings is still running; try again", "busy") from exc
     current = listing(*explicit, catalog=full)
     described = next((item for item in current["agents"] if item["id"] == identifier), None)
     result = {"results": [{"id": identifier, "status": status}], "agent": described}

@@ -969,10 +969,11 @@ def _store_busy(exc):
         return False
     code = getattr(exc, "sqlite_errorcode", None)
     if code is not None:
-        # The primary result code: SQLITE_BUSY is 5, SQLITE_LOCKED is 6.
-        return (code & 0xFF) in (5, 6)
-    # Python reports the code only from 3.11; this is its text.
-    return "is locked" in str(exc)
+        # The primary result code SQLITE_BUSY (5), with its extended codes. SQLITE_LOCKED (6) is a
+        # conflict inside one connection, which trying again does not end.
+        return (code & 0xFF) == 5
+    # Python reports the code only from 3.11; this is SQLite's text for SQLITE_BUSY.
+    return str(exc) == "database is locked"
 
 
 def main(argv=None):

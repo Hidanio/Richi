@@ -92,7 +92,9 @@ assert.deepEqual(ruleSkillSetting(rule),{skill:null,skills:{claude:'review',curs
 assert.deepEqual(ruleSkillSetting({skill:null,skills:{claude:'x',codex:'x'}}),{skill:'x',skills:null});
 assert.equal(ruleHasSkill({skills:{codex:null}}),false);
 assert.equal(ruleHasSkill({skills:{codex:'x'}}),true);
-assert.ok(sameRuleSkills({skill:'x'},{skill:null,skills:{claude:'x',codex:'x'}}));
+// The agents a computer does not list compare too: they get the rule's skill, here x or none.
+assert.ok(!sameRuleSkills({skill:'x'},{skill:null,skills:{claude:'x',codex:'x'}}));
+assert.ok(sameRuleSkills({skill:'x'},{skill:'x',skills:{claude:'x'}}));
 assert.ok(!sameRuleSkills({skill:'x'},{skill:'x',skills:{codex:null}}));
 assert.ok(!sameRuleSkills({skill:'x'},{skill:'x',skills:{cursor:'y'}}));
 // One list for everybody sends one name.
@@ -129,10 +131,30 @@ assert.equal(skillPhrase({}),'');
 assert.equal(ruleSlug('Отвечай на русском языке, а код оставляй'),'otvechay-na-russkom-yazyke-a');
 assert.equal(ruleSlug('  --PR: описание!  '),'pr-opisanie');
 assert.equal(ruleSlug(''),'');
+// A shell expands $HOME, ~ and (zsh) a word that begins with "=": such words are quoted.
+for(const word of ['$HOME','~','~/x','=ls','two words',"it's",''])assert.notEqual(shellQuote(word),word);
+for(const word of ['a=b','plain-1.2','plugin:skill','/opt/skills'])assert.equal(shellQuote(word),word);
+// The editor shows one skill for every agent only when the agents it does not list get that skill too:
+// otherwise saving the shown skill unchanged would change it for them.
+assert.equal(ruleSharesSkill({}),true);
+assert.equal(ruleSharesSkill({skill:'a'}),true);
+assert.equal(ruleSharesSkill({skill:'a',skills:{claude:'a'}}),true);
+assert.equal(ruleSharesSkill({skill:'x',skills:{claude:'a',codex:'a'}}),false);
+assert.equal(ruleSharesSkill({skill:null,skills:{claude:'x',codex:'x'}}),false);
+assert.equal(ruleSharesSkill({skill:'a',skills:{cursor:'c'}}),false);
+// Picks that are all the same, with nothing of its own for the other agents, become the skill for every agent.
+assert.equal(becomesShared(null,{claude:'a',codex:'a'}),true);
+assert.equal(becomesShared('',{claude:'a',codex:'a'}),true);
+assert.equal(becomesShared('x',{claude:'a',codex:'a'}),false);
+assert.equal(becomesShared(null,{claude:'a',codex:'b'}),false);
+assert.equal(becomesShared(null,{claude:null,codex:null}),false);
+assert.equal(becomesShared(null,{}),false);
 // What the server makes of each choice is checked against the choice itself.
 const chosen=[['review',{claude:'review',codex:'code-review'}],['review',{claude:'review',codex:null}],
-  ['review',{claude:'a',codex:'a'}],[null,{claude:'a',codex:null}],[null,'shared'],['review','']];
-console.log(JSON.stringify(chosen.map(([base,choice])=>({base,choice,request:skillRequest(base,choice)}))));
+  ['review',{claude:'a',codex:'a'}],[null,{claude:'a',codex:null}],[null,'shared'],['review',''],
+  [null,{claude:'a',codex:'a'}],['general',{claude:'special',codex:'special'}]];
+console.log(JSON.stringify(chosen.map(([base,choice])=>({base,choice,request:skillRequest(base,choice),
+  shared:typeof choice==='object'&&becomesShared(base,choice)}))));
 """)
         database = self.root / "memory.sqlite3"
         conn = memory.connect(database, create=True)
@@ -148,9 +170,11 @@ console.log(JSON.stringify(chosen.map(([base,choice])=>({base,choice,request:ski
                 wanted = choice if isinstance(choice, dict) else dict.fromkeys(agents.ids(), choice or None)
                 self.assertEqual({agent: rules.skill_for(stored, agent) for agent in wanted}, wanted)
                 # An agent this computer does not list: the per-agent lists leave it the rule's
-                # every-agent skill, and one list for everybody gives it that choice too.
-                self.assertEqual(rules.skill_for(stored, "unlisted"),
-                                 case["base"] if isinstance(choice, dict) else choice or None)
+                # every-agent skill, and one list for everybody gives it that choice too. Per-agent
+                # picks that are all the same become that skill, as the form says beforehand.
+                unlisted = (choice["claude"] if case["shared"] else case["base"]) if isinstance(choice, dict) \
+                    else choice or None
+                self.assertEqual(rules.skill_for(stored, "unlisted"), unlisted)
 
     def test_a_composed_command_names_the_store_and_survives_a_shell(self):
         database = self.root / "my store" / "memory.sqlite3"
@@ -224,7 +248,9 @@ console.log(JSON.stringify({
         samples = {
             "id": ["gemini-cli", "x1", "Gemini", "-x", "a" * 32, "a" * 33, "", "a b", "1x"],
             "variable": ["GEMINI_CLI", "GEMINI_CLI=1", "_x", "1BAD", "A B", "A=", "A=" + "v" * 100, "A=" + "v" * 101,
-                         "A=значение", "A=two words", "A" * 64, "A" * 65],
+                         "A=значение", "A=two words", "A" * 64, "A" * 65,
+                         # Counted in characters, as Python counts them; half of a surrogate pair is refused.
+                         "A=\ud800", "A=\U0001F600", "A=" + "\U0001F600" * 100, "A=" + "\U0001F600" * 101],
             "name": ["pr-description", "plugin:skill", "x.y_z", "two words", "-x", "a" * 100, "a" * 101, "", "скилл"],
             "folder": ["~", "~/skills", "/opt/team skills", "/", "relative", "~x", "", "./x",
                        "/" + "a" * (agents.MAX_FOLDER - 1), "/" + "a" * agents.MAX_FOLDER],
@@ -295,6 +321,7 @@ assert.match(agentRefusal(refusal('exists','source')),/папка уже ест�
 assert.match(agentRefusal(refusal('exists','agent','claude is built into Richi; adjust its skill sources with skill-sources update')),/Агент с таким ID/);
 assert.match(agentRefusal(refusal('limit','folders')),/папок/);
 assert.match(agentRefusal(refusal('limit','agents')),/агентов/);
+assert.match(agentRefusal(refusal('limit','size')),/не поместятся/);
 assert.match(agentRefusal(refusal('not_found','source')),/Источник не найден/);
 assert.match(agentRefusal(refusal('not_found','agent')),/Агент не найден/);
 assert.match(agentRefusal(refusal('settings'),'/home/u/agents.json'),/\/home\/u\/agents\.json/);
@@ -307,6 +334,7 @@ for(const explain of [ruleRefusal,agentRefusal]){
   assert.match(explain(Object.assign(new Error('aborted'),{name:'AbortError'})),/не ответил за 60 секунд/);
   // A code the page has no words for is shown as the server put it.
   assert.equal(explain(refusal('internal',undefined,'The map could not answer: TypeError')),'The map could not answer: TypeError');
+  assert.match(explain(refusal('unreadable')),/могло сохраниться/);
 }
 """)
 

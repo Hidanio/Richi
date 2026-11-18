@@ -41,6 +41,11 @@ SETTINGS_FILE = "agents.json"
 SETTINGS_VERSION = 1
 MAX_SETTINGS = 1024 * 1024
 MAX_CUSTOM = 50
+# How deep a value this version does not know may nest: it is copied and written back as it is.
+MAX_DEPTH = 32
+# The longest integer read from JSON that other programs wrote (settings, plugin manifests): Python
+# before 3.11 converts a long one in quadratic time, and Richi needs no number that long.
+MAX_DIGITS = 100
 MAX_FOLDERS = 20
 MAX_NAME = 60
 MAX_FOLDER = 1000
@@ -157,6 +162,55 @@ def valid_id(value):
     return isinstance(value, str) and ID.fullmatch(value) is not None
 
 
+def _short_integer(text):
+    if len(text) > MAX_DIGITS:
+        raise ValueError("a number longer than %d digits" % MAX_DIGITS)
+    return int(text)
+
+
+def parse_json(text):
+    """JSON that the user or another program wrote, with integers of at most MAX_DIGITS digits.
+
+    ValueError for anything else, RecursionError for brackets nested deeper
+    than the parser goes.
+    """
+    return json.loads(text, parse_int=_short_integer)
+
+
+def _utf8(value):
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def _plain(identifier, entry):
+    """Raise ValueError unless every value of the entry can be copied and written back.
+
+    Fields this version does not know are kept as they are, so they must be
+    shallow and hold only text that UTF-8 can carry; otherwise the settings
+    would load but no change could ever be saved.
+    """
+    stack = [(entry, 0)]
+    while stack:
+        value, depth = stack.pop()
+        if depth > MAX_DEPTH:
+            raise ValueError("settings of " + identifier + " are nested too deeply")
+        if isinstance(value, str):
+            items = ()
+            text = [value]
+        elif isinstance(value, dict):
+            items, text = value.values(), list(value)
+        elif isinstance(value, list):
+            items, text = value, []
+        else:
+            continue
+        if not all(_utf8(part) for part in text):
+            raise ValueError("settings of " + identifier + " hold text that is not UTF-8")
+        stack.extend((item, depth + 1) for item in items)
+
+
 # A skill as an agent lists it, such as plugin:skill. Rules store such names
 # and the skill catalog offers only names of this shape.
 SKILL = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}\Z")
@@ -231,6 +285,7 @@ def check_entry(identifier, entry):
         raise ValueError(ID_HELP)
     if not isinstance(entry, dict):
         raise ValueError("settings of " + identifier + " must be an object")
+    _plain(identifier, entry)
     if not _one_line(entry.get("updated_at"), 64) or ("created_at" in entry and not _one_line(entry["created_at"], 64)):
         raise ValueError("invalid timestamps for " + identifier)
     folders = entry.get("folders", [])
@@ -275,6 +330,17 @@ def forget_settings():
     _cache.clear()
 
 
+def _signature(info):
+    # A writer replaces the file (private_files.replace), so each version is a new inode: the
+    # inode tells versions apart even where two writes share a timestamp and a size.
+    return info.st_ino, info.st_mtime_ns, info.st_size
+
+
+def _unreadable(path, exc):
+    # Not a verdict on the file (too many open files, a disk that does not answer): it is read again next time.
+    return "Agent settings could not be read: " + str(path) + ": " + (exc.strerror or str(exc))
+
+
 def load_settings(environ=None, home=None):
     """(stored agents by ID, problem): a missing file has none; an unusable one is reported, not raised.
 
@@ -284,22 +350,32 @@ def load_settings(environ=None, home=None):
     path = settings_path(environ, home)
     try:
         info = path.stat()
-    except OSError:
+    except (FileNotFoundError, NotADirectoryError):
         return {}, None
-    signature = (info.st_mtime_ns, info.st_size)
+    except OSError as exc:
+        return {}, _unreadable(path, exc)
     cached = _cache.get(str(path))
-    if cached is not None and cached[0] == signature:
+    if cached is not None and cached[0] == _signature(info):
         return cached[1], cached[2]
     try:
-        if info.st_size > MAX_SETTINGS:
+        # What is read and the version it is cached as come from one open file.
+        with open(str(path), "rb") as handle:
+            info = os.fstat(handle.fileno())
+            data = handle.read(MAX_SETTINGS + 1)
+    except (FileNotFoundError, NotADirectoryError):
+        return {}, None
+    except OSError as exc:
+        return {}, _unreadable(path, exc)
+    try:
+        if len(data) > MAX_SETTINGS:
             raise ValueError("the file is larger than %d bytes" % MAX_SETTINGS)
-        entries, problem = check_settings(json.loads(path.read_text(encoding="utf-8"))), None
-    except (OSError, ValueError, RecursionError) as exc:
+        entries, problem = check_settings(parse_json(data.decode("utf-8"))), None
+    except (ValueError, RecursionError) as exc:
         # RecursionError: brackets nested deeper than the parser goes.
         reason = "nested too deeply" if isinstance(exc, RecursionError) else str(exc)
         entries, problem = {}, "Agent settings are ignored: " + str(path) + ": " + reason + "; fix or remove the file"
     _cache.clear()
-    _cache[str(path)] = (signature, entries, problem)
+    _cache[str(path)] = (_signature(info), entries, problem)
     return entries, problem
 
 
@@ -334,9 +410,14 @@ def _custom(identifier, entry):
                  updated_at=entry["updated_at"])
 
 
-def registry(environ=None, home=None):
-    """Every agent Richi works with: the built-in ones as the user adjusted them, then the user's own."""
-    entries, _problem = load_settings(environ, home)
+def registry(environ=None, home=None, entries=None):
+    """Every agent Richi works with: the built-in ones as the user adjusted them, then the user's own.
+
+    entries are the stored settings when the caller has read them already, so
+    that everything one answer shows comes from one version of the file.
+    """
+    if entries is None:
+        entries, _problem = load_settings(environ, home)
     known = set(builtin_ids())
     agents = [_adjusted(agent, entries[agent.id]) if agent.id in entries else agent for agent in AGENTS]
     # An entry without a name adjusts a built-in agent this Richi does not have.

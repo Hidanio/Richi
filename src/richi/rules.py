@@ -21,11 +21,11 @@ made the change, as far as Richi can tell.
 """
 import json
 import os
-import shlex
 import sys
 from typing import NamedTuple, Optional
 
 from . import agents
+from .output import shell_word
 
 
 PREFIX = "rule:"
@@ -44,6 +44,10 @@ MAX_LOG = 200
 # One stored rule with everything it carries. The limits above count the text; this one keeps a
 # field this version does not know, or a hand-edited row, from growing without bound.
 MAX_STORED = 50000
+# What a report of a row that cannot be read repeats of it: a longer key is cut, a longer or odd
+# version is reported as invalid, so that one hand-made row cannot flood an agent or the map.
+MAX_NAMED = 200
+MAX_VERSION = 64
 # What `rules show` gives an agent: what it needs to follow a rule and to change it. The stored
 # record has more (where the rule came from, who changed it, fields of a newer Richi); rules list has it all.
 SHOWN = ("id", "scope", "project_id", "text", "skill", "skills", "updated_at")
@@ -124,8 +128,9 @@ def add_commands(commands, api):
     # Help names the built-in agents only, so that it does not depend on this computer's settings.
     known = ", ".join(agents.builtin_ids()) + " or one from skill-sources list"
     skill_help = ("Skill to use whenever the rule applies, as the agent names it (e.g. plugin:skill). NAME is for "
-                  "every agent; AGENT=NAME is for that agent only (" + known + "), so repeat it when agents use "
-                  "different skills")
+                  "every agent, agents added later included; AGENT=NAME replaces it for one agent (" + known
+                  + "), so repeat it when agents use different skills. A skill given to every known agent is "
+                  "stored as the skill for every agent")
     parser = commands.add_parser("rules", help="Show or manage the user's standing rules for this workspace and its projects")
     actions = parser.add_subparsers(dest="action", required=True)
     show = actions.add_parser("show", help="Print the rules that apply here in full: global rules plus one project's rules")
@@ -186,6 +191,28 @@ def _storable(value):
     return True
 
 
+def _readable(value):
+    """Text for a message: what UTF-8 cannot carry is written as an escape."""
+    return value.encode("utf-8", "backslashreplace").decode("utf-8")
+
+
+def _text_of(raw):
+    """A column read as bytes (CAST AS BLOB) as text, or None when it is not UTF-8.
+
+    Richi writes only text, but another program may store other bytes, and one
+    such row must not stop a command that reads all of them.
+    """
+    try:
+        return bytes(raw).decode("utf-8")
+    except (UnicodeDecodeError, TypeError):
+        return None
+
+
+def _shown(raw):
+    """Bytes as a person may read them: what is not UTF-8 is written as escapes."""
+    return bytes(raw).decode("utf-8", "backslashreplace")
+
+
 def _text(value, api):
     value = api.string(value, "text")
     if not _storable(value):
@@ -217,6 +244,10 @@ def _skill_options(values, api):
             if plain:
                 raise api.MemoryError("Give one --skill NAME for every agent; use AGENT=NAME for one agent")
             plain, shared = True, name
+    if plain and not shared and own:
+        # It could only mean "nothing for the other agents", which a rule cannot keep apart from no
+        # skill: the same skill for every known agent becomes the skill for every agent anyway.
+        raise api.MemoryError("An empty --skill removes the rule's skills and is given alone, without AGENT=NAME")
     return shared, own
 
 
@@ -231,10 +262,12 @@ def _skill_setting(shared, own, api, kept=()):
     if own is not None and not isinstance(own, dict):
         raise api.MemoryError("skills maps an agent ID to its skill")
     allowed = set(agents.ids()) | set(kept)
-    unknown = sorted(str(agent) for agent in (own or {}) if agent not in allowed)
+    unknown = sorted(_readable(str(agent)) for agent in (own or {}) if agent not in allowed)
     if unknown:
+        # An own agent is unknown also while the agent settings cannot be used; then say why.
+        problem = agents.load_settings()[1]
         raise api.MemoryError("Unknown agent in skills: " + ", ".join(unknown) + "; known agents: "
-                              + ", ".join(agents.ids()))
+                              + ", ".join(agents.ids()) + ("; " + problem if problem else ""))
     shared, own = _skill(shared, api), {agent: _skill(name, api) for agent, name in (own or {}).items()}
     if shared is None and own and set(agents.ids()) <= set(own) and len(set(own.values())) == 1:
         shared, own = next(iter(own.values())), {}
@@ -272,7 +305,9 @@ def current_author(environ=None):
     """
     environ = os.environ if environ is None else environ
     marked = environ.get("RICHI_RULES_ACTOR")
-    value = "".join(ch for ch in (marked or environ.get("RICHI_CHAT_ID") or "") if ord(ch) >= 32)[:200]
+    # No control characters, and no half of a surrogate pair (a byte the shell could not decode): it is stored.
+    value = "".join(ch for ch in (marked or environ.get("RICHI_CHAT_ID") or "")
+                    if ord(ch) >= 32 and not 0xD800 <= ord(ch) <= 0xDFFF)[:200]
     # The map's server may have been started from an agent's shell; a change made in the page is not that agent's.
     return Author(value or None, None if marked else agents.detect(environ))
 
@@ -280,11 +315,16 @@ def current_author(environ=None):
 def _parsed(value):
     """The JSON value of a stored row; ValueError also when it could not be written out again.
 
-    JSON may spell half of a surrogate pair as an escape. Text that holds one
-    can be neither printed nor stored as UTF-8, so such a row is unreadable.
+    JSON may spell half of a surrogate pair as an escape, and a number too
+    large for a float or NaN. Neither can be printed as JSON or stored as
+    UTF-8 again, so a row that holds one is unreadable.
     """
     record = json.loads(value)
-    if not _storable(json.dumps(record, ensure_ascii=False)):
+    try:
+        written = json.dumps(record, ensure_ascii=False, allow_nan=False)
+    except ValueError:
+        raise ValueError("holds a number that is not finite") from None
+    if not _storable(written):
         raise ValueError("holds an unpaired surrogate character")
     return record
 
@@ -324,41 +364,88 @@ def _decode(key, value):
 
 
 def _stored_version(value):
-    """What `rules remove --expected-updated-at` takes for a row that cannot be read."""
+    """What `rules remove --expected-updated-at` takes for a row that cannot be read.
+
+    Its updated_at when that looks like a version; anything else, which is
+    then not repeated back, is "invalid".
+    """
     try:
         version = _parsed(value)["updated_at"]
     except (ValueError, TypeError, KeyError, RecursionError):
         return "invalid"
-    return version if isinstance(version, str) else "invalid"
+    if not isinstance(version, str) or not 0 < len(version) <= MAX_VERSION or not version.isprintable():
+        return "invalid"
+    return version
 
 
 def _removal(identifier, version):
-    """The command that removes a row by its key, whatever the key holds."""
-    words = ["richi", "rules", "remove", shlex.quote(identifier), "--expected-updated-at", shlex.quote(version)]
+    """The command that removes a row by its key, whatever the key holds.
+
+    The version follows its option after "=", so a version that begins with a
+    dash is still read as one.
+    """
+    words = ["richi", "rules", "remove", shell_word(identifier), "--expected-updated-at=" + shell_word(version)]
     if identifier.startswith("-"):
         # Only after -- is a word that begins with a dash read as the ID.
         words = words[:3] + words[4:] + ["--", words[3]]
     return " ".join(words)
 
 
+def _invalid(identifier, error, version):
+    """How a row that cannot be read is reported: bounded, with the command that removes it when it can be named."""
+    if len(identifier) > MAX_NAMED:
+        return {"id": identifier[:MAX_NAMED] + "…", "updated_at": version,
+                "error": error + "; the key is longer than %d characters, so it is not shown in full: remove the "
+                                 "row with an SQLite tool" % MAX_NAMED}
+    return {"id": identifier, "error": error, "updated_at": version, "next": _removal(identifier, version)}
+
+
+def _row(conn, identifier, removing):
+    """(rowid, key or None, the stored value as bytes) of the rule with this ID, or None.
+
+    A key that is not UTF-8 text is found only for removal, by the spelling
+    invalid_rules gives it: such a row can be removed, never changed.
+    """
+    found = conn.execute("SELECT rowid, CAST(value AS BLOB) FROM metadata WHERE 1=1 AND key = ?",
+                         (PREFIX + identifier,)).fetchone()
+    if found is not None:
+        return found[0], PREFIX + identifier, found[1]
+    if removing:
+        rows = conn.execute("SELECT rowid, CAST(key AS BLOB), CAST(value AS BLOB) FROM metadata "
+                            "WHERE 1=1 AND key >= 'rule:' AND key < 'rule;'").fetchall()
+        for rowid, raw_key, raw_value in rows:
+            if _text_of(raw_key) is None and _shown(raw_key) == PREFIX + identifier:
+                return rowid, None, raw_value
+    return None
+
+
+def _readable_row(key, raw_value):
+    """The stored rule of a row read as bytes, or ValueError (Unsupported for a newer format)."""
+    if key is None:
+        raise ValueError("the key is not UTF-8 text")
+    value = _text_of(raw_value)
+    if value is None:
+        raise ValueError("the stored value is not UTF-8 text")
+    return _decode(key, value)
+
+
 def scan(conn):
     """(rules: global first, then by project and ID; rows that cannot be read; rules a newer Richi must serve)."""
-    rows = conn.execute("SELECT key, value FROM metadata WHERE 1=1 AND key LIKE 'rule:%' ORDER BY key").fetchall()
+    # A key range, not LIKE: LIKE would also match other spellings such as RULE:. ";" follows ":".
+    rows = conn.execute("SELECT CAST(key AS BLOB), CAST(value AS BLOB) FROM metadata "
+                        "WHERE 1=1 AND key >= 'rule:' AND key < 'rule;' ORDER BY key").fetchall()
     rules, invalid, unsupported = [], [], []
-    for key, value in rows:
-        if not key.startswith(PREFIX):
-            continue
-        identifier = key[len(PREFIX):]
+    for raw_key, raw_value in rows:
+        key = _text_of(raw_key)
+        identifier = (key if key is not None else _shown(raw_key))[len(PREFIX):]
         try:
-            rules.append(_decode(key, value))
+            rules.append(_readable_row(key, raw_value))
         except Unsupported as exc:
             # updated_at: what removing the rule takes, for a user who will not update.
             unsupported.append({"id": identifier, "requires": exc.level, "error": str(exc),
-                                "updated_at": _stored_version(value), "next": "richi update"})
+                                "updated_at": _stored_version(_text_of(raw_value)), "next": "richi update"})
         except (ValueError, TypeError, KeyError, RecursionError) as exc:
-            version = _stored_version(value)
-            invalid.append({"id": identifier, "error": str(exc) or type(exc).__name__, "updated_at": version,
-                            "next": _removal(identifier, version)})
+            invalid.append(_invalid(identifier, str(exc) or type(exc).__name__, _stored_version(_text_of(raw_value))))
     rules.sort(key=lambda rule: (rule["scope"] != "global", rule["project_id"] or "", rule["id"]))
     return rules, invalid, unsupported
 
@@ -378,8 +465,9 @@ def _left_out(result, invalid, unsupported):
 
 
 def _project(conn, project_id, api):
-    if conn.execute("SELECT 1 FROM projects WHERE 1=1 AND id = ?", (project_id,)).fetchone() is None:
-        raise api.NotFoundError("Unknown project in this workspace: " + project_id + "; see project list")
+    if not _storable(project_id) or conn.execute("SELECT 1 FROM projects WHERE 1=1 AND id = ?",
+                                                 (project_id,)).fetchone() is None:
+        raise api.NotFoundError("Unknown project in this workspace: " + _readable(project_id) + "; see project list")
     return project_id
 
 
@@ -413,40 +501,55 @@ def _record(conn, api, action, identifier, before, after, author):
     conn.execute("INSERT INTO metadata(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                  (LOG_PREFIX + at + ":" + identifier, json.dumps(entry, ensure_ascii=False, sort_keys=True,
                                                                separators=(",", ":"))))
-    conn.execute("DELETE FROM metadata WHERE 1=1 AND key LIKE 'rule-log:%' AND key NOT IN "
-                 "(SELECT key FROM metadata WHERE 1=1 AND key LIKE 'rule-log:%' ORDER BY key DESC LIMIT ?)", (MAX_LOG,))
+    conn.execute("DELETE FROM metadata WHERE 1=1 AND key >= 'rule-log:' AND key < 'rule-log;' AND key NOT IN "
+                 "(SELECT key FROM metadata WHERE 1=1 AND key >= 'rule-log:' AND key < 'rule-log;' "
+                 "ORDER BY key DESC LIMIT ?)", (MAX_LOG,))
 
 
 def log(conn, identifier=None, entries=20):
-    """The latest changes, newest first."""
-    rows = conn.execute("SELECT value FROM metadata WHERE 1=1 AND key LIKE 'rule-log:%' ORDER BY key DESC").fetchall()
-    found = []
-    for (value,) in rows:
+    """The latest changes, newest first; more says whether older ones are kept beyond them."""
+    rows = conn.execute("SELECT CAST(value AS BLOB) FROM metadata "
+                        "WHERE 1=1 AND key >= 'rule-log:' AND key < 'rule-log;' ORDER BY key DESC").fetchall()
+    found, more = [], False
+    for (raw,) in rows:
         try:
-            entry = _parsed(value)
+            entry = _parsed(_text_of(raw))
         except (ValueError, TypeError, RecursionError):
             continue
         if isinstance(entry, dict) and (identifier is None or entry.get("id") == identifier):
-            found.append(entry)
             if len(found) == entries:
+                more = True
                 break
-    return {"view": "rules-log", "entries": found, "kept": MAX_LOG}
+            found.append(entry)
+    return {"view": "rules-log", "entries": found, "more": more, "kept": MAX_LOG}
 
 
 def clear_log(conn, identifier=None):
     """Delete the recorded changes, all or one rule's: the log keeps rule texts, removed rules included."""
-    rows = conn.execute("SELECT key, value FROM metadata WHERE 1=1 AND key LIKE 'rule-log:%'").fetchall()
-    keys = []
-    for key, value in rows:
+    rows = conn.execute("SELECT rowid, CAST(value AS BLOB) FROM metadata "
+                        "WHERE 1=1 AND key >= 'rule-log:' AND key < 'rule-log;'").fetchall()
+    doomed = []
+    for rowid, raw in rows:
         try:
-            entry = _parsed(value)
+            entry = _parsed(_text_of(raw))
         except (ValueError, TypeError, RecursionError):
             entry = None
         # An entry that cannot be read belongs to no rule, so only clearing everything removes it.
         if identifier is None or (isinstance(entry, dict) and entry.get("id") == identifier):
-            keys.append((key,))
-    conn.executemany("DELETE FROM metadata WHERE 1=1 AND key = ?", keys)
-    return {"view": "rules-log", "results": [{"status": "cleared", "entries": len(keys)}]}
+            doomed.append((rowid,))
+    conn.executemany("DELETE FROM metadata WHERE 1=1 AND rowid = ?", doomed)
+    return {"view": "rules-log", "results": [{"status": "cleared", "entries": len(doomed)}]}
+
+
+def _settings_problem(result):
+    """Say when the agent settings cannot be used: Richi then knows only its built-in agents."""
+    problem = agents.load_settings()[1]
+    if problem:
+        result["agent_settings_problem"] = {
+            "error": problem,
+            "next": "Tell the user. Until the file is fixed or removed, the user's own agents are unknown and "
+                    "do not get their skills (see richi skill-sources list)."}
+    return result
 
 
 def show(conn, api, workspace, project_id, agent=None, unmatched_path=None):
@@ -480,16 +583,16 @@ def show(conn, api, workspace, project_id, agent=None, unmatched_path=None):
             "error": unmatched_path,
             "next": "These are the global rules only. Ask the user whether this repository belongs to the "
                     "workspace (richi project add PATH registers it), or pass --project ID."}
-    return _left_out(result, invalid, unsupported)
+    return _left_out(_settings_problem(result), invalid, unsupported)
 
 
-def _stdin_text(stdin):
+def _stdin_text():
     """Text piped to the command; the newline that ends the pipe is not part of the rule."""
-    text = (stdin or sys.stdin).read(MAX_CHANGE + 1)
+    text = sys.stdin.read(MAX_CHANGE + 1)
     return text[:-1] if text.endswith("\n") else text
 
 
-def read_request(args, api, stdin=None):
+def read_request(args, api):
     """The change object of an add, update, remove or apply command; None for any other.
 
     It may wait for standard input or a file, so it is read before the store
@@ -500,7 +603,7 @@ def read_request(args, api, stdin=None):
     if args.action == "apply":
         try:
             if args.json == "-":
-                data = (stdin or sys.stdin).read(MAX_CHANGE + 1)
+                data = sys.stdin.read(MAX_CHANGE + 1)
             else:
                 with open(args.json, encoding="utf-8") as handle:
                     data = handle.read(MAX_CHANGE + 1)
@@ -519,7 +622,7 @@ def read_request(args, api, stdin=None):
         request["expected_updated_at"] = args.expected_updated_at
     if args.action != "remove":
         if args.text is not None:
-            request["text"] = _stdin_text(stdin) if args.text == "-" else args.text
+            request["text"] = _stdin_text() if args.text == "-" else args.text
         if args.skill is not None:
             request["skill"], request["skills"] = _skill_options(args.skill, api)
         if args.source is not None:
@@ -544,7 +647,7 @@ def change(conn, request, api, checked_project=None, author=Author()):
         raise api.MemoryError(ID_HELP)
     if expected is not None and (not isinstance(expected, str) or not _storable(expected)):
         raise api.MemoryError("expected_updated_at is the rule's updated_at as last read")
-    row = conn.execute("SELECT key, value FROM metadata WHERE 1=1 AND key = ?", (PREFIX + identifier,)).fetchone()
+    row = _row(conn, identifier, action == "remove")
     # Only removal takes a key that is not an ID: such a row cannot be read and must not stay forever.
     if _NAME.fullmatch(identifier) is None and not (action == "remove" and row is not None):
         raise api.MemoryError(ID_HELP)
@@ -571,24 +674,27 @@ def change(conn, request, api, checked_project=None, author=Author()):
         return {"results": [{"id": identifier, "status": "created"}], "rule": rule}
     if row is None:
         raise api.NotFoundError("Unknown rule: " + identifier + "; see rules list")
+    rowid, key, raw = row
     try:
-        rule = _decode(row[0], row[1])
+        rule = _readable_row(key, raw)
     except (ValueError, TypeError, KeyError, RecursionError) as exc:
         # A row this version cannot read or may not serve can still be removed, but not changed.
+        version = _stored_version(_text_of(raw))
         if action != "remove":
             problem = ("Rule " + identifier + " " + str(exc) + "; update Richi to change it"
                        if isinstance(exc, Unsupported) else "Invalid stored rule " + identifier + ": " + str(exc))
-            raise api.MemoryError(problem + "; remove it with " + _removal(identifier, _stored_version(row[1]))) from exc
-        _check_version(identifier, _stored_version(row[1]), expected, api)
-        conn.execute("DELETE FROM metadata WHERE 1=1 AND key = ?", (row[0],))
-        _record(conn, api, "removed", identifier, {"id": identifier, "unreadable": row[1][:MAX_TEXT * 2]}, None, author)
+            raise api.MemoryError(problem + "; remove it with " + _removal(identifier, version)) from exc
+        _check_version(identifier, version, expected, api)
+        conn.execute("DELETE FROM metadata WHERE 1=1 AND rowid = ?", (rowid,))
+        _record(conn, api, "removed", identifier, {"id": identifier, "unreadable": _shown(raw)[:MAX_TEXT * 2]},
+                None, author)
         return {"results": [{"id": identifier, "status": "removed"}], "rule": None}
     if checked_project is not None and rule["scope"] == "project" and rule["project_id"] != checked_project:
         raise api.MemoryError("Rule " + rule["id"] + " belongs to project " + rule["project_id"]
                               + ", not the checked project " + checked_project)
     _check_version(identifier, rule["updated_at"], expected, api)
     if action == "remove":
-        conn.execute("DELETE FROM metadata WHERE 1=1 AND key = ?", (row[0],))
+        conn.execute("DELETE FROM metadata WHERE 1=1 AND rowid = ?", (rowid,))
         _record(conn, api, "removed", identifier, rule, None, author)
         return {"results": [{"id": identifier, "status": "removed"}], "rule": rule}
     if not {"text", "skill", "skills", "source"} & set(request):
@@ -611,11 +717,12 @@ def change(conn, request, api, checked_project=None, author=Author()):
     return {"results": [{"id": identifier, "status": "updated"}], "rule": changed}
 
 
-def run(conn, args, api, workspace=None, checked_project=None, stdin=None, unmatched_path=None, request=None):
+def run(conn, args, api, workspace=None, checked_project=None, unmatched_path=None, request=None):
     """Run a rules command; checked_project is the --project-path project ID.
 
-    request is the change read beforehand (read_request); the caller that
-    locks the store passes it, so that no input is awaited under the lock.
+    request is the change of an add, update, remove or apply, read beforehand
+    with read_request: the caller locks the store for it, and no input may be
+    awaited under the lock. A change that is JSON null stays None and is refused.
     """
     project_id = getattr(args, "project", None) or checked_project
     if args.action == "show":
@@ -626,6 +733,8 @@ def run(conn, args, api, workspace=None, checked_project=None, stdin=None, unmat
         return clear_log(conn, args.id)
     if args.action == "list":
         rules, invalid, unsupported = scan(conn)
+        # The limit is the workspace's, so the size beside it is too, whatever the list shows.
+        characters = sum(len(rule["text"]) for rule in rules)
         if args.global_scope:
             rules = [rule for rule in rules if rule["scope"] == "global"]
         elif args.project is not None:
@@ -633,9 +742,7 @@ def run(conn, args, api, workspace=None, checked_project=None, stdin=None, unmat
             rules = [rule for rule in rules if rule["project_id"] == args.project]
         projects = [{"id": row[0], "name": row[1]}
                     for row in conn.execute("SELECT id, name FROM projects WHERE 1=1 ORDER BY id")]
-        return _left_out({"view": "rules", "workspace": workspace, "rules": rules, "agents": agents.describe(),
-                          "projects": projects, "characters": sum(len(rule["text"]) for rule in rules),
-                          "limit_characters": MAX_TOTAL}, invalid, unsupported)
-    if request is None:
-        request = read_request(args, api, stdin)
+        return _left_out(_settings_problem({
+            "view": "rules", "workspace": workspace, "rules": rules, "agents": agents.describe(),
+            "projects": projects, "characters": characters, "limit_characters": MAX_TOTAL}), invalid, unsupported)
     return change(conn, request, api, checked_project, current_author())

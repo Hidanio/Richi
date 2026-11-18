@@ -1,9 +1,12 @@
 from contextlib import closing, redirect_stderr, redirect_stdout
+import errno
 import io
 import json
 import os
 from pathlib import Path
+import shlex
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import threading
@@ -253,6 +256,12 @@ class AgentSettingsTests(IsolatedHome):
             shown = self.cli("rules", "show", config_file=store)
         self.assertEqual((shown["agent"], shown["rules"][0]["use_skill"]), ("gemini-cli", "review"))
         self.assertEqual(stat_mode(agents.settings_path()), 0o600)
+        # The directory Richi made for it is private too, as the launcher makes it.
+        self.assertEqual(stat_mode(agents.settings_path().parent), 0o700)
+        # Numbers longer than Richi needs are refused: older Pythons convert one in quadratic time.
+        with self.assertRaises(ValueError):
+            agents.parse_json("1" * (agents.MAX_DIGITS + 1))
+        self.assertEqual(agents.parse_json("[1.5, %s]" % ("9" * agents.MAX_DIGITS)), [1.5, int("9" * agents.MAX_DIGITS)])
 
     def test_an_own_agent_changes_with_its_version_and_is_removed(self):
         created = self.cli("skill-sources", "add", "gemini-cli", "--name", "Gemini CLI", "--skills", "~/.gemini/skills")["agent"]
@@ -371,7 +380,7 @@ class AgentSettingsTests(IsolatedHome):
         listed = self.cli("skill-sources", "list")
         self.assertEqual((agents.ids(), listed["problem"]), (("claude", "codex"), None))
         # They are named with what removing them takes, and adding or changing that agent says the same.
-        remove = "richi skill-sources remove future --expected-updated-at t"
+        remove = "richi skill-sources remove future --expected-updated-at=t"
         self.assertEqual(listed["unknown_agents"], [{"id": "future", "updated_at": "t", "next": remove}])
         for arguments, code in ((["add", "future", "--name", "Future", "--skills", "~/x"], "exists"),
                                 (["update", "future", "--expected-updated-at", "t", "--name", "Future"], "not_found")):
@@ -383,12 +392,150 @@ class AgentSettingsTests(IsolatedHome):
         self.assertIn("future", json.loads(path.read_text(encoding="utf-8"))["agents"])
         self.cli(*remove.split()[1:])
         self.assertNotIn("unknown_agents", self.cli("skill-sources", "list"))
-        # Brackets nested deeper than the parser goes are damage like any other.
-        path.write_text('{"version":1,"agents":{"x":' + "[" * 100000 + "]" * 100000 + "}}", encoding="utf-8")
+        # Brackets nested deeper than the parser goes are damage like any other. Python 3.14 parses this
+        # depth, and then the value is too deep to copy and write back: the same verdict.
+        path.write_text('{"version":1,"agents":{"x":{"updated_at":"t","name":"X","folders":[{"path":"~/x",'
+                        '"enabled":true}],"deep":' + "[" * 100000 + "]" * 100000 + "}}}", encoding="utf-8")
         agents.forget_settings()
         self.assertIn("nested too deeply", self.cli("skill-sources", "list")["problem"])
         refused = self.cli("skill-sources", "update", "claude", "--disable", "skills", ok=False)
         self.assertEqual((refused["code"], "nested too deeply" in refused["error"]), ("settings", True))
+
+    def test_unknown_fields_that_could_not_be_written_back_are_damage(self):
+        path = agents.settings_path()
+        path.parent.mkdir(parents=True)
+        entry = {"updated_at": "t", "name": "Own", "folders": [{"path": "~/team", "enabled": True}]}
+        deep = "[" * (agents.MAX_DEPTH + 5) + "]" * (agents.MAX_DEPTH + 5)
+        # Each once loaded cleanly, and then no change could be saved: copying or writing it failed.
+        for name, field in (("deep", deep), ("half-pair", '"\\ud800"'), ("half-pair key", '{"\\udcff": 1}')):
+            with self.subTest(name=name):
+                path.write_text('{"version":1,"agents":{"own":' + json.dumps(entry)[:-1] + ',"extra":' + field
+                                + '}}}', encoding="utf-8")
+                agents.forget_settings()
+                self.assertIn(str(path), self.cli("skill-sources", "list")["problem"])
+                refused = self.cli("skill-sources", "update", "own", "--expected-updated-at", "t", "--name", "Renamed",
+                                   ok=False)
+                self.assertEqual(refused["code"], "settings")
+        # Within the bound a value of a newer Richi is kept and written back as it was.
+        path.write_text(json.dumps({"version": 1, "agents": {"own": dict(entry, extra=[[["x"]]])}}), encoding="utf-8")
+        agents.forget_settings()
+        self.cli("skill-sources", "update", "own", "--expected-updated-at", "t", "--name", "Renamed")
+        self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["agents"]["own"]["extra"], [[["x"]]])
+
+    def test_a_change_that_would_make_the_file_unreadable_is_refused(self):
+        self.cli("skill-sources", "add", "first", "--name", "First", "--skills", "~/team")
+        path = agents.settings_path()
+        before = path.read_text(encoding="utf-8")
+        # Richi once wrote such a file, said "created", and then ignored every setting in it.
+        with mock.patch.object(agents, "MAX_SETTINGS", len(before.encode("utf-8")) + 10):
+            refused = self.cli("skill-sources", "add", "second", "--name", "Second", "--skills", "~/team", ok=False)
+            self.assertEqual((refused["code"], refused["subject"]), ("limit", "size"))
+            self.assertEqual(path.read_text(encoding="utf-8"), before)
+            agents.forget_settings()
+            self.assertEqual(agents.ids(), ("claude", "codex", "first"))
+
+    def test_a_file_that_could_not_be_read_now_is_read_again(self):
+        self.cli("skill-sources", "add", "first", "--name", "First", "--skills", "~/team")
+        agents.forget_settings()
+        target, real_open = str(agents.settings_path()), open
+
+        def exhausted(file, *arguments, **options):
+            if str(file) == target:
+                raise OSError(errno.EMFILE, "Too many open files")
+            return real_open(file, *arguments, **options)
+        with mock.patch("builtins.open", exhausted):
+            entries, problem = agents.load_settings()
+        self.assertEqual(entries, {})
+        self.assertIn("could not be read", problem)
+        self.assertNotIn("fix or remove", problem)
+        # Not taken for damage: the next reading finds the agent.
+        self.assertEqual(agents.ids(), ("claude", "codex", "first"))
+
+    def test_a_new_version_with_the_same_time_and_size_is_read(self):
+        self.cli("skill-sources", "add", "abc", "--name", "Abc", "--skills", "~/team")
+        path = agents.settings_path()
+        self.assertEqual(agents.describe()[-1]["name"], "Abc")
+        info = path.stat()
+        settings = json.loads(path.read_text(encoding="utf-8"))["agents"]
+        settings["abc"]["name"] = "Abd"
+        private_files.replace(path, agent_commands._serialized(settings))
+        # The same length and, as on a file system with coarse timestamps, the same time.
+        self.assertEqual(path.stat().st_size, info.st_size)
+        os.utime(str(path), ns=(info.st_atime_ns, info.st_mtime_ns))
+        self.assertEqual(agents.describe()[-1]["name"], "Abd")
+
+    def test_one_listing_describes_one_version_of_the_settings(self):
+        self.cli("skill-sources", "add", "xagent", "--name", "X", "--skills", "~/team")
+        path, scan = agents.settings_path(), skill_catalog.catalog
+
+        def removed_meanwhile(*arguments, **options):
+            # Another process removes the agent while this listing scans the skill folders.
+            settings = json.loads(path.read_text(encoding="utf-8"))["agents"]
+            settings.pop("xagent")
+            private_files.replace(path, agent_commands._serialized(settings))
+            return scan(*arguments, **options)
+        with mock.patch.object(skill_catalog, "catalog", removed_meanwhile):
+            listed = agent_commands.listing({}, self.home)
+        # Once it showed the agent as written by a newer Richi, with a command that could not work.
+        self.assertEqual([agent["id"] for agent in listed["agents"]], ["claude", "codex", "xagent"])
+        self.assertNotIn("unknown_agents", listed)
+        self.assertEqual([source["key"] for source in listed["agents"][-1]["sources"]], ["~/team"])
+
+    def test_a_change_waits_for_another_writer_only_so_long(self):
+        self.cli("skill-sources", "add", "first", "--name", "First", "--skills", "~/team")
+        with private_files.locked(agents.settings_path()), mock.patch.object(agent_commands, "LOCK_SECONDS", 0.2):
+            refused = self.cli("skill-sources", "update", "first", "--expected-updated-at", "x", "--name", "Late",
+                               ok=False)
+        self.assertEqual(refused["code"], "busy")
+
+    def test_refusals_say_what_they_are_about(self):
+        created = self.cli("skill-sources", "add", "own", "--name", "Own", "--skills", "~/team")["agent"]
+        version = ["--expected-updated-at", created["updated_at"]]
+        many = [word for number in range(agents.MAX_FOLDERS + 1) for word in ("--skills", "~/f%d" % number)]
+        for arguments, code, subject in (
+                (["update", "own", *version, "--remove-skills", "~/missing"], "not_found", "source"),
+                (["remove", "nobody", "--expected-updated-at", "x"], "not_found", "agent"),
+                (["remove", "claude", "--expected-updated-at", "x"], "not_found", "agent"),
+                (["add", "many", "--name", "Many", *many], "limit", "folders")):
+            with self.subTest(arguments=arguments[:3]):
+                refused = self.cli("skill-sources", *arguments, ok=False)
+                self.assertEqual((refused.get("code"), refused.get("subject")), (code, subject))
+        path = agents.settings_path()
+        settings = json.loads(path.read_text(encoding="utf-8"))
+        settings["agents"]["future"] = {"updated_at": "-t", "disabled": ["skills"]}
+        path.write_text(json.dumps(settings), encoding="utf-8")
+        refused = self.cli("skill-sources", "add", "future", "--name", "Future", "--skills", "~/x", ok=False)
+        self.assertEqual((refused["code"], refused["subject"]), ("exists", "agent"))
+        # A version that begins with a dash is still read as the version in the command offered.
+        offered = self.cli("skill-sources", "list")["unknown_agents"][0]["next"]
+        self.assertEqual(offered, "richi skill-sources remove future --expected-updated-at=-t")
+        self.assertEqual(self.cli(*shlex.split(offered)[1:])["results"], [{"id": "future", "status": "removed"}])
+
+    def test_an_own_agent_without_a_variable_is_named_only_by_its_chat(self):
+        self.cli("skill-sources", "add", "plain", "--name", "Plain", "--skills", "~/team")
+        # It has no sign of its own in a shell: it must not count as present in every one.
+        self.assertEqual(agents.detect({"CLAUDECODE": "1"}), "claude")
+        self.assertIsNone(agents.detect({}))
+        self.assertEqual(agents.detect({"RICHI_CHAT_ID": "plain:chat"}), "plain")
+
+    def test_the_lock_keeps_processes_apart_and_its_file_private(self):
+        target = self.root / "settings.json"
+        holder = subprocess.Popen(
+            [sys.executable, "-c", "import sys\nfrom pathlib import Path\nfrom richi import private_files\n"
+             "with private_files.locked(Path(sys.argv[1])):\n    print('held', flush=True)\n    sys.stdin.read()\n",
+             str(target)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        try:
+            self.assertEqual(holder.stdout.readline().strip(), "held")
+            with self.assertRaises(TimeoutError):
+                with private_files.locked(target, timeout=0.3):
+                    pass
+        finally:
+            holder.stdin.close()
+            holder.wait(10)
+            holder.stdout.close()
+        with private_files.locked(target, timeout=5):
+            pass
+        self.assertEqual(stat_mode(Path(str(target) + ".lock")), 0o600)
 
     def test_settings_changed_by_another_process_are_read_again(self):
         self.cli("skill-sources", "add", "first", "--name", "First", "--skills", "~/team")

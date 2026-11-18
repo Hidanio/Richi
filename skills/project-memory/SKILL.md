@@ -56,8 +56,9 @@ standing rules, loaded with `rules show`.
    null, run the command again with `--agent` and your agent ID, and check that ID
    when the answer has `agent_problem`. Tell the user when
    the answer has `project_path_problem` (only global rules came back: the repository
-   is not registered), `invalid_rules` (stored rules that cannot be read) or
-   `unsupported_rules` (rules that need a newer Richi).
+   is not registered), `invalid_rules` (stored rules that cannot be read),
+   `unsupported_rules` (rules that need a newer Richi) or `agent_settings_problem`
+   (the user's own agents are unknown until their settings are fixed).
 
 ## Retrieve the evidence needed
 

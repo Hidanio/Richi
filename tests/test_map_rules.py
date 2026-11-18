@@ -1,11 +1,14 @@
 """The map changes standing rules only from a page opened by richi map; synthetic stores and homes only."""
 from contextlib import closing
+import errno
 import html
 import http.client
 import json
 import os
 from pathlib import Path
 import re
+import signal
+import socket
 import sqlite3
 import stat
 import subprocess
@@ -60,7 +63,23 @@ class SkillCatalogTests(unittest.TestCase):
                           "link": "a#b", "empty": "", "quoted": "it \\\\"})
         # Only the beginning of a long file is read: what it holds still counts.
         self.assertEqual(skill_catalog.front_matter("---\nname: a\ndisable-model-invocation: true\nnotes: cut he", cut=True),
-                         {"name": "a", "disable-model-invocation": "true", "notes": "cut he"})
+                         {"name": "a", "disable-model-invocation": "true"})
+        # The last line read may be cut in two: half a name, half a character or half a "true".
+        for tail in ("name: my-sk", "name: caf\ufffd", "disable-model-invocation: tr"):
+            with self.subTest(tail=tail):
+                self.assertEqual(skill_catalog.front_matter("---\ndescription: d\n" + tail, cut=True), {"description": "d"})
+        # A file that opens with a Markdown rule and runs on has no header, however long it is.
+        prose = "---\nSome text, no field.\nname: from-body\ndisable-model-invocation: true\n"
+        self.assertEqual((skill_catalog.front_matter(prose, cut=True), skill_catalog.front_matter(prose)), ({}, {}))
+        # A value may begin on the line after its key; a nested mapping there is not a value.
+        below = ("---\nname: x\ndescription:\n  text on the next line\n  and more\ndisable-model-invocation:\n"
+                 "  true\nmetadata:\n  author: y\nlist:\n  - a\n---\n")
+        self.assertEqual(skill_catalog.front_matter(below), {"name": "x", "description": "text on the next line and more",
+                                                             "disable-model-invocation": "true"})
+        # Only a space or a tab before "#" starts a comment; text after a closing quote keeps the value whole.
+        spaced = "---\na: n\u00b0\u00a0#12 du ticket\nb: \u4f7f\u7528\u3000#tag\nc: x\t# tab\nd: \"a\" b\n---\n"
+        self.assertEqual(skill_catalog.front_matter(spaced), {"a": "n\u00b0\u00a0#12 du ticket", "b": "\u4f7f\u7528\u3000#tag",
+                                                              "c": "x", "d": '"a" b'})
 
     def test_a_skill_only_the_user_invokes_stays_out_however_its_header_is_written(self):
         manual = "disable-model-invocation: true"
@@ -114,7 +133,8 @@ class SkillCatalogTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="richi-skills-") as temporary:
             home = Path(temporary)
             rpm = home / agents.CLAUDE_APP / "account-1" / "organization-1" / "rpm"
-            for name, manifest in (("deep", "[" * 100000 + "]" * 100000), ("fine", json.dumps({"name": "engineering"}))):
+            for name, manifest in (("deep", "[" * 100000 + "]" * 100000), ("fine", json.dumps({"name": "engineering"})),
+                                   ("long", '{"name": "long", "version": ' + "7" * 200 + "}")):
                 (rpm / name / ".claude-plugin").mkdir(parents=True)
                 (rpm / name / ".claude-plugin" / "plugin.json").write_text(manifest, encoding="utf-8")
                 write_skill(rpm / name / "skills" / "review", "---\nname: review\n---\n")
@@ -123,6 +143,21 @@ class SkillCatalogTests(unittest.TestCase):
             result = skill_catalog.catalog({}, home)
             self.assertEqual([skill["name"] for skill in result["skills"]], ["engineering:review"])
             self.assertEqual(agent_commands.listing({}, home)["agents"][0]["skills"], 1)
+
+    def test_versions_count_as_numbers_and_codex_lists_no_plugin_commands(self):
+        with tempfile.TemporaryDirectory(prefix="richi-skills-") as temporary:
+            home = Path(temporary)
+            cache = home / ".codex" / "plugins" / "cache" / "market" / "tools"
+            write_skill(cache / "1.9.0" / "skills" / "old", "---\nname: old\n---\n")
+            write_skill(cache / "1.10.0" / "skills" / "new", "---\nname: new\n---\n")
+            (cache / "1.10.0" / "commands").mkdir()
+            (cache / "1.10.0" / "commands" / "run.md").write_text("---\ndescription: A command\n---\n", encoding="utf-8")
+            # Two sources of one agent that give the same skill count it once.
+            write_skill(home / ".agents" / "skills" / "twice", "---\nname: twice\n---\n")
+            write_skill(home / ".codex" / "skills" / "twice", "---\nname: twice\n---\n")
+            result = skill_catalog.catalog({}, home)
+        self.assertEqual(sorted(skill["name"] for skill in result["skills"]), ["tools:new", "twice"])
+        self.assertEqual(result["totals"]["codex"], 2)
 
     def test_catalog_merges_agents_and_offers_only_storable_names(self):
         with tempfile.TemporaryDirectory(prefix="richi-skills-") as temporary:
@@ -337,6 +372,40 @@ class MapAccessTests(unittest.TestCase):
         self.assertEqual(len(issued), 1)
         self.assertIsNotNone(map_access.redeem(self.database, issued[0]))
 
+    def test_a_key_file_that_cannot_be_read_now_is_not_taken_for_no_key(self):
+        value = map_access.redeem(self.database, map_access.issue_ticket(self.database))
+        real_open = os.open
+
+        def exhausted(path, *arguments, **options):
+            if str(path) == str(self.key):
+                raise OSError(errno.EMFILE, "Too many open files")
+            return real_open(path, *arguments, **options)
+        # "No key" would make the page drop a key that still works.
+        with mock.patch.object(map_access.os, "open", exhausted):
+            with self.assertRaises(OSError):
+                map_access.authorized(self.database, value)
+        self.assertTrue(map_access.authorized(self.database, value))
+        # A link is no key file: nothing is followed.
+        self.key.unlink()
+        self.key.symlink_to(self.root / "elsewhere")
+        self.assertIsNone(map_access.secret(self.database))
+
+    def test_forgetting_the_key_ends_editing_for_every_page(self):
+        value = map_access.redeem(self.database, map_access.issue_ticket(self.database))
+        map_access.forget_secret(self.database)
+        self.assertFalse(map_access.authorized(self.database, value))
+        map_access.forget_secret(self.database)
+        self.assertFalse(map_access.secret_path(self.database).exists())
+
+    def test_a_ticket_lock_held_too_long_is_an_error_not_a_hang(self):
+        ticket = map_access.issue_ticket(self.database)
+        with private_files.locked(self.ticket), mock.patch.object(map_access, "LOCK_SECONDS", 0.2):
+            with self.assertRaises(TimeoutError):
+                map_access.redeem(self.database, ticket)
+            with self.assertRaises(TimeoutError):
+                map_access.issue_ticket(self.database)
+        self.assertIsNotNone(map_access.redeem(self.database, ticket))
+
     def test_the_browser_gets_the_ticket_outside_its_arguments(self):
         address, redirect, opened = "http://127.0.0.1:1/", map_access.redirect_path(self.database), []
         with_ticket = r"\Ahttp://127\.0\.0\.1:1/#ticket=[0-9a-f]{64}\Z"
@@ -378,9 +447,12 @@ class MapAccessTests(unittest.TestCase):
         self.assertTrue(html.unescape(link).startswith("http://127.0.0.1:1/#ticket="))
         self.assertIsNotNone(map_access.redeem(self.database, html.unescape(link).rsplit("=", 1)[1]))
         del opened[:]
-        with mock.patch.object(map_access, "issue_ticket", side_effect=PermissionError("read-only")):
-            map_access.open_browser(address, self.database, opens)
+        problems = []
+        with mock.patch.object(map_access, "issue_ticket", side_effect=PermissionError(13, "Permission denied")):
+            map_access.open_browser(address, self.database, opens, problems=problems)
         self.assertEqual(opened, [address])
+        # richi map says why the page it opened cannot save.
+        self.assertIn("Permission denied", problems[0])
 
     def test_a_browser_that_cannot_read_the_redirect_still_gets_the_map(self):
         address, redirect = "http://127.0.0.1:1/", map_access.redirect_path(self.database).as_uri()
@@ -404,6 +476,59 @@ class MapAccessTests(unittest.TestCase):
             self.assertFalse(map_access.open_browser(address, self.database, lambda url: opened.append(url) and False,
                                                      wait=60, sleep=self.fail))
             self.assertEqual(opened, [redirect])
+
+
+class MapKeyLifetimeTests(unittest.TestCase):
+    """The edit key ends with the map process; the process that replaces a map keeps it."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="richi-map-key-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        clean_environment(self, self.root / "home")
+        self.database = self.root / "store" / "memory.sqlite3"
+        self.database.parent.mkdir()
+        conn = memory.connect(self.database, create=True)
+        try:
+            memory.initialize(conn, self.database)
+        finally:
+            conn.close()
+
+    def serve(self, **environment):
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        process = subprocess.Popen([sys.executable, "-m", "richi.serve", "--db", str(self.database), "--port", str(port)],
+                                   env=dict(os.environ, **environment), stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT, text=True)
+        self.addCleanup(self.stop, process)
+        deadline = time.monotonic() + 30
+        while serve.read_health(port) is None:
+            if process.poll() is not None or time.monotonic() > deadline:
+                self.fail("the map did not start: " + (process.stdout.read() if process.poll() is not None else ""))
+            time.sleep(0.1)
+        return process
+
+    def stop(self, process):
+        if process.poll() is None:
+            process.send_signal(signal.SIGTERM)
+            process.wait(30)
+        process.stdout.close()
+
+    def test_a_new_map_process_ends_the_previous_key_and_so_does_a_stop(self):
+        earlier = map_access.redeem(self.database, map_access.issue_ticket(self.database))
+        process = self.serve()
+        # A page left open from the map before holds a key nobody may use now.
+        self.assertFalse(map_access.authorized(self.database, earlier))
+        current = map_access.redeem(self.database, map_access.issue_ticket(self.database))
+        self.assertTrue(map_access.authorized(self.database, current))
+        self.stop(process)
+        # Whatever answers on the port next must not be handed a key that still works.
+        self.assertFalse(map_access.authorized(self.database, current))
+        # A process that replaces its map (a reload, a hand-off) keeps the key of its pages.
+        kept = map_access.redeem(self.database, map_access.issue_ticket(self.database))
+        self.serve(**{serve.RESTARTED_ENV: "1"})
+        self.assertTrue(map_access.authorized(self.database, kept))
 
 
 class MapRulesAPITests(unittest.TestCase):
@@ -786,12 +911,118 @@ class MapRulesAPITests(unittest.TestCase):
             payload = self.change(secret, 503, action="add", id="late", scope="global", text="x")
         self.assertEqual(payload, {"error": "database is locked", "code": "busy"})
 
+    def test_a_key_that_cannot_be_read_now_is_not_taken_for_none(self):
+        secret = self.secret()
+        header = {map_access.HEADER: secret}
+        with mock.patch.object(map_access, "secret", side_effect=OSError(errno.EMFILE, "Too many open files")):
+            for method, path, body in (("GET", "/api/rules", None), ("GET", "/api/agents", None),
+                                       ("POST", "/api/rules", {"action": "add", "id": "x", "scope": "global",
+                                                               "text": "x"})):
+                with self.subTest(method=method, path=path):
+                    status, payload = self.request(method, path, body, header)
+                    self.assertEqual((status, payload["code"]), (503, "unavailable"), payload)
+        self.assertEqual((self.listed(secret)["editing"], self.listed()["rules"]), (True, []))
+
+    def test_a_failure_is_logged_even_when_the_client_has_gone(self):
+        class Gone(serve.handler_for(self.database)):
+            def __init__(self):
+                pass
+
+            def send_data(self, *_arguments, **_options):
+                raise BrokenPipeError("the client closed the connection")
+
+        # What the server's log receives is the failure, not the broken pipe of its answer.
+        with self.assertRaises(RuntimeError):
+            Gone().answer(lambda: (_ for _ in ()).throw(RuntimeError("inner")))
+
+    def test_nothing_follows_an_answer_already_sent(self):
+        class Late(serve.handler_for(self.database)):
+            def get(self):
+                self.send_data(200, {"ok": True})
+                raise RuntimeError("after the answer")
+        server = serve.LoopbackHTTPServer(("127.0.0.1", 0), Late)
+        server.daemon_threads = True
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        port, received = server.server_address[1], b""
+        with mock.patch.object(server, "handle_error"):
+            with socket.create_connection(("127.0.0.1", port), timeout=10) as client:
+                client.sendall(b"GET /api/health HTTP/1.0\r\n\r\n")
+                while True:
+                    chunk = client.recv(65536)
+                    if not chunk:
+                        break
+                    received += chunk
+        self.assertEqual(received.count(b"HTTP/1.0 "), 1, received)
+        self.assertIn(b'{"ok": true}', received)
+
+    def test_an_agents_change_does_not_wait_behind_readings(self):
+        secret = self.secret()
+        started, release, answers = threading.Event(), threading.Event(), []
+        listing = agent_commands.listing
+
+        def slow(*arguments, **options):
+            if not started.is_set():
+                started.set()
+                release.wait(30)
+            return listing(*arguments, **options)
+        with mock.patch.object(serve.agent_commands, "listing", slow), mock.patch.object(serve, "TURN_TIMEOUT", 2):
+            reader = threading.Thread(target=lambda: answers.append(self.request("GET", "/api/agents")), daemon=True)
+            reader.start()
+            self.assertTrue(started.wait(10))
+            added = self.agent_change(secret, action="add", id="quick", name="Quick", folders=["~/team"])
+            release.set()
+            reader.join(30)
+        self.assertEqual((added["results"], answers[0][0]), ([{"id": "quick", "status": "created"}], 200))
+        # What a refusal is about travels to the page beside its code.
+        refused = self.agent_change(secret, 409, action="update", id="claude", add_folders=["~/.claude/skills"])
+        self.assertEqual((refused["code"], refused["subject"]), ("exists", "source"))
+
+    def test_an_agents_change_waits_for_another_only_so_long(self):
+        secret = self.secret()
+        inside, release = threading.Event(), threading.Event()
+        change = serve.agent_change
+
+        def slow(body):
+            inside.set()
+            release.wait(30)
+            return change(body)
+        with mock.patch.object(serve, "agent_change", slow), mock.patch.object(serve, "TURN_TIMEOUT", 1):
+            first = threading.Thread(target=lambda: self.request("POST", "/api/agents", {
+                "action": "add", "id": "first", "name": "First", "folders": ["~/team"]}, {map_access.HEADER: secret}),
+                daemon=True)
+            first.start()
+            self.assertTrue(inside.wait(10))
+            refused = self.agent_change(secret, 503, action="add", id="second", name="Second", folders=["~/team"])
+            release.set()
+            first.join(30)
+        self.assertEqual(refused["code"], "busy")
+
+    def test_a_body_that_is_null_or_too_deep_is_answered(self):
+        header = {map_access.HEADER: self.secret()}
+        # null once left the connection without an answer.
+        self.assertEqual(self.request("POST", "/api/session", raw=b"null")[1]["code"], "ticket_invalid")
+        status, payload = self.request("POST", "/api/rules", headers=header, raw=b"null")
+        self.assertEqual(status, 400)
+        self.assertIn("A rule change is an object", payload["error"])
+        status, payload = self.request("POST", "/api/agents", headers=header, raw=b"null")
+        self.assertEqual((status, payload["code"]), (400, "invalid_request"))
+        # Some Pythons parse far deeper than they can write back: no change nests that deep.
+        deep = b'{"action":"add","id":"d","scope":"global","text":"x","source":' + b"[" * 40 + b"]" * 40 + b"}"
+        for path in ("/api/rules", "/api/agents"):
+            with self.subTest(path=path):
+                self.assertEqual(self.request("POST", path, headers=header, raw=deep),
+                                 (400, {"error": "Invalid JSON", "code": "invalid_request"}))
+        self.assertEqual(self.listed()["rules"], [])
+
     def test_a_reading_page_is_not_told_where_the_settings_are(self):
         secret = self.secret()
         path = agents.settings_path()
         path.parent.mkdir(parents=True)
         for text, reason in (("{not json", "Expecting"),
-                             ('{"version":1,"agents":{"x":' + "[" * 100000 + "]" * 100000 + "}}", "nested too deeply")):
+                             ('{"version":1,"agents":{"x":{"updated_at":"t","name":"X","folders":[{"path":"~/x",'
+                              '"enabled":true}],"deep":' + "[" * 100000 + "]" * 100000 + "}}}", "nested too deeply")):
             with self.subTest(reason=reason):
                 path.write_text(text, encoding="utf-8")
                 agents.forget_settings()
@@ -806,6 +1037,9 @@ class MapRulesAPITests(unittest.TestCase):
                 self.assertEqual((refused["code"], reason in refused["error"]), ("settings", True))
                 self.assertEqual(self.listed()["agents"], [{"id": "claude", "name": "Claude Code"},
                                                            {"id": "codex", "name": "Codex"}])
+                # The rules answer says so too, and the place only to an editing page.
+                self.assertEqual(self.listed()["agent_settings_problem"]["error"], serve.SETTINGS_PROBLEM)
+                self.assertIn(str(path), self.listed(secret)["agent_settings_problem"]["error"])
 
     def test_health_and_installed_skills(self):
         status, health = self.request("GET", "/api/health")

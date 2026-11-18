@@ -30,8 +30,9 @@ it), whether it is `enabled`, whether the user `added` it, and how many `skills`
 it gives. `updated_at` is the version of
 the user's settings for the agent, null when there are none. `presets` lists
 well-known agents that could be added, with the folder each reads. `problem` is
-set when the settings file cannot be used; Richi then works with the built-in
-agents only. `unknown_agents` appears when the file has settings of an agent
+set when the settings file cannot be used, because it is damaged or could not be
+read just now; Richi then works with the built-in agents only. A change that
+would make the file larger than Richi reads is refused. `unknown_agents` appears when the file has settings of an agent
 that only a newer Richi has built in: this version keeps them without using
 them, and `next` is the command that removes them.
 
