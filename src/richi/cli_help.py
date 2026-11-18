@@ -554,8 +554,11 @@ DETAILS = {
         with project_path_problem saying why the project's rules do not.
         invalid_rules names stored rules that cannot be read, and
         unsupported_rules those that need a newer Richi; agents get neither.
-        agent_settings_problem says that the agent settings cannot be used now,
-        so the user's own agents are unknown.""",
+        agent_settings_problem says that Richi cannot use the agent settings, all
+        or some own agents' (code: damaged, unreadable, newer, large or agents): the
+        user's own agents described there are not recognized from their shells
+        (pass --agent) and cannot be named in new rules, and next says what to
+        tell the user.""",
         examples=(("", "richi rules show"), ("", "richi --project-path /path/to/service rules show"),
                   ("As a particular agent", "richi rules show --agent codex"))),
     "rules list": dict(about="""
@@ -564,8 +567,9 @@ DETAILS = {
         --global or --project); agents load rules in full, so the total is
         limited. agents lists the
         agents a rule may name a skill for, projects the registered projects, and
-        invalid_rules the stored rules that cannot be read, each with the command
-        that removes it.""",
+        invalid_rules the stored rules that cannot be read, with next, the command
+        that removes one, where a command can name the row (otherwise an SQLite
+        tool removes it).""",
         examples=(("", "richi rules list"), ("", "richi rules list --global"),
                   ("", "richi rules list --project service"))),
     "rules add": dict(about="""
@@ -573,8 +577,10 @@ DETAILS = {
         the user's words, one instruction per rule. --skill NAME names a skill for
         every agent, agents added later included; AGENT=NAME replaces it for one
         agent. The same skill given to every agent Richi knows is the skill of the
-        action and is stored as the skill for every agent. Write a text that begins
-        with a dash as --text="- ...".""",
+        action and is stored as the skill for every agent, unless the agent
+        settings cannot be used now; an agent named beyond the known ones keeps its
+        own skill or none (AGENT=). Write a text that begins with a dash as
+        --text="- ...".""",
         examples=(("", 'richi rules add no-agent-prefix --global --text "Never prefix branch names with the agent name."'),
                   ("A skill for every agent",
                    'richi rules add pr-skill --global --text "Use the pr-description skill for pull requests." '
@@ -633,8 +639,13 @@ DETAILS = {
         For each agent: whether it is built in, whether it looks installed, its
         skill sources with their folders and skill counts, and updated_at, the
         version of your settings for it (null when you changed nothing). presets
-        lists well-known agents you could add; unknown_agents, settings of an
-        agent that only a newer Richi has, which this version keeps and ignores.""",
+        lists well-known agents you could add; unknown_agents, settings this
+        version keeps as they are and ignores: of an agent that only a newer Richi
+        has, or of one agent it cannot use (error says why); it names the first
+        20, and unknown_agents_more counts the rest. problem says why the settings
+        file as a whole cannot be used, problem_code in one word: damaged,
+        unreadable, newer (update Richi) or large (update Richi, or else make
+        the file smaller).""",
         examples=(("", "richi skill-sources list"),)),
     "skill-sources add": dict(about="""
         Describes an agent Richi does not have built in. The ID is permanent: rules

@@ -42,6 +42,31 @@ def _ports(first_port):
     return range(first_port, min(first_port + PORT_RANGE, 65536))
 
 
+def _known_ports(ports, database):
+    """These ports, then the ports of the installation's running maps, then the port this storage's map recorded.
+
+    A map of this storage started with another --port, or before the port
+    setting changed, listens outside the range; it is still the storage's map.
+    Finding it keeps one map, and one edit key, per storage. The installation's
+    registry exists only once it is managed; the record beside the store
+    (map_access.record_port) exists everywhere. Either is only where to look:
+    the map that answers there is checked like any other. A new map starts in
+    the range only.
+    """
+    ports = list(ports)
+    registry = getattr(maps, "registry", None)
+    root = os.environ.get(getattr(maps, "ROOT_ENV", None) or "RICHI_INSTALLATION_ROOT")
+    if root and callable(getattr(registry, "registered_ports", None)):
+        try:
+            ports += [port for port in registry.registered_ports(root) if port not in ports]
+        except (OSError, ValueError):
+            pass
+    recorded = map_access.recorded_port(database)
+    if recorded is not None and recorded not in ports:
+        ports.append(recorded)
+    return ports
+
+
 def healthy(port, database, runtime=None, config_file=None):
     """This storage's map on this runtime answers on the port, and it is this user's map serving it."""
     health = read_health(port)
@@ -258,10 +283,11 @@ def launch(database, first_port, config_file=None, runtime=None, config_required
 def _launch_locked(database, first_port, config_file, runtime_selection, config_required, workspace,
                    restart, runtime_dir):
     ports = _ports(first_port)
+    known = _known_ports(ports, database)
     # A map re-executing on a new version has no health for a moment.
-    restarting = maps.wait_for_restarts(ports) if maps is not None else []
+    restarting = maps.wait_for_restarts(known) if maps is not None else []
     transitioning, stale, foreign = [], None, None
-    for port in ports:
+    for port in known:
         health = read_health(port)
         if not restart and compatible_health(health, database, runtime_selection, config_file):
             reason = foreign_answer(port, health)
@@ -304,7 +330,7 @@ def _launch_locked(database, first_port, config_file, runtime_selection, config_
     if restarting:
         # Not back yet and its storage is unknown: it may be this one, so no second map.
         raise RuntimeError(RESTARTING % url(restarting[0]))
-    if maps is not None and maps.wait_for_restarts(ports, timeout=0):
+    if maps is not None and maps.wait_for_restarts(known, timeout=0):
         # A map began to restart while this scan looked at its port: look again.
         raise MapRefused(maps.Reason.CHANGED, first_port)
     port = next((port for port in ports if available(port)), None)
@@ -329,9 +355,10 @@ def stop(database, first_port, config_file=None):
 
 
 def _stop_locked(database, first_port, config_file):
+    ports = _known_ports(_ports(first_port), database)
     # Otherwise a map re-executing right now would be reported as not running.
-    restarting = maps.wait_for_restarts(_ports(first_port))
-    for port in _ports(first_port):
+    restarting = maps.wait_for_restarts(ports)
+    for port in ports:
         health = read_health(port)
         if managed_health(health, database, config_file):
             return maps.stop(port, health).as_dict()

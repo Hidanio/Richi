@@ -771,6 +771,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   }
   function setMode(mode,updateLocation=true){
     if(!viewModes.includes(mode)||mode===state.mode)return;
+    rulesState.outcome='';
     const queryKey={map:'mapQuery',encyclopedia:'conceptQuery',tools:'toolQuery',rules:'ruleQuery',agents:'agentQuery'};state[queryKey[state.mode]]=$('search').value;state.mode=mode;const encyclopedia=mode==='encyclopedia',tools=mode==='tools',rules=mode==='rules',agents=mode==='agents';hideSearch();
     $('canvas').hidden=mode!=='map';$('encyclopedia').hidden=!encyclopedia;$('tool-catalog').hidden=!tools;$('rules-panel').hidden=!rules;$('agents-panel').hidden=!agents;$('kind-filters').hidden=mode!=='map';document.querySelector('.switches').hidden=rules||agents;document.querySelector('.project-field').hidden=agents;$('main').classList.toggle('tools-mode',tools||rules||agents);$('main').classList.remove('tools-reading');
     for(const name of viewModes){const tab=$(name+'-tab');tab.setAttribute('aria-selected',String(name===mode));tab.tabIndex=name===mode?0:-1;}
@@ -796,6 +797,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   }
 
   async function loadGraph(){
+    // «Обновить» answers the note a save left (rulesState.outcome); the save's own reload keeps it.
+    rulesState.outcome='';
     loadWorkspace();if(state.mode==='tools'&&(!state.toolsLoading||state.toolsRequestedFlags!==toolsFilterKey()))loadTools();if(state.mode==='rules'){loadRules();loadSkills();}if(state.mode==='agents'){loadAgents();loadRules();}
     if($('git-dialog').open)closeGit();
     const request=++state.request;state.loading=true;$('refresh').disabled=true;$('refresh').textContent='Обновляем…';$('error-banner').hidden=true;if(!state.loaded)showMessage('Загружаем карту','Читаем актуальные знания из локальной памяти.');
@@ -849,15 +852,19 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   // Whether the editor may show a rule as one skill for every agent: only when that skill is also
   // the one agents not listed here get, so that saving it unchanged changes nothing for anybody.
   const ruleSharesSkill=rule=>ruleAgentIds(rule).every(agent=>ruleSkillFor(rule,agent)===(rule?.skill||null));
-  // Per-agent picks that are all the same, with no skill of their own for the other agents, are
+  // The same pick for every agent listed here, with no skill of their own for the other agents, is
   // stored as the rule's skill for every agent (rules._skill_setting): agents added later get it too.
-  const becomesShared=(base,chosen)=>{const names=Object.values(chosen||{});return !base&&names.length>0&&Boolean(names[0])&&names.every(name=>name===names[0]);};
+  // An agent the rule names beyond the listed ones keeps its own pick beside it, "no skill" included.
+  const becomesShared=(base,chosen)=>{const names=knownAgentIds().map(agent=>(chosen||{})[agent]||null);return !base&&names.length>0&&Boolean(names[0])&&names.every(name=>name===names[0]);};
   // What a change sends. chosen is one name for every agent, or {agent: name} from the per-agent
   // lists; base is the rule's every-agent skill, which stays the default for agents this computer
   // does not list, so only agents that differ from it get an entry (null: no skill for that agent).
+  // An agent this computer does not list keeps its null too: the rule names it, and its "no skill"
+  // must not be merged into the skill of the others (rules._skill_setting keeps it the same way).
   function skillRequest(base,chosen){
     if(chosen===null||typeof chosen!=='object')return {skill:chosen||null,skills:null};
-    base=base||null;const own=Object.entries(chosen).map(([agent,name])=>[agent,name||null]).filter(([,name])=>name!==base);
+    base=base||null;const known=knownAgentIds();
+    const own=Object.entries(chosen).map(([agent,name])=>[agent,name||null]).filter(([agent,name])=>name!==base||(name===null&&!known.includes(agent)));
     return {skill:base,skills:own.length?Object.fromEntries(own):null};
   }
   // A word zsh would expand (=word at its start) is quoted like any other.
@@ -892,11 +899,17 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     for(const [key,flag] of [['add_folders','--add-skills'],['remove_folders','--remove-skills'],['disable','--disable'],['enable','--enable']])for(const value of list(change[key]))parts.push(commandOption(flag,value));
     return parts.join(' ');
   }
-  // Who changed a rule last: the map, or a chat named by its agent.
-  function changedBy(value){
+  // Who changed a rule last: the map, or a chat and the agent whose shell it was (agent, which
+  // the server stores beside the chat). A rule saved before it did names the agent only by the
+  // prefix of the chat, which Codex's chat identity does not have.
+  function changedBy(value,agent){
     if(typeof value!=='string'||!value)return '';if(value===RULE_SOURCE)return 'карта';
-    const at=value.indexOf(':'),agent=at>0?value.slice(0,at):'';
-    return agent&&knownAgentIds().includes(agent)?agentName(agent)+' · чат '+value.slice(at+1,at+9):value.length>40?value.slice(0,39)+'…':value;
+    const at=value.indexOf(':'),prefix=at>0?value.slice(0,at):'',known=knownAgentIds();
+    // A build that does not know changed_by_agent keeps it unchanged while it records another chat: the
+    // chat's own prefix wins where there is one.
+    const who=prefix&&known.includes(prefix)?prefix:typeof agent==='string'&&known.includes(agent)?agent:'';
+    if(!who)return value.length>40?value.slice(0,39)+'…':value;
+    return agentName(who)+' · чат '+(who===prefix?value.slice(at+1):value).slice(0,8);
   }
   const SOURCE_LABELS={'claude-app':'Плагины claude.ai из приложения Claude',system:'Встроенные скиллы',plugins:'Плагины',skills:'Свои скиллы'};
   // A source is named by its own key where Richi knows it, else by its kind.
@@ -906,15 +919,45 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   const RULE_NAME=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/;
   // u: characters are counted as Python counts them, and half of a surrogate pair is refused as there.
   const AGENT_ID=/^[a-z][a-z0-9-]{0,31}$/,AGENT_VARIABLE=/^[A-Za-z_][A-Za-z0-9_]{0,63}(=[^\x00-\x1f\x7f\ud800-\udfff]{1,100})?$/u;
-  const agentFolderOk=(value,limit)=>typeof value==='string'&&value.length>0&&value.length<=limit&&/^(~|~\/.*|\/.*)$/.test(value);
+  // As agents._one_line: at most limit characters as Python counts them, no control character, no
+  // half of a surrogate pair, and nothing that Python's strip() removes at either end.
+  const PYTHON_SPACE_AT_END=/^[ \x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]|[ \x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]$/u;
+  const oneLine=(value,limit)=>typeof value==='string'&&value.length>0&&Array.from(value).length<=limit&&!/[\x00-\x1f\x7f]|[\ud800-\udfff]/u.test(value)&&!PYTHON_SPACE_AT_END.test(value);
+  const agentNameOk=(value,limit)=>oneLine(value,limit);
+  const agentFolderOk=(value,limit)=>oneLine(value,limit)&&(value==='~'||value.startsWith('~/')||value.startsWith('/'));
   // What an edit sends: only what differs from the version the form was opened with (opened), named
   // against the latest version known (rule). After a conflict the two differ, and a retry then keeps
   // the other change to whatever this form left alone. null: nothing was changed here.
+  // A text field gives every line end as \n; the server stores them so (rules._text), and a rule
+  // stored before may still hold \r.
+  const lineEnds=value=>String(value??'').replace(/\r\n?/g,'\n');
   function ruleUpdate(opened,rule,text,setting){
     const update={action:'update',id:rule.id,expected_updated_at:rule.updated_at};
-    if(text!==opened.text)update.text=text;
-    if(!sameRuleSkills(setting,opened)){update.skill=setting.skill;update.skills=setting.skills;}
+    if(lineEnds(text)!==lineEnds(opened.text))update.text=text;
+    if(!sameRuleSkills(setting,opened)){
+      // An agent that neither this computer nor the latest version of the rule knows (another window
+      // took it out): the server refuses any entry for it, "no skill" included, so it gets what
+      // «Другие агенты» gives. A pick that this form left as it was gives way to that version, and one
+      // equal to «Другие агенты» changes nothing; any other cannot be stored, and the form says so
+      // (a text instead of a change).
+      const known=knownAgentIds(),named=Object.keys(rule.skills||{}),gone=agent=>!known.includes(agent)&&!named.includes(agent);
+      const others=setting.skill||null;
+      const lost=Object.entries(setting.skills||{}).filter(([agent,name])=>gone(agent)&&name!==ruleSkillFor(opened,agent)&&name!==others).map(([agent])=>agent);
+      if(lost.length)return 'Агента «'+lost.join('», «')+'» нет ни на этом компьютере, ни в новой версии правила: отдельный выбор для него сохранить нельзя, он получит то же, что «Другие агенты». Чтобы сохранить, выберите для него '+(others?'«'+others+'»':'«Без скилла»')+'.';
+      const skills=Object.entries(setting.skills||{}).filter(([agent])=>!gone(agent));
+      update.skill=setting.skill;update.skills=skills.length?Object.fromEntries(skills):null;
+    }
     return 'text' in update||'skill' in update?update:null;
+  }
+  // What a save stored for the skills when the form did not say so beforehand (announced: it said
+  // the skills become one for every agent). The server merges by the agents it knows, and they may
+  // differ from the page's list when another window changed them; problem is the answer's
+  // agent_settings_problem, which stops any merge.
+  function skillOutcome(request,stored,announced,problem){
+    if(!request?.skills||!stored)return '';
+    if(announced&&!stored.skill)return 'Скиллы сохранены для каждого агента отдельно, а не как общий: '+(problem?'Richi сейчас не может использовать настройки некоторых агентов (подробности на вкладке «Агенты»).':'Richi знает агентов, которых нет в списке на этой странице. Нажмите «Обновить».');
+    if(!announced&&!request.skill&&stored.skill)return 'Скилл «'+stored.skill+'» сохранён как общий для всех агентов: он один и тот же у каждого агента этого компьютера.';
+    return '';
   }
   // The same for an own agent: opened is the agent the form was built from, agent the latest one known.
   const agentFields=agent=>({name:agent.name,variable:list(agent.variables)[0]||'',manual_skills:agent.manual_skills==='front-matter'?'front-matter':'none'});
@@ -956,8 +999,23 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     if(error.code==='exists')return error.subject==='source'?'Эта папка уже есть среди источников агента.':'Агент с таким ID уже есть.';
     if(error.code==='not_found')return (error.subject==='source'?'Источник не найден':error.subject==='agent'?'Агент не найден':'Агент или источник не найден')+': список устарел. Нажмите «Обновить».';
     if(error.code==='limit')return error.subject==='agents'?'Своих агентов уже столько, сколько Richi хранит. Удалите ненужного.':error.subject==='folders'?'У агента уже столько папок, сколько Richi хранит. Уберите ненужную.':error.subject==='size'?'Настройки агентов не поместятся в файл, который Richi читает. Удалите агента или папку.':'Достигнут предел числа агентов или папок.';
-    if(error.code==='settings')return 'Файл настроек агентов повреждён, поэтому изменения не сохраняются. Исправьте или удалите файл: '+(settingsFile||'agents.json')+'.';
+    if(error.code==='settings'&&error.subject==='agent')return 'Настройки этого агента записала более новая версия Richi, или они повреждены: эта версия их хранит, но не меняет. Обновите Richi (richi update) или удалите эти настройки командой из предупреждения выше.';
+    if(error.code==='settings'&&error.subject==='large')return 'Файл настроек агентов больше, чем читает эта версия Richi, поэтому изменения не сохраняются. Если его записала более новая версия, обновите Richi: richi update; иначе уменьшите файл: '+(settingsFile||'agents.json')+'.';
+    if(error.code==='settings')return error.subject==='newer'?'Настройки агентов записала более новая версия Richi, и эта версия их не меняет, чтобы ничего в них не потерять. Обновите Richi: richi update.':'Файл настроек агентов повреждён, поэтому изменения не сохраняются. Исправьте или удалите файл: '+(settingsFile||'agents.json')+'.';
     return changeFailure(error);
+  }
+  // Why the agent settings are not used, by the listing's problem_code.
+  function agentSettingsProblem(code,settingsFile){
+    const file=settingsFile||'agents.json';
+    if(code==='newer')return 'Настройки агентов записала более новая версия Richi, поэтому эта версия показывает только встроенных агентов без ваших изменений и не меняет настройки. Обновите Richi: richi update.';
+    if(code==='large')return 'Файл настроек агентов больше, чем читает эта версия Richi, поэтому показаны только встроенные агенты без ваших изменений, и настройки не меняются. Если его записала более новая версия, обновите Richi: richi update; иначе уменьшите файл: '+file+'.';
+    if(code==='unreadable')return 'Настройки агентов сейчас не прочитались, поэтому показаны только встроенные агенты без ваших изменений. Обновите список; если не поможет, проверьте файл: '+file+'.';
+    return 'Настройки агентов сейчас не используются: файл повреждён, поэтому показаны только встроенные агенты без ваших изменений. Исправьте или удалите файл: '+file+'.';
+  }
+  // A stored agent this version does not use: one a newer Richi has built in, or settings it cannot read.
+  function unknownAgentText(item){
+    if(!item.error)return 'В настройках есть агент «'+item.id+'», записанный более новой версией Richi. Эта версия его настройки хранит, но не использует. Обновите Richi: richi update.';
+    return 'Настройки агента «'+item.id+'» эта версия Richi использовать не может: их записала более новая версия, они повреждены или своих агентов больше, чем она использует. Они хранятся как есть. Обновите Richi (richi update)'+(typeof item.next==='string'?' или удалите их: '+item.next:'')+'.';
   }
   const translit={а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'e',ж:'zh',з:'z',и:'i',й:'y',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'h',ц:'c',ч:'ch',ш:'sh',щ:'sch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya'};
   // An ID suggested from what the user typed: Latin words joined by dashes.
@@ -1002,12 +1060,14 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   };
   const skillSituations=['создании pull request','написании описания pull request','ревью кода','создании коммита','написании тестов','работе с задачами в Jira'];
   const namingTargets=[['ветки','branch-naming'],['коммиты','commit-naming'],['pull request','pr-naming'],['задачи','task-naming'],['файлы','file-naming']];
-  const rulesState={data:null,loading:false,error:'',failure:'',editing:false,request:0,query:'',scope:'',skills:null,skillMap:new Map(),skillsLoading:false,notice:''};
+  const rulesState={data:null,loading:false,error:'',failure:'',outcome:'',editing:false,request:0,query:'',scope:'',skills:null,skillMap:new Map(),skillsLoading:false,notice:''};
   let ruleSecret='',ruleFieldCount=0,rulesController=null;
   try{ruleSecret=sessionStorage.getItem(RULE_SECRET_KEY)||'';}catch{ruleSecret='';}
   function storeRuleSecret(value){ruleSecret=value||'';try{if(ruleSecret)sessionStorage.setItem(RULE_SECRET_KEY,ruleSecret);else sessionStorage.removeItem(RULE_SECRET_KEY);}catch{}}
   const ruleList=()=>list(rulesState.data?.rules).filter(rule=>rule&&typeof rule.id==='string');
   const ruleLength=value=>Array.from(String(value||'')).length;
+  // Rules of a newer format: this version does not serve them, but their text counts toward the limit.
+  const newerRuleCharacters=()=>list(rulesState.data?.unsupported_rules).reduce((sum,item)=>sum+(Number(item?.characters)||0),0);
   const ruleCountLabel=n=>{const a=n%10,b=n%100;return a===1&&b!==11?'правило':a>=2&&a<=4&&(b<12||b>14)?'правила':'правил';};
   const rulesNote=()=>rulesState.editing?'Правила · изменения сохраняются в workspace':'Правила · режим команд';
   function ruleProjectNames(){
@@ -1156,7 +1216,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     // list does not name get, those added later included.
     const others=skillSelect(null,base),othersRow=make('div','rule-agent-skill rule-other-skill'),othersLabel=make('label','rule-agent-name','Другие агенты');
     others.select.id='rule-other-skill-'+(++ruleFieldCount);othersLabel.htmlFor=others.select.id;othersRow.append(othersLabel,others.element);
-    const merged=make('div','rule-field-hint rule-skill-merged','У всех агентов из списка один и тот же скилл: правило сохранит его как общий, и его получат агенты, добавленные позже.');
+    const merged=make('div','rule-field-hint rule-skill-merged');
+    merged.textContent='У всех агентов этого компьютера один и тот же скилл: правило сохранит его как общий, и его получат агенты, добавленные позже.'+(ids.some(agent=>!known.includes(agent))?' Агенты из правила, которых нет на этом компьютере, сохранят свой выбор.':'');
     // Without a list of agents there is nothing to choose per agent.
     agentsPanel.append(othersRow,make('div','rule-field-hint','Агенты, которых нет в этом списке, например добавленные позже.'),merged,notice);modes.hidden=!ids.length;box.append(modes,sharedPanel,agentsPanel);
     let mode=ruleSharesSkill(rule||{})?'shared':'agents';
@@ -1172,7 +1233,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const picks=()=>Object.fromEntries(ids.map(agent=>[agent,perAgent.get(agent).value()||null]));
     const setting=()=>mode==='shared'?skillRequest(null,shared.value()):skillRequest(others.value(),picks());
     // Said only when saving would change the skills: a rule that already reads so is left alone.
-    function showMerged(){merged.hidden=!(mode==='agents'&&becomesShared(others.value(),picks())&&!sameRuleSkills(setting(),rule||{}));}
+    // Nor while Richi cannot use the agent settings: it then merges nothing (agent_settings_problem).
+    function showMerged(){merged.hidden=!(mode==='agents'&&!rulesState.data?.agent_settings_problem&&becomesShared(others.value(),picks())&&!sameRuleSkills(setting(),rule||{}));}
     function setMode(next){mode=next;sharedRadio.checked=mode==='shared';ownRadio.checked=mode==='agents';sharedPanel.hidden=mode!=='shared';agentsPanel.hidden=mode!=='agents';showStatus();showMerged();}
     function split(name){
       // Agents that lack the skill get one with the same name after the plugin prefix, if they have it.
@@ -1192,11 +1254,11 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     ownRadio.addEventListener('change',()=>{if(shared.value())split(shared.value());else{setMode('agents');changed();}});
     setMode(mode);
     const values=()=>mode==='shared'?[shared.value()]:[...ids.map(agent=>perAgent.get(agent).value()),others.value()];
-    return {element:box,focusTarget:shared.select,names:()=>values().filter(Boolean),value:setting};
+    return {element:box,focusTarget:shared.select,names:()=>values().filter(Boolean),value:setting,announcesMerge:()=>!merged.hidden};
   }
   function openRuleEditor(options={}){
     // opened: the version this form was built from; rule: the latest one known, whose version a save names.
-    let rule=options.rule||null,template=rule?'text':options.template||'text',textTouched=Boolean(rule),idTouched=false;const opened=rule;rulesState.failure='';
+    let rule=options.rule||null,template=rule?'text':options.template||'text',textTouched=Boolean(rule),idTouched=false;const opened=rule;rulesState.failure='';rulesState.outcome='';
     const panel=ruleDialog(rule?'Изменить правило':'Новое правило',rule?rule.id+' · '+ruleScopeText(rule):'Агенты загрузят его в начале каждого подходящего чата.'),{dialog,form,body,foot}=panel;
     const templateRow=make('div','rule-templates'),templateButtons=new Map();templateRow.setAttribute('role','group');templateRow.setAttribute('aria-label','Шаблон правила');
     for(const [key,item] of Object.entries(ruleTemplates)){const button=toolButton('',()=>{template=key;syncTemplate();compose();},'rule-template');button.append(make('strong','',item.label),make('span','',item.hint));templateButtons.set(key,button);templateRow.append(button);}
@@ -1236,7 +1298,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       return uniqueRuleId(ruleSlug(text.value));
     }
     function updateCounter(){
-      const limit=rulesState.data?.limit_text||2000,totalLimit=rulesState.data?.limit_characters||20000,length=ruleLength(text.value),others=ruleList().filter(item=>item.id!==rule?.id).reduce((sum,item)=>sum+ruleLength(item.text),0);
+      const limit=rulesState.data?.limit_text||2000,totalLimit=rulesState.data?.limit_characters||20000,length=ruleLength(text.value),others=ruleList().filter(item=>item.id!==rule?.id).reduce((sum,item)=>sum+ruleLength(item.text),0)+newerRuleCharacters();
       own.textContent=length.toLocaleString('ru-RU')+' / '+limit.toLocaleString('ru-RU');own.className=length>limit?'over':'';total.textContent='Все правила: '+(others+length).toLocaleString('ru-RU')+' / '+totalLimit.toLocaleString('ru-RU');total.className=others+length>totalLimit?'over':'';
     }
     function syncTemplate(){
@@ -1259,8 +1321,9 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     form.addEventListener('submit',async event=>{
       event.preventDefault();problem('');const request=change();if(typeof request==='string'){problem(request);return;}
       if(!rulesState.editing){showCommand(ruleCommandFor(request));return;}
+      const announced=skill.announcesMerge();
       await saveFromForm(panel,submit,{busy:'Сохраняем…',send:()=>sendRuleChange(request),explain:ruleChangeProblem,problem,label:submitLabel,
-        saved:()=>{announce(rule?'Правило изменено':'Правило добавлено');loadRules();},
+        saved:answer=>{rulesState.outcome=skillOutcome(request,answer?.rule,announced,answer?.agent_settings_problem);announce((rule?'Правило изменено':'Правило добавлено')+(rulesState.outcome?'. '+rulesState.outcome:''));loadRules();},
         // Somebody changed the rule meanwhile: take its new version and keep what is typed here.
         failed:async error=>{
           if(error.code!=='conflict'||!rule)return '';
@@ -1276,7 +1339,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     syncTemplate();compose();submitLabel();dialog.showModal();(rule?text:template==='skill'?situation:template==='naming'?format:text).focus();
   }
   function openRuleRemoval(rule){
-    rulesState.failure='';
+    rulesState.failure='';rulesState.outcome='';
     const panel=ruleDialog(rule.invalid?'Удалить повреждённую запись?':'Удалить правило?',rule.invalid?rule.id:rule.id+' · '+ruleScopeText(rule)),{dialog,form,body,foot}=panel,quote=make('blockquote','rule-quote',cut(rule.invalid||rule.text,500));
     body.append(make('p','rule-confirm',rule.invalid?'Эта запись правила повреждена, и агенты её не получают. Удаление нельзя отменить.':'Агенты перестанут получать это правило, когда в следующий раз загрузят правила. Удаление нельзя отменить: вернуть правило можно, только добавив его заново.'),quote);
     const problem=ruleProblem(body),showCommand=ruleCommandBox(body),cancel=toolButton('Отмена',()=>dialog.close()),submit=make('button',rulesState.editing?'danger solid':'primary',rulesState.editing?'Удалить правило':'Показать команду');submit.type='submit';foot.append(cancel,submit);
@@ -1329,7 +1392,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     if(ruleLength(rule.text)>360||String(rule.text).split('\n').length>6){text.classList.add('clamped');const more=toolButton('Показать полностью',()=>{const folded=text.classList.toggle('clamped');more.textContent=folded?'Показать полностью':'Свернуть';more.setAttribute('aria-expanded',String(!folded));},'rule-more');more.setAttribute('aria-expanded','false');card.append(more);}
     if(ruleHasSkill(rule))card.append(ruleSkillChips(rule));
     const bottom=make('div','rule-card-bottom'),meta=make('div','rule-meta'),actions=make('div','rule-actions');meta.append(make('span','','Изменено '+dateText(rule.updated_at)));
-    const author=changedBy(rule.changed_by);if(author){const who=make('span','','Кем: '+author);who.title=rule.changed_by;meta.append(who);}
+    const author=changedBy(rule.changed_by,rule.changed_by_agent);if(author){const who=make('span','','Кем: '+author);who.title=rule.changed_by;meta.append(who);}
     if(rule.source){const source=make('span','','Источник: '+cut(rule.source,70));source.title=rule.source;meta.append(source);}
     const edit=keyed(toolButton('Изменить',()=>openRuleEditor({rule}),'small'),'rule-edit:'+rule.id),remove=keyed(toolButton('Удалить',()=>openRuleRemoval(rule),'small danger'),'rule-remove:'+rule.id);edit.setAttribute('aria-label','Изменить правило '+rule.id);remove.setAttribute('aria-label','Удалить правило '+rule.id);
     actions.append(edit,remove);bottom.append(meta,actions);card.append(bottom);return card;
@@ -1355,7 +1418,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   }
   function renderRulesContent(){
     const root=$('rules-content');root.replaceChildren();$('rules-panel').setAttribute('aria-busy',String(rulesState.loading));if(state.mode==='rules')$('data-note').textContent=rulesNote();
-    const all=ruleList(),limit=rulesState.data?.limit_characters||20000,used=all.reduce((sum,rule)=>sum+ruleLength(rule.text),0);
+    const all=ruleList(),limit=rulesState.data?.limit_characters||20000,used=all.reduce((sum,rule)=>sum+ruleLength(rule.text),0)+newerRuleCharacters();
     const heading=make('div','tools-heading rules-heading'),intro=make('div'),totals=make('div','rules-totals'),count=make('div','tools-total'),meter=make('div','rules-meter'+(used>limit*.85?' near':'')),bar=make('div','rules-meter-bar'),fill=make('i');
     intro.append(make('div','tools-eyebrow','Постоянные инструкции'),make('h2','','Правила агентов'),make('p','tools-lead','Агенты загружают эти правила в начале каждого чата'+(state.workspaceName?' workspace «'+state.workspaceName+'»':'')+', после сжатия контекста и при смене проекта и выполняют их как ваши инструкции. Глобальные действуют во всех чатах, правила проекта — при работе с ним. Более новая просьба в чате важнее правила.'));
     count.append(make('strong','',String(all.length)),make('span','',ruleCountLabel(all.length)));fill.style.width=Math.min(100,used/limit*100).toFixed(1)+'%';bar.append(fill);
@@ -1367,10 +1430,16 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     }
     if(rulesState.error)toolWarning(root,'Не удалось обновить правила: '+rulesState.error+' Показан предыдущий список.');
     if(rulesState.failure)toolWarning(root,'Изменение не сохранено. '+rulesState.failure);
+    if(rulesState.outcome)toolWarning(root,rulesState.outcome);
+    if(rulesState.data.agent_settings_problem)toolWarning(root,'Richi сейчас не может использовать все настройки агентов (подробности на вкладке «Агенты»): в списках агентов здесь нет ваших агентов из этих настроек, и одинаковые скиллы всех агентов не объединяются в общий.');
     // A row that cannot be read is not a rule any more: agents do not get it, and only removing it helps.
     for(const item of list(rulesState.data.invalid_rules).filter(item=>item&&typeof item.id==='string')){
-      const box=make('div','tools-warning rule-invalid'),remove=keyed(toolButton(rulesState.editing?'Удалить запись':'Команда удаления',()=>openRuleRemoval({id:item.id,updated_at:typeof item.updated_at==='string'?item.updated_at:'invalid',invalid:String(item.error||'Запись не читается.')}),'small'),'rule-remove:'+item.id);
-      box.setAttribute('role','status');box.append(make('span','','Запись правила «'+item.id+'» повреждена, и агенты её не получают: '+cut(String(item.error||'запись не читается'),200)),remove);root.append(box);
+      const box=make('div','tools-warning rule-invalid');box.setAttribute('role','status');
+      box.append(make('span','','Запись правила «'+item.id+'» повреждена, и агенты её не получают: '+cut(String(item.error||'запись не читается'),200)));
+      // Only a row the server can name (next) can be removed from here: its key is shown in full and is text.
+      if(typeof item.next==='string')box.append(keyed(toolButton(rulesState.editing?'Удалить запись':'Команда удаления',()=>openRuleRemoval({id:item.id,updated_at:typeof item.updated_at==='string'?item.updated_at:'invalid',invalid:String(item.error||'Запись не читается.')}),'small'),'rule-remove:'+item.id));
+      else box.append(make('span','',' Удалить её можно только инструментом для SQLite.'));
+      root.append(box);
     }
     for(const item of list(rulesState.data.unsupported_rules).filter(item=>item&&typeof item.id==='string'))toolWarning(root,'Правило «'+item.id+'» записано более новой версией Richi, и эта версия его агентам не отдаёт. Обновите Richi: richi update.');
     renderRuleMode(root);
@@ -1454,7 +1523,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const panel=ruleDialog(agent?'Изменить агента':'Новый агент',agent?agent.name+' · '+agent.id:'Опишите агента, которого в Richi нет, чтобы правила могли называть скилл и для него.'),{dialog,form,body,foot}=panel;
     const name=make('input'),folder=make('input'),id=make('input'),variable=make('input'),manual=make('select');let idTouched=false;
     for(const input of [name,folder,id,variable]){input.type='text';input.autocomplete='off';input.spellcheck=false;}
-    name.maxLength=agentLimit('name',60);name.placeholder='Gemini CLI';folder.maxLength=agentLimit('folder',1000);folder.placeholder='~/.gemini/skills';id.maxLength=32;id.placeholder='gemini-cli';variable.maxLength=165;variable.placeholder='GEMINI_CLI=1';
+    // maxLength counts UTF-16 units, so it only stops a runaway paste; change() counts characters.
+    name.maxLength=2*agentLimit('name',60);name.placeholder='Gemini CLI';folder.maxLength=2*agentLimit('folder',1000);folder.placeholder='~/.gemini/skills';id.maxLength=32;id.placeholder='gemini-cli';variable.maxLength=165;variable.placeholder='GEMINI_CLI=1';
     manual.add(new Option('Показывать все скиллы','none'));manual.add(new Option('Скрывать скиллы с disable-model-invocation: true','front-matter'));
     const taken=()=>new Set(agentItems().map(item=>item.id));
     const slug=value=>{let base=ruleSlug(value).slice(0,28).replace(/-+$/,'');if(!/^[a-z]/.test(base))return '';let result=base,index=2;while(taken().has(result))result=base+'-'+index++;return result;};
@@ -1479,6 +1549,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     function change(){
       const label=name.value.trim(),mark=variable.value.trim();
       if(!label)return 'Введите имя агента.';
+      if(!agentNameOk(label,agentLimit('name',60)))return 'Имя: одна строка до '+agentLimit('name',60)+' символов.';
       if(mark&&!AGENT_VARIABLE.test(mark)){more.open=true;return 'Переменная: ИМЯ или ИМЯ=ЗНАЧЕНИЕ, имя из латинских букв, цифр и «_».';}
       if(agent)return agentUpdate(opened,agent,{name:label,variable:mark,manual_skills:manual.value})||'Изменений нет.';
       const identifier=id.value.trim()||slug(label),path=folder.value.trim(),wrong=agentFolderProblem(path);
@@ -1530,7 +1601,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     else if(agent.updated_at)actions.append(keyed(toolButton('Сбросить к встроенным',()=>openAgentRemoval(agent),'small'),'reset:'+agent.id));
     head.append(titles,actions);box.append(head);
     const badges=make('div','agent-badges');badges.append(make('span','agent-badge'+(agent.builtin?'':' own'),agent.builtin?'Встроенный':'Свой'));
-    badges.append(make('span','agent-badge'+(agent.detected?' ok':''),agent.detected?'Найден на компьютере':'Не найден на компьютере'));
+    // null: every source of the agent is switched off, and Richi does not look at those.
+    badges.append(make('span','agent-badge'+(agent.detected?' ok':''),agent.detected===null?'Не проверялся: источники выключены':agent.detected?'Найден на компьютере':'Не найден на компьютере'));
     if(agent.connection==='configured')badges.append(make('span','agent-badge ok','Richi подключён'));
     else if(agent.connection==='not_configured'){const badge=make('span','agent-badge warn','Richi не подключён');badge.title='Подключить: richi setup --agent '+agent.id+' --yes';badges.append(badge);}
     else if(agent.connection){const badge=make('span','agent-badge warn','Подключение Richi нужно проверить');badge.title='Проверить: richi setup --agent '+agent.id+' --status';badges.append(badge);}
@@ -1551,7 +1623,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       box.append(row);
     }
     if(agentsState.addingFolder===agent.id){
-      const formBox=make('form','agent-folder-form'),field=make('div','rule-field'),line=make('div','agent-folder-row'),input=make('input'),problem=make('div','rule-error');input.type='text';input.id='agent-folder-input';keyed(input,'folder-input');input.maxLength=agentLimit('folder',1000);input.placeholder='~/work/team-skills';input.autocomplete='off';input.spellcheck=false;input.setAttribute('aria-label','Папка со скиллами');input.value=agentsState.folderDraft;problem.hidden=true;problem.setAttribute('role','alert');
+      const formBox=make('form','agent-folder-form'),field=make('div','rule-field'),line=make('div','agent-folder-row'),input=make('input'),problem=make('div','rule-error');input.type='text';input.id='agent-folder-input';keyed(input,'folder-input');input.maxLength=2*agentLimit('folder',1000);input.placeholder='~/work/team-skills';input.autocomplete='off';input.spellcheck=false;input.setAttribute('aria-label','Папка со скиллами');input.value=agentsState.folderDraft;problem.hidden=true;problem.setAttribute('role','alert');
       const add=make('button','primary',agentsState.busy?'Сохраняем…':rulesState.editing?'Добавить':'Показать команду');add.type='submit';add.disabled=agentsState.busy;
       line.append(input,add,keyed(toolButton('Отмена',()=>{closeFolderForm();agentsState.focus='add-folder:'+agent.id;renderAgents();}),'folder-cancel'));
       field.append(line,make('span','rule-field-hint','Папка, где каждый скилл лежит в своей подпапке с файлом SKILL.md.'),problem);formBox.append(field);formBox.noValidate=true;
@@ -1563,7 +1635,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     }else{const row=make('div','agent-row-actions');row.append(keyed(toolButton('+ Добавить папку',()=>{agentsState.addingFolder=agent.id;agentsState.folderDraft='';agentsState.focus='folder-input';agentsState.problem='';renderAgents();},'small'),'add-folder:'+agent.id));box.append(row);}
     box.append(make('div','agent-section','Как Richi узнаёт агента'));
     const lines=make('div','agent-lines'),line=(label,value)=>{const item=make('div');item.append(document.createTextNode(label+' '),make('code','',value));lines.append(item);};
-    line('Идентификатор чата:','RICHI_CHAT_ID='+agent.id+':…');
+    if(agent.chat_prefix!==false)line('Идентификатор чата:','RICHI_CHAT_ID='+agent.id+':…');
     for(const value of list(agent.variables))line('Переменная в терминале агента:',value);
     line('Явно в команде:','richi rules show --agent '+agent.id);box.append(lines);
     box.append(make('div','agent-muted',agent.builtin?'Задано в Richi и обновляется вместе с ним. По этим признакам команда rules show отдаёт агенту его скилл.':'По этим признакам команда rules show отдаёт агенту его скилл. Чтобы агент загружал правила, добавьте эту команду в его постоянные инструкции.'));
@@ -1601,8 +1673,10 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       if(failed)box.append(toolButton('Повторить загрузку',()=>loadAgents(),'primary'));root.append(box);return;
     }
     if(agentsState.error)toolWarning(root,'Не удалось обновить список агентов: '+agentsState.error+' Показан предыдущий список.');
-    if(agentsState.data.problem)toolWarning(root,'Настройки агентов сейчас не используются: файл не читается или повреждён, поэтому показаны только встроенные агенты без ваших изменений. Обновите список; если не поможет, исправьте или удалите файл: '+(agentsState.data.settings_file||'agents.json')+'.');
-    for(const item of list(agentsState.data.unknown_agents).filter(item=>item&&typeof item.id==='string'))toolWarning(root,'В настройках есть агент «'+item.id+'», записанный более новой версией Richi. Эта версия его настройки хранит, но не использует. Обновите Richi: richi update.');
+    if(agentsState.data.problem)toolWarning(root,agentSettingsProblem(agentsState.data.problem_code,agentsState.data.settings_file));
+    for(const item of list(agentsState.data.unknown_agents).filter(item=>item&&typeof item.id==='string'))toolWarning(root,unknownAgentText(item));
+    const moreUnknown=Number(agentsState.data.unknown_agents_more)||0;
+    if(moreUnknown>0)toolWarning(root,'И ещё '+plural(moreUnknown,['запись','записи','записей'])+' в настройках агентов эта версия Richi не использует. Полный список — в файле '+(agentsState.data.settings_file||'agents.json')+'.');
     renderRuleMode(root,agentSaved);
     const shown=all.filter(agentMatches),layout=make('div','agents-layout'),column=make('div','agents-list');
     if(!shown.some(agent=>agent.id===agentsState.selected))agentsState.selected=shown[0]?.id||'';

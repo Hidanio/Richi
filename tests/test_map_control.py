@@ -21,7 +21,7 @@ import unittest
 from unittest import mock
 from urllib.parse import unquote, urlsplit
 
-from richi import cli_parser, launch_map, memory, serve
+from richi import cli_parser, launch_map, map_access, memory, serve
 import richi_bootstrap
 import richi_launcher
 from richi_launcher import maps
@@ -305,10 +305,15 @@ class MapControlTests(unittest.TestCase):
         self.assertEqual(refused.exception.reason, maps.Reason.UNVERIFIED_PROCESS)
         result = self.run_cli("map", "stop", "--port", str(forged_port), ok=False)
         self.assertEqual((result["status"], result["reason"]), ("refused", "unverified_process"))
-        # Nor is it reused or opened as this workspace's map, while the real one still is.
+        # Nor is it reused or opened as this workspace's map, while the real one still is: richi map
+        # finds that one by the port it recorded beside the store.
+        self.assertEqual(self.run_cli("map", "--no-open", "--port", str(forged_port)),
+                         {"url": maps.url(self.port), "status": "existing"})
+        self.assertEqual(self.map("--no-open"), {"url": maps.url(self.port), "status": "existing"})
+        # Without that record nothing verified answers there, and richi map refuses rather than start beside it.
+        map_access.port_path(self.database).unlink()
         launched = self.run_cli("map", "--no-open", "--port", str(forged_port), ok=False)
         self.assertEqual((launched["status"], launched["reason"]), ("refused", "unverified_process"))
-        self.assertEqual(self.map("--no-open"), {"url": maps.url(self.port), "status": "existing"})
         opened = self.root / "opened.txt"
         # Never the real browser: the command records the URL and always succeeds,
         # so webbrowser does not fall back to the next browser.
@@ -584,6 +589,65 @@ class RestartingRefusalTests(unittest.TestCase):
         self.assertIs(refused.exception.reason, maps.Reason.CHANGED)
         self.assertTrue(refused.exception.retryable)
         self.assertFalse(self.start.called)
+
+
+class RegisteredMapTests(unittest.TestCase):
+    """richi map finds this storage's map on a port the installation registered, outside its range.
+
+    A second map would end the first one's edit key: the key belongs to the storage.
+    """
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="richi-map-registered-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.database = self.root / "memory.sqlite3"
+        self.database.write_bytes(b"")
+        # Nothing listens here: every answer below is synthetic. The map runs below the range.
+        self.port, self.far = 41000, 40993
+        (self.root / maps.REGISTRY).mkdir()
+        (self.root / maps.REGISTRY / ("%d.json" % self.far)).write_text(json.dumps({"pid": os.getpid()}))
+        self.health = {"application": maps.APPLICATION, "pid": 4242, "runtime": {"identity": "x"}}
+        for patcher in (mock.patch.dict(os.environ, {maps.ROOT_ENV: str(self.root)}),
+                        mock.patch.object(launch_map, "_start"),
+                        mock.patch.object(maps, "wait_for_restarts", return_value=[]),
+                        mock.patch.object(launch_map, "read_health",
+                                          side_effect=lambda port: self.health if port == self.far else None),
+                        mock.patch.object(launch_map, "compatible_health", side_effect=lambda health, *_a: health is not None),
+                        # The synthetic answer stands for this user's map on that port.
+                        mock.patch.object(launch_map, "foreign_answer", return_value=None),
+                        mock.patch.object(launch_map, "managed_health", side_effect=lambda health, *_a: health is not None)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_the_storages_map_is_found_wherever_it_listens(self):
+        self.assertEqual(launch_map._known_ports(launch_map._ports(self.port), self.database),
+                         [*launch_map._ports(self.port), self.far])
+        self.assertEqual(launch_map.launch(self.database, self.port, runtime=mock.sentinel.runtime),
+                         {"url": serve.url(self.far), "status": "existing"})
+        self.assertFalse(launch_map._start.called)
+        stopped = maps.Stopped(self.far, 4242, "1", True)
+        with mock.patch.object(maps, "stop", return_value=stopped) as stop:
+            self.assertEqual(launch_map.stop(self.database, self.port), stopped.as_dict())
+        stop.assert_called_once_with(self.far, self.health)
+
+    def test_without_a_registry_the_store_records_where_its_map_listens(self):
+        del os.environ[maps.ROOT_ENV]
+        self.assertEqual(launch_map._known_ports(range(5, 7), self.database), [5, 6])
+        os.environ[maps.ROOT_ENV] = str(self.root / "missing")
+        self.assertEqual(launch_map._known_ports(range(5, 7), self.database), [5, 6])
+        # A seed, pip or source installation has no registry, but every store has its runtime directory.
+        map_access.record_port(self.database, self.far)
+        self.assertEqual(launch_map._known_ports(range(5, 7), self.database), [5, 6, self.far])
+        self.assertEqual(launch_map.launch(self.database, self.port, runtime=mock.sentinel.runtime),
+                         {"url": serve.url(self.far), "status": "existing"})
+        stopped = maps.Stopped(self.far, 4242, "1", True)
+        with mock.patch.object(maps, "stop", return_value=stopped) as stop:
+            self.assertEqual(launch_map.stop(self.database, self.port), stopped.as_dict())
+        stop.assert_called_once_with(self.far, self.health)
+        # A record that is not this user's private file is no hint at all.
+        os.chmod(map_access.port_path(self.database), 0o644)
+        self.assertEqual(launch_map._known_ports(range(5, 7), self.database), [5, 6])
 
 
 class FollowerTests(unittest.TestCase):

@@ -15,6 +15,7 @@ import unittest
 from unittest import mock
 
 from richi import agents, memory, rules
+from richi.output import cut_name
 from richi_launcher import agent_setup, chats, config
 from richi_launcher.claude_setup import HOOK
 
@@ -413,12 +414,12 @@ class RulesTests(unittest.TestCase):
     def test_changes_are_logged_with_who_made_them(self):
         with mock.patch.dict(os.environ, {"RICHI_CHAT_ID": "claude:chat-1"}):
             created = self.add("alpha", "names", "--global", text="First.")
-        self.assertEqual(created["changed_by"], "claude:chat-1")
+        self.assertEqual((created["changed_by"], created["changed_by_agent"]), ("claude:chat-1", "claude"))
         version = ["--expected-updated-at", created["updated_at"]]
         # The map names itself, whatever chat its server was started from.
         with mock.patch.dict(os.environ, {"RICHI_CHAT_ID": "claude:chat-1", "RICHI_RULES_ACTOR": "richi map"}):
             updated = self.command("alpha", "rules", "update", "names", *version, "--text", "Second.")["rule"]
-        self.assertEqual(updated["changed_by"], "richi map")
+        self.assertEqual((updated["changed_by"], updated["changed_by_agent"]), ("richi map", None))
         version = ["--expected-updated-at", updated["updated_at"]]
         self.assertEqual(self.command("alpha", "rules", "update", "names", *version, "--text", "Second.")
                          ["results"][0]["status"], "unchanged")
@@ -575,18 +576,20 @@ class RulesTests(unittest.TestCase):
                          (b"\xff",))
             # A key of another spelling is no rule.
             conn.execute("INSERT INTO metadata(key, value) VALUES ('RULE:upper', '{}')")
+        # Cut, and told apart from any other key cut the same way by its length and a hash.
+        LONG_KEY = cut_name("k" * 600, rules.MAX_NAMED)
         for view in ("show", "list"):
             with self.subTest(view=view):
                 listed = self.command("alpha", "rules", view)
                 self.assertEqual([rule["id"] for rule in listed["rules"]], ["kept"])
                 invalid = {item["id"]: item for item in listed["invalid_rules"]}
                 self.assertEqual(sorted(invalid), sorted(["huge", "nan", "latin", "blob", "bad\\xff", "old",
-                                                          "k" * 200 + "\u2026"]))
+                                                          LONG_KEY]))
                 self.assertLess(len(json.dumps(listed)), 20000)
                 self.assertIn("not finite", invalid["nan"]["error"])
                 self.assertIn("not UTF-8", invalid["latin"]["error"])
                 self.assertEqual(invalid["old"]["updated_at"], "invalid")
-                self.assertNotIn("next", invalid["k" * 200 + "\u2026"])
+                self.assertNotIn("next", invalid[LONG_KEY])
         # The log is read past an entry that is not text.
         self.assertEqual([entry["id"] for entry in self.command("alpha", "rules", "log")["entries"]], ["kept"])
         # Each row Richi can name is removed by the command it names, as a shell would split it.
@@ -595,7 +598,7 @@ class RulesTests(unittest.TestCase):
                 words = shlex.split(item["next"])
                 self.assertEqual(self.command("alpha", *words[1:])["results"], [{"id": item["id"], "status": "removed"}])
         self.assertEqual([item["id"] for item in self.command("alpha", "rules", "list")["invalid_rules"]],
-                         ["k" * 200 + "\u2026"])
+                         [LONG_KEY])
         self.command("alpha", "rules", "clear-log")
         with closing(sqlite3.connect(str(database))) as conn:
             self.assertEqual(conn.execute("SELECT count(*) FROM metadata WHERE key LIKE 'rule-log:%'").fetchone()[0], 0)
@@ -681,12 +684,40 @@ class RulesTests(unittest.TestCase):
         for view in ("show", "list"):
             problem = self.command("alpha", "rules", view)["agent_settings_problem"]
             self.assertIn(str(settings), problem["error"])
+            self.assertEqual(problem["code"], "damaged")
+            # What really stops: the agent still gets its skills when it names itself.
+            self.assertIn("fix or remove the file", problem["next"])
+            self.assertIn("rules show --agent ID", problem["next"])
         failed = self.command("alpha", "rules", "add", "own", "--global", "--text", "x", "--skill", "gemini-cli=r",
                               ok=False)
         self.assertIn("Unknown agent in skills: gemini-cli", failed["error"])
         self.assertIn(str(settings), failed["error"])
+        # A change says it too: what it stored may differ from what it would store with the settings.
+        added = self.command("alpha", "rules", "add", "while-damaged", "--global", "--text", "x")
+        self.assertEqual(added["agent_settings_problem"]["code"], "damaged")
         settings.unlink()
         self.assertNotIn("agent_settings_problem", self.command("alpha", "rules", "show"))
+        # An own agent and a rule that names it; then a newer Richi rewrites the agent's settings.
+        own = self.command("alpha", "skill-sources", "add", "gemini-cli", "--name", "Gemini CLI", "--skills",
+                           "~/.gemini/skills")["agent"]
+        self.add("alpha", "named", "--global", skill="gemini-cli=gem")
+        stored = json.loads(settings.read_text(encoding="utf-8"))
+        stored["agents"]["gemini-cli"]["manual_skills"] = "openai-yaml"
+        settings.write_text(json.dumps(stored), encoding="utf-8")
+        agents.forget_settings()
+        shown = self.command("alpha", "rules", "show", "--agent", "gemini-cli")
+        self.assertEqual((shown["agent_settings_problem"]["code"], "gemini-cli" in shown["agent_settings_problem"]["error"]),
+                         ("agents", True))
+        # Rules that name it still serve it, and the ID is no misspelling.
+        self.assertEqual(([rule["use_skill"] for rule in shown["rules"] if rule["id"] == "named"],
+                          "agent_problem" in shown), (["gem"], False))
+        self.assertEqual(own["id"], "gemini-cli")
+        # Settings a newer Richi wrote as a whole: nobody is told to remove them.
+        settings.write_text(json.dumps({"version": agents.SETTINGS_VERSION + 1, "agents": {}}), encoding="utf-8")
+        agents.forget_settings()
+        problem = self.command("alpha", "rules", "show")["agent_settings_problem"]
+        self.assertEqual((problem["code"], "richi update" in problem["next"], "remove" in problem["error"] + problem["next"]),
+                         ("newer", True, False))
 
     def test_a_store_that_another_command_holds_is_reported_as_busy(self):
         database = self.configs["alpha"].parent / "memory.sqlite3"
@@ -769,7 +800,7 @@ class RulesTests(unittest.TestCase):
                 # The version is there for a user who removes the rule instead of updating Richi.
                 self.assertEqual(listed["unsupported_rules"],
                                  [{"id": "paused", "requires": rules.FORMAT + 1, "next": "richi update",
-                                   "updated_at": paused["updated_at"],
+                                   "updated_at": paused["updated_at"], "characters": len("Use the old flow."),
                                    "error": listed["unsupported_rules"][0]["error"]}])
                 self.assertIn("format %d" % (rules.FORMAT + 1), listed["unsupported_rules"][0]["error"])
                 self.assertNotIn("invalid_rules", listed)
@@ -788,6 +819,181 @@ class RulesTests(unittest.TestCase):
                                damaged["unsupported_rules"][0]["updated_at"])
         self.assertEqual(removed["results"], [{"id": "paused", "status": "removed"}])
         self.assertNotIn("unsupported_rules", self.command("alpha", "rules", "list"))
+
+    def test_a_newer_format_counts_toward_the_workspace_limit(self):
+        paused = self.add("alpha", "paused", "--global", text="p" * 1990)
+        self.stored("alpha", "rule:paused", requires=rules.FORMAT + 1)
+        listed = self.command("alpha", "rules", "list")
+        self.assertEqual((listed["unsupported_rules"][0]["characters"], listed["characters"]), (1990, 1990))
+        # This version does not serve it, but the version that does would find the workspace over its limit.
+        with mock.patch.object(rules, "MAX_TOTAL", 2000):
+            failed = self.command("alpha", "rules", "add", "more", "--global", "--text", "x" * 11, ok=False)
+            self.assertEqual((failed["code"], failed["subject"]), ("limit", "rules"))
+            fits = self.add("alpha", "fits", "--global", text="x" * 10)
+        # Over the limit already (a newer Richi may allow more): what does not make the rules longer is saved,
+        # also the shortening the refusal asks for; what makes them longer is not.
+        with mock.patch.object(rules, "MAX_TOTAL", 1995):
+            for options in (["--skill", "review"], ["--text", "x" * 8], ["--text", "y" * 8]):
+                with self.subTest(options=options):
+                    fits = self.command("alpha", "rules", "update", "fits", "--expected-updated-at", fits["updated_at"],
+                                        *options)["rule"]
+            longer = self.command("alpha", "rules", "update", "fits", "--expected-updated-at", fits["updated_at"],
+                                  "--text", "y" * 9, ok=False)
+            self.assertEqual((longer["code"], longer["subject"]), ("limit", "rules"))
+            self.command("alpha", "rules", "add", "another", "--global", "--text", "z", ok=False)
+        self.assertEqual(paused["text"], "p" * 1990)
+
+    def test_rows_another_program_wrote_are_reported_within_bounds(self):
+        database = self.configs["alpha"].parent / "memory.sqlite3"
+        good = self.add("alpha", "good", "--global")
+        with closing(sqlite3.connect(str(database))) as conn, conn:
+            # SQLite sorts a key stored as bytes after every text key: such a row was once neither
+            # served nor reported, and a rule of the same name could be added beside it.
+            conn.execute("INSERT INTO metadata(key, value) VALUES (?, ?)",
+                         (b"rule:dup", json.dumps({**good, "id": "dup"})))
+            # A key of a newer format's row is not repeated in full either.
+            conn.execute("INSERT INTO metadata(key, value) VALUES (?, ?)",
+                         ("rule:" + "k" * 300, json.dumps({**good, "id": "k" * 300, "requires": rules.FORMAT + 1})))
+            # Larger than Richi writes: not parsed for its version, which older Pythons do in quadratic time.
+            conn.execute("INSERT INTO metadata(key, value) VALUES (?, ?)",
+                         ("rule:big", json.dumps({**good, "id": "big", "text": "x" * rules.MAX_STORED})))
+            conn.execute("INSERT INTO metadata(key, value) VALUES (?, ?)",
+                         ("rule-log:9999:big", json.dumps({"id": "big", "at": "9999", "action": "updated",
+                                                            "before": "x" * (3 * rules.MAX_STORED)})))
+        listed = self.command("alpha", "rules", "list")
+        self.assertEqual([rule["id"] for rule in listed["rules"]], ["good"])
+        invalid = {item["id"]: item for item in listed["invalid_rules"]}
+        self.assertEqual(sorted(invalid), ["big", "dup"])
+        # No command can name the bytes key apart from a text one.
+        self.assertEqual(("next" in invalid["dup"], "stored as bytes" in invalid["dup"]["error"],
+                          "SQLite tool" in invalid["dup"]["error"]), (False, True, True))
+        self.assertEqual(invalid["big"]["updated_at"], "invalid")
+        newer = listed["unsupported_rules"]
+        self.assertEqual([(item["id"], item["characters"]) for item in newer],
+                         [(cut_name("k" * 300, rules.MAX_NAMED), len(good["text"]))])
+        self.assertTrue(newer[0]["id"].startswith("k" * rules.MAX_NAMED + "… (300 characters, sha256 "))
+        twin = self.add("alpha", "dup", "--global")
+        self.command("alpha", "rules", "remove", "dup", "--expected-updated-at", twin["updated_at"])
+        self.assertEqual([item["id"] for item in self.command("alpha", "rules", "list")["invalid_rules"]],
+                         ["big", "dup"])
+        self.command("alpha", "rules", "remove", "big", "--expected-updated-at=invalid")
+        # The log row larger than any entry Richi writes is passed over, and only clearing everything removes it.
+        self.assertEqual([entry["action"] for entry in self.command("alpha", "rules", "log", "--id", "big")["entries"]],
+                         ["removed"])
+        self.command("alpha", "rules", "clear-log", "--id", "big")
+        with closing(sqlite3.connect(str(database))) as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM metadata WHERE key = 'rule-log:9999:big'").fetchone(), (1,))
+        self.command("alpha", "rules", "clear-log")
+        with closing(sqlite3.connect(str(database))) as conn:
+            self.assertEqual(conn.execute("SELECT count(*) FROM metadata WHERE key LIKE 'rule-log:%'").fetchone(), (0,))
+
+    def test_line_ends_are_stored_one_way(self):
+        piped = self.command("alpha", "rules", "add", "piped", "--global", "--text", "-",
+                             stdin="Line one.\r\nLine two.\r\n")["rule"]
+        self.assertEqual(piped["text"], "Line one.\nLine two.")
+        self.assertEqual(self.add("alpha", "old-mac", "--global", text="One.\rTwo.")["text"], "One.\nTwo.")
+        # A page's text field gives the lines with \n: the same rule, nothing to save.
+        unchanged = self.command("alpha", "rules", "update", "piped", "--expected-updated-at", piped["updated_at"],
+                                 "--text", "Line one.\r\nLine two.")
+        self.assertEqual(unchanged["results"][0]["status"], "unchanged")
+
+    def test_the_same_skill_of_every_agent_is_merged_only_while_every_agent_is_known(self):
+        same = ["--skill", "claude=rev", "--skill", "codex=rev"]
+
+        def skills(rule):
+            return rule["skill"], rule["skills"]
+        # Every agent this computer has gets one skill: the skill of the action, for every agent.
+        merged = self.command("alpha", "rules", "add", "merged", "--global", "--text", "x", *same)
+        self.assertEqual((skills(merged["rule"]), "agent_settings_problem" in merged), (("rev", None), False))
+        # Not while the agent settings cannot be used: the user may have agents Richi does not know now,
+        # and they would get the skill once the settings are fixed.
+        settings = agents.settings_path()
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        settings.write_text("{not json", encoding="utf-8")
+        agents.forget_settings()
+        self.addCleanup(agents.forget_settings)
+        kept = self.command("alpha", "rules", "add", "kept-apart", "--global", "--text", "x", *same)
+        self.assertEqual((skills(kept["rule"]), kept["agent_settings_problem"]["code"]),
+                         ((None, {"claude": "rev", "codex": "rev"}), "damaged"))
+        settings.unlink()
+        agents.forget_settings()
+        # The rule names an own agent, which the user then removes from this computer.
+        own = self.command("alpha", "skill-sources", "add", "gemini-cli", "--name", "Gemini CLI", "--skills",
+                           "~/.gemini/skills")["agent"]
+        three = self.add("alpha", "three", "--global", skill="gemini-cli=gem")
+        four = self.add("alpha", "four", "--global", skill="gemini-cli=gem")
+        self.command("alpha", "skill-sources", "remove", "gemini-cli", "--expected-updated-at", own["updated_at"])
+        # The same skill for the two agents left is the skill of the action; the one the rule names keeps its none.
+        three = self.command("alpha", "rules", "update", "three", "--expected-updated-at", three["updated_at"], *same,
+                             "--skill", "gemini-cli=")["rule"]
+        self.assertEqual(skills(three), ("rev", {"gemini-cli": None}))
+        # Its own skill alike.
+        four = self.command("alpha", "rules", "update", "four", "--expected-updated-at", four["updated_at"], *same,
+                            "--skill", "gemini-cli=gem")["rule"]
+        self.assertEqual(skills(four), ("rev", {"gemini-cli": "gem"}))
+        # An agent added later gets the skill of the action; the agent the rule names, once back, its own choice.
+        self.command("alpha", "skill-sources", "add", "cursor", "--name", "Cursor", "--skills", "~/.cursor/skills")
+        self.command("alpha", "skill-sources", "add", "gemini-cli", "--name", "Gemini CLI", "--skills", "~/.gemini/skills")
+        for agent, wanted in (("cursor", {"three": "rev", "four": "rev"}), ("gemini-cli", {"three": None, "four": "gem"})):
+            shown = self.command("alpha", "rules", "show", "--agent", agent)
+            self.assertEqual({rule["id"]: rule["use_skill"] for rule in shown["rules"] if rule["id"] in wanted}, wanted)
+
+    def test_a_builtin_agents_unusable_settings_do_not_stop_the_skill_of_the_action(self):
+        # A newer Richi stored something about Claude Code this version cannot read: Claude Code stays known.
+        settings = agents.settings_path()
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        settings.write_text(json.dumps({"version": agents.SETTINGS_VERSION, "agents": {"claude": {
+            "updated_at": "t", "folders": [{"path": "~/x", "enabled": True, "label": "team"}]}}}), encoding="utf-8")
+        agents.forget_settings()
+        self.addCleanup(agents.forget_settings)
+        added = self.command("alpha", "rules", "add", "pr", "--global", "--text", "x", "--skill", "claude=review",
+                             "--skill", "codex=review")
+        self.assertEqual(((added["rule"]["skill"], added["rule"]["skills"]), "agent_settings_problem" in added),
+                         (("review", None), False))
+        self.assertEqual([item["id"] for item in self.command("alpha", "skill-sources", "list")["unknown_agents"]],
+                         ["claude"])
+        # Settings of an own agent this version cannot use still stop it, and are named, a few at most.
+        stored = json.loads(settings.read_text(encoding="utf-8"))
+        stored["agents"].update({"own-%02d" % number: {"name": "Own", "updated_at": "t", "manual_skills": "openai-yaml"}
+                                 for number in range(8)})
+        # Entries without a name adjust an agent built into a newer Richi: not an own agent, never named as one.
+        stored["agents"]["x" * 5000] = {"updated_at": "t"}
+        stored["agents"]["gemini-cli"] = {"updated_at": "t", "folders": [{"path": "~/g", "enabled": True, "label": "x"}]}
+        settings.write_text(json.dumps(stored), encoding="utf-8")
+        agents.forget_settings()
+        added = self.command("alpha", "rules", "add", "pr2", "--global", "--text", "x", "--skill", "claude=review",
+                             "--skill", "codex=review")
+        problem = added["agent_settings_problem"]
+        self.assertEqual(((added["rule"]["skill"], added["rule"]["skills"]), problem["code"]),
+                         ((None, {"claude": "review", "codex": "review"}), "agents"))
+        self.assertIn("own-00, own-01, own-02, own-03, own-04 and 3 more", problem["error"])
+        self.assertNotIn("claude", problem["error"])
+        self.assertNotIn("gemini-cli", problem["error"])
+        # Without the own agents, a newer Richi's built-in agent alone does not stop the skill of the action.
+        for number in range(8):
+            del stored["agents"]["own-%02d" % number]
+        settings.write_text(json.dumps(stored), encoding="utf-8")
+        agents.forget_settings()
+        added = self.command("alpha", "rules", "add", "pr3", "--global", "--text", "x", "--skill", "claude=review",
+                             "--skill", "codex=review")
+        self.assertEqual(((added["rule"]["skill"], added["rule"]["skills"]), "agent_settings_problem" in added),
+                         (("review", None), False))
+
+    def test_a_change_goes_by_one_reading_of_the_agent_settings(self):
+        # Another window may change the agent settings while a rule is saved: what the change stores and what
+        # its answer says of them come from the same reading.
+        database = self.configs["alpha"].parent / "memory.sqlite3"
+        readings = [agents.Settings({}, {"gem": ({"name": "Gem", "updated_at": "t"}, "written by a newer Richi")}, {})]
+
+        def read_settings(*_args, **_kwargs):
+            return readings.pop(0) if readings else agents.Settings({}, {}, {})
+        with mock.patch.object(agents, "read_settings", side_effect=read_settings), \
+                closing(memory.connect(database)) as conn, memory.transaction(conn):
+            answer = rules.change(conn, {"action": "add", "id": "pr", "scope": "global", "text": "x",
+                                         "skills": {"claude": "review", "codex": "review"}}, memory)
+        self.assertEqual(((answer["rule"]["skill"], answer["rule"]["skills"]), answer["agent_settings_problem"]["code"]),
+                         ((None, {"claude": "review", "codex": "review"}), "agents"))
+        self.assertLess(len(json.dumps(self.command("alpha", "rules", "show"))), 4000)
 
     def test_input_is_read_before_the_store_is_locked(self):
         database = self.configs["alpha"].parent / "memory.sqlite3"
@@ -843,15 +1049,19 @@ class RulesTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"RICHI_CHAT_ID": "claude:ambient", "CLAUDECODE": "1"}), \
                 closing(memory.connect(database)) as conn, memory.transaction(conn):
             unnamed = rules.change(conn, {"action": "add", "id": "unnamed", "scope": "global", "text": "x"}, memory)
+            # As the launcher starts a Codex chat: the identity is the thread ID itself.
             named = rules.change(conn, {"action": "add", "id": "named", "scope": "global", "text": "x"}, memory,
-                                 author=rules.Author("codex:chat", "codex"))
+                                 author=rules.Author("019a1b2c-thread", "codex"))
             self.assertEqual(rules.current_author(), rules.Author("claude:ambient", "claude"))
-        self.assertEqual((unnamed["rule"]["changed_by"], named["rule"]["changed_by"]), (None, "codex:chat"))
+        self.assertEqual([(change["rule"]["changed_by"], change["rule"]["changed_by_agent"]) for change in (unnamed, named)],
+                         [(None, None), ("019a1b2c-thread", "codex")])
+        self.assertEqual(rules.current_author({"RICHI_CHAT_ID": "019a1b2c-thread", "CODEX_THREAD_ID": "019a1b2c-thread"}),
+                         rules.Author("019a1b2c-thread", "codex"))
         self.assertEqual(rules.current_author({"RICHI_RULES_ACTOR": "richi map", "CLAUDECODE": "1"}),
                          rules.Author("richi map", None))
         entries = self.command("alpha", "rules", "log")["entries"]
         self.assertEqual([(entry["id"], entry["by"], entry["agent"]) for entry in entries],
-                         [("named", "codex:chat", "codex"), ("unnamed", None, None)])
+                         [("named", "019a1b2c-thread", "codex"), ("unnamed", None, None)])
 
     def test_the_change_log_can_be_cleared(self):
         secret = self.add("alpha", "secret", "--global", text="The staging token is EXAMPLE-0000.")

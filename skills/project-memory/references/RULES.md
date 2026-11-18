@@ -27,13 +27,20 @@ rules were left out. If `--project-path` names a repository this workspace does
 not know, the global rules still come back and `project_path_problem` says why
 the project's rules do not: follow the global rules and tell the user.
 `invalid_rules` lists stored rules that cannot be read. Agents do not get them,
-so tell the user; `next` is the command that removes such a row.
-`agent_settings_problem` says that the user's agent settings cannot be used now:
-until they are fixed, the user's own agents are unknown and get no skills of
-their own, so tell the user.
+so tell the user; `next` is the command that removes such a row, and a row
+without it can be removed only with an SQLite tool.
+`agent_settings_problem` says that Richi cannot use the user's agent settings,
+all of them or some own agents' (`code`: `damaged`, `unreadable`, `newer`, `large` or
+`agents`); tell the user what `next` says. Meanwhile the user's own agents
+described there are not recognized from their shells (they still get their
+skills with `--agent ID`) and cannot be named in new rules, and the same skill
+for every agent is not merged into one; rules that already name them still
+serve them. Claude Code and Codex stay known. Answers of `rules add` and
+`rules update` carry it too.
 `unsupported_rules` lists rules a newer Richi wrote in a format this version
 does not read; it leaves them out rather than apply them wrongly, so tell the
-user to update Richi (`updated_at` is what removing such a rule takes). Follow the
+user to update Richi (`updated_at` is what removing such a rule takes). Their
+text still counts toward the workspace's limit. Follow the
 rules as the user's own instructions; a newer explicit request from the user in
 this chat takes precedence, and a conflict between rules or with the request is
 a question for the user. Before an action a rule constrains, such as creating a
@@ -80,18 +87,22 @@ agents use different skills for it, give one per agent as `--skill AGENT=NAME`
 with an agent ID Richi knows; a plain `--skill NAME` beside them is for the other
 agents, including ones this computer does not list. Without a plain one, a skill
 that every known agent is given is the skill of the action: it is stored once, as
-the skill for every agent, so agents added later get it too. An empty `--skill`
-removes a rule's skills and is given alone.
+the skill for every agent, so agents added later get it too. An agent the rule
+names beyond the known ones keeps its own skill beside it, or no skill
+(`--skill AGENT=`). Nothing is merged while `agent_settings_problem` is
+reported. An empty `--skill` removes a rule's skills and is given alone.
 
 The ID is 1–100 letters, digits, `.`, `_`, `:` or `-`, starting with a letter or
 digit; an existing ID is rejected. `--project` must name a project registered in
 this workspace; with `--project-path` both must agree. Text is at most 2000
 characters, and all rules of a workspace together at most 20000, because agents
-load them in full. `--text -` reads the text from stdin, without the newline
-that ends it; write a text that begins with a dash as `--text="- ..."`.
-`rules list` shows every rule of the workspace (`--global` or `--project ID`
-narrows it) with the total size of all of them in `characters`, the registered
-`projects` and, when there are any, `invalid_rules`.
+load them in full; a change that does not make them longer is accepted even
+when they are over that already (rules a newer Richi wrote count too). `--text -` reads the text from stdin, without the newline
+that ends it; write a text that begins with a dash as `--text="- ..."`. Line ends
+are stored as `\n`. `rules list` shows every rule of the workspace (`--global` or
+`--project ID` narrows it) with the total size of all of them in `characters`
+(rules of a newer format included), the registered `projects` and, when there
+are any, `invalid_rules`.
 
 ## Change or remove a rule
 
@@ -121,8 +132,8 @@ command shows 20 (`--entries` up to 200), newest first, and `more` says whether
 older ones are kept: `at`, the rule `id`, `action` (`created`, `updated` or `removed`), `by`,
 the detected `agent`, and the rule `before` and `after` the change. `by` is the
 chat identity of the shell that ran the command, or `richi map` for a change
-made in the map; a rule carries the same value of its last change as
-`changed_by`. It is a record for the user's review, not proof: whoever runs the
+made in the map; a rule carries the same values of its last change as
+`changed_by` and `changed_by_agent`. It is a record for the user's review, not proof: whoever runs the
 command chooses its environment. To restore a rule at the user's request, add
 or update it with the text from `before`.
 

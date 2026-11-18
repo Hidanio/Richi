@@ -10,9 +10,11 @@ Each rule is one `rule:<id>` row of the store's metadata table. Every supported
 schema has that table, so rules need no migration, and backups and workspace
 copies carry them. A row keeps the fields this version does not know, so a
 store that a newer Richi wrote stays readable and editable; a row that cannot
-be read is reported and skipped, never allowed to hide the other rules. A
-field that changes what a rule means must not be ignored that way: a rule that
-has one says so in `requires`, the format a reader has to know, and a version
+be read is reported and skipped, never allowed to hide the other rules. What
+an older reader would misread or refuse must not reach it that way: a rule
+that has a field changing when or whether it applies, or a value this version
+does not accept (a longer skill name, another scope, an agent ID of another
+shape), says so in `requires`, the format a reader has to know, and a version
 that does not know it leaves the rule out and reports it instead of serving it.
 
 Rules are instructions agents obey, so every change is also kept in a short
@@ -25,7 +27,7 @@ import sys
 from typing import NamedTuple, Optional
 
 from . import agents
-from .output import shell_word
+from .output import cut_name, shell_word
 
 
 PREFIX = "rule:"
@@ -51,12 +53,15 @@ MAX_VERSION = 64
 # What `rules show` gives an agent: what it needs to follow a rule and to change it. The stored
 # record has more (where the rule came from, who changed it, fields of a newer Richi); rules list has it all.
 SHOWN = ("id", "scope", "project_id", "text", "skill", "skills", "updated_at")
-# The rule format this version reads. Raise it, and write it as a rule's `requires`, with the
-# first field that changes when or whether a rule applies: older versions then skip that rule.
+# The rule format this version reads. Raise it, and write it as a rule's `requires`, for a rule
+# that holds anything this version would misread or refuse: a field that changes when or whether
+# the rule applies, or a value outside what it accepts. Older versions then skip that rule; they
+# still count its text toward the workspace's limit.
 FORMAT = 1
 # Fields this version understands, in the order commands print them. A stored
 # rule must have the REQUIRED ones; any other field it has is kept as it is.
-KNOWN = ("id", "scope", "project_id", "text", "skill", "skills", "source", "changed_by", "created_at", "updated_at")
+KNOWN = ("id", "scope", "project_id", "text", "skill", "skills", "source", "changed_by", "changed_by_agent",
+         "created_at", "updated_at")
 REQUIRED = ("id", "scope", "project_id", "text", "created_at", "updated_at")
 # What one change may carry. The command options and `rules apply` both become
 # such an object, so a rule field is validated and stored in one place: change().
@@ -130,7 +135,8 @@ def add_commands(commands, api):
     skill_help = ("Skill to use whenever the rule applies, as the agent names it (e.g. plugin:skill). NAME is for "
                   "every agent, agents added later included; AGENT=NAME replaces it for one agent (" + known
                   + "), so repeat it when agents use different skills. A skill given to every known agent is "
-                  "stored as the skill for every agent")
+                  "stored as the skill for every agent, unless the agent settings cannot be used now; an agent "
+                  "named beyond the known ones keeps its own skill or none (AGENT=)")
     parser = commands.add_parser("rules", help="Show or manage the user's standing rules for this workspace and its projects")
     actions = parser.add_subparsers(dest="action", required=True)
     show = actions.add_parser("show", help="Print the rules that apply here in full: global rules plus one project's rules")
@@ -214,7 +220,8 @@ def _shown(raw):
 
 
 def _text(value, api):
-    value = api.string(value, "text")
+    # Line ends are not part of the user's wording: one form, which a page's text field keeps as it is.
+    value = api.string(value, "text").replace("\r\n", "\n").replace("\r", "\n")
     if not _storable(value):
         raise api.MemoryError("Rule text must not contain an unpaired surrogate character")
     if len(value) > MAX_TEXT:
@@ -251,27 +258,40 @@ def _skill_options(values, api):
     return shared, own
 
 
-def _skill_setting(shared, own, api, kept=()):
+def _skill_setting(shared, own, api, kept=(), settings=None):
     """(skill for every agent, skills per agent or None) as a rule stores them.
 
     An agent may be a known one or one the rule already names (kept). A skill
     given for every agent stays that, also when each known agent gets another
     one: it is for the agents this computer does not list. Without one, a
-    skill that every known agent names becomes the skill for every agent.
+    skill that every known agent is given is the skill of the action and
+    becomes the skill for every agent; an agent the rule names beyond the known
+    ones keeps its own skill beside it, or its "none", which is stored so that
+    it still counts when that agent is back. No such merge while Richi does not
+    know every own agent the user described (settings it cannot use).
+
+    settings: the agent settings (agents.read_settings) this change goes by,
+    read once, so that what it stores and what its answer says agree.
     """
     if own is not None and not isinstance(own, dict):
         raise api.MemoryError("skills maps an agent ID to its skill")
-    allowed = set(agents.ids()) | set(kept)
-    unknown = sorted(_readable(str(agent)) for agent in (own or {}) if agent not in allowed)
+    settings = agents.read_settings() if settings is None else settings
+    ids = tuple(agent.id for agent in agents.registry(entries=settings.entries))
+    known = set(ids)
+    unknown = sorted(_readable(str(agent)) for agent in (own or {}) if agent not in known | set(kept))
     if unknown:
-        # An own agent is unknown also while the agent settings cannot be used; then say why.
-        problem = agents.load_settings()[1]
+        # An own agent is unknown also while its settings cannot be used; then say why.
+        problem = _settings_problem({}, settings).get("agent_settings_problem")
         raise api.MemoryError("Unknown agent in skills: " + ", ".join(unknown) + "; known agents: "
-                              + ", ".join(agents.ids()) + ("; " + problem if problem else ""))
+                              + ", ".join(ids) + ("; " + problem["error"] if problem else ""))
     shared, own = _skill(shared, api), {agent: _skill(name, api) for agent, name in (own or {}).items()}
-    if shared is None and own and set(agents.ids()) <= set(own) and len(set(own.values())) == 1:
-        shared, own = next(iter(own.values())), {}
-    own = {agent: name for agent, name in own.items() if name != shared}
+    if shared is None and own and known <= set(own) and agents.settings_complete(settings):
+        # The skill of the action: the one skill every agent this computer lists is given. An agent the
+        # rule names beyond them keeps its own choice beside it, "no skill" included.
+        given = {own[agent] for agent in known}
+        if len(given) == 1 and None not in given:
+            shared = given.pop()
+    own = {agent: name for agent, name in own.items() if name != shared or (name is None and agent not in known)}
     return shared, (dict(sorted(own.items())) or None)
 
 
@@ -369,6 +389,9 @@ def _stored_version(value):
     Its updated_at when that looks like a version; anything else, which is
     then not repeated back, is "invalid".
     """
+    # A row larger than Richi writes is not parsed at all: older Pythons convert a long number in quadratic time.
+    if not isinstance(value, str) or len(value) > MAX_STORED:
+        return "invalid"
     try:
         version = _parsed(value)["updated_at"]
     except (ValueError, TypeError, KeyError, RecursionError):
@@ -391,13 +414,25 @@ def _removal(identifier, version):
     return " ".join(words)
 
 
-def _invalid(identifier, error, version):
-    """How a row that cannot be read is reported: bounded, with the command that removes it when it can be named."""
+def _invalid(identifier, error, version, named=True):
+    """How a row that cannot be read is reported: bounded, with the command that removes it when it can be named.
+
+    named=False: no command can name the row (its key is stored as bytes, which the
+    spelling shown here cannot tell from a text key).
+    """
     if len(identifier) > MAX_NAMED:
-        return {"id": identifier[:MAX_NAMED] + "…", "updated_at": version,
+        return {"id": cut_name(identifier, MAX_NAMED), "updated_at": version,
                 "error": error + "; the key is longer than %d characters, so it is not shown in full: remove the "
                                  "row with an SQLite tool" % MAX_NAMED}
+    if not named:
+        return {"id": identifier, "updated_at": version, "error": error + "; remove the row with an SQLite tool"}
     return {"id": identifier, "error": error, "updated_at": version, "next": _removal(identifier, version)}
+
+
+def _unsupported(identifier, exc, version, text):
+    """How a rule of a newer format is reported: bounded like an invalid one, with what it counts toward the limit."""
+    return {"id": cut_name(identifier, MAX_NAMED), "requires": exc.level, "error": str(exc), "updated_at": version,
+            "next": "richi update", "characters": len(text) if isinstance(text, str) else 0}
 
 
 def _row(conn, identifier, removing):
@@ -429,30 +464,41 @@ def _readable_row(key, raw_value):
     return _decode(key, value)
 
 
+def _rule_text(raw_value):
+    """The text a row of a newer format stores, for the workspace's limit; None when there is none."""
+    value = _text_of(raw_value)
+    try:
+        record = _parsed(value) if value is not None and len(value) <= MAX_STORED else None
+    except (ValueError, TypeError, RecursionError):
+        return None
+    return record.get("text") if isinstance(record, dict) else None
+
+
 def scan(conn):
     """(rules: global first, then by project and ID; rows that cannot be read; rules a newer Richi must serve)."""
     # A key range, not LIKE: LIKE would also match other spellings such as RULE:. ";" follows ":".
-    rows = conn.execute("SELECT CAST(key AS BLOB), CAST(value AS BLOB) FROM metadata "
-                        "WHERE 1=1 AND key >= 'rule:' AND key < 'rule;' ORDER BY key").fetchall()
+    # SQLite orders every BLOB after every text, so a key another program stored as bytes needs
+    # a range of its own: x'72756c653a' is "rule:".
+    rows = conn.execute("SELECT typeof(key), CAST(key AS BLOB), CAST(value AS BLOB) FROM metadata "
+                        "WHERE 1=1 AND ((key >= 'rule:' AND key < 'rule;') "
+                        "OR (key >= x'72756c653a' AND key < x'72756c653b')) ORDER BY key").fetchall()
     rules, invalid, unsupported = [], [], []
-    for raw_key, raw_value in rows:
-        key = _text_of(raw_key)
+    for kind, raw_key, raw_value in rows:
+        key = _text_of(raw_key) if kind == "text" else None
         identifier = (key if key is not None else _shown(raw_key))[len(PREFIX):]
         try:
+            if kind != "text":
+                raise ValueError("the key is stored as bytes, not as text")
             rules.append(_readable_row(key, raw_value))
         except Unsupported as exc:
             # updated_at: what removing the rule takes, for a user who will not update.
-            unsupported.append({"id": identifier, "requires": exc.level, "error": str(exc),
-                                "updated_at": _stored_version(_text_of(raw_value)), "next": "richi update"})
+            unsupported.append(_unsupported(identifier, exc, _stored_version(_text_of(raw_value)),
+                                            _rule_text(raw_value)))
         except (ValueError, TypeError, KeyError, RecursionError) as exc:
-            invalid.append(_invalid(identifier, str(exc) or type(exc).__name__, _stored_version(_text_of(raw_value))))
+            invalid.append(_invalid(identifier, str(exc) or type(exc).__name__, _stored_version(_text_of(raw_value)),
+                                    named=kind == "text"))
     rules.sort(key=lambda rule: (rule["scope"] != "global", rule["project_id"] or "", rule["id"]))
     return rules, invalid, unsupported
-
-
-def load(conn):
-    """Every stored rule this version serves."""
-    return scan(conn)[0]
 
 
 def _left_out(result, invalid, unsupported):
@@ -477,9 +523,18 @@ def _check_version(identifier, stored, expected, api):
                        "read it again with rules list".format(identifier, expected, stored), "conflict")
 
 
+def _characters(rules, unsupported, replaced=None):
+    """The text agents load from the workspace, and a newer Richi's rules this version only counts."""
+    return (sum(len(rule["text"]) for rule in rules if rule["id"] != replaced)
+            + sum(item["characters"] for item in unsupported))
+
+
 def _check_total(conn, api, replaced=None, added=""):
-    total = sum(len(rule["text"]) for rule in load(conn) if rule["id"] != replaced) + len(added)
-    if total > MAX_TOTAL:
+    rules, _invalid_rows, unsupported = scan(conn)
+    total = _characters(rules, unsupported, replaced) + len(added)
+    # Only a change that makes the rules longer is refused: over the limit already (a newer Richi's
+    # rules count too), a skill, a source or a shorter text can still be saved.
+    if total > MAX_TOTAL and total > _characters(rules, unsupported):
         raise _failure(api, "Rules of one workspace may hold at most %d characters in all (would be %d); "
                        "shorten or remove rules first" % (MAX_TOTAL, total), "limit", "rules")
 
@@ -506,6 +561,12 @@ def _record(conn, api, action, identifier, before, after, author):
                  "ORDER BY key DESC LIMIT ?)", (MAX_LOG,))
 
 
+def _log_text(raw):
+    """A log row as text, or None when it is not text or larger than any entry Richi writes (two rules and more)."""
+    value = _text_of(raw)
+    return value if value is not None and len(value) <= 2 * MAX_STORED + 4 * MAX_SOURCE + 4000 else None
+
+
 def log(conn, identifier=None, entries=20):
     """The latest changes, newest first; more says whether older ones are kept beyond them."""
     rows = conn.execute("SELECT CAST(value AS BLOB) FROM metadata "
@@ -513,7 +574,7 @@ def log(conn, identifier=None, entries=20):
     found, more = [], False
     for (raw,) in rows:
         try:
-            entry = _parsed(_text_of(raw))
+            entry = _parsed(_log_text(raw))
         except (ValueError, TypeError, RecursionError):
             continue
         if isinstance(entry, dict) and (identifier is None or entry.get("id") == identifier):
@@ -531,7 +592,7 @@ def clear_log(conn, identifier=None):
     doomed = []
     for rowid, raw in rows:
         try:
-            entry = _parsed(_text_of(raw))
+            entry = _parsed(_log_text(raw))
         except (ValueError, TypeError, RecursionError):
             entry = None
         # An entry that cannot be read belongs to no rule, so only clearing everything removes it.
@@ -541,14 +602,44 @@ def clear_log(conn, identifier=None):
     return {"view": "rules-log", "results": [{"status": "cleared", "entries": len(doomed)}]}
 
 
-def _settings_problem(result):
-    """Say when the agent settings cannot be used: Richi then knows only its built-in agents."""
-    problem = agents.load_settings()[1]
-    if problem:
-        result["agent_settings_problem"] = {
-            "error": problem,
-            "next": "Tell the user. Until the file is fixed or removed, the user's own agents are unknown and "
-                    "do not get their skills (see richi skill-sources list)."}
+# What stops working while Richi cannot use the agent settings, by why (agents.Settings.code).
+_SETTINGS_EFFECT = ("Meanwhile Richi knows only its built-in agents, without the user's settings: the user's own agents "
+                    "are not recognized from their shells (they still get their skills with rules show --agent ID), "
+                    "cannot be named in new rules, and their skill folders are not read; skill sources the user "
+                    "switched off are read again; the same skill for every agent is not merged into one.")
+SETTINGS_NEXT = {
+    "damaged": "Tell the user to fix or remove the file (see richi skill-sources list). " + _SETTINGS_EFFECT,
+    "unreadable": "It is read again next time; tell the user if this lasts. " + _SETTINGS_EFFECT,
+    "newer": "Tell the user to update Richi (richi update): a newer version wrote the file. " + _SETTINGS_EFFECT,
+    # Not proof of damage: a newer Richi may read a larger file.
+    "large": "Tell the user to update Richi (richi update) if a newer version wrote the file, or else to make it "
+             "smaller (see richi skill-sources list). " + _SETTINGS_EFFECT,
+    # Own agents whose settings this version cannot use (agents.missing_agents); a built-in agent's are not
+    # reported here: it stays known, named and merged, only without what the user set for it.
+    "agents": "Tell the user to update Richi, or to remove those settings (see richi skill-sources list). "
+              "Meanwhile those agents are unknown here: they are not recognized from their shells (they still get "
+              "their skills with rules show --agent ID), cannot be named in new rules, their skill folders are not "
+              "read, and the same skill for every agent is not merged into one.",
+}
+# How many such agents one answer names: the settings file may hold any number of them.
+NAMED_AGENTS = 5
+
+
+def _settings_problem(result, settings=None):
+    """Say when Richi cannot use the user's agent settings, all of them or some own agents' (agents.read_settings)."""
+    settings = agents.read_settings() if settings is None else settings
+    missing = agents.missing_agents(settings)
+    if settings.problem is not None:
+        error, code = settings.problem, settings.code
+    elif missing:
+        named = [cut_name(_readable(identifier), MAX_NAMED) for identifier in missing[:NAMED_AGENTS]]
+        more = len(missing) - len(named)
+        error, code = ("Settings of own agents " + ", ".join(named) + (" and %d more" % more if more else "")
+                       + " cannot be used by this version: a newer Richi wrote them, they are damaged, or this "
+                         "version uses fewer own agents; richi skill-sources list says which"), "agents"
+    else:
+        return result
+    result["agent_settings_problem"] = {"error": error, "code": code, "next": SETTINGS_NEXT[code]}
     return result
 
 
@@ -589,7 +680,7 @@ def show(conn, api, workspace, project_id, agent=None, unmatched_path=None):
 def _stdin_text():
     """Text piped to the command; the newline that ends the pipe is not part of the rule."""
     text = sys.stdin.read(MAX_CHANGE + 1)
-    return text[:-1] if text.endswith("\n") else text
+    return text[:-2] if text.endswith("\r\n") else text[:-1] if text.endswith("\n") else text
 
 
 def read_request(args, api):
@@ -642,6 +733,8 @@ def change(conn, request, api, checked_project=None, author=Author()):
         raise api.MemoryError("A rule change is an object with action add, update or remove, id and that "
                               "action's fields only")
     identifier, expected = request.get("id"), request.get("expected_updated_at")
+    # Read once: the agents the skills are checked and merged against, and what the answer says of them.
+    settings = agents.read_settings()
     # Text that cannot be UTF-8 reaches neither the store nor a message.
     if not isinstance(identifier, str) or not _storable(identifier):
         raise api.MemoryError(ID_HELP)
@@ -663,15 +756,16 @@ def change(conn, request, api, checked_project=None, author=Author()):
                                   + checked_project)
         text = _text(request.get("text"), api)
         timestamp = api.now()
-        skill, skills = _skill_setting(request.get("skill"), request.get("skills"), api)
+        skill, skills = _skill_setting(request.get("skill"), request.get("skills"), api, settings=settings)
         rule = {"id": identifier, "scope": scope,
                 "project_id": _project(conn, project, api) if scope == "project" else None,
                 "text": text, "skill": skill, "skills": skills, "source": _source(request.get("source"), api),
-                "changed_by": author.by, "created_at": timestamp, "updated_at": timestamp}
+                "changed_by": author.by, "changed_by_agent": author.agent, "created_at": timestamp,
+                "updated_at": timestamp}
         _check_total(conn, api, added=text)
         _store(conn, rule, api)
         _record(conn, api, "created", identifier, None, rule, author)
-        return {"results": [{"id": identifier, "status": "created"}], "rule": rule}
+        return _settings_problem({"results": [{"id": identifier, "status": "created"}], "rule": rule}, settings)
     if row is None:
         raise api.NotFoundError("Unknown rule: " + identifier + "; see rules list")
     rowid, key, raw = row
@@ -705,16 +799,16 @@ def change(conn, request, api, checked_project=None, author=Author()):
     if {"skill", "skills"} & set(request):
         # The skills of a rule are replaced together: what the change leaves out is removed.
         changed["skill"], changed["skills"] = _skill_setting(request.get("skill"), request.get("skills"), api,
-                                                             kept=rule["skills"] or ())
+                                                             kept=rule["skills"] or (), settings=settings)
     if "source" in request:
         changed["source"] = _source(request["source"], api)
     if changed == rule:
         return {"results": [{"id": identifier, "status": "unchanged"}], "rule": rule}
     _check_total(conn, api, replaced=identifier, added=changed["text"])
-    changed.update(changed_by=author.by, updated_at=api.now())
+    changed.update(changed_by=author.by, changed_by_agent=author.agent, updated_at=api.now())
     _store(conn, changed, api)
     _record(conn, api, "updated", identifier, rule, changed, author)
-    return {"results": [{"id": identifier, "status": "updated"}], "rule": changed}
+    return _settings_problem({"results": [{"id": identifier, "status": "updated"}], "rule": changed}, settings)
 
 
 def run(conn, args, api, workspace=None, checked_project=None, unmatched_path=None, request=None):
@@ -734,7 +828,7 @@ def run(conn, args, api, workspace=None, checked_project=None, unmatched_path=No
     if args.action == "list":
         rules, invalid, unsupported = scan(conn)
         # The limit is the workspace's, so the size beside it is too, whatever the list shows.
-        characters = sum(len(rule["text"]) for rule in rules)
+        characters = _characters(rules, unsupported)
         if args.global_scope:
             rules = [rule for rule in rules if rule["scope"] == "global"]
         elif args.project is not None:

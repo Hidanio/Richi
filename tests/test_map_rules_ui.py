@@ -107,8 +107,23 @@ assert.deepEqual(skillRequest('review',{claude:'review',codex:null}),{skill:'rev
 assert.deepEqual(skillRequest('review',{claude:'review',codex:'review'}),{skill:'review',skills:null});
 assert.deepEqual(skillRequest(null,{claude:'a',codex:null}),{skill:null,skills:{claude:'a'}});
 assert.deepEqual(skillRequest(undefined,{claude:'',codex:''}),{skill:null,skills:null});
+// "No skill" for an agent the rule names and this computer does not list is said: the server keeps it
+// beside the skill of the action, so that the agent still gets none once it is back.
+assert.deepEqual(skillRequest(null,{claude:'a',codex:'a',cursor:null}),{skill:null,skills:{claude:'a',codex:'a',cursor:null}});
+assert.deepEqual(skillRequest('a',{claude:'a',codex:'a',cursor:null}),{skill:'a',skills:{cursor:null}});
+// The agents this computer lists decide; one the rule names beyond them keeps its own pick beside it.
+assert.equal(becomesShared(null,{claude:'a',codex:'a',cursor:null}),true);
+assert.equal(becomesShared(null,{claude:'a',codex:'a',cursor:'c'}),true);
+assert.equal(becomesShared(null,{claude:'a',codex:null,cursor:'a'}),false);
 assert.equal(changedBy('richi map'),'карта');
 assert.equal(changedBy('claude:0123456789abcdef'),'Claude Code · чат 01234567');
+// The agent the server stored names the chat also where the identity has no prefix (Codex).
+assert.equal(changedBy('019a1b2c-3d4e-5f60','codex'),'Codex · чат 019a1b2c');
+assert.equal(changedBy('claude:0123456789abcdef','claude'),'Claude Code · чат 01234567');
+assert.equal(changedBy('claude:0123456789abcdef','cursor'),'Claude Code · чат 01234567');
+assert.equal(changedBy('claude:0123456789abcdef','codex'),'Claude Code · чат 01234567');
+assert.equal(changedBy('019a1b2c-3d4e-5f60',null),'019a1b2c-3d4e-5f60');
+assert.equal(changedBy('richi map','claude'),'карта');
 assert.equal(changedBy('terminal:abc'),'terminal:abc');
 assert.equal(changedBy('x'.repeat(60)).length,40);
 assert.equal(changedBy(null),'');
@@ -253,19 +268,29 @@ console.log(JSON.stringify({
                          "A=\ud800", "A=\U0001F600", "A=" + "\U0001F600" * 100, "A=" + "\U0001F600" * 101],
             "name": ["pr-description", "plugin:skill", "x.y_z", "two words", "-x", "a" * 100, "a" * 101, "", "скилл"],
             "folder": ["~", "~/skills", "/opt/team skills", "/", "relative", "~x", "", "./x",
-                       "/" + "a" * (agents.MAX_FOLDER - 1), "/" + "a" * agents.MAX_FOLDER],
+                       "/" + "a" * (agents.MAX_FOLDER - 1), "/" + "a" * agents.MAX_FOLDER,
+                       # Characters as Python counts them: an emoji is one, though two UTF-16 units.
+                       "/opt/" + "\U0001F600" * 600, "/" + "\U0001F600" * agents.MAX_FOLDER,
+                       # One line, no half of a surrogate pair, and nothing Python's strip() removes at an end.
+                       "/opt/a\tb", "/opt/a\x7fb", "/opt/\ud800", "/opt/x\u00a0", "/opt/x\x85", " /opt/x",
+                       "/opt/a\u2028b", "/opt/x\ufeff", "~/команда"],
+            "agent_name": ["Gemini CLI", "", " x", "x ", "a" * agents.MAX_NAME, "a" * (agents.MAX_NAME + 1),
+                           "\U0001F600" * agents.MAX_NAME, "\U0001F600" * (agents.MAX_NAME + 1), "a\tb", "\ud800",
+                           "Агент\u3000", "x\u2028y"],
         }
         page = self.evaluate(r"""
-const samples=%s,limit=%d;
+const samples=%s,limit=%d,nameLimit=%d;
 console.log(JSON.stringify({id:samples.id.map(value=>AGENT_ID.test(value)),variable:samples.variable.map(value=>AGENT_VARIABLE.test(value)),
-  name:samples.name.map(value=>RULE_NAME.test(value)),folder:samples.folder.map(value=>agentFolderOk(value,limit))}));
-""" % (json.dumps(samples), agents.MAX_FOLDER))
+  name:samples.name.map(value=>RULE_NAME.test(value)),folder:samples.folder.map(value=>agentFolderOk(value,limit)),
+  agent_name:samples.agent_name.map(value=>agentNameOk(value,nameLimit))}));
+""" % (json.dumps(samples), agents.MAX_FOLDER, agents.MAX_NAME))
         self.assertEqual(page, {
             "id": [agents.valid_id(value) for value in samples["id"]],
             "variable": [agents.valid_variable(value) for value in samples["variable"]],
             # One shape serves rule IDs and skill names.
             "name": [agents.valid_skill(value) for value in samples["name"]],
-            "folder": [agents.valid_folder(value) for value in samples["folder"]]})
+            "folder": [agents.valid_folder(value) for value in samples["folder"]],
+            "agent_name": [agents.valid_name(value) for value in samples["agent_name"]]})
         for value, valid in zip(samples["name"], page["name"]):
             with self.subTest(rule_id=value):
                 try:
@@ -274,6 +299,39 @@ console.log(JSON.stringify({id:samples.id.map(value=>AGENT_ID.test(value)),varia
                 except ValueError:
                     accepted = False
                 self.assertEqual(accepted, valid)
+
+    def test_no_skill_for_an_agent_this_computer_does_not_list_is_kept(self):
+        # A rule names gemini-cli, which the user then removed from this computer. In the per-agent lists
+        # they pick one skill for Claude Code and Codex, and "Без скилла" for gemini-cli.
+        added = self.run_command("richi skill-sources add gemini-cli --name 'Gemini CLI' --skills ~/.gemini/skills")
+        database = self.root / "memory.sqlite3"
+        conn = memory.connect(database, create=True)
+        self.addCleanup(conn.close)
+        memory.initialize(conn, database)
+        with memory.transaction(conn):
+            created = rules.change(conn, {"action": "add", "id": "review", "scope": "global", "text": "x",
+                                          "skills": {"claude": "old", "codex": "old", "gemini-cli": "gem"}}, memory)["rule"]
+        self.run_command("richi skill-sources remove gemini-cli --expected-updated-at=VERSION",
+                         VERSION=added["agent"]["updated_at"])
+        request = self.evaluate(r"""
+setMapAgents([{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'}]);
+const rule=%s,picks={claude:'review',codex:'review','gemini-cli':null};
+// Announced: the skill every agent of this computer gets is the skill of the action, and gemini-cli keeps its none.
+assert.equal(becomesShared(null,picks),true);
+console.log(JSON.stringify(ruleUpdate(rule,rule,rule.text,skillRequest(null,picks))));
+""" % json.dumps(created))
+        with memory.transaction(conn):
+            stored = rules.change(conn, request, memory)["rule"]
+        self.assertEqual((stored["skill"], stored["skills"]), ("review", {"gemini-cli": None}))
+        # Opened again, the form shows what is stored and has nothing to save.
+        unchanged = self.evaluate(r"""
+setMapAgents([{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'}]);
+const rule=%s,picks=Object.fromEntries(ruleAgentIds(rule).map(agent=>[agent,ruleSkillFor(rule,agent)]));
+console.log(JSON.stringify({picks,update:ruleUpdate(rule,rule,rule.text,skillRequest(rule.skill,picks)),
+  announced:becomesShared(rule.skill,picks)}));
+""" % json.dumps(stored))
+        self.assertEqual(unchanged, {"picks": {"claude": "review", "codex": "review", "gemini-cli": None},
+                                     "update": None, "announced": False})
 
     def test_a_retry_after_a_conflict_sends_only_what_the_form_changed(self):
         self.evaluate(r"""
@@ -290,6 +348,39 @@ assert.deepEqual(ruleUpdate(opened,fresh,'Review code carefully.',skillRequest(n
   {action:'update',id:'review',expected_updated_at:'v2',text:'Review code carefully.',skill:'code-review',skills:null});
 // Nothing was changed in the form, whatever happened elsewhere.
 assert.equal(ruleUpdate(opened,fresh,'Review code.',unchangedSkills),null);
+// A text field gives line ends as \n: a stored \r is no change of the text.
+const crlf={...opened,text:'One.\r\nTwo.\r'};
+assert.equal(ruleUpdate(crlf,crlf,'One.\nTwo.\n',unchangedSkills),null);
+assert.equal(ruleUpdate(crlf,crlf,'One.\nTwo.',unchangedSkills).text,'One.\nTwo.');
+// "No skill" for an agent that another window took out of the rule, and this computer does not list,
+// is not sent: the server would refuse the unknown agent.
+const named={...opened,skills:{claude:'a',codex:'a',cursor:'c'}},dropped={...named,skills:{claude:'a',codex:'a'},updated_at:'v3'};
+const picked=skillRequest(null,{claude:'b',codex:'b',cursor:null});
+assert.deepEqual(ruleUpdate(named,named,'Review code.',picked).skills,{claude:'b',codex:'b',cursor:null});
+assert.deepEqual(ruleUpdate(named,dropped,'Review code.',picked).skills,{claude:'b',codex:'b'});
+// A skill for that agent which the form left as it was gives way to the latest version; one chosen
+// here cannot be stored, and the form says so instead of sending what the server refuses.
+const kept=skillRequest(null,{claude:'b',codex:'b',cursor:'c'});
+assert.deepEqual(ruleUpdate(named,dropped,'Review code.',kept).skills,{claude:'b',codex:'b'});
+assert.match(ruleUpdate(named,dropped,'Review code.',skillRequest(null,{claude:'b',codex:'b',cursor:'d'})),/«cursor».*Без скилла/);
+// The server takes no entry for that agent, "no skill" included: it gets what «Другие агенты» gives. A pick
+// equal to that is no change; "no skill" beside another skill there would be one, and is refused too.
+const withOthers=pick=>ruleUpdate(named,dropped,'Review code.',skillRequest('S',{claude:'b',codex:'b',cursor:pick}));
+assert.deepEqual(withOthers('S').skills,{claude:'b',codex:'b'});
+assert.equal(withOthers('S').skill,'S');
+assert.match(withOthers(null),/«cursor».*то же, что «Другие агенты».*«S»/);
+assert.match(withOthers('d'),/«S»/);
+// What a save stored is said when the form did not say it beforehand.
+assert.equal(skillOutcome({skill:'a'},{skill:'a',skills:null},false),'');
+assert.match(skillOutcome({skill:null,skills:{claude:'a',codex:'a'}},{skill:'a',skills:null},false),/«a» сохранён как общий/);
+assert.equal(skillOutcome({skill:null,skills:{claude:'a',codex:'a'}},{skill:'a',skills:null},true),'');
+assert.match(skillOutcome({skill:null,skills:{claude:'a',codex:'a'}},{skill:null,skills:{claude:'a',codex:'a'}},true),/для каждого агента отдельно/);
+assert.equal(skillOutcome({skill:null,skills:{claude:'a',codex:'b'}},{skill:null,skills:{claude:'a',codex:'b'}},false),'');
+assert.equal(skillOutcome({skill:null,skills:{claude:'a'}},undefined,false),'');
+// The answer says why nothing was merged when Richi could not use every own agent's settings.
+assert.match(skillOutcome({skill:null,skills:{claude:'a',codex:'a'}},{skill:null,skills:{claude:'a',codex:'a'}},true,{code:'agents'}),/настройки некоторых агентов/);
+// Merged with an exception kept beside it: as announced, nothing to add.
+assert.equal(skillOutcome({skill:null,skills:{claude:'a',codex:'a',cursor:null}},{skill:'a',skills:{cursor:null}},true),'');
 assert.equal(ruleUpdate(opened,opened,'Review code.',skillRequest(null,'')),null);
 // The same for an own agent. Its form changed the variable only.
 const agent={id:'gem',name:'Foo',variables:['GEM=1'],manual_skills:'none',updated_at:'a1'};
@@ -326,6 +417,21 @@ assert.match(agentRefusal(refusal('not_found','source')),/Источник не 
 assert.match(agentRefusal(refusal('not_found','agent')),/Агент не найден/);
 assert.match(agentRefusal(refusal('settings'),'/home/u/agents.json'),/\/home\/u\/agents\.json/);
 assert.match(agentRefusal(refusal('settings')),/agents\.json/);
+assert.match(agentRefusal(refusal('settings','damaged'),'/home/u/agents.json'),/Исправьте или удалите файл: \/home\/u\/agents\.json/);
+// Settings a newer Richi wrote are not damage: updating helps, removing them would lose them.
+assert.match(agentRefusal(refusal('settings','newer')),/более новая версия Richi.*richi update/);
+assert.doesNotMatch(agentRefusal(refusal('settings','newer')),/удалите/);
+// One agent's settings that this version cannot use: not the file, and not an agent that is missing.
+assert.match(agentRefusal(refusal('settings','agent')),/Настройки этого агента.*richi update/);
+assert.doesNotMatch(agentRefusal(refusal('settings','agent'),'/home/u/agents.json'),/agents\.json|не найден/);
+assert.match(agentSettingsProblem('newer','/x/agents.json'),/richi update/);
+assert.doesNotMatch(agentSettingsProblem('newer','/x/agents.json'),/удалите/);
+assert.match(agentSettingsProblem('unreadable','/x/agents.json'),/не прочитались.*\/x\/agents\.json/);
+assert.match(agentSettingsProblem('damaged','/x/agents.json'),/Исправьте или удалите файл: \/x\/agents\.json/);
+assert.match(agentSettingsProblem(undefined),/повреждён.*agents\.json/);
+assert.match(unknownAgentText({id:'future'}),/записанный более новой версией Richi/);
+assert.match(unknownAgentText({id:'x',error:'invalid skill folder for x',next:'richi skill-sources remove x --expected-updated-at=t'}),/или удалите их: richi skill-sources remove x/);
+assert.doesNotMatch(unknownAgentText({id:'Bad ID',error:'not an agent ID'}),/удалите их/);
 // What is not about the change itself reads the same on every form.
 for(const explain of [ruleRefusal,agentRefusal]){
   assert.match(explain(refusal('busy')),/Повторите через несколько секунд/);

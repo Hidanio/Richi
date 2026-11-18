@@ -88,7 +88,8 @@ class SkillSource(NamedTuple):
 
 
 class Agent(NamedTuple):
-    # Also the prefix of the chat identity its integration sets: RICHI_CHAT_ID "<id>:...".
+    # A chat this agent's integration starts is named "<id>:..." in RICHI_CHAT_ID (chat_prefix),
+    # so the identity says whose chat it is.
     id: str
     name: str
     # Environment variables its shells set: {name: the value it has, or None
@@ -108,6 +109,9 @@ class Agent(NamedTuple):
     builtin: bool = True
     # When the user's settings for this agent last changed; None without any.
     updated_at: Optional[str] = None
+    # False where the chat identity is the agent's own ID of the chat instead (Codex: its thread
+    # ID, as the launcher takes it from CODEX_THREAD_ID): it names no agent, the variables do.
+    chat_prefix: bool = True
 
 
 def _home_variable(environ, home, variable, default):
@@ -134,7 +138,7 @@ AGENTS = (
     Agent(id="claude", name="Claude Code", variables={"CLAUDECODE": "1"},
           invocation="front-matter", plugin_commands=True, sources=_claude_sources),
     Agent(id="codex", name="Codex", variables={"CODEX_THREAD_ID": None},
-          invocation="openai-yaml", plugin_commands=False, sources=_codex_sources),
+          invocation="openai-yaml", plugin_commands=False, sources=_codex_sources, chat_prefix=False),
 )
 
 # Other agents a user may add as their own, with the user-wide skill folder
@@ -185,18 +189,19 @@ def _utf8(value):
     return True
 
 
-def _plain(identifier, entry):
+def _plain(what, entry, depth=0):
     """Raise ValueError unless every value of the entry can be copied and written back.
 
     Fields this version does not know are kept as they are, so they must be
     shallow and hold only text that UTF-8 can carry; otherwise the settings
-    would load but no change could ever be saved.
+    would load but no change could ever be saved. what names the entry in the
+    message; depth is the entry's own (negative for what holds entries).
     """
-    stack = [(entry, 0)]
+    stack = [(entry, depth)]
     while stack:
         value, depth = stack.pop()
         if depth > MAX_DEPTH:
-            raise ValueError("settings of " + identifier + " are nested too deeply")
+            raise ValueError(what + " are nested too deeply")
         if isinstance(value, str):
             items = ()
             text = [value]
@@ -207,7 +212,7 @@ def _plain(identifier, entry):
         else:
             continue
         if not all(_utf8(part) for part in text):
-            raise ValueError("settings of " + identifier + " hold text that is not UTF-8")
+            raise ValueError(what + " hold text that is not UTF-8")
         stack.extend((item, depth + 1) for item in items)
 
 
@@ -275,17 +280,24 @@ def settings_path(environ=None, home=None):
     return base / "richi" / SETTINGS_FILE
 
 
+def stored_version(entry):
+    """What `skill-sources remove --expected-updated-at` takes for a stored entry: its updated_at, or invalid."""
+    value = entry.get("updated_at") if isinstance(entry, dict) else None
+    return value if _one_line(value, 64) else "invalid"
+
+
 def check_entry(identifier, entry):
     """Raise ValueError unless entry is a well-formed stored agent.
 
     Fields this version does not know are allowed and kept, so settings that a
-    newer Richi wrote keep working here.
+    newer Richi wrote keep working here. An entry that fails is not used, and
+    the others still are (parse_settings).
     """
     if not valid_id(identifier):
         raise ValueError(ID_HELP)
     if not isinstance(entry, dict):
         raise ValueError("settings of " + identifier + " must be an object")
-    _plain(identifier, entry)
+    _plain("settings of " + identifier, entry)
     if not _one_line(entry.get("updated_at"), 64) or ("created_at" in entry and not _one_line(entry["created_at"], 64)):
         raise ValueError("invalid timestamps for " + identifier)
     folders = entry.get("folders", [])
@@ -309,17 +321,58 @@ def check_entry(identifier, entry):
         raise ValueError("manual_skills must be one of " + ", ".join(MANUAL_SKILLS))
 
 
-def check_settings(data):
-    """Raise ValueError unless data is a well-formed settings document; returns its agents."""
-    if not isinstance(data, dict) or set(data) != {"version", "agents"} or data["version"] != SETTINGS_VERSION \
-            or not isinstance(data["agents"], dict):
+class Newer(ValueError):
+    """Settings of a format that only a newer Richi reads."""
+
+    def __init__(self, version):
+        super().__init__("written by a newer Richi (format %d)" % version)
+        self.version = version
+
+
+class Settings(NamedTuple):
+    """The user's agent settings as this version reads them.
+
+    Two versions of Richi may share the file (dev is chosen per workspace), so
+    what this one cannot use is kept, not taken for damage: an entry it cannot
+    read is left unused in unusable ({ID: (entry, why)}), a top-level field it
+    does not know in extra, and both are written back unchanged. problem and
+    code say why the file as a whole cannot be used now: "damaged",
+    "unreadable" (it is read again next time), "newer" (update Richi) or
+    "large" (more than this version reads: a newer Richi's, or else too large).
+    """
+    entries: Dict[str, dict]
+    unusable: Dict[str, tuple]
+    extra: Dict[str, object]
+    problem: Optional[str] = None
+    code: Optional[str] = None
+
+
+def parse_settings(data):
+    """(entries, unusable, extra) of the file's JSON value; Newer or ValueError when it cannot be used at all."""
+    # First: a newer format may change everything else, the shape of agents included.
+    if isinstance(data, dict) and type(data.get("version")) is int and data["version"] > SETTINGS_VERSION:
+        raise Newer(data["version"])
+    if not isinstance(data, dict) or "version" not in data or not isinstance(data.get("agents"), dict):
         raise ValueError("expected {\"version\": %d, \"agents\": {...}}" % SETTINGS_VERSION)
-    for identifier, entry in data["agents"].items():
-        check_entry(identifier, entry)
-    custom = [identifier for identifier in data["agents"] if identifier not in builtin_ids()]
-    if len(custom) > MAX_CUSTOM:
-        raise ValueError("at most %d own agents" % MAX_CUSTOM)
-    return data["agents"]
+    if type(data["version"]) is not int or data["version"] != SETTINGS_VERSION:
+        raise ValueError("unknown format version %r" % (data["version"],))
+    # What cannot be written back as it was is damage of the file: kept unused, it would stop every change.
+    _plain("the agent settings", data, -2)
+    entries, unusable = {}, {}
+    for identifier, entry in sorted(data["agents"].items()):
+        try:
+            check_entry(identifier, entry)
+        except ValueError as exc:
+            unusable[identifier] = (entry, str(exc))
+            continue
+        entries[identifier] = entry
+    # More own agents than this version keeps (a newer one may keep more): the ones described last are
+    # left unused, so that those described earlier, by this version too, keep working.
+    own = sorted((identifier for identifier in entries if own_entry(identifier, entries[identifier])),
+                 key=lambda identifier: (entries[identifier].get("created_at") or "\uffff", identifier))
+    for identifier in own[MAX_CUSTOM:]:
+        unusable[identifier] = (entries.pop(identifier), "this version uses at most %d own agents" % MAX_CUSTOM)
+    return entries, unusable, {key: value for key, value in data.items() if key not in ("version", "agents")}
 
 
 _cache = {}
@@ -341,42 +394,89 @@ def _unreadable(path, exc):
     return "Agent settings could not be read: " + str(path) + ": " + (exc.strerror or str(exc))
 
 
-def load_settings(environ=None, home=None):
-    """(stored agents by ID, problem): a missing file has none; an unusable one is reported, not raised.
+def settings_from(data, path):
+    """Settings from the bytes of the file: never raises, the problem is reported instead."""
+    if len(data) > MAX_SETTINGS:
+        # Not proof of damage: a newer Richi may keep more own agents, and read a larger file.
+        return Settings({}, {}, {}, "Agent settings are larger than %d bytes, more than this version reads: %s; "
+                        "update Richi if a newer one wrote them, or else make the file smaller"
+                        % (MAX_SETTINGS, path), "large")
+    try:
+        return Settings(*parse_settings(parse_json(data.decode("utf-8"))))
+    except Newer as exc:
+        return Settings({}, {}, {}, "Agent settings were " + str(exc) + ": " + str(path)
+                        + "; update Richi to use and change them", "newer")
+    except (ValueError, RecursionError) as exc:
+        # RecursionError: brackets nested deeper than the parser goes.
+        reason = "nested too deeply" if isinstance(exc, RecursionError) else str(exc)
+        return Settings({}, {}, {}, "Agent settings are ignored: " + str(path) + ": " + reason
+                        + "; fix or remove the file", "damaged")
 
-    Every command reads the registry, so a damaged settings file must not
-    break them: Richi then knows only its built-in agents and says why.
+
+def read_settings(environ=None, home=None):
+    """The user's agent settings (Settings); a missing file has none, and nothing is raised.
+
+    Every command reads the registry, so settings that cannot be used must not
+    break them: Richi then knows only what it can use and says why.
     """
     path = settings_path(environ, home)
     try:
         info = path.stat()
     except (FileNotFoundError, NotADirectoryError):
-        return {}, None
+        return Settings({}, {}, {})
     except OSError as exc:
-        return {}, _unreadable(path, exc)
+        return Settings({}, {}, {}, _unreadable(path, exc), "unreadable")
     cached = _cache.get(str(path))
     if cached is not None and cached[0] == _signature(info):
-        return cached[1], cached[2]
+        return cached[1]
     try:
         # What is read and the version it is cached as come from one open file.
         with open(str(path), "rb") as handle:
             info = os.fstat(handle.fileno())
             data = handle.read(MAX_SETTINGS + 1)
     except (FileNotFoundError, NotADirectoryError):
-        return {}, None
+        return Settings({}, {}, {})
     except OSError as exc:
-        return {}, _unreadable(path, exc)
-    try:
-        if len(data) > MAX_SETTINGS:
-            raise ValueError("the file is larger than %d bytes" % MAX_SETTINGS)
-        entries, problem = check_settings(parse_json(data.decode("utf-8"))), None
-    except (ValueError, RecursionError) as exc:
-        # RecursionError: brackets nested deeper than the parser goes.
-        reason = "nested too deeply" if isinstance(exc, RecursionError) else str(exc)
-        entries, problem = {}, "Agent settings are ignored: " + str(path) + ": " + reason + "; fix or remove the file"
+        return Settings({}, {}, {}, _unreadable(path, exc), "unreadable")
+    settings = settings_from(data, path)
     _cache.clear()
-    _cache[str(path)] = (_signature(info), entries, problem)
-    return entries, problem
+    _cache[str(path)] = (_signature(info), settings)
+    return settings
+
+
+def load_settings(environ=None, home=None):
+    """(the agents this version uses, by ID; why the file as a whole cannot be used, or None)."""
+    settings = read_settings(environ, home)
+    return settings.entries, settings.problem
+
+
+def own_entry(identifier, entry):
+    """Whether a stored entry may describe one of the user's own agents.
+
+    Not a built-in agent's, and not one without a name: that adjusts an agent
+    built into a newer Richi (registry). An entry that is not even an object
+    may be anything, so it counts.
+    """
+    return identifier not in builtin_ids() and not (isinstance(entry, dict) and "name" not in entry)
+
+
+def missing_agents(settings):
+    """IDs of own agents the user described that this version does not know because it cannot use their settings.
+
+    A built-in agent whose settings are unusable is still known, only without
+    what the user set for it; an own agent may be one a newer Richi accepts
+    under an ID of another shape too.
+    """
+    return sorted(identifier for identifier, (entry, _why) in settings.unusable.items() if own_entry(identifier, entry))
+
+
+def settings_complete(settings=None, environ=None, home=None):
+    """Whether Richi knows every agent the user described: the file can be used, and every own agent in it.
+
+    settings: what the caller read already (read_settings), else they are read now.
+    """
+    settings = read_settings(environ, home) if settings is None else settings
+    return settings.problem is None and not missing_agents(settings)
 
 
 def _folders(folders, home):
@@ -449,8 +549,9 @@ def _in_shell(agent, environ):
 def detect(environ=None):
     """The agent whose shell runs this command, or None.
 
-    Two signs name an agent: the chat identity its integration sets
-    (RICHI_CHAT_ID "<id>:...") and its shell variables. A process inherits
+    Two signs name an agent: the chat identity its integration sets, where
+    that names the agent (RICHI_CHAT_ID "<id>:..."; Codex's is its thread ID
+    alone), and its shell variables. A process inherits
     both from the shell that started it, so one agent started from another's
     terminal carries the signs of both. Richi names an agent only when every
     sign present points to the same one; otherwise the caller says who it is

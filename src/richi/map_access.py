@@ -10,13 +10,17 @@ server. The page redeems the ticket once, within TICKET_SECONDS, for a new
 edit secret, keeps the secret in its session storage and sends it with every
 change and every reading of the rules and the agents, which tells it whether
 it may edit. A ticket seen afterwards is spent, and opening the map again
-replaces the secret. The secret also ends with the map: a map that stops, or
-starts other than by handing itself over, forgets it (forget_secret), so a
-page left open cannot hand a still valid key to whatever answers on that port
-later. A page opened without a valid one, such as a bookmark or an earlier
-tab, still shows the rules and composes the commands that change them. The
-ticket and the secret belong to one store: stores kept in one directory do
-not share them.
+replaces the secret. The secret also ends with the map: a map that starts
+other than by handing itself over forgets it, and a map that stops forgets the
+one its pages held (forget_secret), so a page left open cannot hand a still
+valid key to whatever answers on that port later. A page opened without a
+valid one, such as a bookmark or an earlier tab, still shows the rules and
+composes the commands that change them. The ticket and the secret belong to
+one store: stores kept in one directory do not share them, and two maps of one
+store share one. So a map records beside the store on which port it listens
+(record_port), and richi map reuses the map it finds there instead of starting
+a second one; a second map started by hand (richi map serve) still ends the
+first one's key.
 
 Where the browser would receive the ticket as a command-line argument, which
 other local users can list, the map is opened through a private redirect file
@@ -46,6 +50,8 @@ TICKET_SECONDS = 120
 FALLBACK_SECONDS = 5
 # How long issuing or redeeming a ticket waits for the other; each holds the lock for a moment.
 LOCK_SECONDS = 10
+# How long a stopping map waits for a page being given a key: that key is a newer one, and it stays.
+FORGET_LOCK_SECONDS = 2
 HEADER = "X-Richi-Map-Secret"
 _TOKEN = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -112,10 +118,63 @@ def _new_secret(database):
     return value
 
 
-def forget_secret(database):
-    """End the edit key of this store's map: its pages compose commands until richi map opens a new one."""
+def port_path(database, create=False):
+    return _file(database, "map-port", create=create)
+
+
+def record_port(database, port):
+    """Say beside the store on which port its map listens, so that richi map finds it in every installation."""
+    path = port_path(database, create=True)
+    with private_files.locked(path, FORGET_LOCK_SECONDS):
+        private_files.replace(path, json.dumps({"port": port, "pid": os.getpid()}))
+
+
+def recorded_port(database):
+    """The port the store's map recorded, or None. Only a hint: whoever uses it checks the map that answers there."""
     try:
-        os.unlink(str(secret_path(database)))
+        value = json.loads(_read_private(port_path(database)) or "null")
+    except (OSError, ValueError):
+        return None
+    port = value.get("port") if isinstance(value, dict) else None
+    return port if type(port) is int and 1 <= port <= 65535 else None
+
+
+def clear_port(database, port):
+    """Drop the record while it still names this process and port: a map started after this one keeps its own."""
+    path = port_path(database)
+    try:
+        with private_files.locked(path, FORGET_LOCK_SECONDS):
+            value = json.loads(_read_private(path) or "null")
+            if isinstance(value, dict) and value.get("pid") == os.getpid() and value.get("port") == port:
+                os.unlink(str(path))
+    except (OSError, ValueError):
+        # TimeoutError is an OSError: a map recording itself right now is newer than this one.
+        pass
+
+
+def forget_secret(database, expected=None):
+    """End the edit key of this store's map: its pages compose commands until richi map opens a new one.
+
+    expected: end only that key, the one a stopping map's pages held. A map
+    started meanwhile (richi map restart goes on when the old map is slow to
+    finish its requests) may have given its page a new one, which stays.
+    """
+    path = secret_path(database)
+    if expected is not None:
+        if not path.parent.is_dir():
+            return
+        try:
+            # The lock with which a page redeems its ticket: no new key is written in between.
+            with private_files.locked(ticket_path(database), FORGET_LOCK_SECONDS):
+                if secret(database) != expected:
+                    return
+                os.unlink(str(path))
+        except (FileNotFoundError, TimeoutError):
+            # Gone already, or a page is being given a key right now: that one is newer.
+            pass
+        return
+    try:
+        os.unlink(str(path))
     except FileNotFoundError:
         pass
 

@@ -14,11 +14,15 @@ from pathlib import Path
 
 from . import agents, private_files, skill_catalog
 from .memory import now
-from .output import shell_word
+from .output import cut_name, shell_word
 
 
 # How long a change waits while another process changes the settings; holders keep the lock for milliseconds.
 LOCK_SECONDS = 10
+# How many settings the listing names that this version keeps unused (unknown_agents), and how much
+# of a key it repeats: an ID is at most 32 characters, so only a hand-made key is ever cut.
+MAX_UNKNOWN = 20
+MAX_SHOWN_ID = 200
 
 
 # What each change may carry; `skill-sources` options and the map send exactly these.
@@ -32,7 +36,10 @@ class AgentError(ValueError):
     """A refused change with a stable code: invalid, exists, not_found, conflict, limit, builtin, settings, busy.
 
     subject says what an exists, not_found or limit error is about: the agent
-    or one of its skill sources; for limit: agents, folders or size (the file).
+    or one of its skill sources; for limit: agents, folders or size (the file);
+    for settings: damaged (fix or remove the file), newer (update Richi), large
+    (more than this version reads: update Richi, or else make the file smaller)
+    or agent (this agent's stored settings, which this version cannot use).
     """
 
     def __init__(self, message, code="invalid", subject=None):
@@ -108,8 +115,15 @@ def _launcher_agents():
 
 
 def _looks_installed(roots, home):
-    """Whether an agent the launcher does not connect looks installed for this user."""
-    for root in roots:
+    """Whether an agent the launcher does not connect looks installed for this user.
+
+    None when every source of it is switched off: those are not looked at (one
+    may be on a share that no longer answers), so nothing tells either way.
+    """
+    enabled = [root for root in roots if root["enabled"]]
+    if roots and not enabled:
+        return None
+    for root in enabled:
         folder = Path(root["path"])
         # An agent whose skills folder is not created yet still has its own directory.
         if root["exists"] or (folder.parent != home and skill_catalog.folder_state(folder.parent) == "ok"):
@@ -127,7 +141,8 @@ def listing(environ=None, home=None, catalog=False):
     environ = os.environ if environ is None else environ
     home = Path(home) if home is not None else Path.home()
     # Read once: the list, the skill counts and unknown_agents below describe one version of the file.
-    entries, problem = agents.load_settings(environ, home)
+    settings = agents.read_settings(environ, home)
+    entries = settings.entries
     registry = agents.registry(environ, home, entries)
     skills = skill_catalog.catalog(environ, home, registry)
     totals, roots = skills["totals"], {}
@@ -143,6 +158,8 @@ def listing(environ=None, home=None, catalog=False):
             "detected": detected,
             # configured, not_configured, repair_required...; None when Richi installs no integration for it.
             "connection": connection, "variables": agents.variables(agent),
+            # Whether its chats are named "<id>:..." (RICHI_CHAT_ID), which also tells Richi who it is.
+            "chat_prefix": agent.chat_prefix,
             # Only an own agent has this setting; a built-in one keeps its own rule.
             "manual_skills": None if agent.builtin else agent.invocation,
             "skills": totals.get(agent.id, 0),
@@ -158,16 +175,27 @@ def listing(environ=None, home=None, catalog=False):
                            and skill_catalog.folder_state(agents.folder_path(folder, home)) == "ok")}
                for identifier, name, folder in agents.PRESETS if identifier not in known]
     result = {"view": "agents", "agents": items, "presets": presets,
-              "settings_file": str(agents.settings_path(environ, home)), "problem": problem,
-              "connections_problem": connections_problem,
+              "settings_file": str(agents.settings_path(environ, home)), "problem": settings.problem,
+              # damaged, unreadable (read again next time) or newer (update Richi); None without a problem.
+              "problem_code": settings.code, "connections_problem": connections_problem,
               # What a form may accept, so that the map does not keep its own copy of these numbers.
               "limits": {"name": agents.MAX_NAME, "folder": agents.MAX_FOLDER}}
-    # Settings of an agent this version neither has built in nor can read as an own one: a newer
-    # Richi wrote them. They are kept and not used; what removing them takes is said here.
-    kept = [{"id": identifier, "updated_at": entry["updated_at"], "next": _removal(identifier, entry)}
+    # Settings this version keeps and does not use: of an agent it neither has built in nor can read
+    # as an own one (a newer Richi has it built in), or that it cannot use at all (a newer Richi
+    # wrote them, they are damaged, or there are more own agents than it uses). What removing them
+    # takes is said here. Only a hand edit makes a key longer than an ID, and only the file's size
+    # limits how many there are: the answer names the first few, each bounded.
+    kept = [{"id": identifier, "updated_at": agents.stored_version(entry), "next": _removal(identifier, entry)}
             for identifier, entry in sorted(entries.items()) if identifier not in known]
+    for identifier, (entry, why) in sorted(settings.unusable.items()):
+        item = {"id": cut_name(identifier, MAX_SHOWN_ID), "updated_at": agents.stored_version(entry), "error": why}
+        if agents.valid_id(identifier):
+            item["next"] = _removal(identifier, entry)
+        kept.append(item)
     if kept:
-        result["unknown_agents"] = kept
+        result["unknown_agents"] = kept[:MAX_UNKNOWN]
+    if len(kept) > MAX_UNKNOWN:
+        result["unknown_agents_more"] = len(kept) - MAX_UNKNOWN
     if catalog:
         result["catalog"] = skills
     return result
@@ -175,32 +203,36 @@ def listing(environ=None, home=None, catalog=False):
 
 def _removal(identifier, entry):
     # After "=": a version that begins with a dash is still read as the version.
-    return "richi skill-sources remove " + identifier + " --expected-updated-at=" + shell_word(entry["updated_at"])
+    return ("richi skill-sources remove " + identifier + " --expected-updated-at="
+            + shell_word(agents.stored_version(entry)))
 
 
 def _read(path):
+    """The settings to change (agents.Settings); AgentError when the file as a whole cannot be changed."""
     try:
         with open(path, "rb") as handle:
             data = handle.read(agents.MAX_SETTINGS + 1)
     except FileNotFoundError:
-        return {}
-    try:
-        if len(data) > agents.MAX_SETTINGS:
-            raise ValueError("the file is larger than %d bytes" % agents.MAX_SETTINGS)
-        return agents.check_settings(agents.parse_json(data.decode("utf-8")))
-    except (ValueError, RecursionError) as exc:
-        reason = "nested too deeply" if isinstance(exc, RecursionError) else str(exc)
-        raise AgentError("Cannot change agent settings: " + str(path) + ": " + reason
-                         + "; fix or remove the file", "settings") from exc
+        return agents.Settings({}, {}, {})
+    settings = agents.settings_from(data, path)
+    if settings.code == "newer":
+        # Not damage: this version must not rewrite what it cannot read, and removing it would lose it.
+        raise AgentError("Cannot change agent settings: they were written by a newer Richi; update Richi to change "
+                         "them", "settings", "newer")
+    if settings.code == "large":
+        raise AgentError("Cannot change agent settings: " + settings.problem, "settings", "large")
+    if settings.problem is not None:
+        raise AgentError("Cannot change agent settings: " + settings.problem, "settings", "damaged")
+    return settings
 
 
-def _serialized(entries):
-    return json.dumps({"version": agents.SETTINGS_VERSION, "agents": entries}, ensure_ascii=False, indent=2,
-                      sort_keys=True) + "\n"
+def _serialized(entries, extra=None):
+    return json.dumps(dict(extra or {}, version=agents.SETTINGS_VERSION, agents=entries), ensure_ascii=False,
+                      indent=2, sort_keys=True) + "\n"
 
 
-def _write(path, entries):
-    text = _serialized(entries)
+def _write(path, entries, extra=None):
+    text = _serialized(entries, extra)
     # Richi would refuse to read a larger file and forget every setting in it.
     if len(text.encode("utf-8")) > agents.MAX_SETTINGS:
         raise AgentError("The agent settings would be larger than %d bytes, more than Richi reads; remove an agent "
@@ -249,14 +281,14 @@ def _strings(options, key):
 
 
 def _check_version(identifier, current, expected):
-    stored = current.get("updated_at") if current else None
+    stored = agents.stored_version(current) if current is not None else None
     if expected != stored:
         raise AgentError("Agent update conflict for {}: expected {} but the current version is {}; read it again "
                          "with skill-sources list".format(identifier, expected or "no settings yet",
                                                   stored or "no settings yet"), "conflict")
 
 
-def _added(identifier, options, builtin, current, entries, home):
+def _added(identifier, options, builtin, current, stored, home):
     if builtin:
         raise AgentError(identifier + " is built into Richi; adjust its skill sources with skill-sources update",
                          "exists", "agent")
@@ -264,7 +296,8 @@ def _added(identifier, options, builtin, current, entries, home):
         raise _newer(identifier, current, "exists")
     if current is not None:
         raise AgentError("Agent " + identifier + " already exists; change it with skill-sources update", "exists", "agent")
-    if sum(1 for known in entries if known not in agents.builtin_ids()) >= agents.MAX_CUSTOM:
+    # Every own agent stored counts (stored: their IDs), also one this version cannot use.
+    if len(stored) >= agents.MAX_CUSTOM:
         raise AgentError("At most %d own agents; remove one first" % agents.MAX_CUSTOM, "limit", "agents")
     folders = []
     for value in _strings(options, "folders"):
@@ -361,11 +394,30 @@ def _newer(identifier, entry, code):
                       + _removal(identifier, entry), code, "agent")
 
 
-def _apply(action, identifier, options, entries, environ, home):
-    """(status, entry or None) of one change against the stored entries; nothing is written."""
-    builtin, current = identifier in agents.builtin_ids(), entries.get(identifier)
+def _unusable(identifier, entry, why, code):
+    """The refusal to add or change an agent whose stored settings this version cannot use."""
+    return AgentError("Settings of " + identifier + " cannot be used by this version (" + why + "): they are kept as "
+                      "they are. Update Richi if a newer one wrote them, or drop them with "
+                      + _removal(identifier, entry), code, "agent")
+
+
+def _apply(action, identifier, options, settings, environ, home):
+    """(status, entry or None) of one change against the stored settings; nothing is written."""
+    entries, builtin = settings.entries, identifier in agents.builtin_ids()
+    if identifier in settings.unusable:
+        entry, why = settings.unusable[identifier]
+        if action == "add":
+            raise _unusable(identifier, entry, why, "exists")
+        if action != "remove":
+            # Also for a built-in agent, which is listed all the same: not "not found".
+            raise _unusable(identifier, entry, why, "settings")
+        _check_version(identifier, entry, options.get("expected_updated_at"))
+        return ("reset" if builtin else "removed"), None
+    current = entries.get(identifier)
     if action == "add":
-        status, entry = "created", _added(identifier, options, builtin, current, entries, home)
+        stored = {**entries, **{key: value[0] for key, value in settings.unusable.items()}}
+        own = [key for key, value in stored.items() if agents.own_entry(key, value)]
+        status, entry = "created", _added(identifier, options, builtin, current, own, home)
     elif action == "update":
         status, entry = _updated(identifier, options, builtin, current, environ, home)
     else:
@@ -407,20 +459,22 @@ def change(action, identifier, options=None, environ=None, home=None, full=False
     # A change refused before the settings directory exists creates neither the directory nor the lock
     # file. Once there, the lock file stays: two writers must always lock the same file.
     if not path.parent.is_dir():
-        status, entry = _apply(action, identifier, options, {}, environ, home)
+        status, entry = _apply(action, identifier, options, agents.Settings({}, {}, {}), environ, home)
         if status != "unchanged":
             # Private, as the launcher makes Richi's configuration directory.
             path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     try:
         with private_files.locked(path, LOCK_SECONDS) if path.parent.is_dir() else contextlib.nullcontext():
-            entries = _read(path)
-            status, entry = _apply(action, identifier, options, entries, environ, home)
+            settings = _read(path)
+            status, entry = _apply(action, identifier, options, settings, environ, home)
             if status != "unchanged":
+                # What this version cannot use is written back as it was.
+                entries = {**settings.entries, **{key: value[0] for key, value in settings.unusable.items()}}
                 if entry is None:
                     entries.pop(identifier, None)
                 else:
                     entries[identifier] = entry
-                _write(path, entries)
+                _write(path, entries, settings.extra)
     except TimeoutError as exc:
         raise AgentError("Another change of the agent settings is still running; try again", "busy") from exc
     current = listing(*explicit, catalog=full)

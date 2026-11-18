@@ -24,17 +24,31 @@ richi --compact-json skill-sources list
 
 `agents` holds every agent in order: `id` (used in `--skill ID=NAME` and
 `rules show --agent ID`), `name`, `builtin`, `detected` (it looks installed for
-this user), `skills` (how many it can use) and `sources`. A source has a `key`,
+this user: for Claude Code and Codex Richi's setup tells; for an own agent its
+folders do, and it is null when every source of it is switched off, since Richi
+does not look at those), `skills` (how many it can use) and `sources`. A source has a `key`,
 its `path`, whether the folder `exists` (`denied` when this user may not read
-it), whether it is `enabled`, whether the user `added` it, and how many `skills`
-it gives. `updated_at` is the version of
+it; neither is checked for a source switched off), whether it is `enabled`,
+whether the user `added` it, and how many `skills` it gives. `chat_prefix` says
+whether the agent's chats are named `ID:…` in `RICHI_CHAT_ID`, which then also
+tells Richi who it is (Codex's chat identity is its thread ID alone).
+`updated_at` is the version of
 the user's settings for the agent, null when there are none. `presets` lists
 well-known agents that could be added, with the folder each reads. `problem` is
-set when the settings file cannot be used, because it is damaged or could not be
-read just now; Richi then works with the built-in agents only. A change that
-would make the file larger than Richi reads is refused. `unknown_agents` appears when the file has settings of an agent
-that only a newer Richi has built in: this version keeps them without using
-them, and `next` is the command that removes them.
+set when the settings file cannot be used, and `problem_code` says why:
+`damaged` (fix or remove the file), `unreadable` (it could not be read just
+now), `newer` (a newer Richi wrote it: update Richi; this version does not
+change it) or `large` (larger than this version reads: update Richi if a newer
+one wrote it, or else make it smaller; this version does not change it). Richi then works with the built-in agents only, without the user's
+settings. A change that would make the file larger than Richi reads is refused.
+`unknown_agents` lists settings this version keeps as they are without using
+them: of an agent that only a newer Richi has built in, or settings of one
+agent it cannot use (`error` says why: a newer Richi wrote them, they are
+damaged, or there are more own agents than this version uses, which keeps the
+ones described first). `next`, where given, is the command that removes them;
+the other agents' settings keep working. It names the first 20, and
+`unknown_agents_more` counts the rest; a key longer than 200 characters, which
+only a hand edit makes, is cut and given its length and a hash.
 
 ## Describe another agent
 

@@ -93,7 +93,8 @@ class RegistryTests(IsolatedHome):
         self.assertIsNone(agents.detect({}))
         for environment, agent in (({"CLAUDECODE": "1"}, "claude"), ({"CODEX_THREAD_ID": "thread"}, "codex"),
                                    ({"RICHI_CHAT_ID": "claude:chat"}, "claude"),
-                                   ({"RICHI_CHAT_ID": "codex:chat", "CODEX_THREAD_ID": "thread"}, "codex"),
+                                   # Codex's chat identity is its thread ID: it names no agent, the variable does.
+                                   ({"RICHI_CHAT_ID": "019a1b2c-thread", "CODEX_THREAD_ID": "019a1b2c-thread"}, "codex"),
                                    # A chat identity that names no agent says nothing either way.
                                    ({"RICHI_CHAT_ID": "terminal:chat", "CLAUDECODE": "1"}, "claude")):
             with self.subTest(environment=environment):
@@ -113,11 +114,11 @@ class RegistryTests(IsolatedHome):
         for value in ("Claude", "-x", "a" * 33, "", None, "with space"):
             self.assertFalse(agents.valid_id(value))
 
-    def test_builtin_agents_are_the_ones_the_launcher_connects(self):
-        # `richi setup` and the registry are two lists of the same agents: a built-in agent the
-        # launcher cannot connect, or the reverse, would show a connection state nobody can change.
+    def test_every_agent_the_launcher_connects_is_built_in(self):
+        # An agent `richi setup` connects but the registry lacks would have a connection nobody sees.
+        # A built-in agent without an integration is fine: it is listed without a connection state.
         from richi_launcher import agent_adapters
-        self.assertEqual(set(agents.builtin_ids()), set(agent_adapters.AGENTS))
+        self.assertLessEqual(set(agent_adapters.AGENTS), set(agents.builtin_ids()))
 
     def test_settings_live_in_the_launchers_configuration_directory(self):
         self.assertEqual(agents.settings_path(), config._platform_dirs()[0] / agents.SETTINGS_FILE)
@@ -359,19 +360,23 @@ class AgentSettingsTests(IsolatedHome):
     def test_a_damaged_settings_file_is_reported_and_never_breaks_commands(self):
         path = agents.settings_path()
         path.parent.mkdir(parents=True)
-        for text in ("{not json", json.dumps({"version": 2, "agents": {}}),
-                     json.dumps({"version": 1, "agents": {"Bad ID": {"updated_at": "t"}}}),
-                     json.dumps({"version": 1, "agents": {"x": {"updated_at": "t", "name": "X",
-                                                                "folders": [{"path": "relative", "enabled": True}]}}})):
+        for text, code in (("{not json", "damaged"), (json.dumps({"version": "1", "agents": {}}), "damaged"),
+                           (json.dumps({"version": 1, "agents": []}), "damaged"),
+                           (json.dumps({"version": 2, "agents": {}}), "newer"),
+                           # A newer format may change the shape of everything else; it is still not damage.
+                           (json.dumps({"version": 2, "agents": []}), "newer"),
+                           (json.dumps({"version": 2, "profiles": {}}), "newer")):
             with self.subTest(text=text[:30]):
                 path.write_text(text, encoding="utf-8")
                 agents.forget_settings()
                 listed = self.cli("skill-sources", "list")
                 self.assertEqual([agent["id"] for agent in listed["agents"]], ["claude", "codex"])
-                self.assertIn(str(path), listed["problem"])
+                self.assertEqual((str(path) in listed["problem"], listed["problem_code"]), (True, code))
                 self.assertEqual(agents.ids(), ("claude", "codex"))
-                self.assertEqual(self.cli("skill-sources", "update", "claude", "--disable", "skills", ok=False)["code"],
-                                 "settings")
+                refused = self.cli("skill-sources", "update", "claude", "--disable", "skills", ok=False)
+                self.assertEqual((refused["code"], refused["subject"]), ("settings", code))
+                # Settings a newer Richi wrote are not damage: nobody is told to remove them.
+                self.assertEqual("remove" in listed["problem"] + refused["error"], code == "damaged")
                 self.assertEqual(path.read_text(encoding="utf-8"), text)
         # Settings a newer Richi wrote for a built-in agent this one lacks are kept and ignored.
         path.write_text(json.dumps({"version": 1, "agents": {"future": {"updated_at": "t", "disabled": ["skills"]}}}),
@@ -400,6 +405,120 @@ class AgentSettingsTests(IsolatedHome):
         self.assertIn("nested too deeply", self.cli("skill-sources", "list")["problem"])
         refused = self.cli("skill-sources", "update", "claude", "--disable", "skills", ok=False)
         self.assertEqual((refused["code"], "nested too deeply" in refused["error"]), ("settings", True))
+
+    def test_settings_this_version_cannot_use_are_kept_and_the_rest_works(self):
+        # Two versions of Richi may share the file (dev is chosen per workspace): what a newer one
+        # wrote, or one damaged entry, must not take the other agents' settings down with it.
+        path = agents.settings_path()
+        path.parent.mkdir(parents=True)
+        own = {"name": "Own", "updated_at": "t1", "folders": [{"path": "~/team", "enabled": True}]}
+        unusable = {
+            # A newer Richi's value of a known field, and a field of a folder this version does not know.
+            "gemini-cli": {"name": "Gemini CLI", "updated_at": "t2", "folders": [{"path": "~/g", "enabled": True}],
+                           "manual_skills": "openai-yaml"},
+            "claude": {"updated_at": "t3", "folders": [{"path": "~/x", "enabled": True, "shared": True}]},
+            # Damage: a folder relative to some working directory, and a key that is no agent ID.
+            "x": {"name": "X", "updated_at": "t4", "folders": [{"path": "relative", "enabled": True}]},
+            "Bad ID": {"updated_at": "t5"}}
+        path.write_text(json.dumps({"version": agents.SETTINGS_VERSION, "agents": {"own": own, **unusable},
+                                    "future": {"keep": [1]}}), encoding="utf-8")
+        agents.forget_settings()
+        listed = self.cli("skill-sources", "list")
+        self.assertEqual([agent["id"] for agent in listed["agents"]], ["claude", "codex", "own"])
+        self.assertEqual((listed["problem"], listed["problem_code"], agents.settings_complete()), (None, None, False))
+        # Codex's chats are named by its thread ID alone, so the identity tells nobody it is Codex.
+        self.assertEqual([agent["chat_prefix"] for agent in listed["agents"]], [True, False, True])
+        # Every own agent stored counts toward the limit, also one this version cannot use.
+        with mock.patch.object(agents, "MAX_CUSTOM", 2):
+            refused = self.cli("skill-sources", "add", "third", "--name", "Third", "--skills", "~/team", ok=False)
+        self.assertEqual((refused["code"], refused["subject"]), ("limit", "agents"))
+        kept = {item["id"]: item for item in listed["unknown_agents"]}
+        self.assertEqual(sorted(kept), ["Bad ID", "claude", "gemini-cli", "x"])
+        self.assertEqual(("next" in kept["Bad ID"], "manual_skills" in kept["gemini-cli"]["error"]), (False, True))
+        self.assertEqual(kept["gemini-cli"]["next"], "richi skill-sources remove gemini-cli --expected-updated-at=t2")
+        # A built-in agent stays, without what the user set for it.
+        self.assertEqual([source["key"] for source in self.listed()["claude"]["sources"]],
+                         [source.key for source in agents.AGENTS[0].sources(os.environ, self.home)])
+        # A change of another agent writes them back as they were, and the file's other fields too.
+        self.cli("skill-sources", "update", "own", "--expected-updated-at", "t1", "--name", "Renamed")
+        stored = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual({key: stored["agents"][key] for key in unusable}, unusable)
+        self.assertEqual((stored["future"], stored["agents"]["own"]["name"]), ({"keep": [1]}, "Renamed"))
+        # This version changes none of them, a built-in agent's included; it removes them with their stored version.
+        refused = self.cli("skill-sources", "update", "gemini-cli", "--expected-updated-at", "t2", "--name", "G", ok=False)
+        self.assertEqual((refused["code"], refused["subject"], kept["gemini-cli"]["next"] in refused["error"]),
+                         ("settings", "agent", True))
+        refused = self.cli("skill-sources", "update", "claude", "--expected-updated-at", "t3", "--disable", "plugins",
+                           ok=False)
+        self.assertEqual((refused["code"], refused["subject"]), ("settings", "agent"))
+        self.assertEqual(self.cli("skill-sources", "add", "gemini-cli", "--name", "G", "--skills", "~/g", ok=False)["code"],
+                         "exists")
+        self.assertEqual(self.cli("skill-sources", "remove", "x", "--expected-updated-at", "t0", ok=False)["code"],
+                         "conflict")
+        self.assertEqual([self.cli("skill-sources", "remove", identifier, "--expected-updated-at", version)
+                          ["results"][0]["status"] for identifier, version in (("x", "t4"), ("claude", "t3"))],
+                         ["removed", "reset"])
+        self.assertEqual(sorted(json.loads(path.read_text(encoding="utf-8"))["agents"]), ["Bad ID", "gemini-cli", "own"])
+
+    def test_beyond_the_own_agents_this_version_uses_the_ones_described_last_are_left_out(self):
+        # A newer Richi may keep more own agents. One it adds must not take the place of an agent this
+        # version described and uses, whatever their IDs.
+        self.cli("skill-sources", "add", "zeta", "--name", "Zeta", "--skills", "~/team")
+        path = agents.settings_path()
+        settings = json.loads(path.read_text(encoding="utf-8"))
+        settings["agents"]["alpha"] = {"name": "Alpha", "updated_at": "9999", "created_at": "9999",
+                                       "folders": [{"path": "~/team", "enabled": True}]}
+        path.write_text(json.dumps(settings), encoding="utf-8")
+        # Settings of an agent a newer Richi has built in (no name) are no own agent and take no one's place.
+        settings["agents"]["future"] = {"updated_at": "t"}
+        path.write_text(json.dumps(settings), encoding="utf-8")
+        with mock.patch.object(agents, "MAX_CUSTOM", 1):
+            agents.forget_settings()
+            listed = self.cli("skill-sources", "list")
+        self.assertEqual([agent["id"] for agent in listed["agents"]], ["claude", "codex", "zeta"])
+        self.assertEqual([(item["id"], item.get("error")) for item in listed["unknown_agents"]],
+                         [("future", None), ("alpha", "this version uses at most 1 own agents")])
+        agents.forget_settings()
+
+    def test_settings_this_version_does_not_use_are_named_within_bounds(self):
+        # Only a hand edit makes a key longer than an ID, and only the file's size limits how many there are.
+        path = agents.settings_path()
+        path.parent.mkdir(parents=True)
+        entries = {"Bad %03d" % number: {"updated_at": "t"} for number in range(30)}
+        entries["x" * 5000] = {"updated_at": "t"}
+        path.write_text(json.dumps({"version": agents.SETTINGS_VERSION, "agents": entries}), encoding="utf-8")
+        agents.forget_settings()
+        listed = self.cli("skill-sources", "list")
+        self.assertEqual((len(listed["unknown_agents"]), listed["unknown_agents_more"]), (20, 11))
+        self.assertLess(len(json.dumps(listed)), 20000)
+        path.write_text(json.dumps({"version": agents.SETTINGS_VERSION, "agents": {"x" * 5000: {"updated_at": "t"},
+                                                                                 "y" + "x" * 4999: {}}}),
+                        encoding="utf-8")
+        agents.forget_settings()
+        # Two keys cut the same way still read apart.
+        shown = sorted(item["id"] for item in self.cli("skill-sources", "list")["unknown_agents"])
+        self.assertEqual([name[:200] for name in shown], ["x" * 200, "y" + "x" * 199])
+        self.assertTrue(all("(5000 characters, sha256 " in name for name in shown))
+        self.assertNotIn("unknown_agents_more", self.cli("skill-sources", "list"))
+
+    def test_a_switched_off_source_is_not_looked_at(self):
+        # It may be on a share that no longer answers: a stat would wait for it, and with it the map.
+        self.cli("skill-sources", "update", "claude", "--disable", "plugins")
+        paths = {source.key: str(source.path) for source in agents.AGENTS[0].sources(os.environ, self.home)}
+        looked, real = [], skill_catalog.folder_state
+        with mock.patch.object(skill_catalog, "folder_state", side_effect=lambda path: looked.append(str(path)) or real(path)):
+            claude = self.listed()["claude"]
+        plugins = next(source for source in claude["sources"] if source["key"] == "plugins")
+        self.assertEqual((plugins["enabled"], plugins["exists"], plugins["denied"]), (False, False, False))
+        self.assertNotIn(paths["plugins"], looked)
+        self.assertIn(paths["skills"], looked)
+        # An own agent whose every folder is switched off: nothing tells whether it is installed.
+        (self.home / "team").mkdir(exist_ok=True)
+        own = self.cli("skill-sources", "add", "own", "--name", "Own", "--skills", "~/team")["agent"]
+        self.assertTrue(own["detected"])
+        off = self.cli("skill-sources", "update", "own", "--expected-updated-at", own["updated_at"],
+                       "--disable", "~/team")["agent"]
+        self.assertEqual(([source["enabled"] for source in off["sources"]], off["detected"]), ([False], None))
 
     def test_unknown_fields_that_could_not_be_written_back_are_damage(self):
         path = agents.settings_path()
@@ -577,15 +696,28 @@ class AgentSettingsTests(IsolatedHome):
             refused = self.cli("skill-sources", "add", "second", "--name", "Second", "--skills", "~/team", ok=False)
             self.assertEqual((refused["code"], refused["subject"]), ("limit", "agents"))
         self.cli("skill-sources", "add", "second", "--name", "Second", "--skills", "~/team")
-        # A file with more agents than Richi keeps, or larger than it reads, is damage: reported, not used.
-        for limit, value in (("MAX_CUSTOM", 1), ("MAX_SETTINGS", path.stat().st_size - 1)):
-            with self.subTest(limit=limit), mock.patch.object(agents, limit, value):
-                agents.forget_settings()
-                listed = self.cli("skill-sources", "list")
-                self.assertEqual(([agent["id"] for agent in listed["agents"]], str(path) in listed["problem"]),
-                                 (["claude", "codex"], True))
-                self.assertEqual(self.cli("skill-sources", "update", "claude", "--disable", "skills", ok=False)["code"],
-                                 "settings")
+        # A file larger than this version reads is not used and not changed. It is no proof of damage: a newer
+        # Richi may read a larger one, so nobody is told to remove it.
+        with mock.patch.object(agents, "MAX_SETTINGS", path.stat().st_size - 1):
+            agents.forget_settings()
+            listed = self.cli("skill-sources", "list")
+            self.assertEqual(([agent["id"] for agent in listed["agents"]], str(path) in listed["problem"],
+                              listed["problem_code"]), (["claude", "codex"], True, "large"))
+            refused = self.cli("skill-sources", "update", "claude", "--disable", "skills", ok=False)
+            self.assertEqual((refused["code"], refused["subject"]), ("settings", "large"))
+            self.assertNotIn("remove", listed["problem"] + refused["error"])
+        # More own agents than this version keeps (a newer one may keep more): the first ones work, the
+        # others are kept unused, and none can be added.
+        with mock.patch.object(agents, "MAX_CUSTOM", 1):
+            agents.forget_settings()
+            listed = self.cli("skill-sources", "list")
+            self.assertEqual(([agent["id"] for agent in listed["agents"]], listed["problem"]),
+                             (["claude", "codex", "first"], None))
+            self.assertEqual([item["id"] for item in listed["unknown_agents"]], ["second"])
+            self.cli("skill-sources", "update", "claude", "--disable", "skills")
+            refused = self.cli("skill-sources", "add", "third", "--name", "Third", "--skills", "~/team", ok=False)
+            self.assertEqual((refused["code"], refused["subject"]), ("limit", "agents"))
+        self.assertIn("second", json.loads(path.read_text(encoding="utf-8"))["agents"])
         agents.forget_settings()
         self.assertEqual(agents.ids(), ("claude", "codex", "first", "second"))
 

@@ -6,6 +6,7 @@ format. Stored artifacts and internal work limits use an explicit format.
 """
 from contextlib import contextmanager
 from contextvars import ContextVar
+import hashlib
 import json
 import shlex
 
@@ -29,6 +30,18 @@ def shell_word(value):
     """
     quoted = shlex.quote(value)
     return "'" + value + "'" if quoted == value and value.startswith("=") else quoted
+
+
+def cut_name(value, limit):
+    """A name as an answer repeats it: whole up to limit characters, else cut, with its length and a hash.
+
+    Only a name another program or a hand edit wrote is that long. Two of them
+    cut the same way still read apart by the hash, and the answer stays small.
+    """
+    if len(value) <= limit:
+        return value
+    digest = hashlib.sha256(value.encode("utf-8", "surrogatepass")).hexdigest()[:8]
+    return value[:limit] + "… (%d characters, sha256 %s)" % (len(value), digest)
 
 
 def rendered(value, *, compact=None):

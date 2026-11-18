@@ -1103,11 +1103,19 @@ def _keep_listening(server):
         return None
 
 
-def _forget_secret(database):
+def _forget_secret(database, expected=None):
     try:
-        map_access.forget_secret(database)
+        map_access.forget_secret(database, expected)
     except OSError as exc:
-        print("The previous edit key could not be removed: " + (exc.strerror or str(exc)), flush=True)
+        print("The edit key could not be removed: " + (exc.strerror or str(exc)), flush=True)
+
+
+def _secret_now(database):
+    """The edit key this map's pages hold, or None when there is none or it cannot be read now."""
+    try:
+        return map_access.secret(database)
+    except OSError:
+        return None
 
 
 def _main(argv=None):
@@ -1182,6 +1190,11 @@ def _main(argv=None):
         # A key from an earlier map process ends here: pages still holding it compose commands, and
         # the page this start opens gets a new one.
         _forget_secret(database)
+    # Where richi map finds this map, also outside its range of ports and without a map registry.
+    try:
+        map_access.record_port(database, args.port)
+    except OSError as exc:
+        print("The map's port could not be recorded beside the store: " + (exc.strerror or str(exc)), flush=True)
     server.daemon_threads = False
     registration = maps.register(args.port) if follower is not None else None
 
@@ -1227,6 +1240,9 @@ def _main(argv=None):
         # code; only a map richi map knows to wait for (its entry) does that.
         kept = (_keep_listening(server) if reload_requested.is_set() and not terminating.is_set()
                 and registration is not None and follower.takes_listener() else None)
+        # The key this map's pages hold, read while it still has the port: once the port is free,
+        # a map started after this one may give its page a new key, which this one must not end.
+        own_key = _secret_now(database)
         server.server_close()
         # A transition preflight owns a bounded child process (15 seconds).
         # Let it reap that child before this process exits.
@@ -1240,7 +1256,9 @@ def _main(argv=None):
                 maps.unregister(registration)
             restore_handoff()
             # Whatever answers on this port next must not be handed a key that still works.
-            _forget_secret(database)
+            if own_key is not None:
+                _forget_secret(database, own_key)
+            map_access.clear_port(database, args.port)
     if not restarting:
         return
     # Replace this process, preserving its PID and URL. No supervisor or old

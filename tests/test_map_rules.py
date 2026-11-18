@@ -397,6 +397,24 @@ class MapAccessTests(unittest.TestCase):
         map_access.forget_secret(self.database)
         self.assertFalse(map_access.secret_path(self.database).exists())
 
+    def test_a_stopping_map_forgets_only_the_key_its_pages_held(self):
+        earlier = map_access.redeem(self.database, map_access.issue_ticket(self.database))
+        # A map started after it gave its own page a new key meanwhile: that one stays.
+        later = map_access.redeem(self.database, map_access.issue_ticket(self.database))
+        map_access.forget_secret(self.database, earlier)
+        self.assertTrue(map_access.authorized(self.database, later))
+        map_access.forget_secret(self.database, later)
+        self.assertFalse(map_access.authorized(self.database, later))
+        # Nothing to forget: no key, or no directory for it.
+        map_access.forget_secret(self.database, later)
+        map_access.forget_secret(self.root / "elsewhere" / "memory.sqlite3", later)
+        # While a page is being given a key, the stopping map does not wait long, and the key stays.
+        current = map_access.redeem(self.database, map_access.issue_ticket(self.database))
+        with private_files.locked(map_access.ticket_path(self.database)), \
+                mock.patch.object(map_access, "FORGET_LOCK_SECONDS", 0.2):
+            map_access.forget_secret(self.database, current)
+        self.assertTrue(map_access.authorized(self.database, current))
+
     def test_a_ticket_lock_held_too_long_is_an_error_not_a_hang(self):
         ticket = map_access.issue_ticket(self.database)
         with private_files.locked(self.ticket), mock.patch.object(map_access, "LOCK_SECONDS", 0.2):
@@ -494,12 +512,13 @@ class MapKeyLifetimeTests(unittest.TestCase):
         finally:
             conn.close()
 
-    def serve(self, **environment):
+    def serve(self, command=None, **environment):
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
-        process = subprocess.Popen([sys.executable, "-m", "richi.serve", "--db", str(self.database), "--port", str(port)],
-                                   env=dict(os.environ, **environment), stdout=subprocess.PIPE,
+        command = ([*command, str(port)] if command is not None
+                   else [sys.executable, "-m", "richi.serve", "--db", str(self.database), "--port", str(port)])
+        process = subprocess.Popen(command, env=dict(os.environ, **environment), stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, text=True)
         self.addCleanup(self.stop, process)
         deadline = time.monotonic() + 30
@@ -514,6 +533,41 @@ class MapKeyLifetimeTests(unittest.TestCase):
             process.send_signal(signal.SIGTERM)
             process.wait(30)
         process.stdout.close()
+
+    def test_a_map_records_its_port_beside_the_store_while_it_runs(self):
+        # richi map finds the store's map by this record where the installation has no map registry.
+        process = self.serve()
+        port = map_access.recorded_port(self.database)
+        self.assertEqual(serve.read_health(port)["pid"], process.pid)
+        self.assertEqual(json.loads(map_access.port_path(self.database).read_text())["pid"], process.pid)
+        self.stop(process)
+        self.assertIsNone(map_access.recorded_port(self.database))
+        # A map ends only its own record: one that a map started after it wrote stays.
+        private_files.replace(map_access.port_path(self.database), json.dumps({"port": port, "pid": os.getpid() + 1}))
+        map_access.clear_port(self.database, port)
+        self.assertEqual(map_access.recorded_port(self.database), port)
+
+    def test_a_stopping_map_leaves_the_key_of_a_map_started_after_it(self):
+        # richi map restart starts the next map when the old one is slow to finish its requests: the
+        # old one may still be draining when the new map's page gets its key. Here that happens while
+        # the old map closes, after it has let its port go.
+        script = (
+            "import sys\n"
+            "from richi import map_access, serve\n"
+            "database = sys.argv[1]\n"
+            "close = serve.LoopbackHTTPServer.server_close\n"
+            "def server_close(self):\n"
+            "    close(self)\n"
+            "    map_access.redeem(database, map_access.issue_ticket(database))\n"
+            "serve.LoopbackHTTPServer.server_close = server_close\n"
+            "sys.exit(serve.main(['--db', database, '--port', sys.argv[2]]))\n")
+        process = self.serve(command=[sys.executable, "-c", script, str(self.database)])
+        own = map_access.redeem(self.database, map_access.issue_ticket(self.database))
+        self.stop(process)
+        self.assertEqual(process.returncode, 0)
+        later = map_access.secret(self.database)
+        self.assertNotIn(later, (None, own))
+        self.assertFalse(map_access.authorized(self.database, own))
 
     def test_a_new_map_process_ends_the_previous_key_and_so_does_a_stop(self):
         earlier = map_access.redeem(self.database, map_access.issue_ticket(self.database))

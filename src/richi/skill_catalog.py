@@ -294,7 +294,9 @@ def catalog(environ=None, home=None, registry=None):
 
     roots lists every skill source of every agent, in registry order, with
     whether its directory exists (or may not be read: denied), whether the
-    user switched it off and how many skills it gives its agent; totals has
+    user switched it off and how many skills it gives its agent. A source
+    switched off is not looked at, so neither is said of it: it may be on a
+    share that no longer answers, and a stat would wait for it. totals has
     the number of skills each agent has in all. The list itself names at most
     MAX_SKILLS skills and says so in truncated; the counts include the rest.
     """
@@ -305,7 +307,7 @@ def catalog(environ=None, home=None, registry=None):
     for agent in listed:
         every = set()
         for source in agent.sources(environ, home):
-            state = folder_state(source.path)
+            state = folder_state(source.path) if source.enabled else None
             entry = {"agent": agent.id, "key": source.key, "kind": source.kind, "layout": source.layout,
                      "path": str(source.path), "exists": state == "ok", "denied": state == "denied",
                      "enabled": source.enabled, "added": source.added, "skills": 0}

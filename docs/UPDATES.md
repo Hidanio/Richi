@@ -199,7 +199,14 @@ change.
   that runs `richi map` therefore always opens the current version. The new
   version is checked first, and a map is never stopped where no local port can
   be opened. If two installations serve the same store, the one whose
-  `richi map` ran last owns the map.
+  `richi map` ran last owns the map. Besides the configured port and the next
+  ten, `richi map` and `richi map stop` look at the ports where the installation
+  has registered a running map and at the port the store's map records beside
+  the store (in every installation, managed or not), so the workspace's map is
+  found there too (for example one started with another `--port`) instead of a
+  second map being started; the map that answers there is checked like any
+  other. Two maps of one store share one edit key: a second one started by hand
+  (`richi map serve`) ends the key of the first one's page.
 
 To stop or restart the selected workspace's map explicitly:
 

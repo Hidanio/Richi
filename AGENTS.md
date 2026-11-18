@@ -11,8 +11,9 @@ any agent it lists, so supporting another agent means adding one entry there
 plus its setup in `launcher/richi_launcher/` if Richi installs an integration
 for it. The registry names a layout and an opt-out rule; `skill_catalog.py`
 implements each of them once, for every agent that names it, and the map labels
-a skill source by its key. Built-in agents are the ones the launcher connects
-(`agent_adapters.AGENTS`); a test keeps the two lists equal.
+a skill source by its key. Every agent the launcher connects
+(`agent_adapters.AGENTS`) must be a built-in agent, which a test checks; a
+built-in agent that Richi installs no integration for has no connection state.
 Users adjust built-in agents and describe their own with `richi skill-sources`
 or the map's Agents tab; those settings layer on top of the built-in entries
 and never replace them. Installed skills are local deployment copies (with dev

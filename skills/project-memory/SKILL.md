@@ -58,7 +58,8 @@ standing rules, loaded with `rules show`.
    the answer has `project_path_problem` (only global rules came back: the repository
    is not registered), `invalid_rules` (stored rules that cannot be read),
    `unsupported_rules` (rules that need a newer Richi) or `agent_settings_problem`
-   (the user's own agents are unknown until their settings are fixed).
+   (Richi cannot use the agent settings, all or some agents'; its `next` says what
+   to tell the user).
 
 ## Retrieve the evidence needed
 
