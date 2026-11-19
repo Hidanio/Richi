@@ -209,8 +209,8 @@ agent chats:
   RICHI_CHAT_ID     stable chat identity for workspace binding; Claude Code
                     setup provides it through its SessionStart hook
   CODEX_THREAD_ID   chat identity supplied by Codex
-  In Cursor chats, pass the exact --chat cursor:<id> from the sessionStart
-  hook on every command. It takes precedence over the shell environment.
+  CURSOR_AGENT      marks a Cursor Agent shell. Pass the explicit
+                    --chat cursor:<id> from its sessionStart hook on each command.
   In a chat, RICHI_CONFIG, RICHI_DB and RICHI_DATA_DIR are rejected: the
   chat's binding selects the store.
 
