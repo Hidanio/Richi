@@ -573,29 +573,33 @@ def _setup_plan(ctx, args):
     return result, ops
 
 
+def _status(ctx, agent, record, pending):
+    if pending:
+        return dict(record or {}, status="recovery_required", pending_recovery=True)
+    if record is None:
+        return {"status": "not_configured"}
+    # Replanning also detects shadowed/edited instructions and broken links.
+    _, operations = plan(ctx, agent=agent)
+    drift = [op["path"] for op in operations if op["before"] != op["after"]]
+    result = dict(record, status="repair_required" if drift else "configured", changes=drift,
+                  pending_recovery=False, skill_mode=_mode(record),
+                  skill_link=_link_target(record))
+    if record.get("dev_source"):
+        try:
+            dev_skill(record["dev_source"])
+        except ConfigError as exc:
+            result["dev_skill_error"] = str(exc) + "; repair links to the release or fix the checkout"
+    return result
+
+
 def _inspect(ctx, args):
-    if args.status:
-        record = _load(ctx, args.agent)
-        if record is None:
-            return {"status": "not_configured"}
-        if (Path(ctx["root"]) / files.JOURNAL).exists():
-            return dict(record, status="recovery_required", pending_recovery=True)
-        # Replanning also detects shadowed/edited instructions and broken links.
-        _, operations = plan(ctx, agent=args.agent)
-        drift = [op["path"] for op in operations if op["before"] != op["after"]]
-        result = dict(record, status="repair_required" if drift else "configured", changes=drift,
-                      pending_recovery=False, skill_mode=_mode(record),
-                      skill_link=_link_target(record))
-        if record.get("dev_source"):
-            try:
-                dev_skill(record["dev_source"])
-            except ConfigError as exc:
-                result["dev_skill_error"] = str(exc) + "; repair links to the release or fix the checkout"
-        return result
+    pending = (Path(ctx["root"]) / files.JOURNAL).exists()
+    if args.status or pending:
+        return _status(ctx, args.agent, _load(ctx, args.agent), pending)
     return _setup_plan(ctx, args)[0]
 
 
-def _preview(ctx, args):
+def _preview(ctx, inspect, *args):
     """Read a complete setup transaction without creating lock files on first use."""
     import fcntl
     lock = Path(ctx["root"]) / "state.lock"
@@ -603,7 +607,7 @@ def _preview(ctx, args):
         # A first writer creates state.lock before touching any profile. If one
         # appeared during the inspection, discard even an apparent conflict.
         try:
-            result = _inspect(ctx, args)
+            result = inspect(ctx, *args)
         except (ConfigError, OSError):
             if not lock.exists():
                 raise
@@ -612,7 +616,7 @@ def _preview(ctx, args):
                 return result
     with lock.open("rb") as stream:
         fcntl.flock(stream, fcntl.LOCK_SH)
-        return _inspect(ctx, args)
+        return inspect(ctx, *args)
 
 
 def command(argv):
@@ -620,10 +624,12 @@ def command(argv):
     args = setup_parser().parse_args(argv)
     ctx = installation._context()
     if args.status or args.dry_run:
-        return _preview(ctx, args)
+        return _preview(ctx, _inspect, args)
     # Validate a first setup before creating its installation metadata.
     if not args.yes or not (Path(ctx["root"]) / "state.lock").exists():
-        result = _preview(ctx, args)
+        result = _preview(ctx, _inspect, args)
+    if not args.yes and result.get("pending_recovery"):
+        raise ConfigError("A setup transaction was interrupted; rerun setup to recover it")
     if not args.yes and result["changes"]:
         try:
             with open("/dev/tty", "r+") as terminal:
@@ -662,23 +668,27 @@ def agents_parser():
                     see=("setup",), guide="docs/SETUP.md")
 
 
+def _agents(ctx):
+    records = _records(ctx)
+    pending = (Path(ctx["root"]) / files.JOURNAL).exists()
+    items = []
+    for name in agent_adapters.AGENTS:
+        item = {"agent": name, "detected": agent_adapters.get(name).detected()}
+        try:
+            item["status"] = _status(ctx, name, records.get(name), pending)["status"]
+        except ConfigError as exc:
+            item.update(status="conflict", error=str(exc))
+        items.append(item)
+    return items
+
+
 def agents_command(argv):
     """Explicit discovery/menu; never runs on ordinary CLI calls."""
     from . import installation
     args = agents_parser().parse_args(argv)
+    ctx = installation._context()
     while True:
-        records = _records(installation._context())
-        items = []
-        for name in agent_adapters.AGENTS:
-            adapter = agent_adapters.get(name)
-            item = {"agent": name, "detected": adapter.detected(),
-                    "status": "not_configured"}
-            if name in records:
-                try:
-                    item["status"] = command(["--agent", name, "--status"])["status"]
-                except ConfigError as exc:
-                    item.update(status="conflict", error=str(exc))
-            items.append(item)
+        items = _preview(ctx, _agents)
         if args.status:
             return {"agents": items}
         try:

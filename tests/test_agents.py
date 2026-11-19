@@ -221,8 +221,7 @@ class AgentSettingsTests(IsolatedHome):
                     "---\nname: manual\ndisable-model-invocation: true\n---\n")
         write_skill(self.home / "team" / "release", "---\nname: release\n---\n")
 
-    def test_a_preexisting_cursor_description_stays_editable_until_reset(self):
-        # Create what a user of the old Cursor preset could have saved, using the old command path.
+    def test_a_preexisting_cursor_profile_keeps_its_folder_choices_under_the_builtin(self):
         previous = tuple(agent for agent in agents.AGENTS if agent.id != "cursor")
         with mock.patch.object(agents, "AGENTS", previous):
             cursor = self.cli("skill-sources", "add", "cursor", "--name", "Team Cursor", "--variable", "TEAM_EDITOR=1",
@@ -230,25 +229,35 @@ class AgentSettingsTests(IsolatedHome):
             saved = self.cli("skill-sources", "update", "cursor", "--expected-updated-at", cursor["updated_at"],
                              "--disable", "~/.cursor/skills")["agent"]
         path = agents.settings_path()
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["agents"]["cursor"]["future"] = ["keep"]
+        path.write_text(json.dumps(data), encoding="utf-8")
         before = path.read_bytes()
-        self.assertEqual(self.listed()["cursor"], saved)
+        listed = self.listed()["cursor"]
+        self.assertEqual((listed["builtin"], listed["name"], listed["variables"], listed["updated_at"]),
+                         (True, "Cursor", ["CURSOR_AGENT"], saved["updated_at"]))
+        self.assertEqual([(s["key"], s["added"], s["enabled"]) for s in listed["sources"]],
+                         [("cursor-skills", False, False), ("agents-skills", False, True), ("claude-skills", False, True),
+                          ("codex-skills", False, True), ("~/.gemini/skills", True, True)])
+        # The extra folder is still scanned, using Cursor's built-in rule for manual invocation.
+        self.assertEqual(listed["sources"][-1]["skills"], 1)
+        self.assertEqual(agents.detect({"CURSOR_AGENT": "1"}), "cursor")
+        self.assertIsNone(agents.detect({"TEAM_EDITOR": "1"}))
+        version = ["--expected-updated-at", saved["updated_at"]]
+        refused = self.cli("skill-sources", "update", "cursor", *version, "--name", "Other", ok=False)
+        self.assertEqual(refused["code"], "builtin")
         self.assertEqual(path.read_bytes(), before)
-        self.assertEqual((saved["builtin"], saved["manual_skills"], saved["skills"]), (False, "none", 2))
-        self.assertEqual(agents.detect({"TEAM_EDITOR": "1"}), "cursor")
-        self.assertIsNone(agents.detect({"CURSOR_AGENT": "1"}))
-        changed = self.cli("skill-sources", "update", "cursor", "--expected-updated-at", saved["updated_at"],
-                           "--name", "My Cursor", "--variable", "MY_EDITOR", "--manual-skills", "front-matter")["agent"]
-        self.assertEqual((changed["name"], changed["variables"], changed["skills"]), ("My Cursor", ["MY_EDITOR"], 1))
-        self.assertEqual(self.cli("skill-sources", "remove", "cursor", "--expected-updated-at", saved["updated_at"],
-                                  ok=False)["code"], "conflict")
-        reset = self.cli("skill-sources", "remove", "cursor", "--expected-updated-at", changed["updated_at"])
+        enabled = self.cli("skill-sources", "update", "cursor", *version, "--enable", "cursor-skills")["agent"]
+        self.assertTrue(enabled["sources"][0]["enabled"])
+        self.assertEqual(self.cli("skill-sources", "remove", "cursor", *version, ok=False)["code"], "conflict")
+        stored = json.loads(path.read_text(encoding="utf-8"))["agents"]["cursor"]
+        for field in ("name", "variable", "manual_skills", "created_at", "future"):
+            self.assertEqual(stored[field], data["agents"]["cursor"][field])
+        reset = self.cli("skill-sources", "remove", "cursor", "--expected-updated-at", enabled["updated_at"])
         self.assertEqual(reset["results"], [{"id": "cursor", "status": "reset"}])
-        builtin = reset["agent"]
-        self.assertEqual((builtin["builtin"], builtin["name"], builtin["variables"], builtin["updated_at"]),
-                         (True, "Cursor", ["CURSOR_AGENT"], None))
-        self.assertEqual([source["path"] for source in builtin["sources"]],
+        self.assertIsNone(reset["agent"]["updated_at"])
+        self.assertEqual([s["path"] for s in reset["agent"]["sources"]],
                          ["~/.cursor/skills", "~/.agents/skills", "~/.claude/skills", "~/.codex/skills"])
-        self.assertEqual(self.cli("skill-sources", "update", "cursor", "--name", "Other", ok=False)["code"], "builtin")
 
     def test_an_own_agent_is_described_detected_and_gets_its_skill(self):
         before = self.cli("skill-sources", "list")
@@ -876,6 +885,19 @@ class AgentSettingsTests(IsolatedHome):
         claude = self.listed()["claude"]
         self.assertEqual([source["key"] for source in claude["sources"]], ["skills", "plugins", "claude-app", "~/team"])
         self.assertEqual((claude["skills"], adjusted["skills"]), (2, 2))
+
+    def test_enabling_one_builtin_source_keeps_others_at_a_former_folder_off(self):
+        path = agents.settings_path()
+        path.parent.mkdir(parents=True)
+        stored = {"updated_at": "t", "folders": [{"path": "~/.agents/skills", "enabled": False}]}
+        path.write_text(agent_commands._serialized({"codex": stored}), encoding="utf-8")
+        # With this profile both agents-skills and codex-skills read the saved folder.
+        with mock.patch.dict(os.environ, {"CODEX_HOME": str(self.home / ".agents")}):
+            changed = self.cli("skill-sources", "update", "codex", "--expected-updated-at", "t",
+                               "--enable", "agents-skills")["agent"]
+            enabled = {source["key"]: source["enabled"] for source in changed["sources"]}
+            self.assertTrue(enabled["agents-skills"])
+            self.assertFalse(enabled["codex-skills"])
 
     def test_changes_are_validated_for_every_caller(self):
         for action, identifier, options in (

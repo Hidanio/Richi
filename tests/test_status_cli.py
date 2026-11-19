@@ -40,7 +40,7 @@ class StatusCliTests(unittest.TestCase):
             shutil.copytree(source, self.installed / target, ignore=ignored)
         self.environment = {key: value for key, value in os.environ.items()
                             if not key.startswith("RICHI_")
-                            and key not in {"CODEX_THREAD_ID", "CODEX_SESSION_ID"}}
+                            and key not in {"CODEX_THREAD_ID", "CODEX_SESSION_ID", "CURSOR_AGENT"}}
         self.environment.update(HOME=str(self.root / "home"),
                                 XDG_CONFIG_HOME=str(self.root / "config"),
                                 XDG_DATA_HOME=str(self.root / "data"))

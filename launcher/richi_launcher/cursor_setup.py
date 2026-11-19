@@ -88,10 +88,18 @@ def _calls_script(entry, profile, script):
     command = entry.get("command") if isinstance(entry, dict) else None
     if not isinstance(command, str):
         return False
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
     try:
-        return any(os.path.normpath(profile / arg) == str(script) for arg in shlex.split(command))
+        args = list(lexer)
     except ValueError:
         return False
+    for arg in args:
+        root, slash, tail = arg.partition("/")
+        path = profile.parent / tail if slash and root in {"~", "$HOME", "${HOME}"} else profile / arg
+        if os.path.normpath(path) == str(script):
+            return True
+    return False
 
 
 def _hook_operations(ctx, profile, current, content):

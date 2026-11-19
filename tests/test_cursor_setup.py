@@ -131,8 +131,11 @@ class CursorSetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         self.assertIn(b"alwaysApply: true", rule)
         settings = json.loads(self.settings.read_text())
         settings["hooks"]["sessionStart"].clear()
+        duplicate = json.loads(self.settings.read_text())
+        duplicate["hooks"]["sessionStart"].append({"command": 'python -I "$HOME/.cursor/richi/session_start.py"; echo done >&2'})
         changed = ((self.rule, rule.replace(b"alwaysApply: true", b"alwaysApply: false", 1)),
-                   (self.script, b"local edits"), (self.settings, json.dumps(settings).encode()))
+                   (self.script, b"local edits"), (self.settings, json.dumps(settings).encode()),
+                   (self.settings, json.dumps(duplicate).encode()))
         for path, edit in changed:
             with self.subTest(path=path):
                 original = path.read_bytes()

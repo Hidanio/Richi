@@ -118,6 +118,36 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
         self.assertEqual(result["status"], "planned")
         self.assertEqual(self.paths(), before)
 
+    def test_readers_wait_for_first_setup_and_report_an_interrupted_transaction(self):
+        from concurrent.futures import ThreadPoolExecutor
+        import fcntl
+        from threading import Event
+
+        waiting = Event()
+        flock = fcntl.flock
+
+        def observe_lock(fd, mode):
+            if mode == fcntl.LOCK_SH:
+                waiting.set()
+            return flock(fd, mode)
+
+        with ThreadPoolExecutor(max_workers=1) as pool, patch.object(fcntl, "flock", observe_lock):
+            with installation._locked(self.ctx), installation._locked(self.ctx, state=True):
+                _, ops = agent_setup.plan(self.ctx, agent="cursor")
+                # Leave user files and their journal as after a crash before the manifest.
+                setup_files.begin(self.ctx, ops)
+                manifest = next(op for op in ops if Path(op["path"]).name == agent_setup.MANIFEST)
+                setup_files.replace(manifest["path"], manifest["after"], manifest["before"])
+                reader = pool.submit(agent_setup.command, ["--agent", "cursor", "--status"])
+                self.assertTrue(waiting.wait(5))
+                self.assertFalse(reader.done())
+            self.assertEqual(reader.result(timeout=5)["status"], "recovery_required")
+        self.assertEqual(agent_setup.command(["--agent", "cursor", "--dry-run"])["status"], "recovery_required")
+        items = agent_setup.agents_command(["--status"])["agents"]
+        self.assertEqual(next(item["status"] for item in items if item["agent"] == "cursor"), "recovery_required")
+        self.assertTrue((self.root / setup_files.JOURNAL).is_file())
+        self.assertEqual(self.configure("--agent", "cursor")["status"], "configured")
+
     def test_conflicting_command_does_not_modify_instructions(self):
         command = self.home / ".local/bin/richi"
         command.parent.mkdir(parents=True)
@@ -319,6 +349,11 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
         installation._atomic_json(self.root / "state.json", new)
         setup_files.recover(self.ctx)
         self.assertEqual(agent_setup._load(self.ctx)["generation"], new["current"])
+        # A setup already launched by the previous generation must re-enter
+        # through the launcher before it can modify the recovered profiles.
+        with patch.dict(os.environ, {richi_bootstrap.GENERATION_ENV: "seed"}):
+            with self.assertRaisesRegex(ConfigError, "release changed"):
+                self.configure()
 
     def test_recovery_does_not_overwrite_concurrent_user_edits(self):
         self.configure()

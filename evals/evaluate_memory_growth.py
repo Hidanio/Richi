@@ -36,7 +36,7 @@ def digest(value):
 def environment(directory):
     root = Path(directory) / "home"
     env = {key: value for key, value in os.environ.items()
-           if not key.startswith(("RICHI_", "PYTHON")) and key != "CODEX_THREAD_ID"}
+           if not key.startswith(("RICHI_", "PYTHON")) and key not in {"CODEX_THREAD_ID", "CURSOR_AGENT"}}
     env.update(HOME=str(root), XDG_CONFIG_HOME=str(root / ".config"),
                XDG_DATA_HOME=str(root / ".local" / "share"))
     return env

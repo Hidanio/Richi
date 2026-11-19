@@ -566,9 +566,7 @@ function acceptAgents(listing){applied.push(listing);}
   // must not overtake the first and let the stale first listing replace both committed changes.
   const first=saveAgentChange('first'),second=saveAgentChange('second');await Promise.resolve();
   assert.deepEqual(sent,['first']);
-  const restored={id:'cursor',builtin:true};
-  pending.get('first').resolve({agent:restored,listing:['first']});assert.deepEqual((await first).agent,restored);
-  await Promise.resolve();
+  pending.get('first').resolve({listing:['first']});await first;await Promise.resolve();
   assert.deepEqual(sent,['first','second']);
   pending.get('second').resolve({listing:['first','second']});await second;
   assert.deepEqual(applied,[['first'],['first','second']]);

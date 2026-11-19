@@ -18,9 +18,7 @@ three layers, each refining the one before:
    extra skill folders. Removing them restores the built-in agent.
 3. The user's own agents, described with generic parts: a name, skill
    folders, an environment variable that marks its shells. An agent that needs
-   more than that becomes a built-in entry. If an upgrade adds a built-in
-   agent with the same ID, the existing description stays in effect until
-   its owner removes it.
+   more than that becomes a built-in entry.
 
 Layers 2 and 3 are the user's settings, kept in agents.json in Richi's
 configuration directory and shared by every workspace of this user; `richi
@@ -481,11 +479,11 @@ def load_settings(environ=None, home=None):
 def own_entry(identifier, entry):
     """Whether a stored entry may describe one of the user's own agents.
 
-    Only an own agent has a stored name, even after an upgrade adds its ID
-    to the built-in registry. If an entry is not even an object, count it
-    unless we already know its ID.
+    Not a built-in agent's, and not one without a name: that adjusts an agent
+    built into a newer Richi (registry). An entry that is not even an object
+    may be anything, so it counts.
     """
-    return "name" in entry if isinstance(entry, dict) else identifier not in builtin_ids()
+    return identifier not in builtin_ids() and not (isinstance(entry, dict) and "name" not in entry)
 
 
 def missing_agents(settings):
@@ -495,8 +493,7 @@ def missing_agents(settings):
     what the user set for it; an own agent may be one a newer Richi accepts
     under an ID of another shape too.
     """
-    return sorted(identifier for identifier, (entry, _why) in settings.unusable.items()
-                  if identifier not in builtin_ids() and own_entry(identifier, entry))
+    return sorted(identifier for identifier, (entry, _why) in settings.unusable.items() if own_entry(identifier, entry))
 
 
 def settings_complete(settings=None, environ=None, home=None):
@@ -522,9 +519,13 @@ def _adjusted(agent, entry):
     disabled, folders = frozenset(entry.get("disabled", ())), _stored_folders(entry)
 
     def sources(environ, home, base=agent.sources):
-        built = [source._replace(enabled=source.key not in disabled) for source in base(environ, home)]
+        added = _folders(folders, home)
+        # A previously added folder can become a built-in source after an upgrade.
+        off = {source.path for source in added if not source.enabled}
+        built = [source._replace(enabled=source.key not in disabled and source.path not in off)
+                 for source in base(environ, home)]
         taken = {source.path for source in built}
-        return built + [source for source in _folders(folders, home) if source.path not in taken]
+        return built + [source for source in added if source.path not in taken]
     return agent._replace(sources=sources, updated_at=entry["updated_at"])
 
 
@@ -547,14 +548,12 @@ def registry(environ=None, home=None, entries=None):
     """
     if entries is None:
         entries, _problem = load_settings(environ, home)
-    known = {agent.id: agent for agent in AGENTS}
-    for identifier, entry in sorted(entries.items()):
-        if own_entry(identifier, entry):
-            known[identifier] = _custom(identifier, entry)
-        elif identifier in known:
-            known[identifier] = _adjusted(known[identifier], entry)
-        # An adjustment for an agent only a newer Richi has is kept unused.
-    return tuple(known.values())
+    known = set(builtin_ids())
+    agents = [_adjusted(agent, entries[agent.id]) if agent.id in entries else agent for agent in AGENTS]
+    # An entry without a name adjusts a built-in agent this Richi does not have.
+    agents += [_custom(identifier, entry) for identifier, entry in sorted(entries.items())
+               if identifier not in known and "name" in entry]
+    return tuple(agents)
 
 
 def ids(environ=None, home=None):

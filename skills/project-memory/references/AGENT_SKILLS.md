@@ -78,9 +78,12 @@ agent's own standing instructions.
 ## Adjust an agent
 
 Cursor reads skills from `~/.cursor/skills`, `~/.agents/skills`, `~/.claude/skills`
-and `~/.codex/skills`. If you added `cursor` as a custom agent in an earlier
-version, Richi keeps that profile and its settings. To use the built-in
-defaults, remove the custom profile with its current `--expected-updated-at`.
+and `~/.codex/skills`. If you added `cursor` in an earlier version, the upgrade
+uses Cursor’s built-in name, detection and skill filtering. Your additional
+folders still appear, and a disabled folder stays disabled even if it is now a
+built-in source. Use the source key from `skill-sources list` to enable it.
+Richi leaves the saved settings file intact on upgrade. To restore the defaults,
+reset Cursor as described below.
 
 ```sh
 richi --compact-json skill-sources update claude --disable claude-app --add-skills ~/work/team-skills

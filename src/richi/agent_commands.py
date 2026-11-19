@@ -343,13 +343,13 @@ def _updated(identifier, options, builtin, current, environ, home):
     _check_version(identifier, agents.stored_version(current) if current is not None else None,
                    options.get("expected_updated_at"))
     entry = copy.deepcopy(current) if current else {}
-    base_keys, base_paths = set(), set()
+    base_sources = {}
     if builtin:
         if any(options.get(key) is not None for key in ("name", "variable", "manual_skills")):
             raise AgentError(identifier + " is built into Richi: only its skill sources can be switched or added",
                              "builtin")
         base = next(agent for agent in agents.AGENTS if agent.id == identifier).sources(environ, home)
-        base_keys, base_paths = {source.key for source in base}, {source.path for source in base}
+        base_sources = {source.key: source.path for source in base}
     else:
         if options.get("name") is not None:
             entry["name"] = _name(options["name"])
@@ -369,7 +369,7 @@ def _updated(identifier, options, builtin, current, environ, home):
         folders.remove(match)
     for value in _strings(options, "add_folders"):
         text = _folder(value, home)
-        if _find_folder(folders, text, home) is not None or agents.folder_path(text, home) in base_paths:
+        if _find_folder(folders, text, home) is not None or agents.folder_path(text, home) in base_sources.values():
             raise AgentError("Already a skill source of " + identifier + ": " + text, "exists", "source")
         folders.append({"path": text, "enabled": True})
     if len(folders) > agents.MAX_FOLDERS:
@@ -379,7 +379,16 @@ def _updated(identifier, options, builtin, current, environ, home):
         folder = _find_folder(folders, key, home)
         if folder is not None:
             folder["enabled"] = enabled
-        elif key in base_keys:
+            # The old folder key still switches the whole folder if it is now a built-in source.
+            path = agents.folder_path(folder["path"], home)
+            disabled.difference_update(source for source, directory in base_sources.items() if directory == path)
+        elif key in base_sources:
+            path = base_sources[key]
+            for added in folders:
+                if not added["enabled"] and agents.folder_path(added["path"], home) == path:
+                    # Transfer the old folder switch to all source keys at that path before changing one.
+                    disabled.update(source for source, directory in base_sources.items() if directory == path)
+                    added["enabled"] = True
             (disabled.discard if enabled else disabled.add)(key)
         else:
             raise AgentError("Unknown skill source of " + identifier + ": " + key + "; see skill-sources list",
@@ -429,14 +438,12 @@ def _apply(action, identifier, options, settings, environ, home):
         _check_version(identifier, agents.stored_version(entry), options.get("expected_updated_at"))
         return ("reset" if builtin else "removed"), None
     current = entries.get(identifier)
-    # A saved custom agent keeps its editable description when a release adds its ID.
-    uses_builtin = builtin and (current is None or not agents.own_entry(identifier, current))
     if action == "add":
         stored = {**entries, **{key: value[0] for key, value in settings.unusable.items()}}
         own = [key for key, value in stored.items() if agents.own_entry(key, value)]
-        status, entry = "created", _added(identifier, options, uses_builtin, current, own, home)
+        status, entry = "created", _added(identifier, options, builtin, current, own, home)
     elif action == "update":
-        status, entry = _updated(identifier, options, uses_builtin, current, environ, home)
+        status, entry = _updated(identifier, options, builtin, current, environ, home)
     else:
         if current is None:
             raise AgentError((identifier + " has no adjustments to remove" if builtin

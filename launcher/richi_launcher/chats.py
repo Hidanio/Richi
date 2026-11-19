@@ -39,7 +39,8 @@ def detect_chat(explicit=None):
     # Cursor's session hook supplies the ID to the conversation. Shell
     # variables may be absent or inherited from a different conversation.
     if os.environ.get("CURSOR_AGENT"):
-        raise ChatError("Cursor Agent needs the explicit --chat ID from its sessionStart hook",
+        raise ChatError("Pass --chat with the active client's conversation ID in a Cursor Agent shell. "
+                        "Cursor supplies --chat cursor:<id> in its sessionStart hook.",
                         "chat_id_required")
     for variable in ("RICHI_CHAT_ID", "CODEX_THREAD_ID"):
         if variable in os.environ:

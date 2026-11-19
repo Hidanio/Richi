@@ -79,9 +79,12 @@ richi --compact-json skill-sources add gemini-cli --name "Gemini CLI" \
 
 Cursor читает скиллы из `~/.cursor/skills`, `~/.agents/skills`, `~/.claude/skills`
 и `~/.codex/skills`. Если в прежней версии уже был настроен свой агент
-`cursor`, Richi сохраняет его профиль и настройки. Чтобы перейти на встроенные
-настройки, удали этот профиль, передав его текущее значение `updated_at` в
-`--expected-updated-at`.
+`cursor`, после обновления Richi использует встроенное имя Cursor и встроенные
+правила распознавания агента и отбора скиллов. Добавленные папки остаются в
+списке. Выключенная папка остаётся выключенной, даже если теперь это встроенный
+источник. Включить её можно по ключу из `skill-sources list`. При обновлении
+Richi сохраняет исходный файл настроек. Вернуть настройки по умолчанию можно
+командой сброса, описанной ниже.
 
 ```sh
 richi --compact-json skill-sources update claude --disable claude-app --add-skills ~/work/team-skills
