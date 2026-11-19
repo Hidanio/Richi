@@ -1248,13 +1248,10 @@ class RulesIntegrationTests(unittest.TestCase):
                 mock.patch.object(config.sys, "platform", "linux"):
             self.assertEqual(chats.current_chat("chat")["next_commands"][0], "richi chat bind --current")
             bound = chats.bind_chat("chat", "default")
-            # The commands themselves: compared only with the list, an empty list would pass.
-            self.assertEqual(chats.RULES_COMMANDS, ["richi rules show", "richi --project-path PATH rules show"])
-            self.assertEqual(bound["next_commands"], chats.RULES_COMMANDS)
+            expected = ["richi rules show", "richi --project-path PATH rules show"]
+            self.assertEqual(bound["next_commands"], expected)
             current = chats.current_chat("chat")
-            self.assertEqual(current["next_commands"], chats.RULES_COMMANDS)
-            current["next_commands"].append("mutated")
-            self.assertNotIn("mutated", chats.RULES_COMMANDS)
+            self.assertEqual(current["next_commands"], expected)
 
     def test_claude_hook_reloads_rules_after_compaction(self):
         def context(**payload):

@@ -184,10 +184,10 @@ def begin(ctx, operations, generation=None):
     journal = Path(ctx["root"]) / JOURNAL
     if journal.exists():
         raise ConfigError("Pending setup transaction must be recovered first")
-    operations = [op for op in operations if op.get("before") != op.get("after")]
     for op in operations:
         if snapshot(op["path"]) != op["before"]:
             raise ConfigError("Setup plan changed; rerun setup: " + op["path"])
+    operations = [op for op in operations if op["before"] != op["after"]]
     transaction = {"format_version": 1, "root": ctx["root"], "generation": generation,
                    "committed": False, "operations": operations}
     if len((json.dumps(transaction, indent=2, sort_keys=True) + "\n").encode()) > MAX_FILE:

@@ -257,6 +257,17 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
         self.assertTrue(all(path.read_bytes() == b"managed" for path in paths))
         self.assertFalse((self.root / setup_files.JOURNAL).exists())
 
+    def test_activation_rechecks_a_link_even_when_its_target_stays_the_same(self):
+        skill = self.home / "skill"
+        skill.symlink_to(self.home / "checkout")
+        link = setup_files.change(skill, setup_files.snapshot(skill))
+        skill.unlink()
+        skill.write_text("user replacement")
+        with self.assertRaisesRegex(ConfigError, "plan changed"):
+            setup_files.begin(self.ctx, [link], generation="next")
+        self.assertEqual(skill.read_text(), "user replacement")
+        self.assertFalse((self.root / setup_files.JOURNAL).exists())
+
     def test_candidate_without_setup_protocol_cannot_activate(self):
         self.configure()
         state = self.next_state()

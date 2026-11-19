@@ -271,6 +271,12 @@ class ChatCliTests(unittest.TestCase):
             with self.subTest(inherited=inherited):
                 self.assertEqual(self.command("init", env=inherited, ok=False)["code"], "chat_id_required")
         self.assertFalse(list(self.root.rglob("*.sqlite3")))
+        suggested = self.command("--chat", "cursor:active", "chat", "current", env=cursor)["next_commands"][0]
+        bound = self.command(*suggested.split()[1:], env=cursor)
+        self.assertEqual(bound["chat_id"], "cursor:active")
+        self.assertEqual(bound["next_commands"], [
+            "richi --chat cursor:active rules show --agent cursor",
+            "richi --chat cursor:active --project-path PATH rules show --agent cursor"])
         self.command("--chat", "generic", "chat", "bind", "alpha", chat="automatic", env=cursor)
         self.assertFalse(self.command("chat", "current", chat="automatic")["bound"])
         path = self.root / "shared repo"
