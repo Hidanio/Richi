@@ -25,6 +25,8 @@ MAX_SKILLS = 1000
 MAX_HEADER = 32768
 MAX_DESCRIPTION = 600
 MAX_MANIFEST = 4 * 1024 * 1024
+# Maximum directory entries examined across one recursively searched skill source.
+MAX_NESTED_ENTRIES = 100000
 # Kinds of skill source, in the order the map groups their skills.
 KINDS = ("skills", "system", "plugins")
 
@@ -281,10 +283,57 @@ def _plugins(layout, root):
                 yield plugin.name, version, None
 
 
-def _candidates(agent, layout, root):
+def _nested_folders(root):
+    """Folders containing SKILL.md in breadth-first order and whether the scan hit its entry budget."""
+    try:
+        info = root.stat()
+    except OSError:
+        return [], False
+    seen = {(info.st_dev, info.st_ino)}
+    directories = [root]
+    skills = []
+    remaining = MAX_NESTED_ENTRIES
+    limited = False
+    for directory in directories:
+        children = []
+        try:
+            with os.scandir(directory) as entries:
+                for child in entries:
+                    if not remaining:
+                        limited = True
+                        break
+                    remaining -= 1
+                    if child.name == "SKILL.md":
+                        skills.append(directory)
+                    try:
+                        if child.name.startswith(".") or not child.is_dir():
+                            continue
+                        info = child.stat()
+                    except OSError:
+                        continue
+                    children.append((child.name, (info.st_dev, info.st_ino)))
+        except OSError:
+            pass
+        for name, identity in sorted(children):
+            if identity not in seen:
+                seen.add(identity)
+                directories.append(directory / name)
+        if limited:
+            break
+    return skills, limited
+
+
+def _candidates(agent, source, report):
     """(name prefix, file with front matter, name without one, enabled names or None) under a root."""
-    if layout == "skills":
-        for child in _children(root):
+    layout, root = source.layout, source.path
+    if layout in ("skills", "nested-skills"):
+        if layout == "nested-skills":
+            children, limited = _nested_folders(root)
+            if limited:
+                report["truncated"] = True
+        else:
+            children = _children(root)
+        for child in children:
             yield "", child / "SKILL.md", child.name, None
         return
     for name, directory, enabled in _plugins(layout, root):
@@ -309,6 +358,8 @@ def catalog(environ=None, home=None, registry=None):
     share that no longer answers, and a stat would wait for it. totals has
     the number of skills each agent has in all. The list itself names at most
     MAX_SKILLS skills and says so in truncated; the counts include the rest.
+    When a recursive source exceeds the scan budget, its root and the catalog
+    are marked truncated and the counts include only discovered skills.
     """
     environ = os.environ if environ is None else environ
     home = Path(home) if home is not None else Path.home()
@@ -325,7 +376,7 @@ def catalog(environ=None, home=None, registry=None):
             if not entry["exists"] or not source.enabled:
                 continue
             found = set()
-            for prefix, path, fallback, enabled in _candidates(agent, source.layout, source.path):
+            for prefix, path, fallback, enabled in _candidates(agent, source, entry):
                 try:
                     fields = front_matter(*_read_header(path))
                 except OSError:
@@ -353,5 +404,6 @@ def catalog(environ=None, home=None, registry=None):
             every |= found
         totals[agent.id] = len(every)
     ordered = sorted(skills.values(), key=lambda skill: (KINDS.index(skill["kind"]), skill["name"].lower()))
-    return {"skills": ordered, "roots": seen_roots, "totals": totals, "truncated": truncated,
+    scan_truncated = any(root.get("truncated") for root in seen_roots)
+    return {"skills": ordered, "roots": seen_roots, "totals": totals, "truncated": truncated or scan_truncated,
             "agents": [{"id": agent.id, "name": agent.name} for agent in listed]}

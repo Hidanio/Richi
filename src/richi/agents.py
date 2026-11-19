@@ -76,7 +76,7 @@ class SkillSource(NamedTuple):
     source, the folder as the user wrote it for an added one. kind groups
     skills in the map: "skills", "system" (built into the agent) or "plugins".
     layout says how the directory holds them: "skills" has one skill per
-    subdirectory; "cache" is a plugin cache,
+    subdirectory; "nested-skills" also searches category subdirectories. "cache" is a plugin cache,
     <marketplace>/<plugin>/<version>/skills/<skill>; "claude-app" is the Claude
     app's <account>/<organization>/rpm/<plugin> with rpm/manifest.json, and
     skills-plugin/<account>/<organization> with its manifest of enabled skills.
@@ -116,6 +116,8 @@ class Agent(NamedTuple):
     # False where the chat identity is the agent's own ID of the chat instead (Codex: its thread
     # ID, as the launcher takes it from CODEX_THREAD_ID): it names no agent, the variables do.
     chat_prefix: bool = True
+    # How to scan extra skill folders the user adds to this agent.
+    folder_layout: str = "skills"
 
 
 def _home_variable(environ, home, variable, default):
@@ -140,7 +142,7 @@ def _codex_sources(environ, home):
 
 def _cursor_sources(environ, home):
     # Cursor also discovers personal skills in the Claude and Codex compatibility folders.
-    return [SkillSource(profile + "-skills", "skills", "skills", home / ("." + profile) / "skills")
+    return [SkillSource(profile + "-skills", "skills", "nested-skills", home / ("." + profile) / "skills")
             for profile in ("cursor", "agents", "claude", "codex")]
 
 
@@ -150,7 +152,7 @@ AGENTS = (
     Agent(id="codex", name="Codex", variables={"CODEX_THREAD_ID": None},
           invocation="openai-yaml", plugin_commands=False, sources=_codex_sources, chat_prefix=False),
     Agent(id="cursor", name="Cursor", variables={"CURSOR_AGENT": None},
-          invocation="front-matter", plugin_commands=False, sources=_cursor_sources),
+          invocation="front-matter", plugin_commands=False, sources=_cursor_sources, folder_layout="nested-skills"),
 )
 
 # Other agents a user may add as their own, with the user-wide skill folder
@@ -505,8 +507,8 @@ def settings_complete(settings=None, environ=None, home=None):
     return settings.problem is None and not missing_agents(settings)
 
 
-def _folders(folders, home):
-    return [SkillSource(key=path, kind="skills", layout="skills", path=folder_path(path, home), enabled=enabled,
+def _folders(folders, home, layout="skills"):
+    return [SkillSource(key=path, kind="skills", layout=layout, path=folder_path(path, home), enabled=enabled,
                         added=True) for path, enabled in folders]
 
 
@@ -519,7 +521,7 @@ def _adjusted(agent, entry):
     disabled, folders = frozenset(entry.get("disabled", ())), _stored_folders(entry)
 
     def sources(environ, home, base=agent.sources):
-        added = _folders(folders, home)
+        added = _folders(folders, home, agent.folder_layout)
         # A previously added folder can become a built-in source after an upgrade.
         off = {source.path for source in added if not source.enabled}
         built = [source._replace(enabled=source.key not in disabled and source.path not in off)

@@ -191,6 +191,37 @@ class SkillCatalogTests(unittest.TestCase):
                           ("cursor", "skills", False), ("cursor", "skills", False)])
         self.assertFalse(result["truncated"])
 
+    def test_cursor_finds_nested_skills_once_in_its_enabled_user_roots(self):
+        with tempfile.TemporaryDirectory(prefix="richi-nested-skills-") as temporary:
+            home = Path(temporary)
+            shared = home / ".agents" / "skills"
+            leaf = shared / "teams" / "shipping" / "release"
+            write_skill(leaf, "---\nname: release\n---\n")
+            write_skill(shared / "teams" / "manual", "---\ndisable-model-invocation: true\n---\n")
+            (shared / "teams" / "loop").symlink_to(shared, target_is_directory=True)
+            (shared / "teams-link").symlink_to(shared / "teams", target_is_directory=True)
+            write_skill(home / "extra" / "qa" / "triage", "Run triage.\n")
+            write_skill(home / "repo" / ".cursor" / "skills" / "private", "Project only.\n")
+            agent_commands.change("update", "cursor", {"add_folders": ["~/extra"]}, {}, home)
+            with mock.patch.object(skill_catalog, "_read_header", wraps=skill_catalog._read_header) as reads:
+                catalog = skill_catalog.catalog({}, home)
+            self.assertEqual([(s["name"], s["agents"]) for s in catalog["skills"]],
+                             [("release", ["cursor"]), ("triage", ["cursor"])])
+            self.assertEqual(catalog["totals"], {"claude": 0, "codex": 0, "cursor": 2})
+            self.assertFalse(catalog["truncated"])
+            skill_file = (leaf / "SKILL.md").resolve()
+            self.assertEqual(sum(call.args[0].resolve() == skill_file for call in reads.call_args_list), 1)
+            # A wide source can also exceed the budget at its first level, even if it contains only files.
+            wide = home / ".cursor" / "skills"
+            wide.mkdir(parents=True)
+            for number in range(8):
+                (wide / str(number)).touch()
+            with mock.patch.object(skill_catalog, "MAX_NESTED_ENTRIES", 4):
+                listed = agent_commands.listing({}, home, catalog=True)
+            self.assertTrue(listed["catalog"]["truncated"])
+            cursor = next(a for a in listed["agents"] if a["id"] == "cursor")
+            self.assertTrue(next(s for s in cursor["sources"] if s["key"] == "cursor-skills")["truncated"])
+
     def test_catalog_includes_codex_system_skills_and_installed_plugin_skills(self):
         with tempfile.TemporaryDirectory(prefix="richi-skills-") as temporary:
             home = Path(temporary)

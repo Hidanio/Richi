@@ -81,7 +81,7 @@ class RegistryTests(IsolatedHome):
                 for source in sources:
                     self.assertRegex(source.key, r"\A[a-z][a-z0-9-]*\Z")
                     self.assertIn(source.kind, skill_catalog.KINDS)
-                    self.assertIn(source.layout, {"skills", "cache", "claude-app"})
+                    self.assertIn(source.layout, {"skills", "nested-skills", "cache", "claude-app"})
         self.assertEqual(agents.describe(), [{"id": "claude", "name": "Claude Code"}, {"id": "codex", "name": "Codex"},
                                              {"id": "cursor", "name": "Cursor"}])
         for identifier, name, folder in agents.PRESETS:

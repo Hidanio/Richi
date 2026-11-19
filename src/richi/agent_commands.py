@@ -165,7 +165,8 @@ def listing(environ=None, home=None, catalog=False, *, settings=None):
             "skills": totals.get(agent.id, 0),
             "sources": [{"key": root["key"], "kind": root["kind"], "layout": root["layout"],
                          "path": _display(root["path"], home), "exists": root["exists"], "denied": root["denied"],
-                         "enabled": root["enabled"], "added": root["added"], "skills": root["skills"]}
+                         "enabled": root["enabled"], "added": root["added"], "skills": root["skills"],
+                         **({"truncated": True} if root.get("truncated") else {})}
                         for root in own]})
     known = {item["id"] for item in items}
     # A folder that a known agent already reads says nothing about another agent being installed.
