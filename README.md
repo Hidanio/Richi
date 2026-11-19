@@ -41,11 +41,15 @@ Git. The `richi use` menu provides quick workspace selection. An MCP server is
 not included in this distribution yet.
 
 The example connects Codex. For Claude Code, replace `codex` with `claude`.
-With Richi 1.2.0 or later, use `cursor` for local Cursor Agent.
 
 ```sh
 curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh | sh -s -- --agent codex --yes
 ```
+
+Local Cursor Agent requires Richi 1.2.0 or later. To check the latest stable
+installer, replace `--agent codex --yes` in the command above with `--help`.
+If the agent list includes `cursor`, run the command with `--agent cursor --yes`.
+If `cursor` is missing, [install Richi from source](docs/INSTALLATION.md).
 
 The installer downloads a stable release from GitHub. Open a new chat in the
 selected agent to choose its workspace and a new terminal to run `richi`.

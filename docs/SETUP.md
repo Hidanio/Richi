@@ -4,11 +4,15 @@
 English | [Русский](SETUP.ru.md)
 
 The example connects Codex. For Claude Code, replace `codex` with `claude`.
-With Richi 1.2.0 or later, use `cursor` for local Cursor Agent.
 
 ```sh
 curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh | sh -s -- --agent codex --yes
 ```
+
+Local Cursor Agent requires Richi 1.2.0 or later. To check the latest stable
+installer, replace `--agent codex --yes` in the command above with `--help`.
+If the agent list includes `cursor`, run the command with `--agent cursor --yes`.
+If `cursor` is missing, [install Richi from source](INSTALLATION.md).
 
 You need macOS or Linux, curl and Python 3.9+ with sqlite3, venv and ensurepip.
 On Debian/Ubuntu you may also need `python3-venv`. Git is required for repository history.
@@ -192,9 +196,10 @@ the interactive menu. Connect each client you want to use.
 On Richi 1.0.1, use `richi setup --yes` to connect Codex and `richi setup --status`
 to inspect it. That launcher predates the agents menu and the `--agent` option.
 Claude Code requires Richi 1.1.0 or later, and local Cursor Agent requires 1.2.0
-or later. To connect either client from an older installation, run `richi update apply`
-and check the available agents with `richi setup --help`. The installed launcher
-supplies the agent choices even in dev mode.
+or later. Once a stable release supports your client, run `richi update apply`
+on the older installation. Check that the client appears in `richi setup --help`
+before connecting it. The installed launcher supplies the agent choices even
+in dev mode.
 
 ### Local Cursor Agent
 
