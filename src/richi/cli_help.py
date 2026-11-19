@@ -32,7 +32,7 @@ GROUPS = (
     ("read and write records", ("entry", "entity", "edge", "relation")),
     ("explore and analyze", ("map", "graph", "tools", "query", "punisher")),
     ("code evidence (Git)", ("sources",)),
-    ("projects, workspaces and chats", ("project", "workspace", "use", "chat")),
+    ("projects, workspaces and chats", ("project", "workspace", "use", "chat", "rules", "skill-sources")),
     ("configuration and updates", ("config", "update")),
     ("maintenance", ("check", "backup", "storage", "search-index", "migrate")),
     ("help", ("help", "capabilities")),
@@ -532,6 +532,147 @@ DETAILS = {
         Fields: id and name (required), repo_path, description, source,
         verified_at. Writing an existing ID replaces its fields.""",
         examples=(("", "richi project upsert --json projects.json"),), guide="CLI.md"),
+    "rules": dict(about="""
+        Standing rules are the user's own instructions for every relevant chat of a
+        workspace: global ones for all its chats, project ones for work in one
+        registered project. They are not knowledge, so search never returns them;
+        agents load them with rules show and change them only when the user asks.
+        A rule may name a skill, for every agent or a different one per agent.""",
+        examples=(("Rules that apply here", "richi rules show"),
+                  ("Plus one project's rules", "richi --project-path /path/to/service rules show"),
+                  ("Keep a rule the user asked for",
+                   'richi rules add branch-naming --project service --text "Name branches SE-<number>_<topic>."')),
+        see=("skill-sources", "project", "map"), guide="RULES.md"),
+    "rules show": dict(about="""
+        Prints every rule that applies in full: global rules, then the project's
+        with --project-path or --project. When the agent running the command is
+        known (detected from its shell, or given with --agent), each rule's
+        use_skill is the skill that agent uses whenever the rule applies. A shell
+        that carries the signs of two agents names neither: pass --agent. An ID
+        that no agent and no rule has is answered with agent_problem. In a
+        repository the workspace does not know, the global rules still come back,
+        with project_path_problem saying why the project's rules do not.
+        invalid_rules names stored rules that cannot be read, and
+        unsupported_rules those that need a newer Richi; agents get neither.
+        agent_settings_problem says that Richi cannot use the agent settings, all
+        or some own agents' (code: damaged, unreadable, newer, large or agents): the
+        user's own agents described there are not recognized from their shells
+        (pass --agent) and cannot be named in new rules, and next says what to
+        tell the user.""",
+        examples=(("", "richi rules show"), ("", "richi --project-path /path/to/service rules show"),
+                  ("As a particular agent", "richi rules show --agent codex"))),
+    "rules list": dict(about="""
+        Lists every stored rule of the workspace as it is stored, with where it
+        came from, who changed it last and the total size of all rules (also with
+        --global or --project); agents load rules in full, so the total is
+        limited. agents lists the
+        agents a rule may name a skill for, projects the registered projects, and
+        invalid_rules the stored rules that cannot be read, with next, the command
+        that removes one, where a command can name the row (otherwise an SQLite
+        tool removes it).""",
+        examples=(("", "richi rules list"), ("", "richi rules list --global"),
+                  ("", "richi rules list --project service"))),
+    "rules add": dict(about="""
+        Creates a rule only when the user explicitly asks for a standing rule, in
+        the user's words, one instruction per rule. --skill NAME names a skill for
+        every agent, agents added later included; AGENT=NAME replaces it for one
+        agent. The same skill given to every agent Richi knows is the skill of the
+        action and is stored as the skill for every agent, unless the agent
+        settings cannot be used now; an agent named beyond the known ones keeps its
+        own skill or none (AGENT=). Write a text that begins with a dash as
+        --text="- ...".""",
+        examples=(("", 'richi rules add no-agent-prefix --global --text "Never prefix branch names with the agent name."'),
+                  ("A skill for every agent",
+                   'richi rules add pr-skill --global --text "Use the pr-description skill for pull requests." '
+                   "--skill pr-description"),
+                  ("A different skill per agent",
+                   'richi rules add review-skill --global --text "Use the code review skill for reviews." '
+                   "--skill claude=engineering:code-review --skill codex=code-review"))),
+    "rules update": dict(about="""
+        Changes the text, the skills or the source of a rule; --skill options
+        replace all its skills and an empty --skill removes them. Pass the
+        updated_at last read: a newer version is a conflict and nothing is
+        written.""",
+        examples=(("", 'richi rules update branch-naming --expected-updated-at 2026-01-02T03:04:05.000000Z '
+                       '--text "Name branches SE-<number>_<topic>."'),
+                  ("Remove the rule's skills",
+                   "richi rules update pr-skill --expected-updated-at 2026-01-02T03:04:05.000000Z --skill ''"))),
+    "rules remove": dict(about="""
+        Deletes a rule; agents stop receiving it when they next load the rules.
+        Pass the updated_at last read.""",
+        examples=(("", "richi rules remove branch-naming --expected-updated-at 2026-01-02T03:04:05.000000Z"),)),
+    "rules log": dict(about="""
+        Shows the latest changes of rules, newest first: when, which rule, the
+        action, who made it (the chat identity of the shell that ran the command,
+        or richi map), and the rule before and after. The workspace keeps the
+        latest 200 changes; more says whether older ones exist than those shown.
+        It is a record for review, not proof of who acted.""",
+        examples=(("", "richi rules log"),
+                  ("The last changes of one rule", "richi rules log --id branch-naming --entries 5"))),
+    "rules clear-log": dict(about="""
+        Deletes the recorded rule changes, all of them or those of one rule. The
+        log keeps rule texts, removed rules included, so clear it when a rule
+        held something that should not stay in the store. The rules themselves
+        are not touched. Omit --project-path even with --id because a deleted
+        rule ID can be reused in a different project.""",
+        examples=(("Everything", "richi rules clear-log"),
+                  ("The changes of one rule", "richi rules clear-log --id branch-naming"))),
+    "rules apply": dict(about="""
+        Takes the same change as rules add, update and remove, as one JSON object:
+        action, id and that action's fields (scope, project, text, skill, skills,
+        source, expected_updated_at). skills maps an agent ID to its skill. Useful
+        for text with quotes or line breaks and for programs; the map saves rules
+        through it.""",
+        examples=(("", "richi rules apply --json rule-change.json"),
+                  ("From a program", "richi --compact-json rules apply --json -"))),
+    "skill-sources": dict(about="""
+        Richi knows which AI agents work on this computer and where each finds
+        skills, so that a rule can name a skill for every agent or one per agent.
+        Claude Code and Codex are built in; you may switch their skill sources and
+        add skill folders, and describe any other agent yourself. These settings
+        are yours and shared by every workspace. To connect Richi to an agent, see
+        richi agents and richi setup.""",
+        examples=(("Agents, their skill sources and skill counts", "richi skill-sources list"),
+                  ("Describe another agent", 'richi skill-sources add gemini-cli --name "Gemini CLI" --skills ~/.gemini/skills'),
+                  ("Stop using one skill source of a built-in agent", "richi skill-sources update claude --disable claude-app")),
+        see=("rules", "agents", "map"), guide="AGENT_SKILLS.md"),
+    "skill-sources list": dict(about="""
+        For each agent: whether it is built in, whether it looks installed, its
+        skill sources with their folders and skill counts, and updated_at, the
+        version of your settings for it (null when you changed nothing). presets
+        lists well-known agents you could add; unknown_agents, settings this
+        version keeps as they are and ignores: of an agent that only a newer Richi
+        has, or of one agent it cannot use (error says why); it names the first
+        20, and unknown_agents_more counts the rest. problem says why the settings
+        file as a whole cannot be used, problem_code in one word: damaged,
+        unreadable, newer (update Richi) or large (update Richi, or else make
+        the file smaller).""",
+        examples=(("", "richi skill-sources list"),)),
+    "skill-sources add": dict(about="""
+        Describes an agent Richi does not have built in. The ID is permanent: rules
+        use it in --skill ID=NAME. A skills folder holds one skill per subfolder,
+        each with a SKILL.md. The variable lets rules show recognize the agent's
+        shells; without one the agent passes --agent ID.""",
+        examples=(("", 'richi skill-sources add gemini-cli --name "Gemini CLI" --skills ~/.gemini/skills'),
+                  ("Recognize its shells and hide skills only the user invokes",
+                   'richi skill-sources add gemini-cli --name "Gemini CLI" --skills ~/.gemini/skills '
+                   "--variable GEMINI_CLI=1 --manual-skills front-matter"))),
+    "skill-sources update": dict(about="""
+        Switches skill sources by their key from skill-sources list, and adds or removes
+        skill folders. An own agent may also get a new name, variable or
+        manual-skills rule; a built-in agent keeps the definition Richi gives it.
+        Pass updated_at as last read; omit it while it is null.""",
+        examples=(("Adjust a built-in agent for the first time",
+                   "richi skill-sources update claude --disable claude-app --add-skills ~/work/team-skills"),
+                  ("Change an own agent",
+                   'richi skill-sources update gemini-cli --expected-updated-at 2026-01-02T03:04:05.000000Z --name "Gemini"'),
+                  ("Use a source again",
+                   "richi skill-sources update claude --expected-updated-at 2026-01-02T03:04:05.000000Z --enable claude-app"))),
+    "skill-sources remove": dict(about="""
+        Deletes an own agent; rules that name a skill for it keep that name. For a
+        built-in agent it drops your adjustments and restores the agent as Richi
+        defines it. Skill folders on disk are not touched.""",
+        examples=(("", "richi skill-sources remove gemini-cli --expected-updated-at 2026-01-02T03:04:05.000000Z"),)),
     "check": dict(about="""
         Runs SQLite integrity and foreign key checks and reports the schema version
         and search backend. Exits with an error when anything is wrong.""",

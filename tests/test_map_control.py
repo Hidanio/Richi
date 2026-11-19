@@ -19,13 +19,14 @@ import threading
 import time
 import unittest
 from unittest import mock
+from urllib.parse import unquote, urlsplit
 
-from richi import cli_parser, launch_map, memory, serve
+from richi import cli_parser, launch_map, map_access, memory, serve
 import richi_bootstrap
 import richi_launcher
 from richi_launcher import maps
 
-from cli_environment import cli_environment, free_port
+from cli_environment import cli_environment, free_port, stop_test_map
 
 
 def alive(pid):
@@ -183,8 +184,6 @@ class MapControlTests(unittest.TestCase):
         self.port = free_port()
         self.command = [sys.executable, "-B", "-m", "richi", "--config", str(self.config)]
         self.run_cli("init")
-        self.started = set()
-        self.addCleanup(self.stop_started)
 
     def run_cli(self, *arguments, ok=True):
         result = subprocess.run(self.command + list(arguments), capture_output=True, text=True,
@@ -194,14 +193,9 @@ class MapControlTests(unittest.TestCase):
 
     def map(self, *arguments, ok=True):
         result = self.run_cli("map", *arguments, "--port", str(self.port), ok=ok)
-        if ok and isinstance(result, dict) and result.get("pid"):
-            self.started.add(result["pid"])
+        if ok and isinstance(result, dict) and result.get("status") in {"started", "restarted"}:
+            self.addCleanup(stop_test_map, result, self.database)
         return result
-
-    def stop_started(self):
-        for pid in self.started:
-            if alive(pid) and maps.process_arguments(pid):
-                os.kill(pid, signal.SIGTERM)
 
     def health(self, port=None):
         return maps.read_health(port or self.port)
@@ -304,10 +298,15 @@ class MapControlTests(unittest.TestCase):
         self.assertEqual(refused.exception.reason, maps.Reason.UNVERIFIED_PROCESS)
         result = self.run_cli("map", "stop", "--port", str(forged_port), ok=False)
         self.assertEqual((result["status"], result["reason"]), ("refused", "unverified_process"))
-        # Nor is it reused or opened as this workspace's map, while the real one still is.
+        # Nor is it reused or opened as this workspace's map, while the real one still is: richi map
+        # finds that one by the port it recorded beside the store.
+        self.assertEqual(self.run_cli("map", "--no-open", "--port", str(forged_port)),
+                         {"url": maps.url(self.port), "status": "existing"})
+        self.assertEqual(self.map("--no-open"), {"url": maps.url(self.port), "status": "existing"})
+        # Without that record nothing verified answers there, and richi map refuses rather than start beside it.
+        map_access.port_path(self.database).unlink()
         launched = self.run_cli("map", "--no-open", "--port", str(forged_port), ok=False)
         self.assertEqual((launched["status"], launched["reason"]), ("refused", "unverified_process"))
-        self.assertEqual(self.map("--no-open"), {"url": maps.url(self.port), "status": "existing"})
         opened = self.root / "opened.txt"
         # Never the real browser: the command records the URL and always succeeds,
         # so webbrowser does not fall back to the next browser.
@@ -318,7 +317,16 @@ class MapControlTests(unittest.TestCase):
                 served = subprocess.run(self.command + ["map", "serve", "--open", "--port", str(port)],
                                         capture_output=True, text=True, timeout=60, env=browser, cwd=self.root)
                 self.assertEqual(served.returncode == 0, ok, served.stdout + served.stderr)
-        self.assertEqual(opened.read_text().split(), [maps.url(self.port)])
+        # BROWSER would see a URL in its arguments, so the map opens through a
+        # private redirect file that carries the one-time edit ticket.
+        targets = opened.read_text().split()
+        # This BROWSER never loads the page, like a sandboxed one that cannot read the private
+        # file: the ticket stays unused, so the map's plain address is opened as well.
+        self.assertEqual(len(targets), 2)
+        self.assertEqual(targets[1], maps.url(self.port))
+        self.assertRegex(targets[0], r"\Afile://.*/runtime/map-open-[0-9a-f]{16}\.html\Z")
+        redirect = Path(unquote(urlsplit(targets[0]).path))
+        self.assertIn(maps.url(self.port) + "#ticket=", redirect.read_text(encoding="utf-8"))
         with mock.patch.object(maps.control, "listens", return_value=None):
             # Where processes may not be inspected a copy cannot be told apart: refused too.
             self.assertEqual(serve.foreign_answer(self.port, real), maps.Reason.NOT_PERMITTED)
@@ -364,6 +372,7 @@ class MapControlTests(unittest.TestCase):
         stale = subprocess.Popen([sys.executable, "-I", "-B", "-c", runner, str(site), "--config", str(self.config),
                                   "map", "serve", "--port", str(self.port)],
                                  env=self.environment, stdout=log, stderr=log, cwd=self.root)
+        self.addCleanup(stale.wait, 10)
         self.addCleanup(lambda: stale.poll() is None and stale.kill())
         deadline = time.monotonic() + 20
         while not (maps.is_map(self.health()) and self.health()["runtime"]["version"] == "0.0.1"):
@@ -416,6 +425,7 @@ class MapControlTests(unittest.TestCase):
                 old = subprocess.Popen([sys.executable, "-I", "-B", "-c", runner, str(site), "--config",
                                         str(self.config), "map", "serve", "--port", str(self.port)],
                                        env=self.environment, stdout=log, stderr=log, cwd=self.root)
+                self.addCleanup(old.wait, 10)
                 self.addCleanup(lambda process=old: process.poll() is None and process.terminate())
                 deadline = time.monotonic() + 20
                 while not maps.is_map(self.health()):
@@ -520,6 +530,33 @@ class InstallationHookTests(unittest.TestCase):
         self.assertEqual(maps.wait_for_restarts([port], timeout=5), [])
         self.assertLess(time.monotonic() - started, 1)
 
+    def test_another_stores_handoff_only_reserves_its_own_port(self):
+        database = self.root / "one.sqlite3"
+        other_database = self.root / "two.sqlite3"
+        port = 41000
+        entry = maps.register_store(port, other_database)
+        maps.mark_restarting(entry)
+        with mock.patch.object(launch_map, "read_health", return_value=None), \
+                mock.patch.object(maps.registry, "read_health", return_value=None), \
+                mock.patch.object(launch_map, "available", return_value=True), \
+                mock.patch.object(launch_map, "_start", return_value={"status": "started"}) as start:
+            self.assertEqual(launch_map.stop(database, port)["status"], "not_running")
+            self.assertEqual(launch_map.launch(database, port, runtime=mock.sentinel.runtime)["status"], "started")
+            self.assertEqual(start.call_args.args[0], port + 1)
+            self.assertEqual(maps.store_restarts([port], other_database, timeout=0), ([port], []))
+            self.assertEqual(maps.wait_for_restarts([port], timeout=0), [port])
+
+    def test_invalid_registered_pid_does_not_block_another_workspace(self):
+        port = 41000
+        entry = maps.register(port)
+        with mock.patch.object(maps.registry.os, "kill") as signal_process:
+            for pid in (-1, 0, True, 2**31):
+                with self.subTest(pid=pid):
+                    entry.write_text(json.dumps({"pid": pid, "restarting": int(time.time())}))
+                    maps.registry.prune(self.root, port)
+                    self.assertEqual(maps.wait_for_restarts([port], timeout=0), [])
+            signal_process.assert_not_called()
+
 
 class RestartingRefusalTests(unittest.TestCase):
     """richi map never starts a second map while one of the range is still re-executing."""
@@ -537,8 +574,11 @@ class RestartingRefusalTests(unittest.TestCase):
 
     def scan(self, restarting, own=False, quick=()):
         answers = {self.port: self.health} if own else {}
-        return [mock.patch.object(maps, "wait_for_restarts",
-                                  side_effect=lambda _ports, timeout=None: list(quick) if timeout == 0 else restarting),
+
+        def store_restarts(_ports, database, timeout=None):
+            return (list(quick) if timeout == 0 else restarting), []
+
+        return [mock.patch.object(maps, "store_restarts", side_effect=store_restarts),
                 mock.patch.object(launch_map, "read_health", side_effect=lambda port: answers.get(port)),
                 mock.patch.object(launch_map, "compatible_health", side_effect=lambda health, *_a: health is not None),
                 # The synthetic answer stands for this user's map on that port.
@@ -574,6 +614,65 @@ class RestartingRefusalTests(unittest.TestCase):
         self.assertIs(refused.exception.reason, maps.Reason.CHANGED)
         self.assertTrue(refused.exception.retryable)
         self.assertFalse(self.start.called)
+
+
+class RegisteredMapTests(unittest.TestCase):
+    """richi map finds this storage's map on a port the installation registered, outside its range.
+
+    A second map would end the first one's edit key: the key belongs to the storage.
+    """
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="richi-map-registered-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.database = self.root / "memory.sqlite3"
+        self.database.write_bytes(b"")
+        # Nothing listens here: every answer below is synthetic. The map runs below the range.
+        self.port, self.far = 41000, 40993
+        (self.root / maps.REGISTRY).mkdir()
+        (self.root / maps.REGISTRY / ("%d.json" % self.far)).write_text(json.dumps({"pid": os.getpid()}))
+        self.health = {"application": maps.APPLICATION, "pid": 4242, "runtime": {"identity": "x"}}
+        for patcher in (mock.patch.dict(os.environ, {maps.ROOT_ENV: str(self.root)}),
+                        mock.patch.object(launch_map, "_start"),
+                        mock.patch.object(maps, "wait_for_restarts", return_value=[]),
+                        mock.patch.object(launch_map, "read_health",
+                                          side_effect=lambda port: self.health if port == self.far else None),
+                        mock.patch.object(launch_map, "compatible_health", side_effect=lambda health, *_a: health is not None),
+                        # The synthetic answer stands for this user's map on that port.
+                        mock.patch.object(launch_map, "foreign_answer", return_value=None),
+                        mock.patch.object(launch_map, "managed_health", side_effect=lambda health, *_a: health is not None)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_the_storages_map_is_found_wherever_it_listens(self):
+        self.assertEqual(launch_map._known_ports(launch_map._ports(self.port), self.database),
+                         [*launch_map._ports(self.port), self.far])
+        self.assertEqual(launch_map.launch(self.database, self.port, runtime=mock.sentinel.runtime),
+                         {"url": serve.url(self.far), "status": "existing"})
+        self.assertFalse(launch_map._start.called)
+        stopped = maps.Stopped(self.far, 4242, "1", True)
+        with mock.patch.object(maps, "stop", return_value=stopped) as stop:
+            self.assertEqual(launch_map.stop(self.database, self.port), stopped.as_dict())
+        stop.assert_called_once_with(self.far, self.health)
+
+    def test_without_a_registry_the_store_records_where_its_map_listens(self):
+        del os.environ[maps.ROOT_ENV]
+        self.assertEqual(launch_map._known_ports(range(5, 7), self.database), [5, 6])
+        os.environ[maps.ROOT_ENV] = str(self.root / "missing")
+        self.assertEqual(launch_map._known_ports(range(5, 7), self.database), [5, 6])
+        # A seed, pip or source installation has no registry, but every store has its runtime directory.
+        map_access.record_port(self.database, self.far)
+        self.assertEqual(launch_map._known_ports(range(5, 7), self.database), [5, 6, self.far])
+        self.assertEqual(launch_map.launch(self.database, self.port, runtime=mock.sentinel.runtime),
+                         {"url": serve.url(self.far), "status": "existing"})
+        stopped = maps.Stopped(self.far, 4242, "1", True)
+        with mock.patch.object(maps, "stop", return_value=stopped) as stop:
+            self.assertEqual(launch_map.stop(self.database, self.port), stopped.as_dict())
+        stop.assert_called_once_with(self.far, self.health)
+        # A record that is not this user's private file is no hint at all.
+        os.chmod(map_access.port_path(self.database), 0o644)
+        self.assertEqual(launch_map._known_ports(range(5, 7), self.database), [5, 6])
 
 
 class FollowerTests(unittest.TestCase):

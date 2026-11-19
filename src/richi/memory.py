@@ -15,6 +15,7 @@ from . import graph
 from . import compact
 from .compact import bounded
 from . import output
+from . import revisions
 
 
 # Newest storage schema: new stores are created with it and migrate targets it.
@@ -97,6 +98,15 @@ def _help_target(prog):
 
 def now():
     return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+def next_updated_at(*previous):
+    """Allocate a UTC version while the caller holds the write lock.
+
+    The clock can repeat or go backwards. Advance past versions written by
+    Richi, while leaving older formats and opaque versions readable.
+    """
+    return revisions.next_timestamp(now(), previous)
 
 
 def dumps(value):
@@ -457,7 +467,7 @@ def entry_put(conn, obj):
         if expected_updated_at != actual_updated_at:
             raise MemoryError("Entry update conflict for {}: expected_updated_at does not match the current record; read it again before updating".format(record["id"]))
     if status != "unchanged":
-        changed_at = now()
+        changed_at = next_updated_at(old["updated_at"] if old else None)
         record["created_at"] = old["created_at"] if old else changed_at
         record["updated_at"] = changed_at
         stored = dict(record)
@@ -793,6 +803,10 @@ def global_option_rules(path, apply=False):
         rules["--project-path"] = "Use project upsert without --project-path for deliberate registration changes."
     elif command == "storage" and action == "optimize" and apply:
         rules["--project-path"] = "Storage optimization affects the whole workspace; omit --project-path."
+    elif command == "rules" and action == "clear-log":
+        rules["--project-path"] = "Rule history belongs to the whole workspace; omit --project-path to clear it."
+    elif command == "skill-sources":
+        rules["--project-path"] = "Agents are described for this computer, not for a project; omit --project-path."
     return rules
 
 
@@ -816,6 +830,10 @@ def run(args, cli=None):
     if args.command in LAUNCHER_COMMANDS:
         raise MemoryError("Use the installed richi " + args.command + " command")
     check_global_options(args)
+    if args.command == "skill-sources":
+        # Agent settings are the user's, shared by every workspace: no store is opened.
+        from . import agent_commands
+        return agent_commands.run(args, sys.modules[__name__])
     from richi_launcher.config import resolve_settings
     settings = resolve_settings(db=args.db, config_file=getattr(args, "config", None),
                                 workspace=getattr(args, "workspace", None))
@@ -828,8 +846,10 @@ def run(args, cli=None):
     storage_apply = (args.command == "storage" and args.action == "optimize"
                      and args.apply)
     building_index = args.command == "search-index" and args.action == "build"
+    from . import rules
+    writing_rules = rules.writes(args)
     project_path = getattr(args, "project_path", None)
-    writing = args.command in {"init", "migrate"} or getattr(args, "action", None) in {"put", "upsert"} or source_attach or adding_project or applying_scan or storage_apply or building_index
+    writing = args.command in {"init", "migrate"} or getattr(args, "action", None) in {"put", "upsert"} or source_attach or adding_project or applying_scan or storage_apply or building_index or writing_rules
     conn = connect(database, create=args.command == "init", readonly=not writing)
     try:
         if args.command == "init":
@@ -851,10 +871,22 @@ def run(args, cli=None):
             return storage.run(conn, args, sys.modules[__name__], database)
         writing = getattr(args, "action", None) in {"put", "upsert"}
         items = payload(args.json) if writing else None
-        with transaction(conn, write=writing or source_attach or adding_project or applying_scan or building_index):
+        # Like a payload, a rule change is read before the store is locked: it may wait for stdin.
+        rule_request = rules.read_request(args, sys.modules[__name__]) if writing_rules else None
+        checked_project = unmatched_path = None
+        loading_rules = args.command == "rules" and args.action == "show" and args.project is None
+        with transaction(conn, write=writing or source_attach or adding_project or applying_scan or building_index or writing_rules):
             if project_path is not None:
                 from .projects import ensure_project_context
-                project = ensure_project_context(conn, project_path, expected_id=getattr(args, "project", None))
+                try:
+                    project = ensure_project_context(conn, project_path, expected_id=getattr(args, "project", None))
+                except MemoryError as exc:
+                    # The user's global rules bind an agent in any repository, so loading
+                    # them does not depend on this one being registered.
+                    if not loading_rules:
+                        raise
+                    project, unmatched_path = None, str(exc)
+                checked_project = project["id"] if project else None
                 if writing and args.command == "entry":
                     for item in items:
                         if project["id"] not in (item.get("project_ids") or []):
@@ -863,6 +895,10 @@ def run(args, cli=None):
                     for item in items:
                         if project["id"] not in (item.get("from_project"), item.get("to_project")):
                             raise MemoryError("Relation must include checked project " + project["id"])
+            if args.command == "rules":
+                return rules.run(conn, args, sys.modules[__name__], workspace=settings.workspace,
+                                 checked_project=checked_project, unmatched_path=unmatched_path,
+                                 request=rule_request)
             if scanning:
                 from .projects import project_scan
                 result = project_scan(conn, args.path, apply=args.apply, max_depth=args.max_depth)
@@ -939,6 +975,19 @@ def run(args, cli=None):
         conn.close()
 
 
+def _store_busy(exc):
+    """Whether SQLite gave up waiting for a lock that another connection holds."""
+    if not isinstance(exc, sqlite3.OperationalError):
+        return False
+    code = getattr(exc, "sqlite_errorcode", None)
+    if code is not None:
+        # The primary result code SQLITE_BUSY (5), with its extended codes. SQLITE_LOCKED (6) is a
+        # conflict inside one connection, which trying again does not end.
+        return (code & 0xFF) == 5
+    # Python reports the code only from 3.11; this is SQLite's text for SQLITE_BUSY.
+    return str(exc) == "database is locked"
+
+
 def main(argv=None):
     try:
         cli = parser()
@@ -966,6 +1015,9 @@ def main(argv=None):
         payload = {"error": str(exc)}
         if isinstance(exc, MemoryError) and exc.code:
             payload["code"] = exc.code
+        elif _store_busy(exc):
+            # Not a mistake in the command: another one holds the store, and trying again helps.
+            payload["code"] = "busy"
         payload.update(getattr(exc, "details", None) or {})
         print(json.dumps(payload, ensure_ascii=False), file=sys.stderr)
         return 1

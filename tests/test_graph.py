@@ -9,6 +9,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
 BASE = Path(__file__).resolve().parents[1] / "src" / "richi"
 from richi import memory
@@ -70,6 +71,8 @@ class GraphTests(unittest.TestCase):
         self.put("project", {"id": "a", "name": "A"}, action="upsert")
         self.put("entry", self.entry("old", event_id="initial-write"))
         self.put("entry", self.entry("old", summary="FTSneedlepersist", event_id="changed-write"))
+        rule = self.cli("rules", "add", "review", "--project", "a", "--text", "Review changes.",
+                        "--skill", "codex=review-code")["rule"]
         tables = ["projects", "entries", "entry_projects", "relations", "entry_history", "entry_events", "metadata"]
         with closing(sqlite3.connect(str(self.db))) as conn, conn:
             before = {t: conn.execute("SELECT * FROM " + t).fetchall() for t in tables}
@@ -81,6 +84,10 @@ class GraphTests(unittest.TestCase):
             after = {t: conn.execute("SELECT * FROM " + t).fetchall() for t in tables}
             self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 3)
         self.assertEqual(before, after)
+        shown = self.cli("rules", "show", "--project", "a", "--agent", "codex")["rules"][0]
+        self.assertEqual((shown["id"], shown["use_skill"], shown["updated_at"]),
+                         ("review", "review-code", rule["updated_at"]))
+        self.assertEqual(self.cli("rules", "log")["entries"][0]["after"], rule)
         self.assertIn("old", json.dumps(self.cli("search", "FTSneedlepersist")))
         self.assertEqual(len(self.cli("entry", "get", "old", "--history")["history"]), 2)
         self.assertEqual(len(self.graph()["nodes"]), 2)
@@ -156,6 +163,28 @@ class GraphTests(unittest.TestCase):
             for table in ("entity_history", "edge_history"):
                 with self.assertRaises(sqlite3.IntegrityError):
                     conn.execute("DELETE FROM " + table)
+
+    def test_frozen_clock_preserves_versions_of_entries_entities_and_edges(self):
+        first = "2030-01-01T00:00:00.000000Z"
+        second = "2030-01-01T00:00:00.000001Z"
+        with closing(memory.connect(self.db)) as conn, mock.patch.object(memory, "now", return_value=first):
+            for kind, payload, field in (("entry", self.entry("clock"), "summary"),
+                                         ("entity", self.entity(), "summary"),
+                                         ("edge", self.edge(), "description")):
+                with self.subTest(kind=kind):
+                    def put(item):
+                        with memory.transaction(conn):
+                            if kind == "entry":
+                                return memory.entry_put(conn, item)
+                            return memory.graph.put(conn, item, kind, memory)
+
+                    put(payload)
+                    edit = dict(payload, expected_updated_at=first)
+                    put(dict(edit, **{field: "first writer"}))
+                    with self.assertRaisesRegex(memory.MemoryError, "conflict"):
+                        put(dict(edit, **{field: "stale writer"}))
+                    current = self.cli(kind, "get", payload["id"])
+                    self.assertEqual((current["updated_at"], current[field]), (second, "first writer"))
 
     def test_cycles_cross_project_component_and_limits(self):
         self.put("entity", self.entity())

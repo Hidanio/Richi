@@ -5,13 +5,35 @@ on that port; it stays, marked ``restarting``, while the map re-executes.
 ``<root>/maps/handoff.json`` records which port ranges the first command of a
 generation has already looked at.
 """
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
 import time
 
-from .control import is_map, read_health
+from .control import is_map, read_health, valid_pid
 from .protocol import GENERATION_ENV, MARKER, REGISTRY, RESTART_STALE, RESTART_TIMEOUT, ROOT_ENV
+
+
+@contextmanager
+def _registration_lock(path):
+    """Serialize PID checks and writes across maps, including replacement on the same port."""
+    import fcntl
+    # Port entries are atomically replaced or unlinked: their own inodes cannot be locked.
+    descriptor = os.open(path.parent / "registrations.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        deadline = time.monotonic() + 2
+        while True:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("Map registrations are busy")
+                time.sleep(0.02)
+        yield
+    finally:
+        os.close(descriptor)
 
 
 def atomic_json(path, value):
@@ -56,6 +78,11 @@ def current_generation(root):
 
 
 def register(port, pid=None):
+    """Register a map started by a runtime that does not report its database."""
+    return register_store(port, None, pid)
+
+
+def register_store(port, database, pid=None):
     """Record a running map so updaters can find it on any port; never fatal.
 
     Only a managed installation has a registry. Before its first update no
@@ -72,8 +99,12 @@ def register(port, pid=None):
             return None
         path = entries / ("%d.json" % port)
         # Readers use pid and restarting; port, generation and started_at help diagnostics.
-        atomic_json(path, {"format_version": 1, "port": port, "pid": pid or os.getpid(),
-                           "generation": generation, "started_at": int(time.time())})
+        entry = {"format_version": 1, "port": port, "pid": pid or os.getpid(),
+                 "generation": generation, "started_at": int(time.time())}
+        if database is not None:
+            entry["database"] = str(database)
+        with _registration_lock(path):
+            atomic_json(path, entry)
         return path
     except OSError:
         return None
@@ -83,11 +114,12 @@ def mark_restarting(path, pid=None):
     """Keep a map's entry until it answers again, so richi map waits instead of taking its port."""
     if path is None:
         return
-    entry = read_json(Path(path))
-    if entry is None or entry.get("pid") != (pid or os.getpid()):
-        return
+    path = Path(path)
     try:
-        atomic_json(Path(path), dict(entry, restarting=int(time.time())))
+        with _registration_lock(path):
+            entry = read_json(path)
+            if entry is not None and entry.get("pid") == (pid or os.getpid()):
+                atomic_json(path, dict(entry, restarting=int(time.time())))
     except OSError:
         pass
 
@@ -95,12 +127,14 @@ def mark_restarting(path, pid=None):
 def unregister(path, pid=None):
     if path is None:
         return
-    entry = read_json(Path(path))
-    if entry is not None and entry.get("pid") == (pid or os.getpid()):
-        try:
-            Path(path).unlink()
-        except OSError:
-            pass
+    path = Path(path)
+    try:
+        with _registration_lock(path):
+            entry = read_json(path)
+            if entry is not None and entry.get("pid") == (pid or os.getpid()):
+                path.unlink()
+    except OSError:
+        pass
 
 
 def registered_ports(root):
@@ -121,7 +155,7 @@ def prune(root, port):
         return
     path = entries / ("%d.json" % port)
     entry = read_json(path)
-    if entry is None or type(entry.get("pid")) is not int:
+    if entry is None or not valid_pid(entry.get("pid")):
         return
     try:
         os.kill(entry["pid"], 0)
@@ -140,16 +174,30 @@ def wait_for_restarts(ports, timeout=RESTART_TIMEOUT):
     Returns the ports whose map is still re-executing when the time is up;
     with ``timeout=0`` it only looks.
     """
+    busy, _ = store_restarts(ports, None, timeout)
+    return busy
+
+
+def store_restarts(ports, database, timeout=RESTART_TIMEOUT):
+    """Wait for our store or a legacy registration with unknown storage.
+
+    Return their still-busy ports and the ports reserved by another store's
+    live handoff. Its listener can be temporarily closed even on a port in
+    our own configured range.
+    """
     root = os.environ.get(ROOT_ENV)
     entries = directory(root) if root else None
     if entries is None:
-        return []
+        return [], []
     deadline, busy = time.monotonic() + timeout, []
+    reserved = []
     for port in ports:
         entry = read_json(entries / ("%d.json" % port))
-        if (entry is None or type(entry.get("pid")) is not int or type(entry.get("restarting")) is not int
+        if (entry is None or not valid_pid(entry.get("pid")) or type(entry.get("restarting")) is not int
                 or abs(time.time() - entry["restarting"]) > RESTART_STALE):
             continue
+        other = (database is not None and isinstance(entry.get("database"), str)
+                 and os.path.isabs(entry["database"]) and entry["database"] != str(database))
         while not is_map(read_health(port, timeout=0.2)):
             try:
                 os.kill(entry["pid"], 0)
@@ -157,11 +205,14 @@ def wait_for_restarts(ports, timeout=RESTART_TIMEOUT):
                 break
             except OSError:
                 pass
+            if other:
+                reserved.append(port)
+                break
             if time.monotonic() >= deadline:
                 busy.append(port)
                 break
             time.sleep(0.1)
-    return busy
+    return busy, reserved
 
 
 def read_marker(root):

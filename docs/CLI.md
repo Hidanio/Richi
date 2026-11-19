@@ -141,6 +141,39 @@ richi project scan /path/to/repositories --apply
 ```
 
 The `bind` alternatives are mutually exclusive: run only the user's selection.
+Once bound, the agent loads the user's standing rules: global rules of the
+workspace, plus the project's own rules with `--project-path`:
+
+```sh
+richi rules show
+richi --project-path /path/to/service-example rules show
+richi rules add no-agent-prefix --global --text "Never prefix branch names with the agent name."
+richi rules add branch-naming --project service-example --text "Name branches SE-<number>_<topic>."
+richi rules add pr-skill --global --text "Use the pr-description skill for pull requests." --skill pr-description
+richi rules add review-skill --global --text "Use the code review skill for reviews." --skill claude=engineering:code-review --skill codex=code-review
+richi rules log
+```
+
+Rules are instructions, not knowledge: search never returns them, and agents
+change them only at the user's request. `rules log` shows who changed which rule,
+with the rule before and after. See [standing rules](../skills/project-memory/references/RULES.md).
+The map's **Rules** tab shows them and, in a page opened by `richi map`, adds
+and edits them with templates and a list of installed skills: one skill for every agent, or
+one per agent when they differ.
+
+Richi knows which agents work on this computer and where each finds skills.
+Claude Code and Codex are built in; switch their skill sources, add skill
+folders or describe another agent, for every workspace at once:
+
+```sh
+richi skill-sources list
+richi skill-sources add gemini-cli --name "Gemini CLI" --skills ~/.gemini/skills
+richi skill-sources update claude --disable claude-app
+```
+
+See [agents and their skills](../skills/project-memory/references/AGENT_SKILLS.md); the
+map's **Agents** tab shows and changes the same settings.
+
 In a bound chat, `-w` may only repeat the stored workspace. Direct `--db`,
 `--config` and corresponding storage environment variables are rejected.
 For another client, pass a stable ID through `--chat ID` or `RICHI_CHAT_ID`;
@@ -167,6 +200,7 @@ directory is portable, without links to files outside it.
 | Task | Reference |
 |---|---|
 | Create a database, register a project, make a backup | [CLI](../skills/project-memory/references/CLI.md) |
+| Load or manage the user's standing rules | [Rules](../skills/project-memory/references/RULES.md) |
 | Create or fully replace a record, save a task card | [Writing and conflict protection](../skills/project-memory/references/ENTRY_WRITE.md) |
 | Find prior work and understand result limits | [Recall](../skills/project-memory/references/RECALL.md) |
 | Select candidates and batch-read full records | [Discover and fetch](../skills/project-memory/references/RETRIEVAL_TOOLS.md) |

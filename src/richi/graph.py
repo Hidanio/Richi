@@ -167,7 +167,7 @@ def put(conn, obj, kind, api):
         return {"id": record["id"], "status": status}
     if "expected_updated_at" in obj and expected != (old["updated_at"] if old else None):
         raise api.MemoryError("{} update conflict: expected_updated_at does not match; read the current record".format(kind))
-    record["updated_at"] = api.now()
+    record["updated_at"] = api.next_updated_at(old["updated_at"] if old else None)
     record["created_at"] = old["created_at"] if old else record["updated_at"]
     stored = dict(record)
     for key in ("sources", "tags", "aliases") if kind == "entity" else ("sources",):

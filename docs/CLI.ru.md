@@ -145,6 +145,39 @@ richi project scan /path/to/repositories --apply
 ```
 
 Варианты `bind` взаимоисключающие: выполните только выбранный пользователем.
+После привязки агент загружает постоянные правила пользователя: глобальные правила
+workspace, а с `--project-path` — ещё и правила проекта:
+
+```sh
+richi rules show
+richi --project-path /path/to/service-example rules show
+richi rules add no-agent-prefix --global --text "Never prefix branch names with the agent name."
+richi rules add branch-naming --project service-example --text "Name branches SE-<number>_<topic>."
+richi rules add pr-skill --global --text "Use the pr-description skill for pull requests." --skill pr-description
+richi rules add review-skill --global --text "Use the code review skill for reviews." --skill claude=engineering:code-review --skill codex=code-review
+richi rules log
+```
+
+Правила — это инструкции, а не знания: поиск их не возвращает, а агенты меняют их
+только по просьбе пользователя. `rules log` показывает, кто и какое правило менял, с
+правилом до и после изменения. Подробнее: [постоянные правила](../skills/project-memory/references/RULES.ru.md).
+Вкладка **«Правила»** карты показывает их, а на странице, открытой командой
+`richi map`, добавляет и меняет их по шаблонам и со списком установленных скиллов: один скилл для
+всех агентов или свой для каждого, если они различаются.
+
+Richi знает, какие агенты работают на этом компьютере и где каждый берёт скиллы.
+Claude Code и Codex встроены; выключайте их источники скиллов, добавляйте папки со
+скиллами или опишите другого агента, сразу для всех workspace:
+
+```sh
+richi skill-sources list
+richi skill-sources add gemini-cli --name "Gemini CLI" --skills ~/.gemini/skills
+richi skill-sources update claude --disable claude-app
+```
+
+Подробнее: [агенты и их скиллы](../skills/project-memory/references/AGENT_SKILLS.ru.md);
+вкладка карты **«Агенты»** показывает и меняет те же настройки.
+
 В привязанном чате `-w` может только повторять сохранённую область. Прямые
 `--db`, `--config` и соответствующие переменные хранилища отклоняются.
 Для другого клиента передавайте устойчивый ID через `--chat ID` или `RICHI_CHAT_ID`;
@@ -171,6 +204,7 @@ richi status --projects --limit 50
 | Задача | Справочник |
 |---|---|
 | Создать базу, зарегистрировать проект, сделать backup | [CLI](../skills/project-memory/references/CLI.ru.md) |
+| Загрузить или изменить постоянные правила пользователя | [Правила](../skills/project-memory/references/RULES.ru.md) |
 | Создать или полностью обновить запись, сохранить task-карточку | [Запись и защита от конфликтов](../skills/project-memory/references/ENTRY_WRITE.ru.md) |
 | Найти прошлую работу и разобрать ограничения выдачи | [Recall](../skills/project-memory/references/RECALL.ru.md) |
 | Выбрать кандидатов и пакетно прочитать полные записи | [Discover и fetch](../skills/project-memory/references/RETRIEVAL_TOOLS.ru.md) |

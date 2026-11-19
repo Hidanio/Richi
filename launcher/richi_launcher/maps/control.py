@@ -31,10 +31,14 @@ def read_health(port, timeout=0.5):
         return None
 
 
+def valid_pid(pid):
+    return type(pid) is int and 1 < pid <= 0x7FFFFFFF
+
+
 def is_map(health):
     """A loopback answer that claims to be a Richi map; proves nothing about its PID."""
     return (isinstance(health, dict) and health.get("application") == APPLICATION
-            and type(health.get("pid")) is int and 1 < health["pid"] <= 0x7FFFFFFF
+            and valid_pid(health.get("pid"))
             and isinstance(health.get("runtime"), dict)
             and isinstance(health["runtime"].get("identity"), str)
             and isinstance(health.get("capabilities"), list))

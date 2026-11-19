@@ -163,14 +163,22 @@ def isolated_storage(workspace, overrides):
                        + ", ".join(overrides) + " or use an explicit --config")
 
 
-def resolve_settings(db=None, config_file=None, port=None, workspace=None, config_required=None):
-    """Resolve settings without writes, checkout inspection, imports, or database access."""
+def resolve_settings(db=None, config_file=None, port=None, workspace=None, config_required=None, environ=None):
+    """Resolve settings without writes, checkout inspection, imports, or database access.
+
+    environ is where the storage variables are read (RICHI_DB, RICHI_DATA_DIR,
+    RICHI_PORT and the active-workspace labels): the process environment by
+    default, or a mapping of the caller's, such as an empty one to learn what a
+    workspace name leads to by itself. Which configuration file is chosen still
+    follows the process environment unless workspace or config_file names it.
+    """
+    environ = os.environ if environ is None else environ
     _, platform_data = _platform_dirs()
     from .workspaces import choose_config
     path, required, selected_workspace = choose_config(workspace=workspace, config_file=config_file)
     if selected_workspace not in (None, "default"):
         overrides = (["--db"] if db is not None else []) + [
-            key for key in ("RICHI_DB", "RICHI_DATA_DIR") if key in os.environ]
+            key for key in ("RICHI_DB", "RICHI_DATA_DIR") if key in environ]
         if overrides:
             raise isolated_storage(selected_workspace, overrides)
     if config_required is not None:
@@ -180,29 +188,29 @@ def resolve_settings(db=None, config_file=None, port=None, workspace=None, confi
     values = _load(path, required=required)
     from .workspaces import _validate_storage
     _validate_storage(selected_workspace, path, values)
-    if "RICHI_DATA_DIR" in os.environ:
-        data_dir = _path(os.environ["RICHI_DATA_DIR"], "RICHI_DATA_DIR")
+    if "RICHI_DATA_DIR" in environ:
+        data_dir = _path(environ["RICHI_DATA_DIR"], "RICHI_DATA_DIR")
     else:
         data_dir = values.get("data_dir", path.parent if selected_workspace not in (None, "default")
                               else platform_data.resolve())
     if db is not None:
         database = _path(db, "--db")
-    elif "RICHI_DB" in os.environ:
-        database = _path(os.environ["RICHI_DB"], "RICHI_DB")
+    elif "RICHI_DB" in environ:
+        database = _path(environ["RICHI_DB"], "RICHI_DB")
     else:
         database = values.get("database", data_dir / "memory.sqlite3")
     if port is not None:
         resolved_port = _port(port, "--port")
-    elif "RICHI_PORT" in os.environ:
-        resolved_port = _port(os.environ["RICHI_PORT"], "RICHI_PORT")
+    elif "RICHI_PORT" in environ:
+        resolved_port = _port(environ["RICHI_PORT"], "RICHI_PORT")
     else:
         resolved_port = values.get("port", 8765)
     # Pinned child processes can retain the selected label while addressing the
     # exact config and database explicitly. Metadata never selects storage or
     # bypasses validation of a public workspace selection.
     if config_file is not None and selected_workspace is None:
-        active_path = os.environ.get("RICHI_ACTIVE_CONFIG")
-        active_workspace = os.environ.get("RICHI_ACTIVE_WORKSPACE")
+        active_path = environ.get("RICHI_ACTIVE_CONFIG")
+        active_workspace = environ.get("RICHI_ACTIVE_WORKSPACE")
         if active_path is not None and active_workspace is not None:
             from .workspaces import _name
             try:

@@ -4,9 +4,7 @@ import http.client
 import io
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import os
 from pathlib import Path
-import signal
 import socket
 from socketserver import BaseRequestHandler, TCPServer
 import subprocess
@@ -21,7 +19,7 @@ from richi_launcher import maps
 from richi_launcher.runtime import bootstrap_command
 from richi.launch_map import read_health
 
-from cli_environment import cli_environment, free_port
+from cli_environment import cli_environment, free_port, stop_test_map
 
 
 
@@ -35,15 +33,6 @@ class LauncherTests(unittest.TestCase):
         subprocess.run(bootstrap_command(["--config", str(self.config), "init"]),
                        capture_output=True, check=True, env=cli_environment(self.db.parent))
         self.port = free_port()
-        self.children = []
-        self.addCleanup(self.stop_children)
-
-    def stop_children(self):
-        for pid in self.children:
-            try:
-                os.kill(pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
 
     def launch(self, db=None):
         result = subprocess.run(bootstrap_command(["--config", str(self.config), "--db", str(db or self.db),
@@ -51,8 +40,8 @@ class LauncherTests(unittest.TestCase):
                                 capture_output=True, text=True, timeout=20, env=cli_environment(self.db.parent))
         self.assertEqual(result.returncode, 0, result.stderr)
         record = json.loads(result.stdout)
-        if "pid" in record:
-            self.children.append(record["pid"])
+        if record["status"] == "started":
+            self.addCleanup(stop_test_map, record, db or self.db)
         return record
 
     def test_concurrent_clicks_start_once_then_reuse(self):
@@ -63,7 +52,7 @@ class LauncherTests(unittest.TestCase):
         third = self.launch()
         self.assertEqual(third["status"], "existing")
         self.assertEqual(third["url"], first["url"])
-        self.assertEqual(len(self.children), 1)
+        self.assertEqual([record["status"] for record in (first, second, third) if "pid" in record], ["started"])
 
     def test_busy_port_uses_another_without_touching_owner(self):
         with socket.socket() as occupied:
