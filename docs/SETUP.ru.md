@@ -206,6 +206,9 @@ Codex. Чтобы подключить несколько клиентов, вы
 
 ### Локальный Cursor Agent
 
+На macOS Richi также находит Cursor в `/Applications` и `~/Applications`
+ещё до первого запуска, даже если команда редактора отсутствует в PATH.
+
 ```sh
 richi setup --agent cursor --dry-run
 richi setup --agent cursor --yes

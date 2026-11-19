@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 
 import test_agent_setup
-from richi_launcher import agent_setup, chats, installation, workspaces
+from richi_launcher import agent_setup, chats, cursor_setup, installation, workspaces
 from richi_launcher.config import ConfigError
 
 
@@ -24,6 +24,22 @@ class CursorSetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
 
     def connect(self):
         return self.configure("--agent", "cursor")
+
+    def test_mac_app_discovery_before_first_launch(self):
+        system = self.home / "system/Applications"
+        with patch.object(cursor_setup, "SYSTEM_APPLICATIONS", system), \
+             patch.object(shutil, "which", return_value=None), patch.object(sys, "platform", "darwin"):
+            for directory in (system, self.home / "Applications"):
+                executable = directory / "Cursor.app/Contents/MacOS/Cursor"
+                executable.parent.mkdir(parents=True)
+                executable.touch(mode=0o644)
+                self.assertFalse(cursor_setup.detected())
+                executable.chmod(0o755)
+                self.assertTrue(cursor_setup.detected())
+                with patch.object(sys, "platform", "linux"):
+                    self.assertFalse(cursor_setup.detected())
+                executable.unlink()
+        self.assertFalse(self.profile.exists())
 
     def emit_hook(self, payload):
         # Execute the script and options as registered in the actual hooks.json.
@@ -146,7 +162,6 @@ class CursorSetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
                 path.write_bytes(original)
 
     def test_release_updates_and_rollbacks_select_matching_hook_and_skill(self):
-        from richi_launcher import cursor_setup
         self.connect()
         initial = self.script.read_bytes()
         original_settings = self.settings.read_bytes()

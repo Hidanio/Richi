@@ -191,6 +191,9 @@ installation, you can pass `--agent cursor` or `--agent claude` to the installer
 
 ### Local Cursor Agent
 
+On macOS, Richi also finds Cursor in `/Applications` and `~/Applications`
+before its first launch and without a shell command on PATH.
+
 ```sh
 richi setup --agent cursor --dry-run
 richi setup --agent cursor --yes

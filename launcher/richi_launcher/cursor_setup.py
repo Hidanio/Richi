@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import shlex
 import shutil
+import sys
 
 from . import setup_files as files
 from .agent_adapters import literal
@@ -11,6 +12,7 @@ from .config import ConfigError, _unique_object
 
 LABEL = "Cursor"
 INSTRUCTION_LIMIT = None
+SYSTEM_APPLICATIONS = Path("/Applications")
 
 
 def profile_dir():
@@ -18,7 +20,14 @@ def profile_dir():
 
 
 def detected():
-    return bool(shutil.which("cursor") or shutil.which("cursor-agent") or profile_dir().is_dir())
+    if shutil.which("cursor") or shutil.which("cursor-agent") or profile_dir().is_dir():
+        return True
+    if sys.platform == "darwin":
+        for directory in (SYSTEM_APPLICATIONS, Path.home() / "Applications"):
+            executable = directory / "Cursor.app/Contents/MacOS/Cursor"
+            if executable.is_file() and os.access(executable, os.X_OK):
+                return True
+    return False
 
 
 def paths(current=None):

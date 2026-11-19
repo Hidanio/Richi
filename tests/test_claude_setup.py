@@ -56,6 +56,15 @@ class ClaudeSetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         result = subprocess.run([sys.executable, '-I', '-c', HOOK], input=json.dumps({'session_id': '$(bad)', 'hook_event_name': 'SessionStart'}), text=True, capture_output=True)
         self.assertNotEqual(result.returncode, 0)
 
+    def test_imported_claude_hook_ignores_cursor_session(self):
+        env_file = self.home / 'session.env'
+        payload = {'hook_event_name': 'sessionStart', 'session_id': 'abc-123', 'cursor_version': '3.30.14'}
+        result = subprocess.run([sys.executable, '-I', '-c', HOOK], input=json.dumps(payload),
+                                text=True, capture_output=True, env=dict(os.environ, CLAUDE_ENV_FILE=str(env_file)))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), {})
+        self.assertFalse(env_file.exists())
+
     def test_old_release_cannot_drop_claude_integration(self):
         self.configure('--agent', 'claude')
         with self.assertRaisesRegex(ConfigError, 'cannot maintain'):
