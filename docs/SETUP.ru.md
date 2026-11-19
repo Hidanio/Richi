@@ -3,14 +3,18 @@
 
 [English](SETUP.md) | Русский
 
-Для первой установки выберите агента. В примере выбран Codex. Для Claude Code
-замените `codex` на `claude`. Для Cursor Agent используйте `cursor`, когда это
-имя появится в `--help` установщика стабильного релиза. До релиза можно
-[установить пакет из checkout с поддержкой Cursor](INSTALLATION.ru.md).
+В примере установщик подключает Codex. Для Claude Code замените `codex`
+на `claude`.
 
 ```sh
 curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh | sh -s -- --agent codex --yes
 ```
+
+Для локального Cursor Agent нужен Richi 1.2.0 или новее. Чтобы проверить
+текущий стабильный установщик, замените `--agent codex --yes` в команде выше
+на `--help`. Если в списке агентов есть `cursor`, выполните команду с
+`--agent cursor --yes`. Если `cursor` пока отсутствует,
+[установите Richi из исходников](INSTALLATION.ru.md).
 
 Нужны macOS или Linux, curl и Python 3.9+ с sqlite3, venv и ensurepip.
 В Debian/Ubuntu может понадобиться пакет `python3-venv`. Для истории репозиториев нужен Git.
@@ -209,10 +213,11 @@ python3 -I richi-installer.pyz --yes --wheel richi-X.Y.Z-py3-none-any.whl --mani
 
 В Richi 1.0.1 подключайте Codex через `richi setup --yes` и проверяйте его
 состояние через `richi setup --status`. Этот launcher выпущен до появления
-меню агентов и параметра `--agent`. Если в `richi setup --help` нет нужного
-клиента, выполните `richi update apply`, когда выйдет стабильный релиз с его
-поддержкой. Затем снова проверьте справку. Список агентов определяет установленный
-launcher, в том числе при включённом dev.
+меню агентов и параметра `--agent`. Для Claude Code нужен Richi 1.1.0 или новее,
+для локального Cursor Agent — 1.2.0 или новее. Когда выйдет стабильный релиз
+с поддержкой нужного клиента, обновите старую установку командой `richi update apply`.
+Перед подключением проверьте, что клиент есть в списке `richi setup --help`.
+Список определяет установленный launcher, в том числе при включённом dev.
 
 ### Локальный Cursor Agent
 
