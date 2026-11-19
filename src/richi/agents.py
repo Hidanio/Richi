@@ -118,6 +118,9 @@ class Agent(NamedTuple):
     chat_prefix: bool = True
     # How to scan extra skill folders the user adds to this agent.
     folder_layout: str = "skills"
+    # Sources that indicate installation when the launcher has no adapter.
+    # By default any configured source is evidence for that agent.
+    detection_sources: tuple = ()
 
 
 def _home_variable(environ, home, variable, default):
@@ -153,7 +156,8 @@ AGENTS = (
     Agent(id="codex", name="Codex", variables={"CODEX_THREAD_ID": None},
           invocation="openai-yaml", plugin_commands=False, sources=_codex_sources, chat_prefix=False),
     Agent(id="cursor", name="Cursor", variables={"CURSOR_AGENT": None},
-          invocation="front-matter", plugin_commands=False, sources=_cursor_sources, folder_layout="nested-skills"),
+          invocation="front-matter", plugin_commands=False, sources=_cursor_sources, folder_layout="nested-skills",
+          detection_sources=("cursor-skills", "system")),
 )
 
 # Other agents a user may add as their own, with the user-wide skill folder

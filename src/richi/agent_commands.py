@@ -113,12 +113,14 @@ def _launcher_agents():
         return {}, "Agent connections are unknown: " + (str(exc) or type(exc).__name__)
 
 
-def _looks_installed(roots, home):
+def _looks_installed(roots, home, source_keys):
     """Whether an agent the launcher does not connect looks installed for this user.
 
     None when every source of it is switched off: those are not looked at (one
     may be on a share that no longer answers), so nothing tells either way.
     """
+    if source_keys:
+        roots = [root for root in roots if root["key"] in source_keys]
     enabled = [root for root in roots if root["enabled"]]
     if roots and not enabled:
         return None
@@ -151,7 +153,10 @@ def listing(environ=None, home=None, catalog=False, *, settings=None):
     items = []
     for agent in registry:
         own = roots.get(agent.id, [])
-        detected, connection = launcher[agent.id] if agent.id in launcher else (_looks_installed(own, home), None)
+        if agent.id in launcher:
+            detected, connection = launcher[agent.id]
+        else:
+            detected, connection = _looks_installed(own, home, agent.detection_sources), None
         items.append({
             "id": agent.id, "name": agent.name, "builtin": agent.builtin, "updated_at": agent.updated_at,
             "created_at": entries.get(agent.id, {}).get("created_at"),

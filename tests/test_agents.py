@@ -1031,9 +1031,13 @@ class ListingTests(IsolatedHome):
             listed = agent_commands.listing()
         self.assertIn("setup record is damaged", listed["connections_problem"])
         self.assertEqual([agent["connection"] for agent in listed["agents"]], [None] * len(agents.AGENTS))
+        (self.home / ".agents/skills").mkdir(parents=True)
         with mock.patch.object(agent_setup, "agents_command", return_value={"agents": [
                 {"agent": "claude", "detected": False, "status": "configured"}]}):
             listed = agent_commands.listing()
+            self.assertFalse(next(agent for agent in listed["agents"] if agent["id"] == "cursor")["detected"])
+            (self.home / ".cursor").mkdir()
+            self.assertTrue(self.listed()["cursor"]["detected"])
         self.assertEqual((listed["connections_problem"], listed["agents"][0]["connection"],
                           listed["agents"][0]["detected"]), (None, "configured", False))
 
