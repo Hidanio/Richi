@@ -154,6 +154,7 @@ def listing(environ=None, home=None, catalog=False, *, settings=None):
         detected, connection = launcher[agent.id] if agent.id in launcher else (_looks_installed(own, home), None)
         items.append({
             "id": agent.id, "name": agent.name, "builtin": agent.builtin, "updated_at": agent.updated_at,
+            "created_at": entries.get(agent.id, {}).get("created_at"),
             "detected": detected,
             # configured, not_configured, repair_required...; None when Richi installs no integration for it.
             "connection": connection, "variables": agents.variables(agent),
@@ -223,14 +224,20 @@ def _read(path):
     return settings
 
 
-def _serialized(entries, extra=None):
-    return json.dumps(dict(extra or {}, version=agents.SETTINGS_VERSION, agents=entries), ensure_ascii=False,
-                      indent=2, sort_keys=True) + "\n"
+def _serialized(entries, extra=None, *, compact=False):
+    settings = dict(extra or {}, version=agents.SETTINGS_VERSION, agents=entries)
+    if compact:
+        return memory.dumps(settings) + "\n"
+    return json.dumps(settings, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
 def _write(path, entries, extra=None):
     text = _serialized(entries, extra)
     data = text.encode("utf-8")
+    if len(data) > agents.MAX_SETTINGS:
+        # A compact settings file from another writer can fit even if indentation alone exceeds the limit.
+        text = _serialized(entries, extra, compact=True)
+        data = text.encode("utf-8")
     # Richi would refuse to read a larger file and forget every setting in it.
     if len(data) > agents.MAX_SETTINGS:
         raise AgentError("The agent settings would be larger than %d bytes, more than Richi reads; remove an agent "

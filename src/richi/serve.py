@@ -664,6 +664,13 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                                      "code": "unavailable"})
                 return None
 
+        def require_edit_key(self):
+            editing = self.edit_key()
+            if editing is False:
+                self.send_data(403, {"error": "Open the map with richi map to change rules or agents here",
+                                     "code": "not_editing"})
+            return editing is True
+
         def send_data(self, status, data, content_type="application/json; charset=utf-8"):
             if not isinstance(data, bytes):
                 # backslashreplace: half of a surrogate pair, which a request may carry and a message
@@ -856,36 +863,32 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                     return self.send_data(403, {"error": "This edit ticket is invalid, expired or already used; open the map again with richi map",
                                                 "code": "ticket_invalid"})
                 return self.send_data(200, {"secret": value})
-            editing = self.edit_key()
-            if editing is None:
+            if not self.require_edit_key():
                 return None
-            if not editing:
-                return self.send_data(403, {"error": "Open the map with richi map to change rules or agents here",
-                                            "code": "not_editing"})
             body = self.parse_change(raw)
             if body is INVALID:
                 return None
-            if path.path == "/api/agents":
-                if not agents_lock.acquire(timeout=TURN_TIMEOUT):
-                    return self.send_data(503, {"error": "Another change of the agents is in progress; try again",
-                                                "code": "busy"})
-                try:
-                    status, payload = agent_change(body)
-                finally:
-                    agents_lock.release()
-                return self.send_data(status, payload)
-            change = rules_change(body)
-            if len(change) > rules.MAX_CHANGE:
-                # More than the rules command reads; escaping makes non-ASCII text several times longer.
-                return self.send_data(413, {"error": "The rule change is too large", "code": "limit"})
-            if not rules_lock.acquire(timeout=TURN_TIMEOUT):
-                return self.send_data(503, {"error": "Another rule change is in progress; try again", "code": "busy"})
+            agent_request = path.path == "/api/agents"
+            if not agent_request:
+                change = rules_change(body)
+                if len(change) > rules.MAX_CHANGE:
+                    # Escaping non-ASCII text can exceed what the rules command reads.
+                    return self.send_data(413, {"error": "The rule change is too large", "code": "limit"})
+            lock = agents_lock if agent_request else rules_lock
+            if not lock.acquire(timeout=TURN_TIMEOUT):
+                subject = "change of the agents" if agent_request else "rule change"
+                return self.send_data(503, {"error": "Another " + subject + " is in progress; try again", "code": "busy"})
             try:
-                status, payload = _run_rules_request(database, ["rules", "apply", "--json", "-"], runtime,
-                                                     config_file, workspace, config_required,
-                                                     stdin=change)
+                # The page may have lost its editing session while waiting behind another save.
+                if not self.require_edit_key():
+                    return None
+                if agent_request:
+                    status, payload = agent_change(body)
+                else:
+                    status, payload = _run_rules_request(database, ["rules", "apply", "--json", "-"], runtime,
+                                                         config_file, workspace, config_required, stdin=change)
             finally:
-                rules_lock.release()
+                lock.release()
             return self.send_data(status, payload)
 
         def refuse(self):
@@ -1237,7 +1240,13 @@ def _main(argv=None):
     except OSError as exc:
         print("The map's port could not be recorded beside the store: " + (exc.strerror or str(exc)), flush=True)
     server.daemon_threads = False
-    registration = maps.register(args.port) if follower is not None else None
+
+    def register_map():
+        if hasattr(maps, "register_store"):
+            return maps.register_store(args.port, database)
+        return maps.register(args.port)
+
+    registration = register_map() if follower is not None else None
 
     def announce_restart():
         # Before the port goes silent: from here until the new code answers,
@@ -1247,7 +1256,7 @@ def _main(argv=None):
             return
         if registration is None:
             # Started before the installation became managed: no entry yet.
-            registration = maps.register(args.port)
+            registration = register_map()
         maps.mark_restarting(registration)
     print("Project memory map: " + address, flush=True)
     if listener is not None:

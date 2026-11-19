@@ -96,7 +96,8 @@ def front_matter(text, cut=False):
     fields, index, prose = {}, 1, False
     while index < len(lines):
         line = lines[index]
-        if line.strip() in {"---", "..."}:
+        # A separator inside an indented YAML value is content. Only a top-level one ends the header.
+        if line.rstrip(" \t") in {"---", "..."}:
             return fields
         index += 1
         if not line or line[0] in " \t#":

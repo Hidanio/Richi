@@ -941,7 +941,14 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   // A text field gives every line end as \n; the server stores them so (rules._text), and a rule
   // stored before may still hold \r.
   const lineEnds=value=>String(value??'').replace(/\r\n?/g,'\n');
+  const sameCreation=(opened,current)=>opened===current||Boolean(opened.created_at&&opened.created_at===current.created_at);
+  function ruleTargetProblem(opened,current){
+    if(opened.scope!==current.scope||opened.project_id!==current.project_id)return 'Правило с этим ID создали заново в другой области. Скопируйте нужный текст и откройте актуальное правило.';
+    if(!sameCreation(opened,current))return 'Правило с этим ID создали заново. Скопируйте нужный текст и откройте актуальное правило.';
+    return '';
+  }
   function ruleUpdate(opened,rule,text,setting){
+    const target=ruleTargetProblem(opened,rule);if(target)return target;
     const update={action:'update',id:rule.id,expected_updated_at:rule.updated_at};
     if(lineEnds(text)!==lineEnds(opened.text))update.text=text;
     if(!sameRuleSkills(setting,opened)){
@@ -971,7 +978,9 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   }
   // The same for an own agent: opened is the agent the form was built from, agent the latest one known.
   const agentFields=agent=>({name:agent.name,variable:list(agent.variables)[0]||'',manual_skills:agent.manual_skills==='front-matter'?'front-matter':'none'});
+  const agentTargetProblem=(opened,current)=>sameCreation(opened,current)?'':'Агента могли создать заново под тем же ID. Скопируйте нужные значения и откройте его актуальные настройки.';
   function agentUpdate(opened,agent,fields){
+    const target=agentTargetProblem(opened,agent);if(target)return target;
     const before=agentFields(opened),update={action:'update',id:agent.id};
     for(const key of ['name','variable','manual_skills'])if(fields[key]!==before[key])update[key]=fields[key];
     if(Object.keys(update).length===2)return null;
@@ -991,7 +1000,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   // several things; the server's message is English and only the last resort.
   function changeFailure(error){
     if(error.name==='AbortError')return 'Сервер не ответил за '+CHANGE_TIMEOUT/1000+' секунд. Изменение могло сохраниться: обновите список и проверьте.';
-    if(error.code==='offline')return 'Карта не отвечает: возможно, её остановили. Выполните richi map и повторите.';
+    if(error.code==='offline')return 'Связь с картой прервалась. Изменение могло сохраниться: откройте карту через richi map и проверьте список перед повтором.';
     if(error.code==='busy')return 'Сейчас выполняется другое изменение, или хранилище занято другой командой. Повторите через несколько секунд.';
     if(error.code==='timeout')return 'Команда не уложилась в отведённое время. Изменение могло сохраниться: обновите список и проверьте.';
     if(error.code==='unreadable')return 'Ответ карты не прочитался. Изменение могло сохраниться: обновите список и проверьте.';
@@ -1074,9 +1083,9 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   const skillSituations=['создании pull request','написании описания pull request','ревью кода','создании коммита','написании тестов','работе с задачами в Jira'];
   const namingTargets=[['ветки','branch-naming'],['коммиты','commit-naming'],['pull request','pr-naming'],['задачи','task-naming'],['файлы','file-naming']];
   const rulesState={data:null,loading:false,error:'',failure:'',outcome:'',editing:false,request:0,query:'',scope:'',skills:null,skillMap:new Map(),skillsLoading:false,notice:''};
-  let ruleSecret='',ruleFieldCount=0,rulesController=null;
+  let ruleSecret='',ruleKeyVersion=0,ticketRequest=0,ruleFieldCount=0,rulesController=null;
   try{ruleSecret=sessionStorage.getItem(RULE_SECRET_KEY)||'';}catch{ruleSecret='';}
-  function storeRuleSecret(value){ruleSecret=value||'';try{if(ruleSecret)sessionStorage.setItem(RULE_SECRET_KEY,ruleSecret);else sessionStorage.removeItem(RULE_SECRET_KEY);}catch{}}
+  function storeRuleSecret(value){if((value||'')!==ruleSecret)ruleKeyVersion++;ruleSecret=value||'';try{if(ruleSecret)sessionStorage.setItem(RULE_SECRET_KEY,ruleSecret);else sessionStorage.removeItem(RULE_SECRET_KEY);}catch{}}
   const ruleList=()=>list(rulesState.data?.rules).filter(rule=>rule&&typeof rule.id==='string');
   const ruleLength=value=>Array.from(String(value||'')).length;
   // Rules of a newer format: this version does not serve them, but their text counts toward the limit.
@@ -1109,13 +1118,17 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   // One edit key serves rules and agents: a page either saves both or composes commands for both.
   function setMapEditing(editing,sent){rulesState.editing=editing;if(sent&&!editing){storeRuleSecret('');rulesState.notice='expired';}}
   const skillsKnown=()=>Boolean(rulesState.skills)&&!rulesState.skills.unavailable&&!rulesState.skills.truncated;
+  function refreshRulePicker(){
+    const dialog=$('rule-dialog');
+    if(dialog.open)dialog.querySelector('.rule-skill-picker')?.dispatchEvent(new Event('catalogchange'));
+  }
   async function loadSkills(){
     if(rulesState.skillsLoading)return;const sequence=++agentSequence;rulesState.skillsLoading=true;
     // Like the other lists: a reading that never ends must not leave the pickers loading for good.
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
     try{const response=await fetch('/api/skills',{cache:'no-store',signal:controller.signal});const data=await response.json();if(!response.ok||!data||!Array.isArray(data.skills))throw new Error(data&&data.error||'HTTP '+response.status);setSkills(data,sequence);}
     catch(_error){setSkills({skills:[],unavailable:true},sequence);}
-    finally{clearTimeout(timeout);rulesState.skillsLoading=false;if(state.mode==='rules')renderRules();if(state.mode==='agents')renderAgents();}
+    finally{clearTimeout(timeout);rulesState.skillsLoading=false;refreshRulePicker();if(state.mode==='rules')renderRules();if(state.mode==='agents')renderAgents();}
   }
   async function loadRules(){
     if(rulesController)rulesController.abort();const request=++rulesState.request,sequence=++agentSequence,sent=ruleSecret;rulesState.loading=true;rulesState.error='';renderRules();
@@ -1130,32 +1143,43 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     finally{clearTimeout(timeout);if(request===rulesState.request){rulesState.loading=false;rulesController=null;if(state.mode==='rules'){renderProjectOptions();renderRules();}if(state.mode==='agents')renderAgents();}}
     if(!rulesState.skills&&state.mode!=='agents')loadSkills();
   }
-  function redeemRuleTicket(){
+  async function redeemRuleTicket(){
     const match=/^#ticket=([0-9a-f]{64})$/.exec(location.hash);if(!match)return;
+    const request=++ticketRequest,controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
     // The ticket works once; it never stays in the address bar or history entry.
     history.replaceState(null,'',location.pathname+location.search);
-    fetch('/api/session',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticket:match[1]})})
-      .then(async response=>{let data=null;try{data=await response.json();}catch{data=null;}if(response.ok&&data&&typeof data.secret==='string'){storeRuleSecret(data.secret);rulesState.notice='';}else rulesState.notice=response.status>=500?'unavailable':'ticket';})
-      .catch(()=>{rulesState.notice='ticket';})
-      .finally(()=>{if(state.mode==='rules'||rulesState.data)loadRules();if(state.mode==='agents'||agentsState.data)loadAgents();});
+    try{
+      const response=await fetch('/api/session',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticket:match[1]}),signal:controller.signal});
+      let data=null;try{data=await response.json();}catch{}
+      if(request!==ticketRequest)return;
+      if(response.ok&&typeof data?.secret==='string'){storeRuleSecret(data.secret);rulesState.notice='';}
+      else rulesState.notice=response.status===403?'ticket':'unavailable';
+    }catch{if(request===ticketRequest)rulesState.notice='unavailable';}
+    finally{
+      clearTimeout(timeout);
+      if(request===ticketRequest){if(state.mode==='rules'||rulesState.data)loadRules();if(state.mode==='agents'||agentsState.data)loadAgents();}
+    }
   }
   const sendRuleChange=change=>sendMapChange('/api/rules',change);
   async function sendMapChange(url,change){
-    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),CHANGE_TIMEOUT);let response,data=null;
+    const keyVersion=ruleKeyVersion,controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),CHANGE_TIMEOUT);let response,data=null;
     try{
       try{response=await fetch(url,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json',[RULE_HEADER]:ruleSecret},body:JSON.stringify(change),signal:controller.signal});}
       catch(error){if(error.name==='AbortError')throw error;const offline=new Error(error.message);offline.code='offline';throw offline;}
       try{data=await response.json();}catch(error){if(error.name==='AbortError')throw error;data=null;}
     }finally{clearTimeout(timeout);}
-    if(!response.ok){const error=new Error(data&&data.error||'Сервер вернул HTTP '+response.status);error.code=data&&data.code;error.subject=data&&data.subject;throw error;}
+    if(!response.ok){const error=new Error(data&&data.error||'Сервер вернул HTTP '+response.status);error.code=data&&data.code;error.subject=data&&data.subject;error.keyVersion=keyVersion;throw error;}
     // Saved, but the answer was cut off: what the page would take in is missing.
     if(!data||typeof data!=='object'){const error=new Error('Ответ карты не прочитался');error.code='unreadable';throw error;}
     return data;
   }
-  function ruleChangeProblem(error){
-    if(error.code==='not_editing'){storeRuleSecret('');rulesState.editing=false;rulesState.notice='expired';return 'Ключ редактирования больше не действует: карту перезапустили или открыли заново в другой вкладке. Ниже — команда для терминала; чтобы сохранять здесь, снова выполните richi map.';}
-    return ruleRefusal(error);
+  function editKeyProblem(error){
+    if(error.code!=='not_editing')return '';
+    if(ruleSecret&&error.keyVersion!==ruleKeyVersion)return 'Пока выполнялся запрос, ключ редактирования сменился. Повторите изменение с текущим ключом.';
+    setMapEditing(false,true);
+    return 'Ключ редактирования больше не действует: карту перезапустили или открыли заново в другой вкладке. Чтобы сохранять здесь, снова выполните richi map.';
   }
+  const ruleChangeProblem=error=>editKeyProblem(error)||ruleRefusal(error);
   // A tab is rebuilt whenever its data arrives, which drops the focused control. Controls carry a
   // key (data-focus) by which the rebuilt one is found again; the first key that works wins.
   function focusByKey(root,...keys){
@@ -1194,12 +1218,16 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   function skillSelect(agent,current){
     // agent: list only the skills this agent has; null lists every skill with the agents that have it.
     const box=make('div','rule-skill-control'),select=make('select'),other=make('input'),about=make('div','rule-field-hint');
-    const skills=list(rulesState.skills?.skills).filter(skill=>!agent||list(skill.agents).includes(agent));
-    select.add(new Option('Без скилла',''));
-    const kinds=[['skills','Скиллы'],['system','Встроенные скиллы'],['plugins','Скиллы плагинов']],kindOf=skill=>kinds.some(([kind])=>kind===skill.kind)?skill.kind:'skills';
-    for(const [kind,label] of kinds){const members=skills.filter(skill=>kindOf(skill)===kind);if(!members.length)continue;const group=make('optgroup');group.label=label;
-      for(const skill of members){const agents=agent?'':agentList(list(skill.agents));group.append(new Option(skill.name+(agents?' · '+agents:''),skill.name));}select.append(group);}
-    select.add(new Option('Другой скилл — ввести имя…','__other__'));
+    let skills;
+    function populate(){
+      skills=list(rulesState.skills?.skills).filter(skill=>!agent||list(skill.agents).includes(agent));
+      select.replaceChildren();select.add(new Option('Без скилла',''));
+      const kinds=[['skills','Скиллы'],['system','Встроенные скиллы'],['plugins','Скиллы плагинов']],kindOf=skill=>kinds.some(([kind])=>kind===skill.kind)?skill.kind:'skills';
+      for(const [kind,label] of kinds){const members=skills.filter(skill=>kindOf(skill)===kind);if(!members.length)continue;const group=make('optgroup');group.label=label;
+        for(const skill of members){const agents=agent?'':agentList(list(skill.agents));group.append(new Option(skill.name+(agents?' · '+agents:''),skill.name));}select.append(group);}
+      select.add(new Option('Другой скилл — ввести имя…','__other__'));
+    }
+    populate();
     other.type='text';other.maxLength=100;other.placeholder='Например, plugin:skill-name';other.autocomplete='off';other.spellcheck=false;other.setAttribute('aria-label','Имя скилла'+(agent?' для '+agentName(agent):''));
     const describe=()=>{const value=select.value,skill=rulesState.skillMap.get(value);other.hidden=value!=='__other__';
       about.textContent=value==='__other__'?'Имя так, как его называет агент. Карта не проверяет, что такой скилл установлен.':skill?cut(skill.description||'Описание в SKILL.md не указано.',280):rulesState.skillsLoading?'Загружаем установленные скиллы…':
@@ -1209,7 +1237,13 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const changed=typing=>box.dispatchEvent(new CustomEvent('skillchange',{bubbles:true,detail:{typing}}));
     select.addEventListener('change',()=>{describe();changed(false);if(select.value==='__other__')other.focus();});
     other.addEventListener('input',()=>changed(true));other.addEventListener('change',()=>changed(false));set(current);box.append(select,other,about);
-    return {element:box,select,set,value:()=>select.value==='__other__'?other.value.trim():select.value};
+    function refresh(){
+      const selected=select.value;populate();
+      // The user may be halfway through a manual name. Preserve the field, its value and its caret.
+      if(selected==='__other__'){select.value=selected;describe();}
+      else set(selected);
+    }
+    return {element:box,select,set,refresh,value:()=>select.value==='__other__'?other.value.trim():select.value};
   }
   function ruleSkillPicker(rule){
     // One skill for every agent when they share it; otherwise a list per agent, and the skill of the
@@ -1264,6 +1298,9 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     others.element.addEventListener('skillchange',showMerged);
     sharedRadio.addEventListener('change',()=>{const names=[...ids.map(agent=>perAgent.get(agent).value()),others.value()].filter(Boolean);shared.set(names[0]||'');notice.textContent='';setMode('shared');changed();});
     ownRadio.addEventListener('change',()=>{if(shared.value())split(shared.value());else{setMode('agents');changed();}});
+    box.addEventListener('catalogchange',()=>{
+      shared.refresh();others.refresh();for(const control of perAgent.values())control.refresh();showStatus();showMerged();
+    });
     setMode(mode);
     const values=()=>mode==='shared'?[shared.value()]:[...ids.map(agent=>perAgent.get(agent).value()),others.value()];
     return {element:box,focusTarget:shared.select,names:()=>values().filter(Boolean),value:setting,announcesMerge:()=>!merged.hidden};
@@ -1342,6 +1379,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
           await loadRules();const fresh=ruleList().find(item=>item.id===rule.id);
           if(!fresh)return 'Правило удалили, пока форма была открыта. Скопируйте текст, закройте форму и добавьте правило заново.';
           if(fresh.updated_at===rule.updated_at)return '';
+          const target=ruleTargetProblem(opened,fresh);if(target){rule=fresh;return target;}
           const differs=[],skillsDiffer=!sameRuleSkills(fresh,rule),mine=!sameRuleSkills(skill.value(),opened);if(fresh.text!==rule.text)differs.push('другой текст: «'+cut(fresh.text,240)+'»');if(skillsDiffer)differs.push('другие скиллы');rule=fresh;
           // The skills of a rule are written together: the ones chosen here replace the new ones.
           return 'Правило изменили, пока форма была открыта'+(differs.length?'; в памяти теперь '+differs.join(' и '):'')+'. Нажмите «Сохранить» ещё раз: запишется только то, что вы изменили в этой форме'+(skillsDiffer&&mine?' (скиллы — целиком так, как они выбраны здесь)':'')+', остальное останется как в новой версии.';
@@ -1364,6 +1402,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
           if(error.code!=='not_found'&&(error.code!=='conflict'||rule.invalid))return '';
           await loadRules();const fresh=ruleList().find(item=>item.id===rule.id);
           if(error.code!=='conflict'||!fresh||fresh.updated_at===rule.updated_at)return '';
+          const target=ruleTargetProblem(rule,fresh);if(target)return target;
           rule=fresh;quote.textContent=cut(fresh.text,500);
           return 'Правило изменили, пока вы подтверждали удаление. Выше — его новая версия: нажмите «Удалить правило» ещё раз, если всё ещё хотите удалить.';
         },
@@ -1413,7 +1452,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const box=make('div','rules-mode '+(rulesState.editing?'editing':'commands')),icon=make('span','rules-mode-icon',rulesState.editing?'✓':'›_'),content=make('div');box.setAttribute('role','status');icon.setAttribute('aria-hidden','true');
     if(rulesState.editing)content.append(make('strong','','Редактирование включено'),make('span','',saved));
     else{
-      const line=make('span');line.append(document.createTextNode(rulesState.notice==='expired'?'Ключ редактирования больше не действует: карту перезапустили или открыли заново в другой вкладке. ':rulesState.notice==='ticket'?'Ключ из ссылки не подошёл: он уже использован или устарел. ':rulesState.notice==='unavailable'?'Карта не смогла выдать ключ редактирования: ей не удалось записать его рядом с хранилищем. ':'Вкладка открыта без ключа редактирования, например по закладке. '),
+      const line=make('span');line.append(document.createTextNode(rulesState.notice==='expired'?'Ключ редактирования больше не действует: карту перезапустили или открыли заново в другой вкладке. ':rulesState.notice==='ticket'?'Ключ из ссылки не подошёл: он уже использован или устарел. ':rulesState.notice==='unavailable'?'Не удалось получить ключ редактирования от карты. ':'Вкладка открыта без ключа редактирования, например по закладке. '),
         document.createTextNode('Форма соберёт команду richi. Чтобы сохранять прямо здесь, откройте карту командой '),make('code','','richi map'),document.createTextNode('.'));
       content.append(make('strong','','Режим команд'),line);
     }
@@ -1449,7 +1488,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       const box=make('div','tools-warning rule-invalid');box.setAttribute('role','status');
       box.append(make('span','','Запись правила «'+item.id+'» повреждена, и агенты её не получают: '+cut(String(item.error||'запись не читается'),200)));
       // Only a row the server can name (next) can be removed from here: its key is shown in full and is text.
-      if(typeof item.next==='string')box.append(keyed(toolButton(rulesState.editing?'Удалить запись':'Команда удаления',()=>openRuleRemoval({id:item.id,updated_at:typeof item.updated_at==='string'?item.updated_at:'invalid',invalid:String(item.error||'Запись не читается.')}),'small'),'rule-remove:'+item.id));
+      if(typeof item.next==='string'&&typeof item.updated_at==='string')box.append(keyed(toolButton(rulesState.editing?'Удалить запись':'Команда удаления',()=>openRuleRemoval({id:item.id,updated_at:item.updated_at,invalid:String(item.error||'Запись не читается.')}),'small'),'rule-remove:'+item.id));
       else box.append(make('span','',' Удалить её можно только инструментом для SQLite.'));
       root.append(box);
     }
@@ -1500,15 +1539,22 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     }catch(error){if(request!==agentsState.request)return;agentsState.error=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;}
     finally{clearTimeout(timeout);if(request===agentsState.request){agentsState.loading=false;agentsController=null;if(state.mode==='agents')renderAgents();}}
   }
-  function agentChangeProblem(error){
-    if(error.code==='not_editing'){storeRuleSecret('');rulesState.editing=false;rulesState.notice='expired';return 'Ключ редактирования больше не действует: карту перезапустили или открыли заново в другой вкладке. Чтобы сохранять здесь, снова выполните richi map.';}
-    return agentRefusal(error,agentsState.data?.settings_file);
-  }
+  function agentChangeProblem(error){return editKeyProblem(error)||agentRefusal(error,agentsState.data?.settings_file);}
   // An agents answer: the list, and the skill catalog it was counted from.
-  function setAgents(data,sequence){const {catalog,...listing}=data;agentsState.data=listing;if(catalog&&Array.isArray(catalog.skills))setSkills(catalog,sequence);setMapAgents(listing.agents,sequence);}
+  function setAgents(data,sequence){const {catalog,...listing}=data;agentsState.data=listing;if(catalog&&Array.isArray(catalog.skills))setSkills(catalog,sequence);setMapAgents(listing.agents,sequence);refreshRulePicker();}
   // The answer to a saved change is the newest list: a list still on its way is older and is dropped.
   function acceptAgents(data){agentsState.request++;if(agentsController){agentsController.abort();agentsController=null;}agentsState.loading=false;agentsState.error='';setAgents(data,++agentSequence);}
-  const freshAgent=agent=>agentItems().find(item=>item.id===agent.id)||agent;
+  // Closing a saving form lets another form start. The server commits one agent change at a time
+  // but can deliver their full listings in reverse order; keep this page's writes ordered through receipt.
+  let agentSave=Promise.resolve();
+  function saveAgentChange(change){
+    const save=agentSave.then(async()=>{
+      const answer=await sendMapChange('/api/agents',change);
+      acceptAgents(answer.listing);
+    });
+    agentSave=save.catch(()=>{});
+    return save;
+  }
   const closeFolderForm=()=>{agentsState.addingFolder='';agentsState.folderDraft='';};
   function openAgentCommand(change,title='Команда для терминала'){
     const {dialog,body,foot}=ruleDialog(title,'Вкладка открыта без ключа редактирования, поэтому изменение нужно выполнить командой.');
@@ -1521,7 +1567,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     if(!rulesState.editing){openAgentCommand(change);return false;}
     agentsState.busy=true;agentsState.problem='';renderAgents();
     try{
-      acceptAgents((await sendMapChange('/api/agents',change)).listing);announce(done);return true;
+      await saveAgentChange(change);announce(done);return true;
     }catch(error){
       agentsState.problem=agentChangeProblem(error);if(error.code==='conflict'||error.code==='not_found')await loadAgents();
       // A form the user opened meanwhile is theirs: the command waits in the tab's message instead.
@@ -1573,14 +1619,15 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     form.addEventListener('submit',async event=>{
       event.preventDefault();problem('');const request=change();if(typeof request==='string'){problem(request);return;}
       if(!rulesState.editing){showCommand(agentCommand(request));return;}
-      await saveFromForm(panel,submit,{busy:'Сохраняем…',send:()=>sendMapChange('/api/agents',request),explain:agentChangeProblem,problem,
-        saved:answer=>{acceptAgents(answer.listing);agentsState.selected=request.id;agentsState.problem='';announce(agent?'Агент изменён':'Агент добавлен');renderAgents();},
+      await saveFromForm(panel,submit,{busy:'Сохраняем…',send:()=>saveAgentChange(request),explain:agentChangeProblem,problem,
+        saved:()=>{agentsState.selected=request.id;agentsState.problem='';announce(agent?'Агент изменён':'Агент добавлен');renderAgents();},
         // Somebody changed the agent meanwhile: take its new version and keep what is typed here.
         failed:async error=>{
           if(!agent||error.code!=='conflict')return '';
           await loadAgents();const fresh=agentItems().find(item=>item.id===agent.id);
           if(!fresh)return 'Агента удалили, пока форма была открыта. Закройте форму и добавьте его заново.';
           if(fresh.updated_at===agent.updated_at)return '';
+          const target=agentTargetProblem(opened,fresh);if(target){agent=fresh;return target;}
           const differs=agentDifference(agent,fresh);agent=fresh;
           return 'Настройки агента изменили, пока форма была открыта'+(differs?'; теперь у него '+differs:'')+'. Нажмите «Сохранить» ещё раз: запишется только то, что вы изменили в этой форме, остальное останется как в новой версии.';
         },
@@ -1598,9 +1645,13 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     form.addEventListener('submit',async event=>{
       event.preventDefault();problem('');const request={action:'remove',id:agent.id,expected_updated_at:agent.updated_at};
       if(!rulesState.editing){showCommand(agentCommand(request));return;}
-      await saveFromForm(panel,submit,{send:()=>sendMapChange('/api/agents',request),explain:agentChangeProblem,problem,
-        saved:answer=>{acceptAgents(answer.listing);agentsState.problem='';announce(reset?'Настройки агента сброшены':'Агент удалён');renderAgents();},
-        failed:async error=>{if(error.code==='conflict'){await loadAgents();agent=freshAgent(agent);}return '';},
+      await saveFromForm(panel,submit,{send:()=>saveAgentChange(request),explain:agentChangeProblem,problem,
+        saved:()=>{agentsState.problem='';announce(reset?'Настройки агента сброшены':'Агент удалён');renderAgents();},
+        failed:async error=>{
+          if(error.code!=='conflict'&&error.code!=='not_found')return '';
+          await loadAgents();
+          return 'Настройки изменились, пока вы подтверждали удаление. Закройте форму и проверьте актуальные настройки агента перед новым подтверждением.';
+        },
         lost:message=>{agentsState.problem=message;renderAgents();},commands:()=>{submit.className='primary';showCommand(agentCommand(request));renderAgents();},
         label:()=>{submit.textContent=rulesState.editing?label:'Показать команду';}});
     });

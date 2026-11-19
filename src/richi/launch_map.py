@@ -42,6 +42,15 @@ def _ports(first_port):
     return range(first_port, min(first_port + PORT_RANGE, 65536))
 
 
+def _store_restarts(ports, database, **options):
+    if maps is None:
+        return [], []
+    if hasattr(maps, "store_restarts"):
+        return maps.store_restarts(ports, database, **options)
+    # An older installed launcher has no storage identity in its map registry.
+    return maps.wait_for_restarts(ports, **options), []
+
+
 def _known_ports(ports, database):
     """These ports, then the ports of the installation's running maps, then the port this storage's map recorded.
 
@@ -285,7 +294,7 @@ def _launch_locked(database, first_port, config_file, runtime_selection, config_
     ports = _ports(first_port)
     known = _known_ports(ports, database)
     # A map re-executing on a new version has no health for a moment.
-    restarting = maps.wait_for_restarts(known) if maps is not None else []
+    restarting, _ = _store_restarts(known, database)
     transitioning, stale, foreign = [], None, None
     for port in known:
         health = read_health(port)
@@ -330,10 +339,11 @@ def _launch_locked(database, first_port, config_file, runtime_selection, config_
     if restarting:
         # Not back yet and its storage is unknown: it may be this one, so no second map.
         raise RuntimeError(RESTARTING % url(restarting[0]))
-    if maps is not None and maps.wait_for_restarts(known, timeout=0):
+    restarting, reserved = _store_restarts(known, database, timeout=0)
+    if restarting:
         # A map began to restart while this scan looked at its port: look again.
         raise MapRefused(maps.Reason.CHANGED, first_port)
-    port = next((port for port in ports if available(port)), None)
+    port = next((port for port in ports if port not in reserved and available(port)), None)
     if port is None:
         raise RuntimeError("Не найден свободный локальный порт для карты.")
     return _start(port, database, config_file, runtime_selection, config_required, workspace, runtime_dir)
@@ -357,7 +367,7 @@ def stop(database, first_port, config_file=None):
 def _stop_locked(database, first_port, config_file):
     ports = _known_ports(_ports(first_port), database)
     # Otherwise a map re-executing right now would be reported as not running.
-    restarting = maps.wait_for_restarts(ports)
+    restarting, _ = _store_restarts(ports, database)
     for port in ports:
         health = read_health(port)
         if managed_health(health, database, config_file):

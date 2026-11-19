@@ -810,9 +810,11 @@ class MapRulesAPITests(unittest.TestCase):
         # A damaged row does not take the list down: it is named, and the page can remove it.
         listing = self.listed(secret)
         self.assertEqual([rule["id"] for rule in listing["rules"]], ["kept"])
-        self.assertEqual([(item["id"], item["updated_at"]) for item in listing["invalid_rules"]], [("broken", "invalid")])
+        self.assertEqual([item["id"] for item in listing["invalid_rules"]], ["broken"])
+        version = listing["invalid_rules"][0]["updated_at"]
+        self.assertRegex(version, r"^invalid-[0-9a-f]{32}$")
         self.assertEqual(self.change(secret, 409, action="remove", id="broken", expected_updated_at="x")["code"], "conflict")
-        self.change(secret, action="remove", id="broken", expected_updated_at="invalid")
+        self.change(secret, action="remove", id="broken", expected_updated_at=version)
         self.assertNotIn("invalid_rules", self.listed())
 
     def test_bodies_made_to_break_the_parser_are_refused(self):
@@ -1034,6 +1036,16 @@ class MapRulesAPITests(unittest.TestCase):
             release.set()
             reader.join(30)
         self.assertEqual([rule["id"] for rule in answers[0][1]["rules"]], ["saved"])
+
+    def test_a_save_checks_the_current_edit_session_when_its_turn_starts(self):
+        for path in ("/api/rules", "/api/agents"):
+            with self.subTest(path=path), mock.patch.object(map_access, "authorized", side_effect=[True, False]), \
+                    mock.patch.object(serve, "agent_change") as write_agents, \
+                    mock.patch.object(serve, "_run_rules_request") as write_rules:
+                status, answer = self.request("POST", path, {"action": "add", "id": "sample"})
+                self.assertEqual((status, answer["code"]), (403, "not_editing"))
+                write_agents.assert_not_called()
+                write_rules.assert_not_called()
 
     def test_a_store_that_another_command_holds_is_busy_not_a_bad_request(self):
         secret = self.secret()

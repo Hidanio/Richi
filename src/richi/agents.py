@@ -36,6 +36,8 @@ import stat
 import sys
 from typing import Callable, Dict, NamedTuple, Optional
 
+from .revisions import recovery_version
+
 
 ID = re.compile(r"[a-z][a-z0-9-]{0,31}\Z")
 ID_HELP = "Agent ID: 1-32 lowercase letters, digits or '-', starting with a letter"
@@ -285,9 +287,12 @@ def settings_path(environ=None, home=None):
 
 
 def stored_version(entry):
-    """What `skill-sources remove --expected-updated-at` takes for a stored entry: its updated_at, or invalid."""
+    """The stored version, or a content-based recovery version for an entry without one."""
     value = entry.get("updated_at") if isinstance(entry, dict) else None
-    return value if _one_line(value, 64) else "invalid"
+    if _one_line(value, 64):
+        return value
+    data = json.dumps(entry, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return recovery_version(data)
 
 
 def check_entry(identifier, entry):
@@ -389,8 +394,9 @@ def forget_settings():
 
 def _signature(info):
     # A writer replaces the file (private_files.replace), so each version is a new inode: the
-    # inode tells versions apart even where two writes share a timestamp and a size.
-    return info.st_ino, info.st_mtime_ns, info.st_size
+    # inode tells versions apart even where two writes share a timestamp and a size. A restore
+    # can overwrite that inode and preserve mtime; its status change time still advances.
+    return info.st_dev, info.st_ino, info.st_mtime_ns, info.st_ctime_ns, info.st_size
 
 
 def _unreadable(path, exc):

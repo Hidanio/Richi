@@ -67,4 +67,5 @@ from .protocol import (API_VERSION, APPLICATION, DEFAULT_PORT, GENERATION_ENV, G
                        LISTEN_FD, LISTEN_FD_ENV, MARKER, PASSIVE_ENV, PORT_RANGE, PROBE_ANSWER, PROBE_ENV,
                        REGISTRY, RESTART_TIMEOUT, RETRYABLE, ROOT_ENV, Reason, Status)
 from .reconcile import after_activation, first_invocation
-from .registry import current_generation, mark_restarting, register, unregister, wait_for_restarts
+from .registry import (current_generation, mark_restarting, register, register_store, store_restarts, unregister,
+                       wait_for_restarts)

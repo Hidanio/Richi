@@ -225,6 +225,36 @@ class RulesTests(unittest.TestCase):
         self.assertEqual([entry["action"] for entry in entries], ["updated", "created"])
         self.assertEqual(entries[0]["after"]["text"], current)
 
+    def test_clearing_legacy_history_does_not_reuse_a_removed_version(self):
+        original = "2026-01-02T00:00:00.000000Z"
+        removed_at = "2026-01-02T00:00:00.100000Z"
+        for store, options in (("alpha", []), ("beta", ["--id", "names"])):
+            # The previous runtime has removed this rule. Its audit history is the only surviving
+            # version evidence in that store; it did not maintain a separate rule clock.
+            self.stored(store, "rule-log:" + removed_at + ":names",
+                        json.dumps({"at": removed_at, "action": "removed", "id": "names",
+                                    "before": {"id": "names", "updated_at": original}, "after": None}))
+            # This unreadable key sorts after every timestamp. The valid legacy version still counts.
+            self.stored(store, "rule-log:zzz", "{not json")
+            with self.subTest(options=options), mock.patch.object(memory, "now", return_value=original):
+                self.command(store, "rules", "clear-log", *options)
+                self.assertEqual(self.command(store, "rules", "log")["entries"], [])
+                replacement = self.add(store, "names", "--global")
+                self.assertGreater(replacement["updated_at"], removed_at)
+                self.assertEqual(self.command(store, "rules", "remove", "names", "--expected-updated-at",
+                                              original, ok=False)["code"], "conflict")
+
+    def test_an_old_recovery_command_cannot_remove_a_changed_unversioned_row(self):
+        self.stored("alpha", "rule:broken", b"\xff")
+        old = self.command("alpha", "rules", "list")["invalid_rules"][0]
+        self.stored("alpha", "rule:broken", b"\xfe")
+        new = self.command("alpha", "rules", "list")["invalid_rules"][0]
+        stale = self.command("alpha", *shlex.split(old["next"])[1:], ok=False)
+        self.assertEqual(stale["code"], "conflict")
+        self.assertNotEqual(old["updated_at"], new["updated_at"])
+        self.command("alpha", *shlex.split(new["next"])[1:])
+        self.assertNotIn("invalid_rules", self.command("alpha", "rules", "list"))
+
     def test_rules_may_name_a_skill_and_errors_carry_codes(self):
         rule = self.add("alpha", "pr-skill", "--global", text="Use it for pull requests.", skill="plugin:pr-description")
         self.assertEqual(rule["skill"], "plugin:pr-description")
@@ -466,10 +496,14 @@ class RulesTests(unittest.TestCase):
                 # The stored record keeps the field; an agent is not handed what this version cannot explain.
                 self.assertEqual([(rule["id"], rule.get("when")) for rule in shown["rules"]],
                                  [("kept", "pull-request" if view == "list" else None)])
-                self.assertEqual([(item["id"], item["updated_at"], item["next"]) for item in shown["invalid_rules"]], [
-                    ("broken", "invalid", "richi rules remove broken --expected-updated-at=invalid"),
-                    ("garbled", "invalid", "richi rules remove garbled --expected-updated-at=invalid"),
-                    ("partial", "v1", "richi rules remove partial --expected-updated-at=v1")])
+                versions = {item["id"]: item["updated_at"] for item in shown["invalid_rules"]}
+                self.assertEqual(list(versions), ["broken", "garbled", "partial"])
+                self.assertRegex(versions["broken"], "^invalid-[0-9a-f]{32}$")
+                self.assertNotEqual(versions["broken"], versions["garbled"])
+                self.assertEqual(versions["partial"], "v1")
+                for item in shown["invalid_rules"]:
+                    self.assertEqual(item["next"], "richi rules remove %s --expected-updated-at=%s" %
+                                     (item["id"], item["updated_at"]))
                 self.assertTrue(all(item["error"] for item in shown["invalid_rules"]))
         updated = self.command("alpha", "rules", "update", "kept", "--expected-updated-at", kept["updated_at"],
                                "--text", "Reply in English.")["rule"]
@@ -480,7 +514,7 @@ class RulesTests(unittest.TestCase):
                                    "--text", "x", ok=False)["error"])
         self.assertEqual(self.command("alpha", "rules", "remove", "partial", "--expected-updated-at", "invalid",
                                       ok=False)["code"], "conflict")
-        for identifier, version in (("broken", "invalid"), ("garbled", "invalid"), ("partial", "v1")):
+        for identifier, version in versions.items():
             removed = self.command("alpha", "rules", "remove", identifier, "--expected-updated-at", version)
             self.assertEqual((removed["results"][0]["status"], removed["rule"]), ("removed", None))
         self.assertNotIn("invalid_rules", self.command("alpha", "rules", "list"))
@@ -589,8 +623,8 @@ class RulesTests(unittest.TestCase):
                 for view in ("show", "list"):
                     listed = self.command("alpha", "rules", view)
                     self.assertEqual([rule["id"] for rule in listed["rules"]], ["kept"])
-                    self.assertEqual([(item["id"], item["updated_at"]) for item in listed["invalid_rules"]],
-                                     [("broken", "invalid")])
+                    self.assertEqual([item["id"] for item in listed["invalid_rules"]], ["broken"])
+                    self.assertRegex(listed["invalid_rules"][0]["updated_at"], "^invalid-[0-9a-f]{32}$")
                     self.assertIn("surrogate", listed["invalid_rules"][0]["error"])
                 self.assertIn("surrogate", self.command("alpha", "rules", "update", "broken", "--expected-updated-at",
                                                         "invalid", "--text", "x", ok=False)["error"])
@@ -664,7 +698,7 @@ class RulesTests(unittest.TestCase):
                 self.assertLess(len(json.dumps(listed)), 20000)
                 self.assertIn("not finite", invalid["nan"]["error"])
                 self.assertIn("not UTF-8", invalid["latin"]["error"])
-                self.assertEqual(invalid["old"]["updated_at"], "invalid")
+                self.assertRegex(invalid["old"]["updated_at"], "^invalid-[0-9a-f]{32}$")
                 self.assertNotIn("next", invalid[LONG_KEY])
         # The log is read past an entry that is not text.
         self.assertEqual([entry["id"] for entry in self.command("alpha", "rules", "log")["entries"]], ["kept"])
@@ -843,13 +877,14 @@ class RulesTests(unittest.TestCase):
             with self.subTest(view=view):
                 listed = self.command("alpha", "rules", view)
                 self.assertEqual([rule["id"] for rule in listed["rules"]], ["first"])
+                versions = {item["id"]: item["updated_at"] for item in listed["invalid_rules"]}
                 self.assertEqual({item["id"]: item["next"] for item in listed["invalid_rules"]}, {
-                    "": "richi rules remove '' --expected-updated-at=invalid",
-                    "-dash": "richi rules remove --expected-updated-at=invalid -- -dash",
-                    "=ls": "richi rules remove '=ls' --expected-updated-at=invalid",
-                    "second": "richi rules remove second --expected-updated-at=" + listed["invalid_rules"][3]["updated_at"],
-                    "third": "richi rules remove third --expected-updated-at=" + listed["invalid_rules"][4]["updated_at"],
-                    "two words": "richi rules remove 'two words' --expected-updated-at=invalid"})
+                    "": "richi rules remove '' --expected-updated-at=" + versions[""],
+                    "-dash": "richi rules remove --expected-updated-at=" + versions["-dash"] + " -- -dash",
+                    "=ls": "richi rules remove '=ls' --expected-updated-at=" + versions["=ls"],
+                    "second": "richi rules remove second --expected-updated-at=" + versions["second"],
+                    "third": "richi rules remove third --expected-updated-at=" + versions["third"],
+                    "two words": "richi rules remove 'two words' --expected-updated-at=" + versions["two words"]})
         # A key that is not an ID is accepted only to remove the row that has it.
         for argv in (["rules", "remove", "no such row", "--expected-updated-at", "invalid"],
                      ["rules", "update", "two words", "--expected-updated-at", "invalid", "--text", "x"],
@@ -935,6 +970,16 @@ class RulesTests(unittest.TestCase):
             self.command("alpha", "rules", "add", "another", "--global", "--text", "z", ok=False)
         self.assertEqual(paused["text"], "p" * 1990)
 
+    def test_removing_a_newer_format_keeps_the_original_record_in_the_audit(self):
+        rule = self.add("alpha", "future", "--global")
+        original = {**rule, "requires": rules.FORMAT + 1, "future": {"notes": "x" * 6000}}
+        self.stored("alpha", "rule:future", json.dumps(original))
+        self.command("alpha", "rules", "remove", "future", "--expected-updated-at", rule["updated_at"])
+        entry = self.command("alpha", "rules", "log", "--id", "future", "--entries", "1")["entries"][0]
+        self.assertEqual(entry["action"], "removed")
+        self.assertEqual(entry["before"], original)
+        self.assertIsNone(entry["after"])
+
     def test_rows_another_program_wrote_are_reported_within_bounds(self):
         database = self.configs["alpha"].parent / "memory.sqlite3"
         good = self.add("alpha", "good", "--global")
@@ -959,7 +1004,7 @@ class RulesTests(unittest.TestCase):
         # No command can name the bytes key apart from a text one.
         self.assertEqual(("next" in invalid["dup"], "stored as bytes" in invalid["dup"]["error"],
                           "SQLite tool" in invalid["dup"]["error"]), (False, True, True))
-        self.assertEqual(invalid["big"]["updated_at"], "invalid")
+        self.assertRegex(invalid["big"]["updated_at"], "^invalid-[0-9a-f]{32}$")
         newer = listed["unsupported_rules"]
         self.assertEqual([(item["id"], item["characters"]) for item in newer],
                          [(cut_name("k" * 300, rules.MAX_NAMED), len(good["text"]))])
@@ -968,7 +1013,7 @@ class RulesTests(unittest.TestCase):
         self.command("alpha", "rules", "remove", "dup", "--expected-updated-at", twin["updated_at"])
         self.assertEqual([item["id"] for item in self.command("alpha", "rules", "list")["invalid_rules"]],
                          ["big", "dup"])
-        self.command("alpha", "rules", "remove", "big", "--expected-updated-at=invalid")
+        self.command("alpha", *shlex.split(invalid["big"]["next"])[1:])
         # The log row larger than any entry Richi writes is passed over, and only clearing everything removes it.
         self.assertEqual([entry["action"] for entry in self.command("alpha", "rules", "log", "--id", "big")["entries"]],
                          ["removed"])

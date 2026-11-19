@@ -490,15 +490,31 @@ class AgentSettingsTests(IsolatedHome):
         self.assertEqual(refused.exception.code, "conflict")
         self.assertEqual(self.cli(*shlex.split(next_command)[1:])["results"], [{"id": "own", "status": "removed"}])
 
+    def test_replacing_an_unversioned_entry_invalidates_its_recovery_command(self):
+        path = agents.settings_path()
+        path.parent.mkdir(parents=True)
+        path.write_text(agent_commands._serialized({"own": None}), encoding="utf-8")
+        stale = self.cli("skill-sources", "list")["unknown_agents"][0]
+        path.write_text(agent_commands._serialized({"own": {"name": "Other"}}), encoding="utf-8")
+        refused = self.cli(*shlex.split(stale["next"])[1:], ok=False)
+        self.assertEqual(refused["code"], "conflict")
+        fresh = self.cli("skill-sources", "list")["unknown_agents"][0]
+        self.assertNotEqual(fresh["updated_at"], stale["updated_at"])
+        self.assertEqual(self.cli(*shlex.split(fresh["next"])[1:])["results"][0]["status"], "removed")
+
     def test_versions_survive_a_stopped_clock_and_recreation(self):
         with mock.patch.object(memory, "now", return_value="2026-01-02T03:04:05.000000Z"):
             add = ("skill-sources", "add", "own", "--name", "Own", "--skills", "~/team")
             first = self.cli(*add)["agent"]["updated_at"]
-            second = self.cli("skill-sources", "update", "own", "--expected-updated-at", first,
-                              "--name", "Renamed")["agent"]["updated_at"]
+            renamed = self.cli("skill-sources", "update", "own", "--expected-updated-at", first,
+                               "--name", "Renamed")["agent"]
+            second = renamed["updated_at"]
             self.assertGreater(second, first)
+            self.assertEqual(renamed["created_at"], first)
             self.cli("skill-sources", "remove", "own", "--expected-updated-at", second)
-            self.assertGreater(self.cli(*add)["agent"]["updated_at"], second)
+            reopened = self.cli(*add)["agent"]
+            self.assertGreater(reopened["updated_at"], second)
+            self.assertEqual(reopened["created_at"], reopened["updated_at"])
             for stale in (first, second):
                 self.assertEqual(self.cli("skill-sources", "remove", "own", "--expected-updated-at", stale,
                                           ok=False)["code"], "conflict")
@@ -609,6 +625,21 @@ class AgentSettingsTests(IsolatedHome):
             agents.forget_settings()
             self.assertEqual(agents.ids(), ("claude", "codex", "first"))
 
+    def test_a_compact_settings_file_with_extensions_remains_editable(self):
+        path = agents.settings_path()
+        path.parent.mkdir(parents=True)
+        # A newer writer stored a short JSON array on one line. Reindenting it alone exceeds the limit.
+        extension = [0] * 1000
+        old = {"name": "First", "updated_at": "t", "folders": [{"path": "~/team", "enabled": True}]}
+        original = {"version": 1, "agents": {"own": old}, "extension": extension}
+        path.write_text(json.dumps(original, separators=(",", ":")), encoding="utf-8")
+        limit = path.stat().st_size + 128
+        with mock.patch.object(agents, "MAX_SETTINGS", limit):
+            result = self.cli("skill-sources", "update", "own", "--expected-updated-at", "t", "--name", "Other")
+            self.assertEqual(result["agent"]["name"], "Other")
+            self.assertLessEqual(path.stat().st_size, limit)
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["extension"], extension)
+
     def test_a_file_that_could_not_be_read_now_is_read_again(self):
         self.cli("skill-sources", "add", "first", "--name", "First", "--skills", "~/team")
         agents.forget_settings()
@@ -650,6 +681,18 @@ class AgentSettingsTests(IsolatedHome):
         self.assertEqual(path.stat().st_size, info.st_size)
         os.utime(str(path), ns=(info.st_atime_ns, info.st_mtime_ns))
         self.assertEqual(agents.describe()[-1]["name"], "Abd")
+
+    def test_a_restored_settings_file_is_read_when_its_original_mtime_is_preserved(self):
+        path = agents.settings_path()
+        path.parent.mkdir(parents=True)
+        old = {"name": "First", "updated_at": "v1", "folders": [{"path": "~/team", "enabled": True}]}
+        path.write_text(agent_commands._serialized({"own": old}), encoding="utf-8")
+        info = path.stat()
+        self.assertEqual(agents.read_settings().entries["own"]["name"], "First")
+        path.write_text(agent_commands._serialized({"own": dict(old, name="Other", updated_at="v2")}), encoding="utf-8")
+        os.utime(path, ns=(info.st_atime_ns, info.st_mtime_ns))
+        listed = self.listed()["own"]
+        self.assertEqual((listed["name"], listed["updated_at"]), ("Other", "v2"))
 
     def test_one_listing_describes_one_version_of_the_settings(self):
         self.cli("skill-sources", "add", "xagent", "--name", "X", "--skills", "~/team")
@@ -854,6 +897,13 @@ class UnreadableFolderTests(IsolatedHome):
 
 class ListingTests(IsolatedHome):
     """What the map reads: the agents, their connection and the skill catalog behind the counts."""
+
+    def test_a_nested_yaml_separator_does_not_end_the_skill_header(self):
+        root = self.home / ".claude" / "skills"
+        metadata = "---\nmetadata:\n  readme: |\n    Intro\n    ---\n    More\n"
+        write_skill(root / "restricted", metadata + "disable-model-invocation: true\n---\nBody\n")
+        write_skill(root / "folder", metadata + "name: actual-name\n---\nBody\n")
+        self.assertEqual([skill["name"] for skill in skill_catalog.catalog({}, self.home)["skills"]], ["actual-name"])
 
     def test_a_skill_file_that_is_not_a_file_is_skipped(self):
         skills = self.home / ".claude" / "skills"

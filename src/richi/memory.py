@@ -3,7 +3,7 @@
 
 import argparse
 from contextlib import closing, contextmanager
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 import hashlib
 import json
 import os
@@ -15,6 +15,7 @@ from . import graph
 from . import compact
 from .compact import bounded
 from . import output
+from . import revisions
 
 
 # Newest storage schema: new stores are created with it and migrate targets it.
@@ -105,19 +106,7 @@ def next_updated_at(*previous):
     The clock can repeat or go backwards. Advance past versions written by
     Richi, while leaving older formats and opaque versions readable.
     """
-    current = now()
-    for stamp in previous:
-        if not isinstance(stamp, str) or len(stamp) != 27 or stamp < current or not stamp.endswith("Z"):
-            continue
-        try:
-            parsed = datetime.fromisoformat(stamp[:-1])
-        except ValueError:
-            continue
-        # A hand-written maximum timestamp has no successor. Like an opaque
-        # version it still participates in CAS, but cannot seed a new clock.
-        if parsed != datetime.max and parsed.isoformat(timespec="microseconds") + "Z" == stamp:
-            current = (parsed + timedelta(microseconds=1)).isoformat(timespec="microseconds") + "Z"
-    return current
+    return revisions.next_timestamp(now(), previous)
 
 
 def dumps(value):

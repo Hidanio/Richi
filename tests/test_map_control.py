@@ -530,6 +530,33 @@ class InstallationHookTests(unittest.TestCase):
         self.assertEqual(maps.wait_for_restarts([port], timeout=5), [])
         self.assertLess(time.monotonic() - started, 1)
 
+    def test_another_stores_handoff_only_reserves_its_own_port(self):
+        database = self.root / "one.sqlite3"
+        other_database = self.root / "two.sqlite3"
+        port = 41000
+        entry = maps.register_store(port, other_database)
+        maps.mark_restarting(entry)
+        with mock.patch.object(launch_map, "read_health", return_value=None), \
+                mock.patch.object(maps.registry, "read_health", return_value=None), \
+                mock.patch.object(launch_map, "available", return_value=True), \
+                mock.patch.object(launch_map, "_start", return_value={"status": "started"}) as start:
+            self.assertEqual(launch_map.stop(database, port)["status"], "not_running")
+            self.assertEqual(launch_map.launch(database, port, runtime=mock.sentinel.runtime)["status"], "started")
+            self.assertEqual(start.call_args.args[0], port + 1)
+            self.assertEqual(maps.store_restarts([port], other_database, timeout=0), ([port], []))
+            self.assertEqual(maps.wait_for_restarts([port], timeout=0), [port])
+
+    def test_invalid_registered_pid_does_not_block_another_workspace(self):
+        port = 41000
+        entry = maps.register(port)
+        with mock.patch.object(maps.registry.os, "kill") as signal_process:
+            for pid in (-1, 0, True, 2**31):
+                with self.subTest(pid=pid):
+                    entry.write_text(json.dumps({"pid": pid, "restarting": int(time.time())}))
+                    maps.registry.prune(self.root, port)
+                    self.assertEqual(maps.wait_for_restarts([port], timeout=0), [])
+            signal_process.assert_not_called()
+
 
 class RestartingRefusalTests(unittest.TestCase):
     """richi map never starts a second map while one of the range is still re-executing."""
@@ -547,8 +574,11 @@ class RestartingRefusalTests(unittest.TestCase):
 
     def scan(self, restarting, own=False, quick=()):
         answers = {self.port: self.health} if own else {}
-        return [mock.patch.object(maps, "wait_for_restarts",
-                                  side_effect=lambda _ports, timeout=None: list(quick) if timeout == 0 else restarting),
+
+        def store_restarts(_ports, database, timeout=None):
+            return (list(quick) if timeout == 0 else restarting), []
+
+        return [mock.patch.object(maps, "store_restarts", side_effect=store_restarts),
                 mock.patch.object(launch_map, "read_health", side_effect=lambda port: answers.get(port)),
                 mock.patch.object(launch_map, "compatible_health", side_effect=lambda health, *_a: health is not None),
                 # The synthetic answer stands for this user's map on that port.

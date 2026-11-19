@@ -196,8 +196,11 @@ change.
   the same installation to switch in place; it replaces a map started by 1.1.0 or
   earlier, or one from another installation environment. While a map is
   restarting it waits for it instead of taking its port. A desktop shortcut
-  that runs `richi map` therefore always opens the current version. The new
-  version is checked first, and a map is never stopped where no local port can
+  that runs `richi map` therefore always opens the current version.
+  A managed map that reports its database keeps its port during restart. Maps
+  for other databases can start on a free port while it finishes. Registrations
+  from older versions can omit the database, so Richi waits for those too.
+  The new version is checked first, and a map is never stopped where no local port can
   be opened. If two installations serve the same store, the one whose
   `richi map` ran last owns the map. Besides the configured port and the next
   ten, `richi map` and `richi map stop` look at the ports where the installation

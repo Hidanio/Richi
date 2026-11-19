@@ -28,6 +28,7 @@ from typing import NamedTuple, Optional
 
 from . import agents
 from .output import cut_name, shell_word
+from .revisions import recovery_version
 
 
 PREFIX = "rule:"
@@ -47,7 +48,7 @@ MAX_LOG = 200
 # field this version does not know, or a hand-edited row, from growing without bound.
 MAX_STORED = 50000
 # What a report of a row that cannot be read repeats of it: a longer key is cut, a longer or odd
-# version is reported as invalid, so that one hand-made row cannot flood an agent or the map.
+# version is replaced with a content fingerprint, so one hand-made row cannot flood an agent or the map.
 MAX_NAMED = 200
 MAX_VERSION = 64
 # What `rules show` gives an agent: what it needs to follow a rule and to change it. The stored
@@ -85,9 +86,10 @@ def rule_id(value):
 class Unsupported(ValueError):
     """A stored rule that only a newer Richi may serve."""
 
-    def __init__(self, level):
+    def __init__(self, level, record):
         super().__init__("needs a Richi that reads rule format %d; this one reads format %d" % (level, FORMAT))
         self.level = level
+        self.record = record
 
 
 def _failure(api, message, code, subject=None):
@@ -357,7 +359,7 @@ def _decode(key, value):
     if type(level) is not int or level < 1:
         raise ValueError("invalid requires")
     if level > FORMAT:
-        raise Unsupported(level)
+        raise Unsupported(level, record)
     if not set(REQUIRED) <= set(record) or not isinstance(record["id"], str) or PREFIX + record["id"] != key:
         raise ValueError("a required field is missing or the ID does not match")
     rule_id(record["id"])
@@ -386,20 +388,18 @@ def _valid_version(version):
     return isinstance(version, str) and 0 < len(version) <= MAX_VERSION and version.isprintable()
 
 
-def _stored_version(value):
-    """What `rules remove --expected-updated-at` takes for a row that cannot be read.
-
-    Its updated_at when that looks like a version; anything else, which is
-    then not repeated back, is "invalid".
-    """
-    # A row larger than Richi writes is not parsed at all: older Pythons convert a long number in quadratic time.
-    if not isinstance(value, str) or len(value) > MAX_STORED:
-        return "invalid"
-    try:
-        version = _parsed(value)["updated_at"]
-    except (ValueError, TypeError, KeyError, RecursionError):
-        return "invalid"
-    return version if _valid_version(version) else "invalid"
+def _stored_version(raw):
+    """Use a stored version if readable, otherwise tie removal to these exact bytes."""
+    value = _text_of(raw)
+    # A row larger than Richi writes is not parsed at all.
+    if value is not None and len(value) <= MAX_STORED:
+        try:
+            version = _parsed(value)["updated_at"]
+            if _valid_version(version):
+                return version
+        except (ValueError, TypeError, KeyError, RecursionError):
+            pass
+    return recovery_version(raw)
 
 
 def _removal(identifier, version):
@@ -471,16 +471,6 @@ def _readable_row(key, raw_value):
     return _decode(key, value)
 
 
-def _rule_text(raw_value):
-    """The text a row of a newer format stores, for the workspace's limit; None when there is none."""
-    value = _text_of(raw_value)
-    try:
-        record = _parsed(value) if value is not None and len(value) <= MAX_STORED else None
-    except (ValueError, TypeError, RecursionError):
-        return None
-    return record.get("text") if isinstance(record, dict) else None
-
-
 def scan(conn, fields=None):
     """(rules: global first, then by project and ID; rows that cannot be read; rules a newer Richi must serve)."""
     # A key range, not LIKE: LIKE would also match other spellings such as RULE:. ";" follows ":".
@@ -503,10 +493,10 @@ def scan(conn, fields=None):
             rules.append(rule if fields is None else {field: rule[field] for field in fields})
         except Unsupported as exc:
             # updated_at: what removing the rule takes, for a user who will not update.
-            unsupported.append(_unsupported(identifier, exc, _stored_version(_text_of(raw_value)),
-                                            _rule_text(raw_value)))
+            unsupported.append(_unsupported(identifier, exc, _stored_version(raw_value),
+                                            exc.record.get("text")))
         except (ValueError, TypeError, KeyError, RecursionError) as exc:
-            invalid.append(_invalid(identifier, str(exc) or type(exc).__name__, _stored_version(_text_of(raw_value)),
+            invalid.append(_invalid(identifier, str(exc) or type(exc).__name__, _stored_version(raw_value),
                                     named=kind == "text" and "\x00" not in identifier))
     for item in invalid:
         if "next" in item and escaped_names.get(item["id"], 0) > 1:
@@ -567,10 +557,11 @@ def _change_time(conn, api, previous=None):
     """Assign a version in the rule's write transaction, even after a clock adjustment or log clear."""
     row = conn.execute("SELECT CAST(value AS BLOB) FROM metadata WHERE key = 'rule_clock'").fetchone()
     # A previous runtime sharing this store writes log entries without advancing rule_clock.
-    latest_log = conn.execute("SELECT CAST(substr(key, 10, 27) AS BLOB) FROM metadata "
-                              "WHERE key >= 'rule-log:' AND key < 'rule-log;' ORDER BY key DESC LIMIT 1").fetchone()
-    at = api.next_updated_at(_text_of(row[0]) if row else None,
-                             _text_of(latest_log[0]) if latest_log else None, previous)
+    # A malformed key can sort ahead of every timestamp. Read just the fixed-width stamps of
+    # this bounded log, so its valid versions still count when two runtimes share the store.
+    log_times = conn.execute("SELECT CAST(substr(key, 10, 27) AS BLOB) FROM metadata "
+                             "WHERE key >= 'rule-log:' AND key < 'rule-log;'")
+    at = api.next_updated_at(_text_of(row[0]) if row else None, previous, *(_text_of(raw) for raw, in log_times))
     conn.execute("INSERT INTO metadata(key, value) VALUES ('rule_clock', ?) "
                  "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (at,))
     return at
@@ -597,7 +588,7 @@ def _log_text(raw):
 def log(conn, identifier=None, entries=20):
     """The latest changes, newest first; more says whether older ones are kept beyond them."""
     rows = conn.execute("SELECT CAST(value AS BLOB) FROM metadata "
-                        "WHERE 1=1 AND key >= 'rule-log:' AND key < 'rule-log;' ORDER BY key DESC").fetchall()
+                        "WHERE 1=1 AND key >= 'rule-log:' AND key < 'rule-log;' ORDER BY key DESC")
     found, more = [], False
     for (raw,) in rows:
         try:
@@ -612,20 +603,25 @@ def log(conn, identifier=None, entries=20):
     return {"view": "rules-log", "entries": found, "more": more, "kept": MAX_LOG}
 
 
-def clear_log(conn, identifier=None):
+def clear_log(conn, api, identifier=None):
     """Delete the recorded changes, all or one rule's: the log keeps rule texts, removed rules included."""
-    rows = conn.execute("SELECT rowid, CAST(value AS BLOB) FROM metadata "
-                        "WHERE 1=1 AND key >= 'rule-log:' AND key < 'rule-log;'").fetchall()
-    doomed = []
-    for rowid, raw in rows:
-        try:
-            entry = _parsed(_log_text(raw))
-        except (ValueError, TypeError, RecursionError):
-            entry = None
-        # An entry that cannot be read belongs to no rule, so only clearing everything removes it.
-        if identifier is None or (isinstance(entry, dict) and entry.get("id") == identifier):
-            doomed.append((rowid,))
-    conn.executemany("DELETE FROM metadata WHERE 1=1 AND rowid = ?", doomed)
+    where = " WHERE key >= 'rule-log:' AND key < 'rule-log;'"
+    if identifier is None:
+        doomed = conn.execute("SELECT rowid FROM metadata" + where).fetchall()
+    else:
+        doomed = []
+        for rowid, raw in conn.execute("SELECT rowid, CAST(value AS BLOB) FROM metadata" + where):
+            try:
+                entry = _parsed(_log_text(raw))
+            except (ValueError, TypeError, RecursionError):
+                continue
+            if isinstance(entry, dict) and entry.get("id") == identifier:
+                doomed.append((rowid,))
+    if doomed:
+        # An older writer may have advanced only the log. Preserve its revision before removing
+        # the last evidence of a previously used timestamp, in the same write transaction.
+        _change_time(conn, api)
+        conn.executemany("DELETE FROM metadata WHERE rowid = ?", doomed)
     return {"view": "rules-log", "results": [{"status": "cleared", "entries": len(doomed)}]}
 
 
@@ -803,7 +799,7 @@ def change(conn, request, api, checked_project=None, author=Author(), settings=N
         rule = _readable_row(key, raw)
     except (ValueError, TypeError, KeyError, RecursionError) as exc:
         # A row this version cannot read or may not serve can still be removed, but not changed.
-        version = _stored_version(_text_of(raw))
+        version = _stored_version(raw)
         if action != "remove":
             problem = ("Rule " + identifier + " " + str(exc) + "; update Richi to change it"
                        if isinstance(exc, Unsupported) else "Invalid stored rule " + identifier + ": " + str(exc))
@@ -813,8 +809,10 @@ def change(conn, request, api, checked_project=None, author=Author(), settings=N
                                   "without --project-path.")
         _check_version(identifier, version, expected, api)
         conn.execute("DELETE FROM metadata WHERE 1=1 AND rowid = ?", (rowid,))
-        _record(conn, _change_time(conn, api, version), "removed", identifier,
-                {"id": identifier, "unreadable": _shown(raw)[:MAX_TEXT * 2]}, None, author)
+        # A newer format still has a bounded, readable JSON record. Preserve it for restoration
+        # without interpreting it. Only actual damage needs a diagnostic excerpt.
+        before = exc.record if isinstance(exc, Unsupported) else {"id": identifier, "unreadable": _shown(raw)[:MAX_TEXT * 2]}
+        _record(conn, _change_time(conn, api, version), "removed", identifier, before, None, author)
         return {"results": [{"id": identifier, "status": "removed"}], "rule": None}
     if checked_project is not None and rule["scope"] == "project" and rule["project_id"] != checked_project:
         raise api.MemoryError("Rule " + rule["id"] + " belongs to project " + rule["project_id"]
@@ -877,7 +875,7 @@ def run(conn, args, api, workspace=None, checked_project=None, unmatched_path=No
     if args.action == "log":
         return log(conn, args.id, args.entries)
     if args.action == "clear-log":
-        return clear_log(conn, args.id)
+        return clear_log(conn, api, args.id)
     if args.action == "list":
         return listing(conn, api, workspace, global_scope=args.global_scope, project=args.project)
     settings = agents.read_settings()

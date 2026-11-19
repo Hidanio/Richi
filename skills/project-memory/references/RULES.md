@@ -28,7 +28,9 @@ not know, the global rules still come back and `project_path_problem` says why
 the project's rules do not: follow the global rules and tell the user.
 `invalid_rules` lists stored rules that cannot be read. Agents do not get them,
 so tell the user; `next` is the command that removes such a row, and a row
-without it can be removed only with an SQLite tool. Remove an unreadable or newer-format
+without it can be removed only with an SQLite tool. If the stored version is unusable,
+the command includes a token derived from the row's contents. Read the list again after a conflict.
+Remove an unreadable or newer-format
 rule at workspace scope, without `--project-path`, since Richi cannot verify its project.
 `agent_settings_problem` says that Richi cannot use the user's agent settings,
 all of them or some own agents' (`code`: `damaged`, `unreadable`, `newer`, `large` or

@@ -219,8 +219,8 @@ console.log(JSON.stringify({
   update:ruleCommand({action:'update',id:'tricky',expected_updated_at:'VERSION',text:'-x',skill:'pr-description',skills:{codex:null}},store),
   clear:ruleCommand({action:'update',id:'tricky',expected_updated_at:'VERSION',skill:null,skills:null},store),
   remove:ruleCommand({action:'remove',id:'tricky',expected_updated_at:'VERSION'},store),
-  oddSpaced:ruleCommand({action:'remove',id:'two words',expected_updated_at:'invalid'},store),
-  oddDashed:ruleCommand({action:'remove',id:'-dash',expected_updated_at:'invalid'},store)}));
+  oddSpaced:ruleCommand({action:'remove',id:'two words',expected_updated_at:'VERSION'},store),
+  oddDashed:ruleCommand({action:'remove',id:'-dash',expected_updated_at:'VERSION'},store)}));
 """ % (json.dumps(str(database)), json.dumps(TRICKY)))
         self.assertTrue(all(command.startswith("richi --db '" + str(database) + "' rules ") for command in commands.values()))
         tricky = self.run_command(commands["tricky"])["rule"]
@@ -236,8 +236,10 @@ console.log(JSON.stringify({
         self.assertEqual(self.run_command(commands["remove"], VERSION=cleared["updated_at"])["results"][0]["status"], "removed")
         with closing(sqlite3.connect(str(database))) as conn, conn:
             conn.executemany("INSERT INTO metadata(key, value) VALUES (?, '{}')", [("rule:two words",), ("rule:-dash",)])
-        for name in ("oddSpaced", "oddDashed"):
-            self.assertEqual(self.run_command(commands[name])["results"][0]["status"], "removed")
+        invalid = self.run_command("richi --db " + shlex.quote(str(database)) + " rules list")["invalid_rules"]
+        versions = {item["id"]: item["updated_at"] for item in invalid}
+        for name, identifier in (("oddSpaced", "two words"), ("oddDashed", "-dash")):
+            self.assertEqual(self.run_command(commands[name], VERSION=versions[identifier])["results"][0]["status"], "removed")
 
     def test_a_composed_agent_command_is_accepted_as_written(self):
         (self.home / ".gemini" / "skills").mkdir(parents=True)
@@ -339,10 +341,12 @@ console.log(JSON.stringify({picks,update:ruleUpdate(rule,rule,rule.text,skillReq
     def test_a_retry_after_a_conflict_sends_only_what_the_form_changed(self):
         self.evaluate(r"""
 setMapAgents([{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'}],++agentSequence);
-const opened={id:'review',text:'Review code.',skill:null,skills:null,updated_at:'v1'};
+const opened={id:'review',text:'Review code.',skill:null,skills:null,scope:'global',project_id:null,created_at:'v1',updated_at:'v1'};
 // Meanwhile another window gave the rule a skill for one agent.
 const fresh={...opened,skills:{codex:'review-helper'},updated_at:'v2'};
 const unchangedSkills=skillRequest(opened.skill,{claude:null,codex:null});
+assert.match(ruleUpdate(opened,{...fresh,created_at:'v2'},'draft',unchangedSkills),/создали заново/);
+assert.match(ruleUpdate(opened,{...fresh,scope:'project',project_id:'other'},'draft',unchangedSkills),/другой области/);
 // The form changed the text only: the retry names the new version and leaves the skills alone.
 assert.deepEqual(ruleUpdate(opened,fresh,'Review code carefully.',unchangedSkills),
   {action:'update',id:'review',expected_updated_at:'v2',text:'Review code carefully.'});
@@ -386,11 +390,14 @@ assert.match(skillOutcome({skill:null,skills:{claude:'a',codex:'a'}},{skill:null
 assert.equal(skillOutcome({skill:null,skills:{claude:'a',codex:'a',cursor:null}},{skill:'a',skills:{cursor:null}},true),'');
 assert.equal(ruleUpdate(opened,opened,'Review code.',skillRequest(null,'')),null);
 // The same for an own agent. Its form changed the variable only.
-const agent={id:'gem',name:'Foo',variables:['GEM=1'],manual_skills:'none',updated_at:'a1'};
+const agent={id:'gem',name:'Foo',variables:['GEM=1'],manual_skills:'none',created_at:'a1',updated_at:'a1'};
 const typed={name:'Foo',variable:'GEM=2',manual_skills:'none'};
 assert.deepEqual(agentUpdate(agent,agent,typed),{action:'update',id:'gem',variable:'GEM=2',expected_updated_at:'a1'});
 // Meanwhile another window renamed the agent: the retry names the new version and does not undo the rename.
 const renamed={...agent,name:'Bar',updated_at:'a2'};
+assert.match(agentUpdate(agent,{...renamed,created_at:'a2'},typed),/создать заново/);
+const legacy={...agent,created_at:null};
+assert.match(agentUpdate(legacy,{...legacy,updated_at:'a2'},typed),/создать заново/);
 assert.deepEqual(agentUpdate(agent,renamed,typed),{action:'update',id:'gem',variable:'GEM=2',expected_updated_at:'a2'});
 assert.equal(agentDifference(agent,renamed),'имя «Bar»');
 assert.equal(agentDifference(agent,{...agent,variables:[],manual_skills:'front-matter'}),'переменной больше нет, скиллы только по вызову скрываются');
@@ -452,7 +459,7 @@ for(const explain of [ruleRefusal,agentRefusal]){
 const state={mode:'agents'},agentsState={request:0},RULE_HEADER='X-Richi-Map-Secret';
 Object.assign(rulesState,{skills:null,request:0});
 let agentsController=null,rulesController=null,ruleSecret='';
-function renderAgents(){} function renderRules(){} function setMapEditing(){}
+function renderAgents(){} function renderRules(){} function setMapEditing(){} function refreshRulePicker(){}
 const pending=new Map();
 const fetch=url=>new Promise((resolve,reject)=>pending.set(url,{
   respond:data=>resolve({ok:true,json:async()=>data}),fail:()=>reject(new Error('offline'))}));
@@ -484,9 +491,114 @@ function current(agent,skill){assert.deepEqual(knownAgentIds(),[agent]);assert.d
   pending.get('/api/rules').respond({rules:[],agents:listing('names').agents});await rules;
   pending.get('/api/skills').respond(listing('catalog').catalog);await skills;current('names','catalog');
 })().catch(error=>{console.error(error);process.exitCode=1;});
-""", sections=(("  async function loadSkills(", "  function redeemRuleTicket("),
+""", sections=(("  async function loadSkills(", "  async function redeemRuleTicket("),
                ("  async function loadAgents(", "  function agentChangeProblem("),
-               ("  function setAgents(", "  const freshAgent=")))
+               ("  function setAgents(", "  // Closing a saving form")))
+
+    def test_a_late_response_from_the_previous_edit_session_keeps_the_new_session(self):
+        self.evaluate(r"""
+const state={mode:'map'},agentsState={},location={pathname:'/',search:'',hash:''},history={replaceState(){}};
+const RULE_HEADER='X-Richi-Map-Secret';let ruleSecret='before',ruleKeyVersion=1,ticketRequest=0;
+function storeRuleSecret(value){ruleSecret=value;ruleKeyVersion++;}
+function setMapEditing(editing){rulesState.editing=editing;storeRuleSecret('');}
+const pending=new Map(),fetch=(path,options)=>new Promise(resolve=>{
+  const key=path==='/api/session'?JSON.parse(options.body).ticket:path;
+  pending.set(key,(status,data)=>resolve({status,ok:status===200,json:async()=>data}));
+});
+(async()=>{
+  const oldSave=sendMapChange('/api/agents',{});
+  const old='a'.repeat(64),fresh='b'.repeat(64);
+  location.hash='#ticket='+old;const early=redeemRuleTicket();
+  location.hash='#ticket='+fresh;const later=redeemRuleTicket();
+  pending.get(fresh)(200,{secret:'current'});await later;
+  pending.get(old)(200,{secret:'old'});await early;
+  assert.equal(ruleSecret,'current');assert.equal(rulesState.notice,'');
+  pending.get('/api/agents')(403,{code:'not_editing'});
+  await assert.rejects(oldSave,error=>/ключ редактирования сменился/.test(editKeyProblem(error)));
+  assert.equal(ruleSecret,'current');assert.equal(rulesState.editing,true);
+  const currentSave=sendMapChange('/api/rules',{});
+  pending.get('/api/rules')(403,{code:'not_editing'});
+  await assert.rejects(currentSave,error=>/больше не действует/.test(editKeyProblem(error)));
+  assert.equal(ruleSecret,'');assert.equal(rulesState.editing,false);
+})().catch(error=>{console.error(error);process.exitCode=1;});
+""", sections=(("  async function redeemRuleTicket(", "  // A tab is rebuilt"),))
+
+    def test_open_skill_select_refreshes_options_without_losing_manual_input(self):
+        self.evaluate(r"""
+class Element {
+  constructor(){this.children=[];this.value='';}
+  append(...children){this.children.push(...children);}
+  add(option){this.append(option);}
+  replaceChildren(){this.children=[];this.value='';}
+  setAttribute(){}
+  addEventListener(){}
+}
+const Option=class {constructor(label,value){this.value=value;}},make=()=>new Element(),cut=x=>x;
+const agent='codex',catalog=names=>({skills:names.map(name=>({name,agents:[agent],description:name,kind:'skills'}))});
+setSkills(catalog([]),++agentSequence);rulesState.skillsLoading=true;
+const picker=skillSelect(agent,''),input=picker.element.children[1],hint=picker.element.children[2];
+assert.match(hint.textContent,/Загружаем/);
+setSkills(catalog(['review']),++agentSequence);rulesState.skillsLoading=false;picker.refresh();
+assert.deepEqual(picker.select.children.flatMap(e=>e.children||[e]).map(opt=>opt.value),['','review','__other__']);
+picker.set('review');assert.equal(picker.value(),'review');
+setSkills(catalog([]),++agentSequence);picker.refresh();assert.equal(picker.select.value,'__other__');assert.equal(input.value,'review');
+// A scan that now includes the typed name must not move focus out of its input or replace its raw text.
+input.value=' pending ';setSkills(catalog(['pending']),++agentSequence);picker.refresh();
+assert.equal(picker.select.value,'__other__');assert.equal(input.value,' pending ');assert.equal(input.hidden,false);
+""", sections=(("  function skillSelect(", "  function ruleSkillPicker("),))
+
+    def test_agent_saves_from_overlapping_forms_apply_listings_in_commit_order(self):
+        self.evaluate(r"""
+const pending=new Map(),sent=[],applied=[];
+function sendMapChange(url,change){
+  assert.equal(url,'/api/agents');sent.push(change);
+  return new Promise((resolve,reject)=>pending.set(change,{resolve,reject}));
+}
+function acceptAgents(listing){applied.push(listing);}
+(async()=>{
+  // The first form was closed while saving; the next one submits a different agent. Its response
+  // must not overtake the first and let the stale first listing replace both committed changes.
+  const first=saveAgentChange('first'),second=saveAgentChange('second');await Promise.resolve();
+  assert.deepEqual(sent,['first']);
+  pending.get('first').resolve({listing:['first']});await first;await Promise.resolve();
+  assert.deepEqual(sent,['first','second']);
+  pending.get('second').resolve({listing:['first','second']});await second;
+  assert.deepEqual(applied,[['first'],['first','second']]);
+  const stale=saveAgentChange('stale'),next=saveAgentChange('next');await Promise.resolve();
+  pending.get('stale').reject(new Error('conflict'));await assert.rejects(stale,/conflict/);await Promise.resolve();
+  assert.equal(sent.at(-1),'next');
+  pending.get('next').resolve({listing:['next']});await next;
+  assert.deepEqual(applied.at(-1),['next']);
+})().catch(error=>{console.error(error);process.exitCode=1;});
+""", sections=(("  let agentSave=", "  const closeFolderForm="),))
+
+    def test_removal_cannot_adopt_an_unseen_replacement_under_the_old_confirmation(self):
+        self.evaluate(r"""
+const sent=[],messages=[],agentCommandHint='',event={preventDefault(){}};
+let submit,current;
+const control=()=>({append(){},focus(){}});
+const make=control,toolButton=control,cut=value=>value;
+function ruleDialog(){return {alive:()=>true,dialog:{showModal(){}},form:{addEventListener(type,fn){submit=fn;}},
+  body:control(),foot:control()};}
+const ruleProblem=()=>text=>messages.push(text),ruleCommandBox=()=>()=>{};
+const ruleScopeText=rule=>rule.scope,agentRules=()=>[];
+const ruleList=()=>[current],ruleChangeProblem=()=>'',agentChangeProblem=()=>'';
+async function loadRules(){} async function loadAgents(){}
+async function refused(request){sent.push(request.expected_updated_at);throw Object.assign(new Error(),{code:'conflict'});}
+const sendRuleChange=refused,saveAgentChange=refused;
+(async()=>{
+  const original={id:'same-id',scope:'global',text:'Same wording',created_at:'v1',updated_at:'v1'};
+  current={...original,scope:'project',project_id:'other',created_at:'v2',updated_at:'v2'};
+  openRuleRemoval(original);await submit(event);await submit(event);
+  assert.deepEqual(sent.splice(0),['v1','v1']);assert.match(messages.at(-1),/создали заново/);
+  // An ordinary update of the same rule still shows the new wording before a second confirmation.
+  current={...original,text:'Revised wording',updated_at:'v3'};
+  openRuleRemoval(original);await submit(event);await submit(event);assert.deepEqual(sent.splice(0),['v1','v3']);
+  openAgentRemoval({id:'same-agent',name:'Old name',updated_at:'a1'});await submit(event);await submit(event);
+  assert.deepEqual(sent,['a1','a1']);assert.match(messages.at(-1),/Закройте форму/);
+})().catch(error=>{console.error(error);process.exitCode=1;});
+""", sections=(("  function openRuleRemoval(", "  function ruleMatches("),
+               ("  function openAgentRemoval(", "  function renderAgentDetail(")))
 
     def test_saving_from_a_form_reports_what_really_happened(self):
         self.evaluate(r"""
