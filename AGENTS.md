@@ -4,7 +4,7 @@ Use branch names with underscores, such as `audit_fixes_bilingual_docs`, without
 the `codex/` prefix.
 
 Develop the implementation in `src/richi/` and the distributable agent skill in
-`skills/project-memory/`. Keep what is particular to one agent (how to recognize
+`skills/richi/`. Keep what is particular to one agent (how to recognize
 it, which folders it reads, which folder layout and which opt-out rule apply) in
 the registry `src/richi/agents.py`; rules, the skill catalog and the map handle
 any agent it lists, so supporting another agent means adding one entry there
@@ -59,7 +59,7 @@ and synthetic repositories; they must not depend on personal memory. Test
 schema changes against a copy: selecting a runtime never migrates SQLite
 automatically.
 
-For authorized work with an existing knowledge store, use the project-memory
+For authorized work with an existing knowledge store, use the `richi`
 skill and inspect `richi config show` to resolve its location. Search relevant
 records before repeating investigations; preserve evidence, scope, historical
 qualifications, and optimistic concurrency when recording outcomes. Code and

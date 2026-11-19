@@ -2,7 +2,6 @@
 import os
 from pathlib import Path
 import shutil
-import uuid
 
 from . import setup_files as files
 from .config import ConfigError
@@ -30,20 +29,20 @@ def paths(current=None):
             raise ConfigError("AGENTS.override.md now shadows the managed instructions; reconcile the profile before setup")
     else:
         instructions = override if files.contents(files.snapshot(override)).strip() else profile / "AGENTS.md"
-    return profile, instructions, Path.home().resolve() / ".agents/skills/project-memory"
+    return profile, instructions, Path.home().resolve() / ".agents/skills/richi"
+
+
+def _profile_skills(profile, discovery, replace_skill):
+    ops = []
+    if profile / "skills" != discovery:
+        for name in ("richi", "project-memory"):
+            ops.extend(files.duplicate_skill(profile / "skills" / name, replace_skill))
+    return {}, ops
 
 
 def setup_operations(ctx, profile, current, replace_skill):
-    legacy = profile / "skills/project-memory"
-    if files.snapshot(legacy)["kind"] == "absent":
-        return {}, []
-    if current or not replace_skill:
-        raise ConfigError("A legacy project-memory skill exists at " + str(legacy) +
-                          "; use --replace-skill on first setup to back it up and avoid duplicate skills")
-    operation = files.change(legacy, {"kind": "absent"})
-    operation["backup"] = str(profile / "richi-skill-backups" / ("project-memory-" + uuid.uuid4().hex))
-    return {}, [operation]
+    return _profile_skills(profile, Path.home().resolve() / ".agents/skills", replace_skill)
 
 
 def activation_operations(ctx, record, site):
-    return {}, []
+    return _profile_skills(Path(record["instructions"]).parent, Path(record["skill"]).parent, False)

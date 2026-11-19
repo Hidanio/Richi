@@ -18,7 +18,7 @@ You need macOS or Linux, curl and Python 3.9+ with sqlite3, venv and ensurepip.
 On Debian/Ubuntu you may also need `python3-venv`. Git is required for repository history.
 
 The installer puts a fixed release in `~/.local/share/richi/venv`, creates the
-`~/.local/bin/richi` command and connects Project Memory to the agent you chose.
+`~/.local/bin/richi` command and connects the Richi skill to the agent you chose.
 Omitting `--agent` selects Codex. Omitting `--yes` lets you inspect the plan
 and confirm it in a terminal.
 
@@ -30,7 +30,7 @@ workspace settings, chat bindings and data in place.
 <a id="область-действия-и-существующие-настройки"></a>
 ## Scope and existing settings
 
-For Codex, setup links `~/.agents/skills/project-memory` and covers local chats
+For Codex, setup links `~/.agents/skills/richi` and covers local chats
 in the selected profile, including projectless chats. It uses `${CODEX_HOME:-$HOME/.codex}/AGENTS.md`, unless a nonempty
 `AGENTS.override.md` takes precedence. Other profiles, remote hosts, cloud agents
 and other agent products need their own setup. Open chats may retain old instructions.
@@ -114,7 +114,19 @@ richi update apply
 
 To return to the previous release later, use `richi update rollback`.
 
-The complete skill and references are bundled from `skills/project-memory/` into
+Fresh installations register the skill as `richi`. An update delivers the
+renamed skill to all connected agents. While the rollback release still expects
+`project-memory`, the managed directory and instruction block keep their old
+names. Codex already lists the skill as Richi in new chats. When both releases
+support the rename, the updater moves the managed link and updates the block.
+
+During that transition, clients that derive a slash command from the directory
+may still use the old name. Cursor expects the directory to match the skill name,
+so `/richi` may only appear after the directory moves. Until then, the Cursor
+session hook gives the agent the path to the installed `SKILL.md`.
+[Cursor skill format](https://cursor.com/docs/skills#frontmatter-fields).
+
+The complete skill and references are bundled from `skills/richi/` into
 the wheel. Update and rollback switch its managed link to the matching package.
 A recoverable file journal coordinates the skill link, ownership metadata and
 runtime pointer. Interrupted activation is completed or undone on the next CLI
@@ -128,7 +140,7 @@ Automatic installation stays off unless explicitly enabled with
 `richi update auto enable --interval 6h --install`; see [UPDATES.md](UPDATES.md).
 Workspace dev settings are preserved. Dev mode switches the runtime **and the
 managed skill links**: `richi config set dev true` points every managed skill to
-`<development.source>/skills/project-memory`, and `richi config set dev false`
+`<development.source>/skills/richi`, and `richi config set dev false`
 points it back to the installed release, each in one recoverable transaction
 reported as `agent_skills`. This applies to every connected agent. Instruction
 blocks, adapter files such as hooks, PATH blocks and the launcher stay on the
@@ -212,7 +224,7 @@ richi setup --agent cursor --yes
 richi setup --agent cursor --status
 ```
 
-Setup links `~/.cursor/skills/project-memory`, installs the user rule
+Setup links `~/.cursor/skills/richi`, installs the user rule
 `~/.cursor/rules/richi-project-memory.mdc` and adds a `sessionStart` hook to
 `~/.cursor/hooks.json` alongside your existing hooks. The hook runs
 `~/.cursor/richi/session_start.py`. [Cursor skills](https://cursor.com/docs/skills)
@@ -235,7 +247,7 @@ richi setup --agent claude --status
 ```
 
 Claude setup installs the bundled skill under
-`~/.claude/skills/project-memory`, a managed block in `~/.claude/CLAUDE.md`, and a
+`~/.claude/skills/richi`, a managed block in `~/.claude/CLAUDE.md`, and a
 SessionStart hook in `settings.json`, preserving unrelated settings and hooks.
 `CLAUDE_CONFIG_DIR` selects an alternate profile. Existing copied skills require
 `--replace-skill`, which backs them up outside skill discovery.

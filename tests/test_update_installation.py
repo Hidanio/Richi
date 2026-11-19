@@ -543,7 +543,7 @@ class ReleaseCompilationTests(unittest.TestCase):
         self.site = Path(temporary.name).resolve() / "Application Support" / "a+b (c) [d" / "site-packages"
         for name, text in {"richi/__init__.py": '__version__ = "0.2.0"\n', "richi/memory.py": "SCHEMA = 3\n",
                            "richi_launcher/__init__.py": "", "richi_launcher/maps/__init__.py": "",
-                           "richi_launcher/agent_skill/SKILL.md": "name: project-memory\n",
+                           "richi_launcher/agent_skill/SKILL.md": "name: richi\n",
                            "richi_launcher/agent_skill/scripts/helper.py": "print('skill script')\n",
                            "richi_bootstrap.py": "BOOTSTRAP_PROTOCOL = 1\n"}.items():
             (self.site / name).parent.mkdir(parents=True, exist_ok=True)

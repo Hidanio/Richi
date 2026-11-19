@@ -82,8 +82,8 @@ First steps with Richi
      richi map
 
 In an agent chat the agent asks once which workspace to use and remembers the
-choice with richi chat bind. Agents usually write records through the
-project-memory skill; richi help records explains what they contain.
+choice with richi chat bind. Agents usually write records through the Richi
+skill. See richi help records for the contents of each record type.
 """),
     "records": ("Record types, references, knowledge states and safe updates", """
 Records, references and knowledge states

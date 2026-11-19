@@ -138,11 +138,11 @@ of the database and its associated `artifacts/git/` directory.
 ### What dev switches
 
 Dev switches two things: the **runtime** (`src/richi/` for every CLI call,
-agent call and the map) and the **managed Project Memory skill link of every
+agent call and the map) and the **managed Richi skill link of every
 agent connected with `richi setup`**. With dev on, each of these links points to
-`<development.source>/skills/project-memory`, so every agent reads the skill text
+`<development.source>/skills/richi`, so every agent reads the skill text
 that matches the code it runs. This works the same for any supported agent (for
-example `~/.agents/skills/project-memory` for Codex). An agent connected later
+example `~/.agents/skills/richi` for Codex). An agent connected later
 follows the agents already connected; the first one starts on the release skill
 until the next `config set dev true`. Dev does not switch the installed launcher (`launcher/`, including
 `setup`, `update` and `config`), agent-specific integration files such as
@@ -158,9 +158,9 @@ reports it in `agent_skills`:
 ```json
 "agent_skills": {"status": "changed", "mode": "dev",
                  "source": "/path/to/Richi",
-                 "target": "/path/to/Richi/skills/project-memory",
-                 "changes": ["/home/me/.agents/skills/project-memory",
-                             "/home/me/.claude/skills/project-memory"]}
+                 "target": "/path/to/Richi/skills/richi",
+                 "changes": ["/home/me/.agents/skills/richi",
+                             "/home/me/.claude/skills/richi"]}
 ```
 
 `status` is `changed`, `unchanged`, `not_configured` (no `richi setup` yet),
@@ -181,7 +181,7 @@ reports `"matches_config": false`, rerun `richi config set dev true` (or `false`
 in the workspace you work in.
 
 - Links follow a checkout only if it passes the same check as the dev runtime
-  (`pyproject.toml` and `src/richi/`) and has `skills/project-memory/SKILL.md`.
+  (`pyproject.toml` and `src/richi/`) and has `skills/richi/SKILL.md`.
   Otherwise, and for dev without `development.source`, they point to the
   installed release; `reason` explains why. Restoring release links with
   `config set dev false` never depends on the checkout, even a missing or
@@ -329,7 +329,7 @@ After installing the package, run `richi agents --status` to see which
 clients it supports. Follow [setup for Codex, Claude Code and Cursor](SETUP.md)
 to connect the client you use.
 
-For other agents, copy the complete `skills/project-memory`
+For other agents, copy the complete `skills/richi`
 directory, including its `references/` files, to the agent's skill directory.
 
 Make sure the agent process can find the `richi` executable and the selected
@@ -356,7 +356,7 @@ After binding, load the workspace's standing rules with `richi rules show`.
 For repository work, verify `richi project check PATH --id PROJECT_ID`, then use
 `--project-path PATH` on the rules check and knowledge operations. In Cursor,
 request rules with `rules show --agent cursor`. Do not infer a workspace from cwd.
-Use the project-memory skill to recall prior engineering work and save reusable
+Use the `richi` skill to recall prior engineering work and save reusable
 findings, decisions, failed experiments, and task outcomes. Use the configured
 Richi store; inspect `richi config show` if its location is unclear. Local memory
 updates are authorized during this project's work. Search before creating a new

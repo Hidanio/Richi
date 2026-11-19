@@ -121,7 +121,9 @@ Every protocol-1 release keeps them able to update in place:
   before publication. Locally it needs a full clone with tags, the `build` package and
   the candidate installed; `--from vX.Y.Z` runs one source.
 
-The wheel bundles the entire canonical `skills/project-memory/` directory.
+The wheel bundles the entire canonical `skills/richi/` directory. Keep the
+compatibility comment in `SKILL.md` when editing its frontmatter. Earlier updaters
+look for the literal `name: project-memory` in the file before activating a wheel.
 `build_installer.py` creates a deterministic stdlib-only `richi-installer.pyz`
 from that wheel, with a SHA256 sidecar. The workflow publishes those files and
 `install.sh` alongside the wheel and manifest. Each release test job installs

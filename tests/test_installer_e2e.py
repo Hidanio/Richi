@@ -30,7 +30,7 @@ class InstallerLifecycleTests(unittest.TestCase):
             instructions.parent.mkdir(parents=True)
             original = b"# Existing user instructions\r\nKeep my preferences.\r\n"
             instructions.write_bytes(original)
-            skill = home / ".agents/skills/project-memory"
+            skill = home / ".agents/skills/richi"
             skill.mkdir(parents=True)
             (skill / "SKILL.md").write_bytes(b"My customized existing skill")
             wheels = {v: self.make_wheel(v) for v in ("0.1.0", "0.2.0", "0.3.0", "0.4.0")}
@@ -56,7 +56,7 @@ class InstallerLifecycleTests(unittest.TestCase):
             # Retry the same owned installation; adopt only with explicit consent.
             configured = json.loads(self.run_process([*command, "--yes", "--replace-skill"]).stdout)
             self.assertEqual(configured["status"], "configured")
-            backup = list((home / ".agents/richi-skill-backups").glob("project-memory-*"))
+            backup = list((home / ".agents/richi-skill-backups").glob("richi-*"))
             self.assertEqual(len(backup), 1)
             self.assertEqual((backup[0] / "SKILL.md").read_bytes(), b"My customized existing skill")
             self.assertTrue(instructions.read_bytes().startswith(original))
@@ -72,7 +72,7 @@ class InstallerLifecycleTests(unittest.TestCase):
             self.assertEqual(repeated["changes"], [])
             self.assertEqual(instructions.read_bytes(), installed_instructions)
             self.run_process([console, "setup", "--agent", "claude", "--yes", "--no-path"])
-            claude_skill = home / ".claude/skills/project-memory"
+            claude_skill = home / ".claude/skills/richi"
             self.assertEqual(claude_skill.resolve(), skill.resolve())
             # Setup works even inside an unbound chat and does not bind it.
             self.environment["CODEX_THREAD_ID"] = "synthetic-new-chat"
@@ -134,7 +134,7 @@ class InstallerLifecycleTests(unittest.TestCase):
             console, python = home / ".local/bin/richi", Path(configured["prefix"]) / "bin/python"
             for agent in ("codex", "claude"):
                 self.run_process([console, "setup", "--agent", agent, "--yes", "--no-path"])
-            skills = [home / profile / "skills/project-memory" for profile in (".agents", ".claude", ".cursor")]
+            skills = [home / profile / "skills/richi" for profile in (".agents", ".claude", ".cursor")]
             protected = {path: path.read_bytes() for path in (
                 home / ".codex/AGENTS.md", home / ".claude/CLAUDE.md", home / ".claude/settings.json",
                 home / ".cursor/hooks.json", home / ".cursor/rules/richi-project-memory.mdc")}
@@ -144,8 +144,8 @@ class InstallerLifecycleTests(unittest.TestCase):
                             ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
             (checkout / "src/richi/__init__.py").write_text('__version__ = "dev-checkout"\n')
             shutil.copyfile(repository / "pyproject.toml", checkout / "pyproject.toml")
-            shutil.copytree(repository / "skills/project-memory", checkout / "skills/project-memory")
-            dev_link = str(checkout / "skills/project-memory")
+            shutil.copytree(repository / "skills/richi", checkout / "skills/richi")
+            dev_link = str(checkout / "skills/richi")
 
             def config(*arguments):
                 return json.loads(self.run_process([console, "config", *arguments]).stdout)

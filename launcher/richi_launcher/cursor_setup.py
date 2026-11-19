@@ -35,7 +35,7 @@ def paths(current=None):
     instructions = files.safe_path(profile / "rules/richi-project-memory.mdc")
     if current and Path(current["instructions"]) != instructions:
         raise ConfigError("Setup belongs to another Cursor profile; use its original home")
-    return profile, instructions, profile / "skills/project-memory"
+    return profile, instructions, profile / "skills/richi"
 
 
 def instruction_file(block):
@@ -68,7 +68,8 @@ if payload.get("conversation_id", session) != session:
 chat = "cursor:" + session
 command = "richi --chat " + chat
 context = (
-    "Use the project-memory skill in this Cursor chat. Use " + command +
+    "Use the richi skill in this Cursor chat. If the managed Richi rule names project-memory, "
+    "read the skill from ~/.cursor/skills/project-memory/SKILL.md. Use " + command +
     " for every Richi command, even if other agent hooks or environment variables provide an ID. "
     "If richi is absent from PATH, use ~/.local/bin/" + command + ". "
     "Start with " + command + " chat current and " + command + " workspace list. "

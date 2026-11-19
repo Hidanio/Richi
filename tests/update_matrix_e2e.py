@@ -11,7 +11,7 @@ manager perform it.
 
 Every source gets two homes with realistic state: workspaces with projects,
 entries and graph records, a bound chat, a running map, Codex and, where the
-source supports it, Claude Code. One updates manually, rolls back with either
+source supports them, Claude Code and Cursor. One updates manually, rolls back with either
 manager, updates again and covers the rollback edges; the other updates with
 `update auto enable --install` and `update auto run`. Without --from, one more
 home updates the oldest source through every intermediate release to the
@@ -111,6 +111,7 @@ class Release:
         with zipfile.ZipFile(self.wheel) as archive:
             archive.extractall(unpacked)
             self.hands_off_maps = MAP_HANDOFF_MODULE in archive.namelist()
+            self.skill = archive.read("richi_launcher/agent_skill/SKILL.md")
         self.schemas = json.loads(run([sys.executable, "-I", "-B", "-c", SCHEMAS, unpacked]).stdout)
         self.feed = self._feed(work)
 
@@ -284,15 +285,17 @@ class Home:
         return [name.strip() for name in match.group(1).split(",")] if match else ["codex"]
 
     def connect_agents(self):
-        """Connect Claude Code once the active release supports it; report whether it did."""
-        if "claude" in self.agents or "claude" not in self.offered_agents():
-            return False
-        self.cli("setup", "--agent", "claude", "--yes", "--no-path")
-        self.agents.append("claude")
-        return True
+        """Connect additional agents once the active release supports them."""
+        new = [agent for agent in self.offered_agents() if agent not in self.agents]
+        for agent in new:
+            self.cli("setup", "--agent", agent, "--yes", "--no-path")
+            self.agents.append(agent)
+        return bool(new)
 
-    def setup_status(self, agent):
+    def setup_status(self, agent, release):
         data = self.json("setup", *(["--agent", agent] if agent != "codex" else []), "--status")
+        skill = Path(data["skill"]) / "SKILL.md"
+        assert skill.read_bytes() == release.skill, (self.name, agent, release.version, skill)
         return data["status"], data.get("changes", [])
 
     def create_state(self):
@@ -320,7 +323,8 @@ class Home:
         active = self.version()
         assert active == "Richi " + release.version, (self.name, active, release.version)
         for agent in self.agents:
-            assert self.setup_status(agent) == ("configured", []), (self.name, agent, self.setup_status(agent))
+            status = self.setup_status(agent, release)
+            assert status == ("configured", []), (self.name, agent, status)
         if "claude" in self.agents:
             self.verify_claude_hook()
         current = self.json("--chat", CHAT, "chat", "current")
@@ -519,7 +523,7 @@ def claude_blocks_rollback(candidate, home):
     assert home.version() == "Richi " + candidate.version
     assert (home.profile / "settings.json").read_bytes() == settings
     for agent in home.agents:
-        assert home.setup_status(agent) == ("configured", []), agent
+        assert home.setup_status(agent, candidate) == ("configured", []), agent
     home.verify_claude_hook()
     home.assert_map(home.map)
 

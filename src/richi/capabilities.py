@@ -14,7 +14,7 @@ GROUPS = {
     'agents': 'See which AI agents Richi knows and where each finds skills; describe another agent.',
 }
 # id, group, effect, task-oriented summary, canonical detailed guide: a NAME.md
-# under skills/project-memory/references, which is also the command's help page
+# under skills/richi/references, which is also the command's help page
 # guide (cli_help.decorate).
 COMMANDS = (
     ('discover', 'search', 'read', 'Find small candidate cards; supports composed --where.', 'RETRIEVAL_TOOLS.md'),

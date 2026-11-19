@@ -63,7 +63,7 @@
 `expected_entry_probes <= 1`. Она уточняет прежний lexical guard относительно
 выполненного shortlist, но не добавляет кандидата и не входит в scored;
 запись остаётся учтённой в prefiltered. Полный контракт счётчиков — в
-[DIAGNOSTICS.md](../skills/project-memory/references/DIAGNOSTICS.ru.md).
+[DIAGNOSTICS.md](../skills/richi/references/DIAGNOSTICS.ru.md).
 Дополнительные поля диагностики занимают бюджет и могут изменить её сокращение;
 цель сохранения обычной выдачи проверяется отдельно от диагностического JSON.
 

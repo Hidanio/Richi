@@ -18,7 +18,7 @@ import sys
 # once it is listed in richi.cli_help.NEEDS.
 API = 1
 REPOSITORY = "https://github.com/Hidanio/Richi/"
-REFERENCES = "skills/project-memory/references/"
+REFERENCES = "skills/richi/references/"
 TEXT_WIDTH = 78
 
 HelpPage = namedtuple("HelpPage", "summary about examples see guide")

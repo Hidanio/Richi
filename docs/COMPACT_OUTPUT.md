@@ -43,7 +43,7 @@ requires reinstalling the fixed package; a dev reload alone is insufficient.
 <a id="skill-и-маршруты-к-подробностям"></a>
 ## Skill and routes to details
 
-The main [SKILL.md](../skills/project-memory/SKILL.md) covers workspace selection,
+The main [SKILL.md](../skills/richi/SKILL.md) covers workspace selection,
 chat/project guards, search or direct get for a known ID, incomplete excerpts,
 write authorization, full get/CAS, sources and states. References are loaded
 according to the task. For a skill installed by Richi setup, the managed link
@@ -51,11 +51,11 @@ follows package updates and rollbacks. In dev mode, inspect `richi config show`
 to see which checkout supplies the skill. [Setup and development](SETUP.md).
 
 Frequent operations have focused, self-contained instructions:
-[writing](../skills/project-memory/references/ENTRY_WRITE.md),
-[search diagnostics](../skills/project-memory/references/RECALL_DEBUG.md),
-[reading neighbors](../skills/project-memory/references/NEIGHBORS.md),
-[read-only audit](../skills/project-memory/references/MEMORY_AUDIT.md) and
-[capture/attach](../skills/project-memory/references/GIT_CAPTURE.md).
+[writing](../skills/richi/references/ENTRY_WRITE.md),
+[search diagnostics](../skills/richi/references/RECALL_DEBUG.md),
+[reading neighbors](../skills/richi/references/NEIGHBORS.md),
+[read-only audit](../skills/richi/references/MEMORY_AUDIT.md) and
+[capture/attach](../skills/richi/references/GIT_CAPTURE.md).
 This material moved from broader guides; their remaining sections cover advanced
 operations. A known ID can be read directly under the core instructions without
 loading the writing guide.

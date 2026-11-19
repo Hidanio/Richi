@@ -77,7 +77,7 @@ skipped. Maintainers: see the [release contract](RELEASING.md#protocol-1-release
 The current runtime supports database schemas 1, 2 and 3. New stores are created
 at schema 3; existing stores need an explicit migration for tool cards. Runtime
 rollback does not downgrade a store, and older runtimes may not read it. Preserve
-the pre-migration backup. See [graph migration](../skills/project-memory/references/GRAPH.md).
+the pre-migration backup. See [graph migration](../skills/richi/references/GRAPH.md).
 
 <a id="schema-support"></a>
 The manager records verified database-schema support per installed generation.
@@ -293,7 +293,7 @@ the installed version. `auto status` shows an available release and its installa
 command. The user decides when to run `richi update apply` or
 `richi update apply --version X.Y.Z`. `richi chat current` also reports a newer
 release found by the last check as `update`, read from the stored result without
-network access. Agents that follow Project Memory run it at every chat start,
+network access. Agents using the Richi skill run it at every chat start,
 mention the update once and never install it themselves. System notifications and
 an install button in the map are not implemented yet.
 

@@ -1266,15 +1266,14 @@ class RulesIntegrationTests(unittest.TestCase):
         self.assertIn("resumed", context(source="resume"))
         self.assertEqual(context(), startup)
 
-    def test_managed_instructions_stay_as_released(self):
-        # An update is activated by the launcher it replaces, which rewrites the skill link and the
-        # Claude hook but not this block. A changed text would leave every updated installation
-        # needing repair, so the rules step lives in the chat binding and the hook instead. Change
-        # these only together with a way for an updated installation to get the new text.
+    def test_legacy_managed_instructions_stay_as_released(self):
+        # The previous launcher keeps these bytes during update and expects them
+        # when rolling back. The modern block is installed after that window.
         for agent, digest in (("codex", "a908ceb314de9bdbd7c5c22366957d76862553701baccec9a5c6ae86cca8153c"),
                               ("claude", "6ef11912428f7f4356b598d7a9cd74dad3e30fdd02ac6d2888030f0903a7bc79")):
             with self.subTest(agent=agent):
-                self.assertEqual(hashlib.sha256(agent_setup._block("/opt/richi/bin/richi", agent)).hexdigest(), digest)
+                block = agent_setup._block("/opt/richi/bin/richi", agent, agent_setup.LEGACY_NAME)
+                self.assertEqual(hashlib.sha256(block).hexdigest(), digest)
 
 
 if __name__ == "__main__":

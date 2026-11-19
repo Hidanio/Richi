@@ -29,7 +29,10 @@ def main():
                                 capture_output=True, text=True, timeout=30)
         assert result.returncode == 0, result.stdout + result.stderr
         assert json.loads(result.stdout)["status"] == "configured"
-        assert Path(installed["skill"], "SKILL.md").is_file()
+        skill = Path(installed["skill"])
+        assert skill.name == "richi", skill
+        metadata = (skill / "SKILL.md").read_text(encoding="utf-8").split("---", 2)[1].splitlines()
+        assert "name: richi" in metadata
         assert not list(Path(directory).rglob("*.sqlite3"))
     print("Exact release installer smoke test passed")
 

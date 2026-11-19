@@ -20,7 +20,7 @@ curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Ri
 В Debian/Ubuntu может понадобиться пакет `python3-venv`. Для истории репозиториев нужен Git.
 
 Установщик размещает фиксированный релиз в `~/.local/share/richi/venv`,
-создаёт команду `~/.local/bin/richi` и подключает Project Memory к указанному
+создаёт команду `~/.local/bin/richi` и подключает скилл Richi к указанному
 агенту. Без `--agent` он выбирает Codex. Без `--yes` он показывает план и ждёт
 подтверждения в терминале.
 
@@ -33,7 +33,7 @@ curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Ri
 <a id="scope-and-existing-settings"></a>
 ## Область действия и существующие настройки
 
-В Codex установщик создаёт ссылку `~/.agents/skills/project-memory`.
+В Codex установщик создаёт ссылку `~/.agents/skills/richi`.
 Подключение действует для локальных чатов этого профиля, включая чаты без проекта.
 Установщик использует `${CODEX_HOME:-$HOME/.codex}/AGENTS.md`,
 если приоритет не имеет непустой `AGENTS.override.md`. Другие профили, удалённые
@@ -127,7 +127,20 @@ richi update apply
 
 Чтобы позже вернуть предыдущий релиз, выполните `richi update rollback`.
 
-Полный skill и справочники включаются в wheel из `skills/project-memory/`.
+При новой установке скилл регистрируется под именем `richi`. Обновление
+доставляет переименованный скилл всем подключённым агентам. Пока для отката
+нужен релиз, который ожидает `project-memory`, управляемый каталог и блок
+инструкций сохраняют прежние имена. В новых чатах Codex скилл уже отображается
+как Richi. Когда оба релиза поддерживают переименование, обновление переносит
+управляемую ссылку и обновляет блок инструкций.
+
+В переходный период клиенты, которые формируют команду по имени каталога, могут
+сохранить прежнюю команду. В Cursor имя каталога должно совпадать с именем
+скилла, поэтому команда `/richi` может появиться только после переноса каталога.
+До этого хук сессии передаёт агенту путь к установленному `SKILL.md`.
+[Формат скиллов в Cursor](https://cursor.com/docs/skills#frontmatter-fields).
+
+Полный skill и справочники включаются в wheel из `skills/richi/`.
 Обновление и откат переводят его управляемую ссылку на соответствующий пакет.
 Восстанавливаемый файловый журнал согласует ссылку skill, метаданные владения
 и указатель runtime. Прерванная активация завершается или отменяется при
@@ -142,7 +155,7 @@ richi update apply
 `richi update auto enable --interval 6h --install`; см. [UPDATES.md](UPDATES.ru.md).
 Dev-настройки workspace сохраняются. Режим dev переключает runtime **и управляемые
 ссылки skill**: `richi config set dev true` направляет каждый управляемый skill на
-`<development.source>/skills/project-memory`, а `richi config set dev false`
+`<development.source>/skills/richi`, а `richi config set dev false`
 возвращает его на установленный релиз; каждое переключение выполняется одной
 восстанавливаемой транзакцией и отражается в `agent_skills`. Это относится
 к каждому подключённому агенту. Блоки инструкций, файлы адаптеров, такие как
@@ -230,7 +243,7 @@ richi setup --agent cursor --yes
 richi setup --agent cursor --status
 ```
 
-Setup создаёт ссылку `~/.cursor/skills/project-memory`, устанавливает пользовательское
+Setup создаёт ссылку `~/.cursor/skills/richi`, устанавливает пользовательское
 правило `~/.cursor/rules/richi-project-memory.mdc` и добавляет хук `sessionStart`
 в `~/.cursor/hooks.json`, сохраняя другие хуки. Хук запускает скрипт
 `~/.cursor/richi/session_start.py`. [Skills в Cursor](https://cursor.com/docs/skills)
@@ -252,7 +265,7 @@ richi setup --agent claude --yes
 richi setup --agent claude --status
 ```
 
-Claude Code получает skill в `~/.claude/skills/project-memory`,
+Claude Code получает skill в `~/.claude/skills/richi`,
 управляемый блок в `~/.claude/CLAUDE.md` и SessionStart hook в `settings.json`.
 Поддерживается отдельный профиль через `CLAUDE_CONFIG_DIR`.
 Существующие настройки и hooks сохраняются; ранее скопированный skill требует

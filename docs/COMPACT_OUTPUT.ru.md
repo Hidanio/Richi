@@ -40,7 +40,7 @@ Launcher форматирует свои ответы без импорта вы
 
 ## Skill и маршруты к подробностям
 
-Основной [SKILL.md](../skills/project-memory/SKILL.ru.md) содержит выбор workspace,
+Основной [SKILL.md](../skills/richi/SKILL.ru.md) содержит выбор workspace,
 chat/project guards, поиск или прямой get известного ID, неполноту excerpts,
 авторизацию записи, full get/CAS, источники и состояния. Подробности загружаются
 из references по задаче. Если skill установлен через Richi setup, управляемая
@@ -49,11 +49,11 @@ chat/project guards, поиск или прямой get известного ID,
 [Установка и разработка](SETUP.ru.md).
 
 Для частых операций предусмотрены отдельные самодостаточные инструкции:
-[запись](../skills/project-memory/references/ENTRY_WRITE.ru.md),
-[диагностика поиска](../skills/project-memory/references/RECALL_DEBUG.ru.md),
-[чтение соседей](../skills/project-memory/references/NEIGHBORS.ru.md),
-[аудит без изменений](../skills/project-memory/references/MEMORY_AUDIT.ru.md) и
-[capture/attach](../skills/project-memory/references/GIT_CAPTURE.ru.md).
+[запись](../skills/richi/references/ENTRY_WRITE.ru.md),
+[диагностика поиска](../skills/richi/references/RECALL_DEBUG.ru.md),
+[чтение соседей](../skills/richi/references/NEIGHBORS.ru.md),
+[аудит без изменений](../skills/richi/references/MEMORY_AUDIT.ru.md) и
+[capture/attach](../skills/richi/references/GIT_CAPTURE.ru.md).
 Соответствующий материал перенесён из широких справочников; их оставшиеся
 разделы нужны для расширенных операций. Известный ID можно читать напрямую
 по core без загрузки справочника записи.

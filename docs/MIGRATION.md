@@ -89,7 +89,9 @@ execution configuration separately.
    database. Remove direct storage overrides from the agent environment too.
 2. For Codex, Claude Code and Cursor, follow the [managed setup](SETUP.md) to
    install or adopt the skill. For a manually integrated client, preserve any
-   local additions before replacing your copy of `skills/project-memory`.
+   local additions, copy the `skills/richi` directory into the client's skills folder,
+   and move your old `project-memory` copy outside that folder. Update any project
+   instructions that explicitly invoke the skill by its old name.
    Replace calls to old `memory.py`,
    `serve.py` and `launch_map.py` scripts in project instructions with direct
    `richi` commands. Preserve write permissions and source-verification rules.
@@ -110,7 +112,7 @@ execution configuration separately.
 If a registered project's checkout moves, update the complete `project` object
 with `project upsert`, preserving the other fields. Independent clones are not
 automatically treated as the same repository. See the
-[Git reference](../skills/project-memory/references/GIT.md).
+[Git reference](../skills/richi/references/GIT.md).
 
 <a id="схема-базы-и-исправление-ошибок-переноса"></a>
 ## Database schema and migration recovery
@@ -123,7 +125,7 @@ references.
 If `check` reports an unknown schema, preserve the database and investigate the
 version it reports. To upgrade schema 1 or 2 to schema 3, take a backup and run
 `richi migrate` on the intended workspace. See the
-[graph reference](../skills/project-memory/references/GRAPH.md).
+[graph reference](../skills/richi/references/GRAPH.md).
 
 Before writes resume, you can return to the original workspace or restore the
 previous `database` setting in `default`. After new entries appear in the new store,

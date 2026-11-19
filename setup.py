@@ -9,7 +9,7 @@ from setuptools.command.build_py import build_py
 class BuildWithSkill(build_py):
     def run(self):
         super().run()
-        source = Path(__file__).parent / "skills" / "project-memory"
+        source = Path(__file__).parent / "skills" / "richi"
         target = Path(self.build_lib) / "richi_launcher" / "agent_skill"
         if target.exists():
             shutil.rmtree(target)

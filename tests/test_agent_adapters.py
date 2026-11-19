@@ -24,7 +24,7 @@ class AgentAdapterTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         adapter.INSTRUCTION_LIMIT = None
         adapter.detected = lambda: True
         adapter.paths = lambda current=None: (self.profile, self.profile / "POLICY.md",
-                                               self.profile / "skills/project-memory")
+                                               self.profile / "skills/richi")
         adapter.setup_operations = lambda ctx, profile, current, replace: self.extra_operations("seed")
         adapter.activation_operations = lambda ctx, record, site: self.extra_operations(
             agent_adapters.literal(site / "richi_launcher/demo_setup.py", "DATA"))
@@ -81,12 +81,12 @@ class AgentAdapterTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
             installation._activate(self.ctx, new, "updated")
             self.assertEqual((self.profile / "session.cfg").read_text(), "next")
             self.assertEqual(agent_setup._load(self.ctx, "demo")["demo_data"], "next")
-            self.assertIn("Synthetic release 0.2.0", (self.profile / "skills/project-memory/SKILL.md").read_text())
+            self.assertIn("Synthetic release 0.2.0", (self.profile / "skills/richi/SKILL.md").read_text())
             old["generations"].update(new["generations"])
             old["previous"] = new["current"]
             installation._activate(self.ctx, old, "rolled_back")
         self.assertEqual((self.profile / "session.cfg").read_text(), "seed")
-        self.assertIn("Synthetic release 0.1.0", (self.profile / "skills/project-memory/SKILL.md").read_text())
+        self.assertIn("Synthetic release 0.1.0", (self.profile / "skills/richi/SKILL.md").read_text())
 
     def test_dev_mode_moves_any_adapter_skill_without_adapter_code(self):
         # Dev switching is shared: it moves the skill path from paths() for every
@@ -96,11 +96,11 @@ class AgentAdapterTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         self.configure()
         self.configure("--agent", "demo")
         checkout = self.home / "checkout"
-        shutil.copytree(Path(agent_setup.__file__).parent / "agent_skill", checkout / "skills/project-memory")
+        shutil.copytree(Path(agent_setup.__file__).parent / "agent_skill", checkout / "skills/richi")
         (checkout / "src/richi").mkdir(parents=True)
         for name in ("pyproject.toml", "src/richi/__init__.py", "src/richi/memory.py", "src/richi/serve.py"):
             (checkout / name).write_text("")
-        skill, dev_link = self.profile / "skills/project-memory", str(checkout / "skills/project-memory")
+        skill, dev_link = self.profile / "skills/richi", str(checkout / "skills/richi")
         policy = (self.profile / "POLICY.md").read_bytes()
         report = agent_setup.switch_skills(True, checkout)
         self.assertEqual((report["status"], set(report["agents"])), ("changed", {"codex", "demo"}))

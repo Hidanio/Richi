@@ -150,7 +150,7 @@ richi --project-path /path/to/service-example recall 'local cache' --project ser
 To register several repositories, preview `richi project scan /path/to/repositories`
 before applying the result with `--apply`. Change rules only at the user's
 request. For creation examples and the `rules log` change history, see
-[standing rules](../skills/project-memory/references/RULES.md).
+[standing rules](../skills/richi/references/RULES.md).
 
 The map's **Rules** tab shows them and, in a page opened by `richi map`, adds
 and edits them with templates and a list of installed skills: one skill for every agent, or
@@ -166,7 +166,7 @@ richi skill-sources add gemini-cli --name "Gemini CLI" --skills ~/.gemini/skills
 richi skill-sources update claude --disable claude-app
 ```
 
-See [agents and their skills](../skills/project-memory/references/AGENT_SKILLS.md); the
+See [agents and their skills](../skills/richi/references/AGENT_SKILLS.md); the
 map's **Agents** tab shows and changes the same settings.
 
 In a bound chat, `-w` may only repeat the stored workspace. Direct `--db`,
@@ -187,30 +187,30 @@ An unbound chat receives `selection_required` without database access. A broken
 runtime returns `unavailable` with available settings and a reason. See details
 and limits in the [workspace guide](WORKSPACES.md#состояние-workspace-и-путей-проектов).
 
-Complete references live in `skills/project-memory/references`. This is the
+Complete references live in `skills/richi/references`. This is the
 single documentation source for CLI and the installed skill: the entire skill
 directory is portable, without links to files outside it.
 
 | Task | Reference |
 |---|---|
-| Create a database, register a project, make a backup | [CLI](../skills/project-memory/references/CLI.md) |
-| Load or manage the user's standing rules | [Rules](../skills/project-memory/references/RULES.md) |
-| Create or fully replace a record, save a task card | [Writing and conflict protection](../skills/project-memory/references/ENTRY_WRITE.md) |
-| Find prior work and understand result limits | [Recall](../skills/project-memory/references/RECALL.md) |
-| Select candidates and batch-read full records | [Discover and fetch](../skills/project-memory/references/RETRIEVAL_TOOLS.md) |
-| Assemble question and code-change context | [Brief](../skills/project-memory/references/BRIEF.md) |
-| Link knowledge to code versions, open history and diffs | [Git sources](../skills/project-memory/references/GIT.md) |
-| Capture checked checkout/worktree bytes and attach a source | [Capture and attach](../skills/project-memory/references/GIT_CAPTURE.md) |
-| Find knowledge associated with changed files | [Impact](../skills/project-memory/references/IMPACT.md) |
-| Create entities and edges | [Graph](../skills/project-memory/references/GRAPH.md) |
-| Read neighbors of a known record | [Neighbors and output boundaries](../skills/project-memory/references/NEIGHBORS.md) |
-| Describe terms with different meanings and versions | [Encyclopedia](../skills/project-memory/references/ENCYCLOPEDIA.md) |
-| Find tools, configurations and tasks that used them | [Tools](../skills/project-memory/references/TOOLS.md) |
-| Investigate a missing known result | [Recall diagnostics](../skills/project-memory/references/RECALL_DEBUG.md) |
-| Check workspace status, candidates or a source group | [Diagnostics](../skills/project-memory/references/DIAGNOSTICS.md) |
-| Assess duplicates and consolidation without changes | [Bounded audit](../skills/project-memory/references/MEMORY_AUDIT.md) |
-| Manually consolidate knowledge and inspect punisher candidates | [Maintenance](../skills/project-memory/references/MAINTENANCE.md) |
-| Validate a retrieval change with reproducible examples | [Evaluation](../skills/project-memory/references/EVALUATION.md) |
+| Create a database, register a project, make a backup | [CLI](../skills/richi/references/CLI.md) |
+| Load or manage the user's standing rules | [Rules](../skills/richi/references/RULES.md) |
+| Create or fully replace a record, save a task card | [Writing and conflict protection](../skills/richi/references/ENTRY_WRITE.md) |
+| Find prior work and understand result limits | [Recall](../skills/richi/references/RECALL.md) |
+| Select candidates and batch-read full records | [Discover and fetch](../skills/richi/references/RETRIEVAL_TOOLS.md) |
+| Assemble question and code-change context | [Brief](../skills/richi/references/BRIEF.md) |
+| Link knowledge to code versions, open history and diffs | [Git sources](../skills/richi/references/GIT.md) |
+| Capture checked checkout/worktree bytes and attach a source | [Capture and attach](../skills/richi/references/GIT_CAPTURE.md) |
+| Find knowledge associated with changed files | [Impact](../skills/richi/references/IMPACT.md) |
+| Create entities and edges | [Graph](../skills/richi/references/GRAPH.md) |
+| Read neighbors of a known record | [Neighbors and output boundaries](../skills/richi/references/NEIGHBORS.md) |
+| Describe terms with different meanings and versions | [Encyclopedia](../skills/richi/references/ENCYCLOPEDIA.md) |
+| Find tools, configurations and tasks that used them | [Tools](../skills/richi/references/TOOLS.md) |
+| Investigate a missing known result | [Recall diagnostics](../skills/richi/references/RECALL_DEBUG.md) |
+| Check workspace status, candidates or a source group | [Diagnostics](../skills/richi/references/DIAGNOSTICS.md) |
+| Assess duplicates and consolidation without changes | [Bounded audit](../skills/richi/references/MEMORY_AUDIT.md) |
+| Manually consolidate knowledge and inspect punisher candidates | [Maintenance](../skills/richi/references/MAINTENANCE.md) |
+| Validate a retrieval change with reproducible examples | [Evaluation](../skills/richi/references/EVALUATION.md) |
 | Measure storage growth and maintain the search index | [Storage](STORAGE.md) |
 
 Examples use fictional projects `service-example`, `service-consumer`, task

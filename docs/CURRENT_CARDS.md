@@ -16,8 +16,8 @@ nor subject to cleanup. The separate Templates pilot is unchanged.
 the decision, scope, reasons, active limitations, checks, unknowns and next step.
 Independent investigations, decisions and experiments remain ordinary current
 entries with sources and `part_of` links from detail to task. Rules are in the
-[skill](../skills/project-memory/SKILL.md) and
-[maintenance procedure](../skills/project-memory/references/MAINTENANCE.md).
+[skill](../skills/richi/SKILL.md) and
+[maintenance procedure](../skills/richi/references/MAINTENANCE.md).
 
 New flag `punisher --summary-warn-chars N` accepts an integer `1..1000000`,
 default `6000`; the Python API also rejects `bool`. Length is exact
@@ -48,7 +48,7 @@ are not a shell string. Diagnostics do not include the full summary. A budget
 may omit an entire finding, but cannot truncate mandatory details or IDs.
 `candidate_count`, `finding_counts`, `omitted_findings` and coverage retain
 their meanings; scan caps and integrity `health` are unchanged. Full contract:
-[DIAGNOSTICS](../skills/project-memory/references/DIAGNOSTICS.md).
+[DIAGNOSTICS](../skills/richi/references/DIAGNOSTICS.md).
 
 <a id="воспроизводимый-пример"></a>
 ## Reproducible example

@@ -65,7 +65,7 @@ startup. Линейный обход метаданных recall остаётс�
 6. Отдельным профилем проверить исчезновение целевых импортов на обычном пути,
    сохранив исходные `.prof`. Пройти тесты launcher/config/workspaces,
    полную unittest suite и acceptance recall по правилам
-   [EVALUATION.md](../skills/project-memory/references/EVALUATION.ru.md).
+   [EVALUATION.md](../skills/richi/references/EVALUATION.ru.md).
    Особое внимание — путям записи и preflight, которые теперь импортируют
    библиотеки по месту, а также свежести кода в dev.
 

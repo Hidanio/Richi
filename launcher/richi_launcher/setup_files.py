@@ -62,6 +62,23 @@ def change(path, after, *, before=None):
     return {"path": str(path), "before": snapshot(path) if before is None else before, "after": after}
 
 
+def backup_skill(op):
+    path = Path(op["path"])
+    op["backup"] = str(path.parent.parent / "richi-skill-backups" / (path.name + "-" + uuid.uuid4().hex))
+    return op
+
+
+def duplicate_skill(path, replace_skill):
+    """An unmanaged discovery path can only be moved to an explicit backup."""
+    op = change(path, {"kind": "absent"})
+    if op["before"]["kind"] == "absent":
+        return []
+    if not replace_skill:
+        raise ConfigError("A duplicate or legacy skill exists at " + str(path) +
+                          "; move it outside skill discovery or use setup with --replace-skill to back it up")
+    return [backup_skill(op)]
+
+
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 

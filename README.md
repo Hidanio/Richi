@@ -20,10 +20,10 @@ that context together with sources and the conditions under which knowledge appl
 - [Tools](docs/TOOLS.md), practical recipes, configurations and linked project tasks.
 - Explicit links between knowledge, components and projects.
 - Source references and code revisions that support conclusions.
-- [Standing rules](skills/project-memory/references/RULES.md) the user sets for a
+- [Standing rules](skills/richi/references/RULES.md) the user sets for a
   workspace or one project; agents load them in every chat and follow them. A
   rule may name the skill to use, for every agent or
-  [one per agent](skills/project-memory/references/AGENT_SKILLS.md), and the map's
+  [one per agent](skills/richi/references/AGENT_SKILLS.md), and the map's
   Rules and Agents tabs edit rules and the agents' skill sources.
 
 The implementation uses SQLite, text search, a relationship graph, an interactive
@@ -73,7 +73,7 @@ richi config set dev true
 ```
 
 The CLI, agents and map now use this checkout's runtime code, and the agent
-skills connected by `richi setup` link to its `skills/project-memory`. The CLI picks up
+skills connected by `richi setup` link to its `skills/richi`. The CLI picks up
 changes on its next invocation; the map reloads its server after source changes.
 Refresh the browser page to update the interface. Use `richi config set dev false`
 to return to the installed version. Both modes share settings and the knowledge
@@ -133,15 +133,15 @@ shared repositories and settings.
   map port, environment variables and invocation from different directories.
 - [Commands and data formats](docs/CLI.md): search, recording outcomes, the graph,
   definitions, source checks and manual maintenance.
-- [Project Memory skill](skills/project-memory/SKILL.md): retrieving context and
+- [Richi skill](skills/richi/SKILL.md): retrieving context and
   accumulating engineering knowledge with sources, history and concurrency checks.
 - [Compact agent output](docs/COMPACT_OUTPUT.md): `--compact-json`, progressive
   loading of instructions and measured limits of token savings.
-- [Discovery and batch retrieval](skills/project-memory/references/RETRIEVAL_TOOLS.md):
+- [Discovery and batch retrieval](skills/richi/references/RETRIEVAL_TOOLS.md):
   short `discover` cards and complete records through `fetch`.
-- [Metadata without loading cards](skills/project-memory/references/QUERY_TOOLS.md):
+- [Metadata without loading cards](skills/richi/references/QUERY_TOOLS.md):
   `query count`, `exists`, `facets`, `select`; operation catalog: `capabilities list`.
-- [Composed filters and indexed search](skills/project-memory/references/FILTERS.md):
+- [Composed filters and indexed search](skills/richi/references/FILTERS.md):
   strict `--where` filters and explicit construction of a derived index.
 - [Token and context measurements](docs/AGENT_WORKFLOW_EVAL.md): comparing built-in
   operations with card reads and working Python scripts.
@@ -149,7 +149,7 @@ shared repositories and settings.
   history and files; preview and backup before optimization.
 
 To connect another local client, open the `richi agents` menu in a terminal.
-For other agents, copy the entire `skills/project-memory` directory and configure
+For other agents, copy the entire `skills/richi` directory and configure
 access to the installed CLI. Scope memory authorization in agent/project
 instructions. See [setup](docs/SETUP.md) and the
 [agent integration example](docs/INSTALLATION.md#подключение-агента).

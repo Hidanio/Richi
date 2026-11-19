@@ -86,7 +86,7 @@ class ClaudeSetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         with patch.object(installation, '_collect', return_value={}):
             installation._activate(self.ctx, state, 'updated')
             self.assertEqual(hook.read_text(), new_hook)
-            for skill in ('.agents/skills/project-memory', '.claude/skills/project-memory'):
+            for skill in ('.agents/skills/richi', '.claude/skills/richi'):
                 self.assertIn('Synthetic release 0.2.0', (self.home / skill / 'SKILL.md').read_text())
             old['generations'].update(state['generations'])
             old['previous'] = state['current']
@@ -129,13 +129,13 @@ class ClaudeSetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         self.assertEqual(before, self.paths())
 
     def test_claude_skill_adoption_preserves_manual_copy(self):
-        skill = self.home / '.claude/skills/project-memory'
+        skill = self.home / '.claude/skills/richi'
         skill.mkdir(parents=True)
         (skill / 'SKILL.md').write_text('manual copy')
         with self.assertRaisesRegex(ConfigError, '--replace-skill'):
             self.configure('--agent', 'claude')
         self.configure('--agent', 'claude', '--replace-skill')
-        backup, = (self.home / '.claude/richi-skill-backups').glob('project-memory-*')
+        backup, = (self.home / '.claude/richi-skill-backups').glob('richi-*')
         self.assertEqual((backup / 'SKILL.md').read_text(), 'manual copy')
         self.assertTrue(skill.is_symlink())
 

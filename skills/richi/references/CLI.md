@@ -224,7 +224,7 @@ If SQLite lacks FTS5 when a database is created, `scan` is used automatically: U
 
 ## Reliability and backups
 
-For manual deduplication and knowledge consolidation, ask `project-memory`
+For manual deduplication and knowledge consolidation, ask your agent to use the `richi` skill
 to perform maintenance in a separate task. This mode does not run on a schedule
 or on every search. The procedure, preservation of sources/history and relationship
 checks are described in [MAINTENANCE.md](MAINTENANCE.md).
