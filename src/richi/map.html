@@ -1551,6 +1551,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const save=agentSave.then(async()=>{
       const answer=await sendMapChange('/api/agents',change);
       acceptAgents(answer.listing);
+      return answer;
     });
     agentSave=save.catch(()=>{});
     return save;
@@ -1640,13 +1641,13 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const rules=agentRules(agent).length,reset=agent.builtin;
     const panel=ruleDialog(reset?'Сбросить к встроенным настройкам?':'Удалить агента?',agent.name+' · '+agent.id),{dialog,form,body,foot}=panel;
     body.append(make('p','rule-confirm',reset?'Выключенные источники скиллов снова включатся, а добавленные папки исчезнут из списка. Сами папки и скиллы на диске не меняются.':
-      'Richi перестанет учитывать этого агента: он пропадёт из форм правил и списков скиллов. Его папки и скиллы на диске не меняются.'+(rules?' Правила, которые называют скилл для него ('+rules+'), останутся как есть.':'')));
+      'Richi удалит ваше описание агента и настройки его источников скиллов. Его папки и скиллы на диске не меняются.'+(rules?' Правила, которые называют скилл для него ('+rules+'), останутся как есть.':'')));
     const problem=ruleProblem(body),showCommand=ruleCommandBox(body,agentCommandHint),cancel=toolButton('Отмена',()=>dialog.close()),label=reset?'Сбросить':'Удалить агента',submit=make('button',rulesState.editing?(reset?'primary':'danger solid'):'primary',rulesState.editing?label:'Показать команду');submit.type='submit';foot.append(cancel,submit);
     form.addEventListener('submit',async event=>{
       event.preventDefault();problem('');const request={action:'remove',id:agent.id,expected_updated_at:agent.updated_at};
       if(!rulesState.editing){showCommand(agentCommand(request));return;}
       await saveFromForm(panel,submit,{send:()=>saveAgentChange(request),explain:agentChangeProblem,problem,
-        saved:()=>{agentsState.problem='';announce(reset?'Настройки агента сброшены':'Агент удалён');renderAgents();},
+        saved:answer=>{agentsState.problem='';announce(answer.agent?.builtin?'Восстановлены встроенные настройки агента':'Агент удалён');renderAgents();},
         failed:async error=>{
           if(error.code!=='conflict'&&error.code!=='not_found')return '';
           await loadAgents();

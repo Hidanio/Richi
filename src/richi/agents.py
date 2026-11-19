@@ -18,7 +18,9 @@ three layers, each refining the one before:
    extra skill folders. Removing them restores the built-in agent.
 3. The user's own agents, described with generic parts: a name, skill
    folders, an environment variable that marks its shells. An agent that needs
-   more than that becomes a built-in entry.
+   more than that becomes a built-in entry. If an upgrade adds a built-in
+   agent with the same ID, the existing description stays in effect until
+   its owner removes it.
 
 Layers 2 and 3 are the user's settings, kept in agents.json in Richi's
 configuration directory and shared by every workspace of this user; `richi
@@ -138,11 +140,19 @@ def _codex_sources(environ, home):
             SkillSource("plugins", "plugins", "cache", profile / "plugins" / "cache")]
 
 
+def _cursor_sources(environ, home):
+    # Cursor also discovers personal skills in the Claude and Codex compatibility folders.
+    return [SkillSource(profile + "-skills", "skills", "skills", home / ("." + profile) / "skills")
+            for profile in ("cursor", "agents", "claude", "codex")]
+
+
 AGENTS = (
     Agent(id="claude", name="Claude Code", variables={"CLAUDECODE": "1"},
           invocation="front-matter", plugin_commands=True, sources=_claude_sources),
     Agent(id="codex", name="Codex", variables={"CODEX_THREAD_ID": None},
           invocation="openai-yaml", plugin_commands=False, sources=_codex_sources, chat_prefix=False),
+    Agent(id="cursor", name="Cursor", variables={"CURSOR_AGENT": None},
+          invocation="front-matter", plugin_commands=False, sources=_cursor_sources),
 )
 
 # Other agents a user may add as their own, with the user-wide skill folder
@@ -150,7 +160,6 @@ AGENTS = (
 # docs/agents.md, November 2026). They are suggestions for `skill-sources add`, not
 # agents Richi knows until the user adds one.
 PRESETS = (
-    ("cursor", "Cursor", "~/.cursor/skills"),
     ("gemini-cli", "Gemini CLI", "~/.gemini/skills"),
     ("opencode", "OpenCode", "~/.config/opencode/skills"),
     ("github-copilot", "GitHub Copilot", "~/.copilot/skills"),
@@ -472,11 +481,11 @@ def load_settings(environ=None, home=None):
 def own_entry(identifier, entry):
     """Whether a stored entry may describe one of the user's own agents.
 
-    Not a built-in agent's, and not one without a name: that adjusts an agent
-    built into a newer Richi (registry). An entry that is not even an object
-    may be anything, so it counts.
+    Only an own agent has a stored name, even after an upgrade adds its ID
+    to the built-in registry. If an entry is not even an object, count it
+    unless we already know its ID.
     """
-    return identifier not in builtin_ids() and not (isinstance(entry, dict) and "name" not in entry)
+    return "name" in entry if isinstance(entry, dict) else identifier not in builtin_ids()
 
 
 def missing_agents(settings):
@@ -486,7 +495,8 @@ def missing_agents(settings):
     what the user set for it; an own agent may be one a newer Richi accepts
     under an ID of another shape too.
     """
-    return sorted(identifier for identifier, (entry, _why) in settings.unusable.items() if own_entry(identifier, entry))
+    return sorted(identifier for identifier, (entry, _why) in settings.unusable.items()
+                  if identifier not in builtin_ids() and own_entry(identifier, entry))
 
 
 def settings_complete(settings=None, environ=None, home=None):
@@ -537,12 +547,14 @@ def registry(environ=None, home=None, entries=None):
     """
     if entries is None:
         entries, _problem = load_settings(environ, home)
-    known = set(builtin_ids())
-    agents = [_adjusted(agent, entries[agent.id]) if agent.id in entries else agent for agent in AGENTS]
-    # An entry without a name adjusts a built-in agent this Richi does not have.
-    agents += [_custom(identifier, entry) for identifier, entry in sorted(entries.items())
-               if identifier not in known and "name" in entry]
-    return tuple(agents)
+    known = {agent.id: agent for agent in AGENTS}
+    for identifier, entry in sorted(entries.items()):
+        if own_entry(identifier, entry):
+            known[identifier] = _custom(identifier, entry)
+        elif identifier in known:
+            known[identifier] = _adjusted(known[identifier], entry)
+        # An adjustment for an agent only a newer Richi has is kept unused.
+    return tuple(known.values())
 
 
 def ids(environ=None, home=None):

@@ -38,7 +38,7 @@ all of them or some own agents' (`code`: `damaged`, `unreadable`, `newer`, `larg
 described there are not recognized from their shells (they still get their
 skills with `--agent ID`) and cannot be named in new rules, and the same skill
 for every agent is not merged into one; rules that already name them still
-serve them. Claude Code and Codex stay known. Answers of `rules add` and
+serve them. The built-in agents stay known. Answers of `rules add` and
 `rules update` carry it too.
 `unsupported_rules` lists rules a newer Richi wrote in a format this version
 does not read; it leaves them out rather than apply them wrongly, so tell the
@@ -53,10 +53,10 @@ Agents are identified by IDs such as `claude` (Claude Code) and `codex`
 (Codex); `rules list` returns the agents Richi knows in `agents`, and
 [AGENT_SKILLS.md](AGENT_SKILLS.md) tells how the user adds another one. When the agent
 is known, `agent` names it and each rule's `use_skill` is the skill this agent
-uses whenever the rule applies (null for none). Richi recognizes the agent from
-its shell: the chat identity (`RICHI_CHAT_ID` `claude:…`) and the variables the
-agent's shell sets, `CLAUDECODE` for Claude Code and `CODEX_THREAD_ID` for
-Codex. Every sign present must point to the same agent. One agent started from
+uses whenever the rule applies (null for none). Richi recognizes an agent by
+its chat identity (for example, `claude:…` or the `--chat cursor:<id>` supplied
+by Cursor's hook) and by its shell variables (`CLAUDECODE`, `CODEX_THREAD_ID`
+or `CURSOR_AGENT`). Every sign present must point to the same agent. One agent started from
 another's terminal carries the signs of both, and Richi then names neither, so
 that no agent is given another's skill. When `agent` comes back null, run the
 command again with `--agent ID` and your own agent ID. Without an agent, a

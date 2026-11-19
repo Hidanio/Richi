@@ -162,8 +162,8 @@ and edits them with templates and a list of installed skills: one skill for ever
 one per agent when they differ.
 
 Richi knows which agents work on this computer and where each finds skills.
-Claude Code and Codex are built in; switch their skill sources, add skill
-folders or describe another agent, for every workspace at once:
+Claude Code, Codex and Cursor are built in. You can switch their skill sources,
+add skill folders or describe another agent. These settings apply to every workspace.
 
 ```sh
 richi skill-sources list

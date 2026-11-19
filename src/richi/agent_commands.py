@@ -429,12 +429,14 @@ def _apply(action, identifier, options, settings, environ, home):
         _check_version(identifier, agents.stored_version(entry), options.get("expected_updated_at"))
         return ("reset" if builtin else "removed"), None
     current = entries.get(identifier)
+    # A saved custom agent keeps its editable description when a release adds its ID.
+    uses_builtin = builtin and (current is None or not agents.own_entry(identifier, current))
     if action == "add":
         stored = {**entries, **{key: value[0] for key, value in settings.unusable.items()}}
         own = [key for key, value in stored.items() if agents.own_entry(key, value)]
-        status, entry = "created", _added(identifier, options, builtin, current, own, home)
+        status, entry = "created", _added(identifier, options, uses_builtin, current, own, home)
     elif action == "update":
-        status, entry = _updated(identifier, options, builtin, current, environ, home)
+        status, entry = _updated(identifier, options, uses_builtin, current, environ, home)
     else:
         if current is None:
             raise AgentError((identifier + " has no adjustments to remove" if builtin

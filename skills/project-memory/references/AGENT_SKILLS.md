@@ -8,10 +8,9 @@ knows which agents work on this computer and where each finds skills. A rule
 then names one skill for every agent or a different one per agent (see
 [RULES.md](RULES.md)), and `rules show` gives each agent its own.
 
-Agents come in three layers. **Built-in** agents, Claude Code and Codex, are
-defined by Richi, including their plugin and built-in skills, and change only
-with Richi. The user may **adjust** a built-in agent: switch one of its skill
-sources off and add skill folders. And the user may **describe another agent**
+Richi defines the skill sources for its **built-in** agents Claude Code, Codex
+and Cursor. The user may **adjust** a built-in agent by switching off a skill
+source or adding skill folders. The user may also **describe another agent**
 by its name, its skill folders and how to recognize it. These settings belong
 to the user and are shared by every workspace of this computer; they are not
 knowledge and are not copied with a workspace.
@@ -24,14 +23,15 @@ richi --compact-json skill-sources list
 
 `agents` holds every agent in order: `id` (used in `--skill ID=NAME` and
 `rules show --agent ID`), `name`, `builtin`, `detected` (it looks installed for
-this user: for Claude Code and Codex Richi's setup tells; for an own agent its
-folders do, and it is null when every source of it is switched off, since Richi
-does not look at those), `skills` (how many it can use) and `sources`. A source has a `key`,
+this user), `skills` (how many it can use) and `sources`. Richi gets `detected`
+from setup for agents it can connect. For other agents Richi checks their folders
+and returns null when all sources are switched off. A source has a `key`,
 its `path`, whether the folder `exists` (`denied` when this user may not read
 it; neither is checked for a source switched off), whether it is `enabled`,
 whether the user `added` it, and how many `skills` it gives. `chat_prefix` says
 whether the agent's chats are named `ID:…` in `RICHI_CHAT_ID`, which then also
-tells Richi who it is (Codex's chat identity is its thread ID alone).
+tells Richi who it is. Cursor's hook supplies `--chat cursor:<id>`. Codex's
+chat identity is its thread ID alone.
 `updated_at` is the version of
 the user's settings for the agent, null when there are none. `presets` lists
 well-known agents that could be added, with the folder each reads. `problem` is
@@ -76,6 +76,11 @@ another agent, the user adds the `richi rules show --agent ID` step to that
 agent's own standing instructions.
 
 ## Adjust an agent
+
+Cursor reads skills from `~/.cursor/skills`, `~/.agents/skills`, `~/.claude/skills`
+and `~/.codex/skills`. If you added `cursor` as a custom agent in an earlier
+version, Richi keeps that profile and its settings. To use the built-in
+defaults, remove the custom profile with its current `--expected-updated-at`.
 
 ```sh
 richi --compact-json skill-sources update claude --disable claude-app --add-skills ~/work/team-skills

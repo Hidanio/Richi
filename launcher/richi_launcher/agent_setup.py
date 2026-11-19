@@ -189,7 +189,7 @@ def _manifest_op(ctx, records):
                 after = before
         except ConfigError:
             pass
-    return files.change(path, after)
+    return files.change(path, after, before=before)
 
 
 def _block(command, agent="codex"):
@@ -241,7 +241,7 @@ def _file_op(path, block, start=START, end=END, expected=None, instruction_limit
     data = merge_block(files.contents(before), block, start, end, expected)
     if instruction_limit is not None and len(data) > instruction_limit:
         raise ConfigError("Global instructions would exceed the agent discovery budget (" + str(instruction_limit // 1024) + " KiB); shorten them before setup")
-    return files.change(path, files.file_value(data, before.get("mode", 0o600)))
+    return files.change(path, files.file_value(data, before.get("mode", 0o600)), before=before)
 
 
 def _shell_profiles():
@@ -289,6 +289,9 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     installation._validate_layout(ctx)
     _seed_capable(ctx)
     state = installation._state(ctx)
+    # A setup process may have been waiting for a concurrent update or rollback.
+    if os.environ.get(installation.bootstrap.GENERATION_ENV, state["current"]) != state["current"]:
+        raise ConfigError("The active Richi release changed during setup; rerun the command")
     active = state["generations"][state["current"]]
     root, hashes = bundle(active["site"])
     records = _records(ctx)
@@ -556,10 +559,21 @@ def setup_parser():
                     see=("agents", "start"), guide="docs/SETUP.md")
 
 
-def command(argv):
-    from . import installation
-    args = setup_parser().parse_args(argv)
-    ctx = installation._context()
+def _setup_plan(ctx, args):
+    record, ops = plan(ctx, replace_skill=args.replace_skill, no_path=args.no_path, agent=args.agent)
+    changed = [op["path"] for op in ops if op["before"] != op["after"]]
+    result = {"status": "planned", "agent": args.agent, "scope": "user",
+              "changes": changed, "skill": record["skill"], "skill_link": _link_target(record),
+              "skill_mode": _mode(record),
+              "instructions": record["instructions"],
+              "command": record["command"], "backups": str(Path(ctx["root"]) / "setup-backups"),
+              "skill_backups": [op["backup"] for op in ops if "backup" in op],
+              "next_step": "Open a new " + agent_adapters.get(args.agent).LABEL + " chat and choose its workspace. Open a new terminal for PATH changes.",
+              "path_configured": bool(record["profiles"])}
+    return result, ops
+
+
+def _inspect(ctx, args):
     if args.status:
         record = _load(ctx, args.agent)
         if record is None:
@@ -578,19 +592,39 @@ def command(argv):
             except ConfigError as exc:
                 result["dev_skill_error"] = str(exc) + "; repair links to the release or fix the checkout"
         return result
-    record, ops = plan(ctx, replace_skill=args.replace_skill, no_path=args.no_path, agent=args.agent)
-    changed = [op["path"] for op in ops if op["before"] != op["after"]]
-    result = {"status": "planned", "agent": args.agent, "scope": "user",
-              "changes": changed, "skill": record["skill"], "skill_link": _link_target(record),
-              "skill_mode": _mode(record),
-              "instructions": record["instructions"],
-              "command": record["command"], "backups": str(Path(ctx["root"]) / "setup-backups"),
-              "skill_backups": [op["backup"] for op in ops if "backup" in op],
-              "next_step": "Open a new " + agent_adapters.get(args.agent).LABEL + " chat and choose its workspace. Open a new terminal for PATH changes.",
-              "path_configured": bool(record["profiles"])}
-    if args.dry_run:
-        return result
-    if not args.yes and changed:
+    return _setup_plan(ctx, args)[0]
+
+
+def _preview(ctx, args):
+    """Read a complete setup transaction without creating lock files on first use."""
+    import fcntl
+    lock = Path(ctx["root"]) / "state.lock"
+    if not lock.exists():
+        # A first writer creates state.lock before touching any profile. If one
+        # appeared during the inspection, discard even an apparent conflict.
+        try:
+            result = _inspect(ctx, args)
+        except (ConfigError, OSError):
+            if not lock.exists():
+                raise
+        else:
+            if not lock.exists():
+                return result
+    with lock.open("rb") as stream:
+        fcntl.flock(stream, fcntl.LOCK_SH)
+        return _inspect(ctx, args)
+
+
+def command(argv):
+    from . import installation
+    args = setup_parser().parse_args(argv)
+    ctx = installation._context()
+    if args.status or args.dry_run:
+        return _preview(ctx, args)
+    # Validate a first setup before creating its installation metadata.
+    if not args.yes or not (Path(ctx["root"]) / "state.lock").exists():
+        result = _preview(ctx, args)
+    if not args.yes and result["changes"]:
         try:
             with open("/dev/tty", "r+") as terminal:
                 # The plan is shown to someone who can answer; without a
@@ -607,12 +641,8 @@ def command(argv):
             return dict(result, status="cancelled")
     with installation._locked(ctx), installation._locked(ctx, state=True):
         files.recover(ctx)
-        record, ops = plan(ctx, replace_skill=args.replace_skill, no_path=args.no_path, agent=args.agent)
-        result["skill_backups"] = [op["backup"] for op in ops if "backup" in op]
-        result["changes"] = [op["path"] for op in ops if op["before"] != op["after"]]
-        result["skill_link"] = _link_target(record)
-        result["skill_mode"] = _mode(record)
-        if any(op["before"] != op["after"] for op in ops):
+        result, ops = _setup_plan(ctx, args)
+        if result["changes"]:
             transaction = files.begin(ctx, ops)
             files.finish(ctx, transaction)
     return dict(result, status="configured")

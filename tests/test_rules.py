@@ -22,6 +22,10 @@ from richi_launcher import agent_setup, chats, config
 from richi_launcher.claude_setup import HOOK
 
 
+def all_agent_skill_options(skill):
+    return [arg for agent in agents.builtin_ids() for arg in ("--skill", agent + "=" + skill)]
+
+
 class RulesTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="richi-rules-")
@@ -32,7 +36,7 @@ class RulesTests(unittest.TestCase):
         self.addCleanup(environment.stop)
         # Agent shells identify the agent; rules show must not depend on the shell running the tests.
         for key in [key for key in os.environ if key.startswith("RICHI_")
-                    or key in {"CODEX_THREAD_ID", "CLAUDECODE", "XDG_CONFIG_HOME"}]:
+                    or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT", "XDG_CONFIG_HOME"}]:
             del os.environ[key]
         agents.forget_settings()
         self.configs, self.repos = {}, {}
@@ -294,11 +298,11 @@ class RulesTests(unittest.TestCase):
                 argv += ["--skill", skill]
             return self.command("alpha", *argv)["rule"]
 
-        both = add("review", "claude=engineering:code-review", "codex=code-review")
-        self.assertEqual((both["skill"], both["skills"]),
-                         (None, {"claude": "engineering:code-review", "codex": "code-review"}))
+        review = add("review", "claude=engineering:code-review", "codex=code-review", "cursor=cursor-review")
+        self.assertEqual((review["skill"], review["skills"]),
+                         (None, {"claude": "engineering:code-review", "codex": "code-review", "cursor": "cursor-review"}))
         # The same skill for every agent is stored once, as the shared skill.
-        same = add("same", "claude=pr-description", "codex=pr-description")
+        same = add("same", *(agent + "=pr-description" for agent in agents.builtin_ids()))
         self.assertEqual((same["skill"], same["skills"]), ("pr-description", None))
         mixed = add("mixed", "pr-description", "codex=pr-codex", "claude=pr-description")
         self.assertEqual((mixed["skill"], mixed["skills"]), ("pr-description", {"codex": "pr-codex"}))
@@ -318,6 +322,9 @@ class RulesTests(unittest.TestCase):
                          ("claude", {"mixed": "pr-description", "only": "pr-description",
                                      "review": "engineering:code-review", "same": "pr-description"}))
         self.assertEqual(used(CLAUDECODE="1")[0], "claude")
+        self.assertEqual(used(RICHI_CHAT_ID="cursor:chat-1")[:2],
+                         ("cursor", {"mixed": "pr-description", "only": "pr-description",
+                                     "review": "cursor-review", "same": "pr-description"}))
         # Codex started from a Claude Code terminal carries both agents' signs: neither is named,
         # so no agent is told to use the other's skill.
         for environment in ({}, {"RICHI_CHAT_ID": "claude:chat-1", "CODEX_THREAD_ID": "thread-1"},
@@ -325,7 +332,7 @@ class RulesTests(unittest.TestCase):
             with self.subTest(environment=environment):
                 agent, skills, note = used(**environment)
                 self.assertEqual((agent, set(skills.values())), (None, {"-"}))
-        self.assertIn("skills maps an agent ID (claude: Claude Code, codex: Codex)", note)
+        self.assertIn("skills maps an agent ID (" + ", ".join(a.id + ": " + a.name for a in agents.AGENTS) + ")", note)
         with mock.patch.dict(os.environ, {"CODEX_THREAD_ID": "thread-1"}):
             explicit = self.command("alpha", "rules", "show", "--agent", "claude")
         self.assertEqual(explicit["rules"][2]["use_skill"], "engineering:code-review")
@@ -336,7 +343,7 @@ class RulesTests(unittest.TestCase):
                 for skill in skills:
                     argv += ["--skill", skill]
                 self.command("alpha", *argv, ok=False)
-        changed = self.command("alpha", "rules", "update", "review", "--expected-updated-at", both["updated_at"],
+        changed = self.command("alpha", "rules", "update", "review", "--expected-updated-at", review["updated_at"],
                                "--skill", "codex=code-review")["rule"]
         self.assertEqual((changed["skill"], changed["skills"]), (None, {"codex": "code-review"}))
         cleared = self.command("alpha", "rules", "update", "review", "--expected-updated-at", changed["updated_at"],
@@ -427,7 +434,7 @@ class RulesTests(unittest.TestCase):
                        {"action": "add", "id": "x", "scope": "global", "project": "service", "text": "x"},
                        {"action": "add", "id": "x", "scope": "global", "text": 5},
                        {"action": "add", "id": "x", "scope": "global", "text": "x", "skills": ["codex"]},
-                       {"action": "add", "id": "x", "scope": "global", "text": "x", "skills": {"cursor": "x"}},
+                       {"action": "add", "id": "x", "scope": "global", "text": "x", "skills": {"unknown": "x"}},
                        {"action": "add", "id": "-x", "scope": "global", "text": "x"},
                        {"action": "drop", "id": "review"}, ["add"], "add"):
             with self.subTest(change=change):
@@ -567,18 +574,18 @@ class RulesTests(unittest.TestCase):
             return self.command("alpha", *argv)["rule"]
 
         # The plain skill is for the agents this computer does not list; it once vanished without a word.
-        beside = add("beside", "general", "claude=special", "codex=special")
-        self.assertEqual((beside["skill"], beside["skills"]), ("general", {"claude": "special", "codex": "special"}))
-        without = add("without", "general", "claude=", "codex=")
-        self.assertEqual((without["skill"], without["skills"]), ("general", {"claude": None, "codex": None}))
+        beside = add("beside", "general", *(agent + "=special" for agent in agents.builtin_ids()))
+        self.assertEqual((beside["skill"], beside["skills"]), ("general", dict.fromkeys(agents.builtin_ids(), "special")))
+        without = add("without", "general", *(agent + "=" for agent in agents.builtin_ids()))
+        self.assertEqual((without["skill"], without["skills"]), ("general", dict.fromkeys(agents.builtin_ids())))
         # The map sends the same request as one object.
         sent = {"action": "add", "id": "page", "scope": "global", "text": "Review code.", "skill": "general",
-                "skills": {"claude": "special", "codex": "special"}}
+                "skills": dict.fromkeys(agents.builtin_ids(), "special")}
         page = self.command("alpha", "rules", "apply", "--json", "-", stdin=json.dumps(sent))["rule"]
         self.assertEqual((page["skill"], page["skills"]), (beside["skill"], beside["skills"]))
         changed = self.command("alpha", "rules", "update", "without", "--expected-updated-at", without["updated_at"],
-                               "--skill", "other", "--skill", "claude=own", "--skill", "codex=own")["rule"]
-        self.assertEqual((changed["skill"], changed["skills"]), ("other", {"claude": "own", "codex": "own"}))
+                               "--skill", "other", *all_agent_skill_options("own"))["rule"]
+        self.assertEqual((changed["skill"], changed["skills"]), ("other", dict.fromkeys(agents.builtin_ids(), "own")))
 
         def used(agent):
             shown = self.command("alpha", "rules", "show", "--agent", agent)
@@ -590,25 +597,25 @@ class RulesTests(unittest.TestCase):
         shown, skills = used("cluade")
         self.assertEqual(skills, {"beside": "general", "page": "general", "without": "other"})
         self.assertEqual((shown["agent"], shown["agent_problem"]["known"]),
-                         ("cluade", [{"id": "claude", "name": "Claude Code"}, {"id": "codex", "name": "Codex"}]))
+                         ("cluade", agents.describe()))
         self.assertIn("cluade", shown["agent_problem"]["error"])
         self.assertIn("--agent", shown["agent_problem"]["next"])
         self.assertNotIn("agent_problem", used("codex")[0])
         self.assertNotIn("agent_problem", self.command("alpha", "rules", "show"))
         # An ID that a rule names is not unknown: another computer or a newer Richi has that agent.
-        self.stored("alpha", "rule:beside", skills={"claude": "special", "codex": "special", "cursor": "own"})
-        shown, skills = used("cursor")
+        self.stored("alpha", "rule:beside", skills=dict(beside["skills"], future="own"))
+        shown, skills = used("future")
         self.assertEqual((skills["beside"], skills["page"]), ("own", "general"))
         self.assertNotIn("agent_problem", shown)
         # Without one, the same skill for every known agent is the action's skill: agents added later
         # get it too. An empty one beside per-agent skills could only mean "none for the others",
         # which a rule cannot keep apart from no skill, so it is refused rather than ignored.
-        same = add("same-for-all", "claude=pr", "codex=pr")
+        same = add("same-for-all", *(agent + "=pr" for agent in agents.builtin_ids()))
         self.assertEqual((same["skill"], same["skills"]), ("pr", None))
         refused = self.command("alpha", "rules", "add", "empty-beside", "--global", "--text", "x", "--skill", "",
-                               "--skill", "claude=pr", "--skill", "codex=pr", ok=False)
+                               *all_agent_skill_options("pr"), ok=False)
         self.assertIn("empty --skill", refused["error"])
-        self.assertEqual(used("cursor")[1]["same-for-all"], "pr")
+        self.assertEqual(used("future")[1]["same-for-all"], "pr")
 
     def test_half_a_surrogate_pair_in_a_stored_row_does_not_hide_the_rules(self):
         self.add("alpha", "kept", "--global", text="Reply in Russian.")
@@ -1035,7 +1042,7 @@ class RulesTests(unittest.TestCase):
         self.assertEqual(unchanged["results"][0]["status"], "unchanged")
 
     def test_the_same_skill_of_every_agent_is_merged_only_while_every_agent_is_known(self):
-        same = ["--skill", "claude=rev", "--skill", "codex=rev"]
+        same = all_agent_skill_options("rev")
 
         def skills(rule):
             return rule["skill"], rule["skills"]
@@ -1051,7 +1058,7 @@ class RulesTests(unittest.TestCase):
         self.addCleanup(agents.forget_settings)
         kept = self.command("alpha", "rules", "add", "kept-apart", "--global", "--text", "x", *same)
         self.assertEqual((skills(kept["rule"]), kept["agent_settings_problem"]["code"]),
-                         ((None, {"claude": "rev", "codex": "rev"}), "damaged"))
+                         ((None, dict.fromkeys(agents.builtin_ids(), "rev")), "damaged"))
         settings.unlink()
         agents.forget_settings()
         # The rule names an own agent, which the user then removes from this computer.
@@ -1060,7 +1067,7 @@ class RulesTests(unittest.TestCase):
         three = self.add("alpha", "three", "--global", skill="gemini-cli=gem")
         four = self.add("alpha", "four", "--global", skill="gemini-cli=gem")
         self.command("alpha", "skill-sources", "remove", "gemini-cli", "--expected-updated-at", own["updated_at"])
-        # The same skill for the two agents left is the skill of the action; the one the rule names keeps its none.
+        # The same skill for the agents left is the skill of the action; the one the rule names keeps its none.
         three = self.command("alpha", "rules", "update", "three", "--expected-updated-at", three["updated_at"], *same,
                              "--skill", "gemini-cli=")["rule"]
         self.assertEqual(skills(three), ("rev", {"gemini-cli": None}))
@@ -1069,9 +1076,9 @@ class RulesTests(unittest.TestCase):
                             "--skill", "gemini-cli=gem")["rule"]
         self.assertEqual(skills(four), ("rev", {"gemini-cli": "gem"}))
         # An agent added later gets the skill of the action; the agent the rule names, once back, its own choice.
-        self.command("alpha", "skill-sources", "add", "cursor", "--name", "Cursor", "--skills", "~/.cursor/skills")
+        self.command("alpha", "skill-sources", "add", "later", "--name", "Later", "--skills", "~/later/skills")
         self.command("alpha", "skill-sources", "add", "gemini-cli", "--name", "Gemini CLI", "--skills", "~/.gemini/skills")
-        for agent, wanted in (("cursor", {"three": "rev", "four": "rev"}), ("gemini-cli", {"three": None, "four": "gem"})):
+        for agent, wanted in (("later", {"three": "rev", "four": "rev"}), ("gemini-cli", {"three": None, "four": "gem"})):
             shown = self.command("alpha", "rules", "show", "--agent", agent)
             self.assertEqual({rule["id"]: rule["use_skill"] for rule in shown["rules"] if rule["id"] in wanted}, wanted)
 
@@ -1083,8 +1090,7 @@ class RulesTests(unittest.TestCase):
             "updated_at": "t", "folders": [{"path": "~/x", "enabled": True, "label": "team"}]}}}), encoding="utf-8")
         agents.forget_settings()
         self.addCleanup(agents.forget_settings)
-        added = self.command("alpha", "rules", "add", "pr", "--global", "--text", "x", "--skill", "claude=review",
-                             "--skill", "codex=review")
+        added = self.command("alpha", "rules", "add", "pr", "--global", "--text", "x", *all_agent_skill_options("review"))
         self.assertEqual(((added["rule"]["skill"], added["rule"]["skills"]), "agent_settings_problem" in added),
                          (("review", None), False))
         self.assertEqual([item["id"] for item in self.command("alpha", "skill-sources", "list")["unknown_agents"]],
@@ -1098,11 +1104,10 @@ class RulesTests(unittest.TestCase):
         stored["agents"]["gemini-cli"] = {"updated_at": "t", "folders": [{"path": "~/g", "enabled": True, "label": "x"}]}
         settings.write_text(json.dumps(stored), encoding="utf-8")
         agents.forget_settings()
-        added = self.command("alpha", "rules", "add", "pr2", "--global", "--text", "x", "--skill", "claude=review",
-                             "--skill", "codex=review")
+        added = self.command("alpha", "rules", "add", "pr2", "--global", "--text", "x", *all_agent_skill_options("review"))
         problem = added["agent_settings_problem"]
         self.assertEqual(((added["rule"]["skill"], added["rule"]["skills"]), problem["code"]),
-                         ((None, {"claude": "review", "codex": "review"}), "agents"))
+                         ((None, dict.fromkeys(agents.builtin_ids(), "review")), "agents"))
         self.assertIn("own-00, own-01, own-02, own-03, own-04 and 3 more", problem["error"])
         self.assertNotIn("claude", problem["error"])
         self.assertNotIn("gemini-cli", problem["error"])
@@ -1111,8 +1116,7 @@ class RulesTests(unittest.TestCase):
             del stored["agents"]["own-%02d" % number]
         settings.write_text(json.dumps(stored), encoding="utf-8")
         agents.forget_settings()
-        added = self.command("alpha", "rules", "add", "pr3", "--global", "--text", "x", "--skill", "claude=review",
-                             "--skill", "codex=review")
+        added = self.command("alpha", "rules", "add", "pr3", "--global", "--text", "x", *all_agent_skill_options("review"))
         self.assertEqual(((added["rule"]["skill"], added["rule"]["skills"]), "agent_settings_problem" in added),
                          (("review", None), False))
 
@@ -1127,9 +1131,9 @@ class RulesTests(unittest.TestCase):
         with mock.patch.object(agents, "read_settings", side_effect=read_settings), \
                 closing(memory.connect(database)) as conn, memory.transaction(conn):
             answer = rules.change(conn, {"action": "add", "id": "pr", "scope": "global", "text": "x",
-                                         "skills": {"claude": "review", "codex": "review"}}, memory)
+                                         "skills": dict.fromkeys(agents.builtin_ids(), "review")}, memory)
         self.assertEqual(((answer["rule"]["skill"], answer["rule"]["skills"]), answer["agent_settings_problem"]["code"]),
-                         ((None, {"claude": "review", "codex": "review"}), "agents"))
+                         ((None, dict.fromkeys(agents.builtin_ids(), "review")), "agents"))
         self.assertLess(len(json.dumps(self.command("alpha", "rules", "show"))), 4000)
 
     def test_each_rule_command_uses_one_agent_configuration(self):

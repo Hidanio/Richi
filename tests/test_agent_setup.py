@@ -331,6 +331,21 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
         self.assertEqual(instruction.read_text(), "user edited after crash")
         self.assertTrue((self.root / setup_files.JOURNAL).exists())
 
+    def test_planning_keeps_the_bytes_that_were_actually_merged(self):
+        path = self.home / ".profile"
+        path.write_bytes(b"original\n")
+        merge = agent_setup.merge_block
+
+        def concurrent_edit(*args):
+            path.write_bytes(b"saved by user\n")
+            return merge(*args)
+
+        with patch.object(agent_setup, "merge_block", side_effect=concurrent_edit):
+            op = agent_setup._file_op(path, b"managed")
+        with self.assertRaisesRegex(ConfigError, "changed"):
+            setup_files.begin(self.ctx, [op])
+        self.assertEqual(path.read_bytes(), b"saved by user\n")
+
     def test_interrupted_initial_skill_adoption_restores_original_directory(self):
         skill = self.home / ".agents/skills/project-memory"
         skill.mkdir(parents=True)

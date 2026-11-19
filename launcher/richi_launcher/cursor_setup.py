@@ -1,5 +1,6 @@
 """Local Cursor Agent integration for the user's ~/.cursor profile."""
 import json
+import os
 from pathlib import Path
 import shlex
 import shutil
@@ -63,7 +64,9 @@ context = (
     "If richi is absent from PATH, use ~/.local/bin/" + command + ". "
     "Start with " + command + " chat current and " + command + " workspace list. "
     "If unbound, ask the user once to select a workspace unless they have already chosen one "
-    "in this chat. Bind their choice before accessing memory and reuse it across turns."
+    "in this chat. Bind their choice before accessing memory and reuse it across turns. "
+    "Once bound, load the user's standing rules with " + command + " rules show --agent cursor "
+    "(for repository work: " + command + " --project-path PATH rules show --agent cursor)."
 )
 print(json.dumps({"env": {"RICHI_CHAT_ID": chat}, "additional_context": context}))
 '''
@@ -81,12 +84,12 @@ def activation_operations(ctx, record, site):
     return _hook_operations(ctx, profile, record, content)
 
 
-def _calls_script(entry, script):
+def _calls_script(entry, profile, script):
     command = entry.get("command") if isinstance(entry, dict) else None
     if not isinstance(command, str):
         return False
     try:
-        return str(script) in shlex.split(command)
+        return any(os.path.normpath(profile / arg) == str(script) for arg in shlex.split(command))
     except ValueError:
         return False
 
@@ -117,7 +120,7 @@ def _hook_operations(ctx, profile, current, content):
         starts = hooks.setdefault("sessionStart", [])
         if not isinstance(starts, list):
             raise ValueError("sessionStart must be a list")
-        related = [entry for entry in starts if _calls_script(entry, script)]
+        related = [entry for entry in starts if _calls_script(entry, profile, script)]
         if current:
             previous = current["hook_entry"]
             if related != [previous]:
@@ -127,11 +130,14 @@ def _hook_operations(ctx, profile, current, content):
             if related:
                 raise ValueError("unmanaged Richi sessionStart hook already exists")
             starts.append(hook)
-    except (KeyError, ValueError) as exc:
+        # Refuse a configuration Cursor's JSON reader could not load. This
+        # also catches numbers the Python decoder converted to infinity.
+        encoded = (json.dumps(data, indent=2, allow_nan=False) + "\n").encode()
+        if raw and json.loads(raw) == data:
+            encoded = raw
+    except (KeyError, ValueError, RecursionError) as exc:
         raise ConfigError("Cannot safely merge Cursor hooks: " + str(exc)) from exc
-
-    encoded = raw if raw and json.loads(raw) == data else (json.dumps(data, indent=2) + "\n").encode()
     return {"hook_sha256": files.digest(script_bytes), "hook_entry": hook}, [
         script_op,
-        {"path": str(path), "before": before, "after": files.file_value(encoded, before.get("mode", 0o600))},
+        files.change(path, files.file_value(encoded, before.get("mode", 0o600)), before=before),
     ]

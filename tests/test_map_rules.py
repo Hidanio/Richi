@@ -34,7 +34,7 @@ def clean_environment(test, home):
     test.addCleanup(patch.stop)
     # Agent settings are the user's: a test must read them only from its disposable home.
     for key in [key for key in os.environ if key.startswith("RICHI_")
-                or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "BROWSER",
+                or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "BROWSER",
                            "XDG_CONFIG_HOME"}]:
         del os.environ[key]
     agents.forget_settings()
@@ -100,7 +100,9 @@ class SkillCatalogTests(unittest.TestCase):
                 "\ufeffpolicy:\n  allow_implicit_invocation: false # the user asks for it\n", encoding="utf-8")
             result = skill_catalog.catalog({}, home)
             self.assertEqual({skill["name"]: skill["description"] for skill in result["skills"]},
-                             {"bom-offered": "With a mark", "named": ""})
+                             {"bom-offered": "With a mark", "codex-manual": "", "named": ""})
+            codex_manual = next(skill for skill in result["skills"] if skill["name"] == "codex-manual")
+            self.assertEqual(codex_manual["agents"], ["cursor"])
             # Nothing beyond the bound is read: a field after it is not seen, the ones before it are.
             write_skill(claude / "late", "---\nname: early\npadding: " + "x" * 100 + "\ndescription: Late\n---\n")
             with mock.patch.object(skill_catalog, "MAX_HEADER", 64):
@@ -121,13 +123,14 @@ class SkillCatalogTests(unittest.TestCase):
                 cut = skill_catalog.catalog({}, home)
                 listed = {agent["id"]: (agent["skills"], [source["skills"] for source in agent["sources"]][0])
                           for agent in agent_commands.listing({}, home)["agents"]}
-        self.assertEqual((len(full["skills"]), full["truncated"], full["totals"]), (6, False, {"claude": 4, "codex": 3}))
+        totals = {"claude": 4, "codex": 3, "cursor": 6}
+        self.assertEqual((len(full["skills"]), full["truncated"], full["totals"]), (6, False, totals))
         self.assertEqual(([skill["name"] for skill in cut["skills"]], cut["truncated"]), (["a1", "a2", "a3"], True))
         # The agent read second is not left with nothing: its skills are counted, and a skill that
         # made the list names every agent that has it.
-        self.assertEqual(cut["totals"], {"claude": 4, "codex": 3})
-        self.assertEqual(cut["skills"][0]["agents"], ["claude", "codex"])
-        self.assertEqual(listed, {"claude": (4, 4), "codex": (3, 3)})
+        self.assertEqual(cut["totals"], totals)
+        self.assertEqual(cut["skills"][0]["agents"], ["claude", "codex", "cursor"])
+        self.assertEqual(listed, {"claude": (4, 4), "codex": (3, 3), "cursor": (6, 0)})
 
     def test_a_plugin_manifest_made_to_break_the_parser_is_passed_over(self):
         with tempfile.TemporaryDirectory(prefix="richi-skills-") as temporary:
@@ -164,6 +167,7 @@ class SkillCatalogTests(unittest.TestCase):
             root = Path(temporary)
             home, profile = root / "home", root / "claude-profile"
             codex = home / ".agents" / "skills"
+            write_skill(home / ".cursor" / "skills" / "native", "---\nname: native\n---\n")
             write_skill(profile / "skills" / "pr-description", "---\nname: pr-description\ndescription: Claude copy\n---\n")
             write_skill(codex / "pr-description", "---\nname: pr-description\ndescription: Codex copy\n---\n")
             write_skill(codex / "no-header", "Just instructions\n")
@@ -172,17 +176,19 @@ class SkillCatalogTests(unittest.TestCase):
             (codex / ".hidden").mkdir()
             (codex / "without-skill-file").mkdir()
             result = skill_catalog.catalog({"CLAUDE_CONFIG_DIR": str(profile)}, home)
-        self.assertEqual([skill["name"] for skill in result["skills"]], ["long", "no-header", "pr-description"])
+        self.assertEqual([skill["name"] for skill in result["skills"]], ["long", "native", "no-header", "pr-description"])
         skills = {skill["name"]: skill for skill in result["skills"]}
+        self.assertEqual(skills["native"]["agents"], ["cursor"])
         self.assertEqual(skills["pr-description"], {"name": "pr-description", "description": "Claude copy",
-                                                    "kind": "skills", "agents": ["claude", "codex"]})
+                                                    "kind": "skills", "agents": ["claude", "codex", "cursor"]})
         self.assertEqual(skills["no-header"], {"name": "no-header", "description": "", "kind": "skills",
-                                               "agents": ["codex"]})
+                                               "agents": ["codex", "cursor"]})
         self.assertEqual(len(skills["long"]["description"]), skill_catalog.MAX_DESCRIPTION)
         self.assertEqual([(entry["agent"], entry["kind"], entry["exists"]) for entry in result["roots"]],
                          [("claude", "skills", True), ("claude", "plugins", False), ("claude", "plugins", False),
                           ("codex", "skills", True), ("codex", "skills", False), ("codex", "system", False),
-                          ("codex", "plugins", False)])
+                          ("codex", "plugins", False), ("cursor", "skills", True), ("cursor", "skills", True),
+                          ("cursor", "skills", False), ("cursor", "skills", False)])
         self.assertFalse(result["truncated"])
 
     def test_catalog_includes_codex_system_skills_and_installed_plugin_skills(self):
@@ -719,7 +725,7 @@ class MapRulesAPITests(unittest.TestCase):
                           skill=None, skills={"claude": "engineering:code-review", "codex": ""})["rule"]
         self.assertEqual((own["skill"], own["skills"]), (None, {"claude": "engineering:code-review"}))
         shared = self.change(secret, action="update", id="pr-skill", expected_updated_at=own["updated_at"],
-                             skills={"claude": "pr-description", "codex": "pr-description"})["rule"]
+                             skills=dict.fromkeys(agents.builtin_ids(), "pr-description"))["rule"]
         self.assertEqual((shared["skill"], shared["skills"]), ("pr-description", None))
         none = self.change(secret, action="update", id="pr-skill", expected_updated_at=shared["updated_at"],
                            skill="", skills={"claude": None})["rule"]
@@ -801,8 +807,7 @@ class MapRulesAPITests(unittest.TestCase):
         secret = self.secret()
         listing = self.listed()
         self.assertEqual((listing["projects"], listing["agents"]),
-                         ([{"id": "service", "name": "Service"}],
-                          [{"id": "claude", "name": "Claude Code"}, {"id": "codex", "name": "Codex"}]))
+                         ([{"id": "service", "name": "Service"}], agents.describe(entries={})))
         self.assertNotIn("invalid_rules", listing)
         self.change(secret, action="add", id="kept", scope="global", text="Stays.")
         with closing(sqlite3.connect(str(self.database))) as conn, conn:
@@ -845,7 +850,7 @@ class MapRulesAPITests(unittest.TestCase):
         self.assertEqual(self.request("POST", "/api/rules", raw=nested)[0], 403)
         self.assertEqual(self.request("POST", "/api/session", raw=nested)[1]["code"], "ticket_invalid")
         self.assertEqual((self.listed()["rules"], [agent["id"] for agent in self.agents()["agents"]]),
-                         ([], ["claude", "codex"]))
+                         ([], list(agents.builtin_ids())))
 
     def test_change_requests_must_be_same_origin_json(self):
         secret = self.secret()
@@ -904,7 +909,7 @@ class MapRulesAPITests(unittest.TestCase):
         write_skill(home / ".gemini" / "skills" / "review", "---\nname: review\n---\n")
         listed = self.agents()
         self.assertEqual(([agent["id"] for agent in listed["agents"]], listed["editing"], listed["problem"]),
-                         (["claude", "codex"], False, None))
+                         (list(agents.builtin_ids()), False, None))
         self.assertIn("gemini-cli", [preset["id"] for preset in listed["presets"] if preset["exists"]])
         agent = {"action": "add", "id": "gemini-cli", "name": "Gemini CLI", "folders": ["~/.gemini/skills"]}
         self.assertEqual(self.agent_change(None, 403, **agent)["code"], "not_editing")
@@ -916,7 +921,7 @@ class MapRulesAPITests(unittest.TestCase):
         self.assertEqual((added["results"], added["agent"]["skills"], added["agent"]["builtin"]),
                          ([{"id": "gemini-cli", "status": "created"}], 1, False))
         # One answer carries everything the page shows: the agents and the skill lists.
-        self.assertEqual([item["id"] for item in added["listing"]["agents"]], ["claude", "codex", "gemini-cli"])
+        self.assertEqual([item["id"] for item in added["listing"]["agents"]], [*agents.builtin_ids(), "gemini-cli"])
         self.assertEqual(sorted(skill["name"] for skill in added["listing"]["catalog"]["skills"]),
                          ["pr-description", "review"])
         self.assertEqual(sorted(skill["name"] for skill in self.agents()["catalog"]["skills"]),
@@ -931,7 +936,7 @@ class MapRulesAPITests(unittest.TestCase):
         catalog = self.request("GET", "/api/skills")[1]
         self.assertEqual(catalog["agents"][-1], {"id": "gemini-cli", "name": "Gemini CLI"})
         self.assertEqual({skill["name"]: skill["agents"] for skill in catalog["skills"]},
-                         {"pr-description": ["codex"], "review": ["gemini-cli"]})
+                         {"pr-description": ["codex", "cursor"], "review": ["gemini-cli"]})
         rule = self.change(secret, action="add", id="review", scope="global", text="Review.",
                            skills={"gemini-cli": "review", "codex": "pr-description"})["rule"]
         self.assertEqual(rule["skills"], {"codex": "pr-description", "gemini-cli": "review"})
@@ -952,7 +957,7 @@ class MapRulesAPITests(unittest.TestCase):
         self.assertEqual((reset["results"][0]["status"], reset["agent"]["updated_at"]), ("reset", None))
         self.assertEqual(self.agent_change(secret, action="remove", id="gemini-cli",
                                            expected_updated_at=renamed["updated_at"])["agent"], None)
-        self.assertEqual([agent["id"] for agent in self.agents()["agents"]], ["claude", "codex"])
+        self.assertEqual([agent["id"] for agent in self.agents()["agents"]], list(agents.builtin_ids()))
         for invalid in ({"action": "add", "id": "x", "name": "X", "folders": ["relative"]},
                         {"action": "add", "id": "x", "name": "X", "folders": ["~/x"], "unexpected": 1},
                         {"action": "add", "id": "Bad ID", "name": "X", "folders": ["~/x"]},
@@ -990,7 +995,7 @@ class MapRulesAPITests(unittest.TestCase):
         # A refused change leaves nothing behind, not even the settings directory.
         self.assertFalse(agents.settings_path().parent.exists())
         self.assertEqual((self.listed()["rules"], [agent["id"] for agent in self.agents()["agents"]]),
-                         ([], ["claude", "codex"]))
+                         ([], list(agents.builtin_ids())))
 
     def test_a_failure_nobody_foresaw_is_answered_too(self):
         header = {map_access.HEADER: self.secret()}
@@ -1184,11 +1189,10 @@ class MapRulesAPITests(unittest.TestCase):
                 self.assertNotIn(str(self.root), json.dumps(reading))
                 self.assertIn(str(path), editing["problem"])
                 self.assertIn(reason, editing["problem"])
-                self.assertEqual([agent["id"] for agent in reading["agents"]], ["claude", "codex"])
+                self.assertEqual([agent["id"] for agent in reading["agents"]], list(agents.builtin_ids()))
                 refused = self.agent_change(secret, 409, action="update", id="claude", disable=["skills"])
                 self.assertEqual((refused["code"], reason in refused["error"]), ("settings", True))
-                self.assertEqual(self.listed()["agents"], [{"id": "claude", "name": "Claude Code"},
-                                                           {"id": "codex", "name": "Codex"}])
+                self.assertEqual(self.listed()["agents"], agents.describe(entries={}))
                 # The rules answer says so too, and the place only to an editing page.
                 self.assertEqual(self.listed()["agent_settings_problem"]["error"], serve.SETTINGS_PROBLEM)
                 self.assertIn(str(path), self.listed(secret)["agent_settings_problem"]["error"])
@@ -1201,7 +1205,7 @@ class MapRulesAPITests(unittest.TestCase):
         status, catalog = self.request("GET", "/api/skills")
         self.assertEqual(status, 200)
         self.assertEqual(catalog["skills"], [{"name": "pr-description", "description": "Writes pull request descriptions.",
-                                              "kind": "skills", "agents": ["codex"]}])
+                                              "kind": "skills", "agents": ["codex", "cursor"]}])
         self.assertNotIn("roots", catalog)
         self.assertEqual(health["store_arguments"], ["--workspace", "default", "--db", str(self.database)])
 

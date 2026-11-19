@@ -106,7 +106,8 @@ class CursorSetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
     def test_malformed_settings_and_foreign_rule_block_setup_before_writes(self):
         self.profile.mkdir()
         for raw in (b'{"version":', b'{"hooks":{},"hooks":{}}', b'{"version":true}',
-                    b'{"version":2}', b'[]', b'{"hooks":[]}', b'{"hooks":{"sessionStart":"oops"}}'):
+                    b'{"version":2}', b'[]', b'{"hooks":[]}', b'{"hooks":{"sessionStart":"oops"}}',
+                    b'{"invalid":NaN}', b'{"hooks":{"sessionStart":[{"command":"python ./richi/session_start.py"}]}}'):
             with self.subTest(raw=raw):
                 self.settings.write_bytes(raw)
                 before = self.paths()

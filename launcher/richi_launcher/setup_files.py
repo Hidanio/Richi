@@ -57,9 +57,9 @@ def contents(value):
     return base64.b64decode(value["data"], validate=True)
 
 
-def change(path, after):
+def change(path, after, *, before=None):
     path = safe_path(path)
-    return {"path": str(path), "before": snapshot(path), "after": after}
+    return {"path": str(path), "before": snapshot(path) if before is None else before, "after": after}
 
 
 def digest(data):
@@ -75,7 +75,7 @@ def managed_file(path, data, *, expected, label):
             raise ConfigError("Another file owns the " + label + " path: " + str(path))
     elif before["kind"] != "file" or digest(contents(before)) != expected:
         raise ConfigError("Managed " + label + " was edited or removed: " + str(path))
-    return {"path": str(path), "before": before, "after": file_value(data, before.get("mode", 0o600))}
+    return change(path, file_value(data, before.get("mode", 0o600)), before=before)
 
 
 def _sync(directory):

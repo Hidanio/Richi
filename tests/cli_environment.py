@@ -88,10 +88,10 @@ def cli_environment(directory, **overrides):
     root = Path(directory).resolve() / "cli-home"
     # Claude Code exports CLAUDE_CONFIG_DIR into its shells; keeping it would aim
     # Claude setup fixtures at the developer's real profile. CLAUDECODE and
-    # CODEX_THREAD_ID would tell rules show which agent runs the tests.
+    # CODEX_THREAD_ID and CURSOR_AGENT would tell rules show which agent runs the tests.
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith("RICHI_")
-                   and key not in {"CODEX_THREAD_ID", "CLAUDECODE", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "ZDOTDIR"}}
+                   and key not in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "ZDOTDIR"}}
     environment.update(HOME=str(root), XDG_CONFIG_HOME=str(root / ".config"),
                        XDG_DATA_HOME=str(root / ".local" / "share"))
     environment.update(overrides)

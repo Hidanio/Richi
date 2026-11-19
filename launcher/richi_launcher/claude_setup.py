@@ -106,5 +106,5 @@ def hook_operations(ctx, profile, current, content=None):
     if before["kind"] != "absent" and json.loads(files.contents(before)) == data:
         encoded = files.contents(before)
     return {"hook_sha256": files.digest(content), "hook_entry": hook}, [
-        files.change(script, files.file_value(content)),
-        files.change(settings, files.file_value(encoded, before.get("mode", 0o600)))]
+        files.change(script, files.file_value(content), before=value),
+        files.change(settings, files.file_value(encoded, before.get("mode", 0o600)), before=before)]
