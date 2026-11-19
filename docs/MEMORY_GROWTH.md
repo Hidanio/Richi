@@ -133,9 +133,10 @@ because no findings were returned.
 <a id="что-следует-делать-дальше"></a>
 ## Next steps
 
-The first justified candidate for a separate PR is candidate-selection
-optimization, especially ID/alias lookup without a full scan of current entries,
-with behavior parity checked against these and previous scenarios. Controlled
+This experiment identified candidate selection as the first follow-up, especially
+ID/alias lookup without a full scan of current entries. Later experiments tested
+behavior and timing for [candidate preselection](RECALL_CANDIDATES.md) and
+[indexed routing](INDEXED_FILTERS_EVAL.md). Controlled
 task-detail expansion and diagnostics beyond the scan cap should be designed
 separately. Simply raising output limits does not remove full scans or candidate
 competition.

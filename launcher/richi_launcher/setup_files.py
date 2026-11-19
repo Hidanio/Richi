@@ -57,13 +57,25 @@ def contents(value):
     return base64.b64decode(value["data"], validate=True)
 
 
-def change(path, after):
+def change(path, after, *, before=None):
     path = safe_path(path)
-    return {"path": str(path), "before": snapshot(path), "after": after}
+    return {"path": str(path), "before": snapshot(path) if before is None else before, "after": after}
 
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def managed_file(path, data, *, expected, label):
+    """Plan an edit to a dedicated file owned by this installation."""
+    path = safe_path(path)
+    before = snapshot(path)
+    if expected is None:
+        if before["kind"] != "absent":
+            raise ConfigError("Another file owns the " + label + " path: " + str(path))
+    elif before["kind"] != "file" or digest(contents(before)) != expected:
+        raise ConfigError("Managed " + label + " was edited or removed: " + str(path))
+    return change(path, file_value(data, before.get("mode", 0o600)), before=before)
 
 
 def _sync(directory):
@@ -172,10 +184,10 @@ def begin(ctx, operations, generation=None):
     journal = Path(ctx["root"]) / JOURNAL
     if journal.exists():
         raise ConfigError("Pending setup transaction must be recovered first")
-    operations = [op for op in operations if op.get("before") != op.get("after")]
     for op in operations:
         if snapshot(op["path"]) != op["before"]:
             raise ConfigError("Setup plan changed; rerun setup: " + op["path"])
+    operations = [op for op in operations if op["before"] != op["after"]]
     transaction = {"format_version": 1, "root": ctx["root"], "generation": generation,
                    "committed": False, "operations": operations}
     if len((json.dumps(transaction, indent=2, sort_keys=True) + "\n").encode()) > MAX_FILE:

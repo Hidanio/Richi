@@ -1231,7 +1231,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     other.type='text';other.maxLength=100;other.placeholder='Например, plugin:skill-name';other.autocomplete='off';other.spellcheck=false;other.setAttribute('aria-label','Имя скилла'+(agent?' для '+agentName(agent):''));
     const describe=()=>{const value=select.value,skill=rulesState.skillMap.get(value);other.hidden=value!=='__other__';
       about.textContent=value==='__other__'?'Имя так, как его называет агент. Карта не проверяет, что такой скилл установлен.':skill?cut(skill.description||'Описание в SKILL.md не указано.',280):rulesState.skillsLoading?'Загружаем установленные скиллы…':
-        !skills.length?(rulesState.skills?.truncated&&!(agent&&rulesState.skills?.totals?.[agent]===0)?'Скиллов больше, чем помещается в список, и скиллы'+(agent?' этого агента':'')+' в него не попали; имя можно ввести вручную.':'Установленные скиллы не найдены; имя можно ввести вручную.'):(agent?'Скиллы, которые видит '+agentName(agent)+'.':'Скиллы агентов на этом компьютере ('+agentList(knownAgentIds())+'): свои, встроенные и из плагинов.')+(rulesState.skills?.truncated?' Показана только часть: скиллов больше, чем помещается в список.':'');};
+        !skills.length?(rulesState.skills?.truncated?'В показанной части каталога подходящих скиллов нет. Имя можно ввести вручную.':'Установленные скиллы не найдены. Имя можно ввести вручную.'):(agent?'Скиллы, которые видит '+agentName(agent)+'.':'Скиллы агентов на этом компьютере ('+agentList(knownAgentIds())+'): свои, встроенные и из плагинов.')+(rulesState.skills?.truncated?' Показана часть каталога.':'');};
     const set=name=>{name=name||'';if(name&&!skills.some(skill=>skill.name===name)){select.value='__other__';other.value=name;}else{select.value=name;other.value='';}describe();};
     // typing: the name is still being written, so nothing may react to a prefix of it.
     const changed=typing=>box.dispatchEvent(new CustomEvent('skillchange',{bubbles:true,detail:{typing}}));
@@ -1679,7 +1679,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       toggle.type='checkbox';toggle.className='agent-switch';toggle.setAttribute('role','switch');toggle.checked=source.enabled!==false;toggle.disabled=agentsState.busy;keyed(toggle,'source:'+agent.id+':'+source.key);toggle.setAttribute('aria-label',label+': '+source.path);
       toggle.addEventListener('change',async()=>{const enabled=toggle.checked;if(!await applyAgentChange({action:'update',id:agent.id,[enabled?'enable':'disable']:[source.key]},enabled?'Источник включён':'Источник выключен'))toggle.checked=!enabled;});
       text.append(make('div','agent-source-name',label),make('div','agent-source-path',source.path));
-      const count=make('span','agent-source-count',!source.enabled?'выключено':source.denied?'нет доступа':!source.exists?'папки нет':plural(Number(source.skills)||0,skillForms));
+      const count=make('span','agent-source-count',!source.enabled?'выключено':source.denied?'нет доступа':!source.exists?'папки нет':plural(Number(source.skills)||0,skillForms)+(source.truncated?' (по части папки)':''));
       row.append(toggle,text,count);
       if(source.added&&(agent.builtin||list(agent.sources).length>1)){const remove=keyed(toolButton('×',async()=>{if(await applyAgentChange({action:'update',id:agent.id,remove_folders:[source.key]},'Папка убрана'))focusByKey($('agents-content'),'add-folder:'+agent.id);},'icon'),'remove:'+agent.id+':'+source.key);remove.title='Убрать папку из источников';remove.setAttribute('aria-label','Убрать папку '+source.path);remove.disabled=agentsState.busy;row.append(remove);}
       else row.append(make('span'));
@@ -1746,7 +1746,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     for(const agent of shown){
       const rules=agentRules(agent),missing=rules.filter(item=>item.missing).length,button=toolButton('',()=>{agentsState.selected=agent.id;closeFolderForm();agentsState.problem='';renderAgents();},'agent-item');
       button.setAttribute('aria-pressed',String(agent.id===agentsState.selected));button.dataset.agent=agent.id;keyed(button,'item:'+agent.id);
-      button.append(make('strong','',agent.name),make('code','',agent.id),make('span','',plural(Number(agent.skills)||0,skillForms)+' · '+plural(rules.length,['правило','правила','правил'])));
+      button.append(make('strong','',agent.name),make('code','',agent.id),make('span','',plural(Number(agent.skills)||0,skillForms)+(list(agent.sources).some(source=>source.truncated)?' (по части каталога)':'')+' · '+plural(rules.length,['правило','правила','правил'])));
       if(missing)button.append(make('span','warn',plural(missing,['правило','правила','правил'])+' со скиллом, которого у агента нет'));
       column.append(button);
     }

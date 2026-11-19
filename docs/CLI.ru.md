@@ -2,15 +2,13 @@
 
 [English](CLI.md) | Русский
 
-Глобальная интеграция с Codex: `richi setup --dry-run`, `richi setup --yes`,
-`richi setup --status`. Настройка действует на всю установку, не требует привязки
-чата, отклоняет селекторы workspace/хранилища и сохраняет существующие инструкции.
-Установка, флаги принятия существующих файлов и восстановление описаны в
-[SETUP.md](SETUP.ru.md).
+`richi agents --status` показывает, какие локальные клиенты Richi нашёл и какие
+уже подключены. По умолчанию setup подключает Codex. Для Claude Code или Cursor
+передайте `--agent claude` или `--agent cursor`. Настройка действует на всю
+установку и доступна до выбора workspace. Подробнее в [руководстве по настройке](SETUP.ru.md).
 
-После установки используйте `richi` из любой рабочей папки. Команда
-`richi config show` показывает выбранные настройки и runtime. Глобальные параметры базы
-и конфигурации ставятся перед подкомандой:
+`richi config show` показывает выбранные настройки и runtime. В обычном
+терминале параметры базы и конфигурации ставятся перед подкомандой:
 
 ```sh
 richi --db /path/to/memory.sqlite3 recall 'локальный кеш'
@@ -106,8 +104,8 @@ richi map serve --open
 richi config set dev false
 ```
 
-В обычном режиме CLI использует фиксированный установленный пакет. В dev все
-команды используют текущий код выбранного checkout, а карта перезагружает сервер
+В обычном режиме CLI использует фиксированный установленный пакет. В dev команды
+работы с памятью используют runtime из выбранного checkout, а карта перезагружает сервер
 после изменения исходников. Работающая карта также подхватывает переключение
 режима после проверки нового runtime. Для изменений интерфейса обновите страницу
 браузера. База и история знаний общие; миграция SQLite автоматически не выполняется.
@@ -130,44 +128,40 @@ richi -w work recall 'локальный кеш' --project service-example
 ```
 
 `richi use` открывает меню только в обычном терминале. В новом чате агент
-спрашивает область один раз, затем сохраняет выбор:
+проверяет привязку и спрашивает один раз, если пользователь ещё не выбрал workspace.
+В Cursor во всех примерах для чата ниже подставляйте сразу после `richi`
+точный `--chat cursor:<id>` из хука сессии. Команды в поле `next_commands`
+ответов `chat current` и `chat bind` уже содержат этот аргумент.
 
 ```sh
 richi chat current
-richi chat bind --current
-# Или другая область только для чата:
-richi chat bind work
-richi project check /path/to/service-example --id service-example
-richi --project-path /path/to/service-example recall 'локальный кеш' --project service-example
-# Просмотр и последующий импорт папки репозиториев:
-richi project scan /path/to/repositories
-richi project scan /path/to/repositories --apply
+richi workspace list
 ```
 
-Варианты `bind` взаимоисключающие: выполните только выбранный пользователем.
-После привязки агент загружает постоянные правила пользователя: глобальные правила
-workspace, а с `--project-path` — ещё и правила проекта:
+Сохраните выбор командой `richi chat bind --current` или `richi chat bind work`.
+Если в выбранной области ещё нет базы и пользователь разрешил её создать,
+выполните `richi init`. Для работы со всей областью загрузите правила через
+`richi rules show`. В репозитории сначала проверьте его регистрацию и укажите
+путь при загрузке правил и обращении к памяти.
 
 ```sh
-richi rules show
+richi project check /path/to/service-example --id service-example
 richi --project-path /path/to/service-example rules show
-richi rules add no-agent-prefix --global --text "Never prefix branch names with the agent name."
-richi rules add branch-naming --project service-example --text "Name branches SE-<number>_<topic>."
-richi rules add pr-skill --global --text "Use the pr-description skill for pull requests." --skill pr-description
-richi rules add review-skill --global --text "Use the code review skill for reviews." --skill claude=engineering:code-review --skill codex=code-review
-richi rules log
+richi --project-path /path/to/service-example recall 'локальный кеш' --project service-example
 ```
 
-Правила — это инструкции, а не знания: поиск их не возвращает, а агенты меняют их
-только по просьбе пользователя. `rules log` показывает, кто и какое правило менял, с
-правилом до и после изменения. Подробнее: [постоянные правила](../skills/project-memory/references/RULES.ru.md).
+Для регистрации нескольких репозиториев сначала посмотрите результат
+`richi project scan /path/to/repositories`, затем примените его с `--apply`.
+Меняйте правила только по просьбе пользователя. Примеры создания и журнал
+изменений `rules log` описаны в [руководстве по правилам](../skills/project-memory/references/RULES.ru.md).
+
 Вкладка **«Правила»** карты показывает их, а на странице, открытой командой
 `richi map`, добавляет и меняет их по шаблонам и со списком установленных скиллов: один скилл для
 всех агентов или свой для каждого, если они различаются.
 
-Richi знает, какие агенты работают на этом компьютере и где каждый берёт скиллы.
-Claude Code и Codex встроены; выключайте их источники скиллов, добавляйте папки со
-скиллами или опишите другого агента, сразу для всех workspace:
+Каталог скиллов показывает источники для встроенных профилей Claude Code,
+Codex и Cursor, в том числе до подключения клиента. Вы можете переключать их источники скиллов,
+добавлять папки со скиллами или описать другого агента. Настройки действуют во всех workspace.
 
 ```sh
 richi skill-sources list
@@ -180,8 +174,7 @@ richi skill-sources update claude --disable claude-app
 
 В привязанном чате `-w` может только повторять сохранённую область. Прямые
 `--db`, `--config` и соответствующие переменные хранилища отклоняются.
-Для другого клиента передавайте устойчивый ID через `--chat ID` или `RICHI_CHAT_ID`;
-Codex предоставляет `CODEX_THREAD_ID`. [Workspace и изоляция знаний](WORKSPACES.ru.md).
+Как другие клиенты передают ID чата, описано в [руководстве по workspace](WORKSPACES.ru.md).
 
 Единая проверка контекста и путей:
 

@@ -29,7 +29,7 @@ class PackageCliTests(unittest.TestCase):
         self.root = Path(temporary.name).resolve()
         self.env = dict(os.environ)
         for key in list(self.env):
-            if key.startswith("RICHI_") or key == "CODEX_THREAD_ID":
+            if key.startswith("RICHI_") or key in {"CODEX_THREAD_ID", "CURSOR_AGENT"}:
                 del self.env[key]
         self.env.update(HOME=str(self.root / "home"), USERPROFILE=str(self.root / "home"),
                         APPDATA=str(self.root / "appdata"), LOCALAPPDATA=str(self.root / "localappdata"),

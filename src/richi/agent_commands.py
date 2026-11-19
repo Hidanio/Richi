@@ -113,12 +113,14 @@ def _launcher_agents():
         return {}, "Agent connections are unknown: " + (str(exc) or type(exc).__name__)
 
 
-def _looks_installed(roots, home):
+def _looks_installed(roots, home, source_keys):
     """Whether an agent the launcher does not connect looks installed for this user.
 
     None when every source of it is switched off: those are not looked at (one
     may be on a share that no longer answers), so nothing tells either way.
     """
+    if source_keys:
+        roots = [root for root in roots if root["key"] in source_keys]
     enabled = [root for root in roots if root["enabled"]]
     if roots and not enabled:
         return None
@@ -151,7 +153,10 @@ def listing(environ=None, home=None, catalog=False, *, settings=None):
     items = []
     for agent in registry:
         own = roots.get(agent.id, [])
-        detected, connection = launcher[agent.id] if agent.id in launcher else (_looks_installed(own, home), None)
+        if agent.id in launcher:
+            detected, connection = launcher[agent.id]
+        else:
+            detected, connection = _looks_installed(own, home, agent.detection_sources), None
         items.append({
             "id": agent.id, "name": agent.name, "builtin": agent.builtin, "updated_at": agent.updated_at,
             "created_at": entries.get(agent.id, {}).get("created_at"),
@@ -165,7 +170,8 @@ def listing(environ=None, home=None, catalog=False, *, settings=None):
             "skills": totals.get(agent.id, 0),
             "sources": [{"key": root["key"], "kind": root["kind"], "layout": root["layout"],
                          "path": _display(root["path"], home), "exists": root["exists"], "denied": root["denied"],
-                         "enabled": root["enabled"], "added": root["added"], "skills": root["skills"]}
+                         "enabled": root["enabled"], "added": root["added"], "skills": root["skills"],
+                         **({"truncated": True} if root.get("truncated") else {})}
                         for root in own]})
     known = {item["id"] for item in items}
     # A folder that a known agent already reads says nothing about another agent being installed.
@@ -343,13 +349,13 @@ def _updated(identifier, options, builtin, current, environ, home):
     _check_version(identifier, agents.stored_version(current) if current is not None else None,
                    options.get("expected_updated_at"))
     entry = copy.deepcopy(current) if current else {}
-    base_keys, base_paths = set(), set()
+    base_sources = {}
     if builtin:
         if any(options.get(key) is not None for key in ("name", "variable", "manual_skills")):
             raise AgentError(identifier + " is built into Richi: only its skill sources can be switched or added",
                              "builtin")
         base = next(agent for agent in agents.AGENTS if agent.id == identifier).sources(environ, home)
-        base_keys, base_paths = {source.key for source in base}, {source.path for source in base}
+        base_sources = {source.key: source.path for source in base}
     else:
         if options.get("name") is not None:
             entry["name"] = _name(options["name"])
@@ -369,7 +375,7 @@ def _updated(identifier, options, builtin, current, environ, home):
         folders.remove(match)
     for value in _strings(options, "add_folders"):
         text = _folder(value, home)
-        if _find_folder(folders, text, home) is not None or agents.folder_path(text, home) in base_paths:
+        if _find_folder(folders, text, home) is not None or agents.folder_path(text, home) in base_sources.values():
             raise AgentError("Already a skill source of " + identifier + ": " + text, "exists", "source")
         folders.append({"path": text, "enabled": True})
     if len(folders) > agents.MAX_FOLDERS:
@@ -379,8 +385,26 @@ def _updated(identifier, options, builtin, current, environ, home):
         folder = _find_folder(folders, key, home)
         if folder is not None:
             folder["enabled"] = enabled
-        elif key in base_keys:
-            (disabled.discard if enabled else disabled.add)(key)
+            # The old folder key still switches the whole folder if it is now a built-in source.
+            path = agents.folder_path(folder["path"], home)
+            disabled.difference_update(source for source, directory in base_sources.items() if directory == path)
+        elif key in base_sources:
+            path = base_sources[key]
+            added = [folder for folder in folders if agents.folder_path(folder["path"], home) == path]
+            if not added:
+                (disabled.discard if enabled else disabled.add)(key)
+                continue
+            keys = {source for source, directory in base_sources.items() if directory == path}
+            off = keys.intersection(disabled) if all(folder["enabled"] for folder in added) else keys.copy()
+            if (key not in off) == enabled:
+                continue
+            (off.discard if enabled else off.add)(key)
+            # Keep the folder switch readable by older versions. Only a split between keys needs exceptions.
+            for folder in added:
+                folder["enabled"] = off != keys
+            disabled.difference_update(keys)
+            if off != keys:
+                disabled.update(off)
         else:
             raise AgentError("Unknown skill source of " + identifier + ": " + key + "; see skill-sources list",
                              "not_found", "source")

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .config import ConfigError
 
-AGENTS = {"codex": ("codex_setup", 1), "claude": ("claude_setup", 1)}
+AGENTS = {"codex": ("codex_setup", 1), "claude": ("claude_setup", 1), "cursor": ("cursor_setup", 1)}
 
 
 def get(name):

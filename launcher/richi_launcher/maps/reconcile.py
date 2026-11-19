@@ -21,7 +21,7 @@ from .protocol import (DEFAULT_PORT, GENERATION_ENV, HANDOFF_CAPABILITY, HANDOFF
 
 # Child map processes receive their storage explicitly; nothing ambient may
 # redirect them or keep the parent's lease, generation or socket.
-_CHILD_UNSET = ("RICHI_ACTIVE_RUNTIME", "RICHI_CHAT_ID", "CODEX_THREAD_ID", "RICHI_DB",
+_CHILD_UNSET = ("RICHI_ACTIVE_RUNTIME", "RICHI_CHAT_ID", "CODEX_THREAD_ID", "CURSOR_AGENT", "RICHI_DB",
                 "RICHI_DATA_DIR", "RICHI_PORT", "RICHI_WORKSPACE", "RICHI_CONFIG",
                 "RICHI_ACTIVE_CONFIG", "RICHI_ACTIVE_WORKSPACE", PASSIVE_ENV, PROBE_ENV, LISTEN_FD_ENV,
                 LEASE_ENV, ROOT_ENV, GENERATION_ENV)

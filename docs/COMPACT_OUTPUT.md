@@ -46,8 +46,9 @@ requires reinstalling the fixed package; a dev reload alone is insufficient.
 The main [SKILL.md](../skills/project-memory/SKILL.md) covers workspace selection,
 chat/project guards, search or direct get for a known ID, incomplete excerpts,
 write authorization, full get/CAS, sources and states. References are loaded
-according to the task. Update an installed skill by copying the entire
-`skills/project-memory` directory, including all `references/` files.
+according to the task. For a skill installed by Richi setup, the managed link
+follows package updates and rollbacks. In dev mode, inspect `richi config show`
+to see which checkout supplies the skill. [Setup and development](SETUP.md).
 
 Frequent operations have focused, self-contained instructions:
 [writing](../skills/project-memory/references/ENTRY_WRITE.md),
@@ -251,5 +252,4 @@ After this change, the full suite had 587 tests, 586 passed and one Linux-only
 skip on macOS in one run with permitted loopback. Recall acceptance 7/7, skill
 validation and local links passed. Review found a missing common entity/edge
 update contract; it was added to core before freezing the candidate. Original
-first-experiment results were not replaced. The installed skill does not update
-itself: after accepting the change, copy the whole directory with new references.
+first-experiment results were not replaced.

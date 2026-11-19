@@ -57,9 +57,9 @@ python evals/evaluate_recall.py
 ## Проверка разделения task-карточки
 
 Синтетический пример и измерения описаны в
-[CURRENT_CARDS.ru.md](../../../docs/CURRENT_CARDS.ru.md). Fixture находится в
-[card_maintenance.json](../../../tests/fixtures/card_maintenance.json),
-сценарий проверяется [test_card_maintenance.py](../../../tests/test_card_maintenance.py)
+[CURRENT_CARDS.ru.md](https://github.com/Hidanio/Richi/blob/main/docs/CURRENT_CARDS.ru.md). Fixture находится в
+[card_maintenance.json](https://github.com/Hidanio/Richi/blob/main/tests/fixtures/card_maintenance.json),
+сценарий проверяется [test_card_maintenance.py](https://github.com/Hidanio/Richi/blob/main/tests/test_card_maintenance.py)
 через существующие CLI/API во временной базе. Это проверка сохранения
 доступности знания, источников и состояний; алгоритмы retrieval и Templates
 в этом этапе не меняются.
@@ -104,9 +104,10 @@ FTS/графа на схемах 1, 2 и 3, отсутствие source/Git/netw
 
 ## Измерение роста памяти
 
+Запускайте команды ниже из корня репозитория с исходниками Richi.
 Синтетический runner измеряет существующее поведение отдельно от acceptance
-eval. Матрица и параметры — в [evals/README.ru.md](../../../evals/README.ru.md),
-результаты запуска — в [MEMORY_GROWTH.ru.md](../../../docs/MEMORY_GROWTH.ru.md).
+eval. Матрица и параметры — в [evals/README.ru.md](https://github.com/Hidanio/Richi/blob/main/evals/README.ru.md),
+результаты запуска — в [MEMORY_GROWTH.ru.md](https://github.com/Hidanio/Richi/blob/main/docs/MEMORY_GROWTH.ru.md).
 
 ```sh
 python evals/evaluate_memory_growth.py --quick --repeats 1

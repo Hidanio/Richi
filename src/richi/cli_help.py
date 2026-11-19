@@ -61,6 +61,7 @@ First steps with Richi
      richi setup --dry-run
      richi setup --yes                     # Codex
      richi setup --agent claude --yes      # Claude Code
+     richi setup --agent cursor --yes      # Cursor
 
 2. Create the knowledge store of the current workspace (safe to repeat).
      richi init
@@ -208,6 +209,8 @@ agent chats:
   RICHI_CHAT_ID     stable chat identity for workspace binding; Claude Code
                     setup provides it through its SessionStart hook
   CODEX_THREAD_ID   chat identity supplied by Codex
+  CURSOR_AGENT      marks a Cursor Agent shell. Use the sessionStart hook's
+                    --chat cursor:<id> on every command.
   In a chat, RICHI_CONFIG, RICHI_DB and RICHI_DATA_DIR are rejected: the
   chat's binding selects the store.
 
@@ -628,8 +631,8 @@ DETAILS = {
     "skill-sources": dict(about="""
         Richi knows which AI agents work on this computer and where each finds
         skills, so that a rule can name a skill for every agent or one per agent.
-        Claude Code and Codex are built in; you may switch their skill sources and
-        add skill folders, and describe any other agent yourself. These settings
+        You can switch skill sources and add folders for the built-in agents
+        (Claude Code, Codex and Cursor) or describe another agent. These settings
         are yours and shared by every workspace. To connect Richi to an agent, see
         richi agents and richi setup.""",
         examples=(("Agents, their skill sources and skill counts", "richi skill-sources list"),

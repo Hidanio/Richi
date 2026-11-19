@@ -26,7 +26,7 @@ def synthetic_agent_sources(environ, home):
     return [agents.SkillSource(key="skills", kind="skills", layout="skills", path=home / ".synthetic" / "skills")]
 
 
-# A third agent, described only by a registry entry, as a new integration would be.
+# An additional agent, described only by a registry entry, as a new integration would be.
 SYNTHETIC = agents.Agent(id="synthetic", name="Synthetic Agent", variables={"SYNTHETIC_SHELL": "1"},
                          invocation="none", plugin_commands=False, sources=synthetic_agent_sources)
 
@@ -44,7 +44,7 @@ class IsolatedHome(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         for key in [key for key in os.environ if key.startswith("RICHI_")
-                    or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "XDG_CONFIG_HOME"}]:
+                    or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "XDG_CONFIG_HOME"}]:
             del os.environ[key]
         agents.forget_settings()
         self.addCleanup(agents.forget_settings)
@@ -70,7 +70,7 @@ class IsolatedHome(unittest.TestCase):
 
 class RegistryTests(IsolatedHome):
     def test_entries_are_unique_and_well_formed(self):
-        self.assertEqual(agents.ids(), ("claude", "codex"))
+        self.assertEqual(agents.ids(), agents.builtin_ids())
         self.assertEqual(len(set(agents.ids())), len(agents.AGENTS))
         for agent in agents.AGENTS:
             with self.subTest(agent=agent.id):
@@ -81,8 +81,9 @@ class RegistryTests(IsolatedHome):
                 for source in sources:
                     self.assertRegex(source.key, r"\A[a-z][a-z0-9-]*\Z")
                     self.assertIn(source.kind, skill_catalog.KINDS)
-                    self.assertIn(source.layout, {"skills", "cache", "claude-app"})
-        self.assertEqual(agents.describe(), [{"id": "claude", "name": "Claude Code"}, {"id": "codex", "name": "Codex"}])
+                    self.assertIn(source.layout, {"skills", "nested-skills", "cache", "claude-app"})
+        self.assertEqual(agents.describe(), [{"id": "claude", "name": "Claude Code"}, {"id": "codex", "name": "Codex"},
+                                             {"id": "cursor", "name": "Cursor"}])
         for identifier, name, folder in agents.PRESETS:
             with self.subTest(preset=identifier):
                 self.assertTrue(agents.valid_id(identifier) and agents.valid_name(name) and agents.valid_folder(folder))
@@ -93,6 +94,7 @@ class RegistryTests(IsolatedHome):
         self.assertIsNone(agents.detect({}))
         for environment, agent in (({"CLAUDECODE": "1"}, "claude"), ({"CODEX_THREAD_ID": "thread"}, "codex"),
                                    ({"RICHI_CHAT_ID": "claude:chat"}, "claude"),
+                                   ({"RICHI_CHAT_ID": "cursor:chat"}, "cursor"), ({"CURSOR_AGENT": "1"}, "cursor"),
                                    # Codex's chat identity is its thread ID: it names no agent, the variable does.
                                    ({"RICHI_CHAT_ID": "019a1b2c-thread", "CODEX_THREAD_ID": "019a1b2c-thread"}, "codex"),
                                    # A chat identity that names no agent says nothing either way.
@@ -103,6 +105,8 @@ class RegistryTests(IsolatedHome):
         # either direction the signs disagree, and Richi names neither agent.
         for environment in ({"CLAUDECODE": "1", "CODEX_THREAD_ID": "thread"},
                             {"RICHI_CHAT_ID": "claude:chat", "CODEX_THREAD_ID": "thread"},
+                            {"RICHI_CHAT_ID": "cursor:chat", "CODEX_THREAD_ID": "thread"},
+                            {"CURSOR_AGENT": "1", "CLAUDECODE": "1"}, {"CURSOR_AGENT": ""},
                             {"RICHI_CHAT_ID": "codex:chat", "CLAUDECODE": "1"},
                             {"RICHI_CHAT_ID": "claude:chat", "CLAUDECODE": "1", "CODEX_THREAD_ID": "thread"},
                             {"RICHI_CHAT_ID": "claude", "CLAUDECODE": "0"}, {"RICHI_CHAT_ID": "unknown:chat"},
@@ -164,7 +168,7 @@ class AnotherAgentTests(IsolatedHome):
         partial = self.add("partial", "claude=pr-description", "codex=pr-description")["rule"]
         self.assertEqual((partial["skill"], partial["skills"]),
                          (None, {"claude": "pr-description", "codex": "pr-description"}))
-        every = self.add("every", "claude=x", "codex=x", "synthetic=x")["rule"]
+        every = self.add("every", *(identifier + "=x" for identifier in agents.builtin_ids()))["rule"]
         self.assertEqual((every["skill"], every["skills"]), ("x", None))
         with mock.patch.dict(os.environ, {"SYNTHETIC_SHELL": "1", "CLAUDECODE": "1"}):
             unnamed = self.command("rules", "show")
@@ -178,21 +182,21 @@ class AnotherAgentTests(IsolatedHome):
         self.assertEqual(self.command("rules", "list")["agents"][-1], {"id": "synthetic", "name": "Synthetic Agent"})
 
     def test_unknown_agents_are_refused_but_kept_when_a_rule_already_names_them(self):
-        self.assertIn("known agents: claude, codex, synthetic", self.add("x", "cursor=review", ok=False)["error"])
+        self.assertIn("known agents: " + ", ".join(agents.builtin_ids()), self.add("x", "future=review", ok=False)["error"])
         # A newer Richi may have stored a skill for an agent this one does not know.
         self.add("newer", "review")
         database = self.config.parent / "memory.sqlite3"
         with closing(sqlite3.connect(str(database))) as conn, conn:
             row = json.loads(conn.execute("SELECT value FROM metadata WHERE key = 'rule:newer'").fetchone()[0])
-            row["skills"] = {"cursor": "cursor-review"}
+            row["skills"] = {"future": "future-review"}
             conn.execute("UPDATE metadata SET value = ? WHERE key = 'rule:newer'", (json.dumps(row),))
         listed = self.command("rules", "list")["rules"][0]
-        self.assertEqual(listed["skills"], {"cursor": "cursor-review"})
-        shown = self.command("rules", "show", "--agent", "cursor")["rules"][0]
-        self.assertEqual(shown["use_skill"], "cursor-review")
+        self.assertEqual(listed["skills"], {"future": "future-review"})
+        shown = self.command("rules", "show", "--agent", "future")["rules"][0]
+        self.assertEqual(shown["use_skill"], "future-review")
         changed = self.command("rules", "update", "newer", "--expected-updated-at", listed["updated_at"],
-                               "--skill", "review", "--skill", "cursor=cursor-review-2")["rule"]
-        self.assertEqual((changed["skill"], changed["skills"]), ("review", {"cursor": "cursor-review-2"}))
+                               "--skill", "review", "--skill", "future=future-review-2")["rule"]
+        self.assertEqual((changed["skill"], changed["skills"]), ("review", {"future": "future-review-2"}))
         self.command("rules", "show", "--agent", "Not An Agent", ok=False)
 
     def test_catalog_reads_skill_sources_from_the_registry(self):
@@ -200,7 +204,7 @@ class AnotherAgentTests(IsolatedHome):
         write_skill(self.home / ".agents" / "skills" / "reviewer", "---\nname: reviewer\n---\n")
         result = skill_catalog.catalog({}, self.home)
         skills = {skill["name"]: skill for skill in result["skills"]}
-        self.assertEqual(skills["reviewer"]["agents"], ["codex", "synthetic"])
+        self.assertEqual(skills["reviewer"]["agents"], ["codex", "cursor", "synthetic"])
         self.assertEqual(result["agents"][-1], {"id": "synthetic", "name": "Synthetic Agent"})
         self.assertIn(("synthetic", "skills", True),
                       [(entry["agent"], entry["kind"], entry["exists"]) for entry in result["roots"]])
@@ -217,12 +221,62 @@ class AgentSettingsTests(IsolatedHome):
                     "---\nname: manual\ndisable-model-invocation: true\n---\n")
         write_skill(self.home / "team" / "release", "---\nname: release\n---\n")
 
+    def test_a_preexisting_cursor_profile_keeps_its_folder_choices_under_the_builtin(self):
+        previous = tuple(agent for agent in agents.AGENTS if agent.id != "cursor")
+        with mock.patch.object(agents, "AGENTS", previous):
+            cursor = self.cli("skill-sources", "add", "cursor", "--name", "Team Cursor", "--variable", "TEAM_EDITOR=1",
+                              "--skills", "~/.cursor/skills", "--skills", "~/.gemini/skills")["agent"]
+            saved = self.cli("skill-sources", "update", "cursor", "--expected-updated-at", cursor["updated_at"],
+                             "--disable", "~/.cursor/skills")["agent"]
+        path = agents.settings_path()
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["agents"]["cursor"]["future"] = ["keep"]
+        path.write_text(json.dumps(data), encoding="utf-8")
+        before = path.read_bytes()
+        listed = self.listed()["cursor"]
+        self.assertEqual((listed["builtin"], listed["name"], listed["variables"], listed["updated_at"]),
+                         (True, "Cursor", ["CURSOR_AGENT"], saved["updated_at"]))
+        self.assertEqual([(s["key"], s["added"], s["enabled"]) for s in listed["sources"]],
+                         [("cursor-skills", False, False), ("agents-skills", False, True), ("claude-skills", False, True),
+                          ("codex-skills", False, True), ("system", False, True), ("~/.gemini/skills", True, True)])
+        # The extra folder is still scanned, using Cursor's built-in rule for manual invocation.
+        self.assertEqual(listed["sources"][-1]["skills"], 1)
+        self.assertEqual(agents.detect({"CURSOR_AGENT": "1"}), "cursor")
+        self.assertIsNone(agents.detect({"TEAM_EDITOR": "1"}))
+        version = ["--expected-updated-at", saved["updated_at"]]
+        refused = self.cli("skill-sources", "update", "cursor", *version, "--name", "Other", ok=False)
+        self.assertEqual(refused["code"], "builtin")
+        self.assertEqual(path.read_bytes(), before)
+        current = listed
+        for wanted in (False, True, True, False, False):
+            before = path.read_bytes()
+            was = current["sources"][0]["enabled"]
+            changed = self.cli("skill-sources", "update", "cursor", "--expected-updated-at", current["updated_at"],
+                               "--enable" if wanted else "--disable", "cursor-skills")
+            self.assertEqual(changed["results"][0]["status"], "unchanged" if was == wanted else "updated")
+            if was == wanted:
+                self.assertEqual((path.read_bytes(), changed["agent"]["updated_at"]), (before, current["updated_at"]))
+            current = changed["agent"]
+            self.assertEqual(current["sources"][0]["enabled"], wanted)
+            with mock.patch.object(agents, "AGENTS", previous):
+                self.assertEqual(self.listed()["cursor"]["sources"][0]["enabled"], wanted)
+        self.assertEqual(self.cli("skill-sources", "remove", "cursor", *version, ok=False)["code"], "conflict")
+        stored = json.loads(path.read_text(encoding="utf-8"))["agents"]["cursor"]
+        for field in ("name", "variable", "manual_skills", "created_at", "future"):
+            self.assertEqual(stored[field], data["agents"]["cursor"][field])
+        reset = self.cli("skill-sources", "remove", "cursor", "--expected-updated-at", current["updated_at"])
+        self.assertEqual(reset["results"], [{"id": "cursor", "status": "reset"}])
+        self.assertIsNone(reset["agent"]["updated_at"])
+        self.assertEqual([s["path"] for s in reset["agent"]["sources"]],
+                         ["~/.cursor/skills", "~/.agents/skills", "~/.claude/skills", "~/.codex/skills",
+                          "~/.cursor/skills-cursor"])
+
     def test_an_own_agent_is_described_detected_and_gets_its_skill(self):
         before = self.cli("skill-sources", "list")
-        self.assertEqual([agent["id"] for agent in before["agents"]], ["claude", "codex"])
+        self.assertEqual([agent["id"] for agent in before["agents"]], list(agents.builtin_ids()))
         self.assertIsNone(before["problem"])
         presets = {preset["id"]: preset for preset in before["presets"]}
-        self.assertEqual((presets["gemini-cli"]["folder"], presets["gemini-cli"]["exists"], presets["cursor"]["exists"]),
+        self.assertEqual((presets["gemini-cli"]["folder"], presets["gemini-cli"]["exists"], presets["opencode"]["exists"]),
                          ("~/.gemini/skills", True, False))
         created = self.cli("skill-sources", "add", "gemini-cli", "--name", "Gemini CLI", "--skills",
                            str(self.home / ".gemini" / "skills") + "/", "--variable", "GEMINI_CLI=1",
@@ -291,7 +345,7 @@ class AgentSettingsTests(IsolatedHome):
                                    (["update", "gemini-cli", *version, "--enable", "nothing"], "source"),
                                    (["add", "gemini-cli", "--name", "Again", "--skills", "~/x"], "agent"),
                                    (["add", "claude", "--name", "Mine", "--skills", "~/x"], "agent"),
-                                   (["update", "cursor", "--name", "Cursor"], "agent"),
+                                   (["update", "unknown", "--name", "Unknown"], "agent"),
                                    (["update", "gemini-cli", *version]
                                     + [word for number in range(agents.MAX_FOLDERS) for word in ("--add-skills", "~/f%d" % number)],
                                     "folders")):
@@ -307,7 +361,7 @@ class AgentSettingsTests(IsolatedHome):
         self.assertEqual((removed["results"], removed["agent"]), ([{"id": "gemini-cli", "status": "removed"}], None))
         self.assertEqual(self.cli("skill-sources", "remove", "gemini-cli", "--expected-updated-at", "x", ok=False)["code"],
                          "not_found")
-        self.assertEqual(self.cli("skill-sources", "update", "cursor", "--name", "Cursor", ok=False)["code"], "not_found")
+        self.assertEqual(self.cli("skill-sources", "update", "unknown", "--name", "Unknown", ok=False)["code"], "not_found")
         for arguments in (["Bad ID", "--name", "x", "--skills", "~/x"], ["x", "--name", "x"], ["x", "--skills", "~/x"]):
             self.cli("skill-sources", "add", *arguments, ok=False)
         self.cli("--project-path", self.home, "skill-sources", "list", ok=False)
@@ -330,7 +384,7 @@ class AgentSettingsTests(IsolatedHome):
                           ("~/team", True, True, 1)])
         self.assertEqual(adjusted["skills"], 1)
         names = {skill["name"]: skill["agents"] for skill in skill_catalog.catalog()["skills"]}
-        self.assertEqual(names, {"release": ["claude"]})
+        self.assertEqual(names, {"pr-description": ["cursor"], "release": ["claude"]})
         self.assertEqual(self.cli("skill-sources", "update", "claude", "--enable", "skills", ok=False)["code"], "conflict")
         self.assertEqual(self.cli("skill-sources", "update", "claude", "--expected-updated-at", adjusted["updated_at"],
                                   "--add-skills", "~/.claude/skills", ok=False)["code"], "exists")
@@ -370,9 +424,9 @@ class AgentSettingsTests(IsolatedHome):
                 path.write_text(text, encoding="utf-8")
                 agents.forget_settings()
                 listed = self.cli("skill-sources", "list")
-                self.assertEqual([agent["id"] for agent in listed["agents"]], ["claude", "codex"])
+                self.assertEqual([agent["id"] for agent in listed["agents"]], list(agents.builtin_ids()))
                 self.assertEqual((str(path) in listed["problem"], listed["problem_code"]), (True, code))
-                self.assertEqual(agents.ids(), ("claude", "codex"))
+                self.assertEqual(agents.ids(), agents.builtin_ids())
                 refused = self.cli("skill-sources", "update", "claude", "--disable", "skills", ok=False)
                 self.assertEqual((refused["code"], refused["subject"]), ("settings", code))
                 # Settings a newer Richi wrote are not damage: nobody is told to remove them.
@@ -383,7 +437,7 @@ class AgentSettingsTests(IsolatedHome):
                         encoding="utf-8")
         agents.forget_settings()
         listed = self.cli("skill-sources", "list")
-        self.assertEqual((agents.ids(), listed["problem"]), (("claude", "codex"), None))
+        self.assertEqual((agents.ids(), listed["problem"]), (agents.builtin_ids(), None))
         # They are named with what removing them takes, and adding or changing that agent says the same.
         remove = "richi skill-sources remove future --expected-updated-at=t"
         self.assertEqual(listed["unknown_agents"], [{"id": "future", "updated_at": "t", "next": remove}])
@@ -424,10 +478,10 @@ class AgentSettingsTests(IsolatedHome):
                                     "future": {"keep": [1]}}), encoding="utf-8")
         agents.forget_settings()
         listed = self.cli("skill-sources", "list")
-        self.assertEqual([agent["id"] for agent in listed["agents"]], ["claude", "codex", "own"])
+        self.assertEqual([agent["id"] for agent in listed["agents"]], [*agents.builtin_ids(), "own"])
         self.assertEqual((listed["problem"], listed["problem_code"], agents.settings_complete()), (None, None, False))
         # Codex's chats are named by its thread ID alone, so the identity tells nobody it is Codex.
-        self.assertEqual([agent["chat_prefix"] for agent in listed["agents"]], [True, False, True])
+        self.assertEqual([agent["id"] for agent in listed["agents"] if not agent["chat_prefix"]], ["codex"])
         # Every own agent stored counts toward the limit, also one this version cannot use.
         with mock.patch.object(agents, "MAX_CUSTOM", 2):
             refused = self.cli("skill-sources", "add", "third", "--name", "Third", "--skills", "~/team", ok=False)
@@ -475,7 +529,7 @@ class AgentSettingsTests(IsolatedHome):
         with mock.patch.object(agents, "MAX_CUSTOM", 1):
             agents.forget_settings()
             listed = self.cli("skill-sources", "list")
-        self.assertEqual([agent["id"] for agent in listed["agents"]], ["claude", "codex", "zeta"])
+        self.assertEqual([agent["id"] for agent in listed["agents"]], [*agents.builtin_ids(), "zeta"])
         self.assertEqual([(item["id"], item.get("error")) for item in listed["unknown_agents"]],
                          [("future", None), ("alpha", "this version uses at most 1 own agents")])
         agents.forget_settings()
@@ -623,7 +677,7 @@ class AgentSettingsTests(IsolatedHome):
             self.assertEqual((refused["code"], refused["subject"]), ("limit", "size"))
             self.assertEqual(path.read_text(encoding="utf-8"), before)
             agents.forget_settings()
-            self.assertEqual(agents.ids(), ("claude", "codex", "first"))
+            self.assertEqual(agents.ids(), (*agents.builtin_ids(), "first"))
 
     def test_a_compact_settings_file_with_extensions_remains_editable(self):
         path = agents.settings_path()
@@ -655,7 +709,7 @@ class AgentSettingsTests(IsolatedHome):
         self.assertIn("could not be read", problem)
         self.assertNotIn("fix or remove", problem)
         # Not taken for damage: the next reading finds the agent.
-        self.assertEqual(agents.ids(), ("claude", "codex", "first"))
+        self.assertEqual(agents.ids(), (*agents.builtin_ids(), "first"))
 
     def test_settings_reads_reject_special_files_and_nonfinite_fields(self):
         path = agents.settings_path()
@@ -707,7 +761,7 @@ class AgentSettingsTests(IsolatedHome):
         with mock.patch.object(skill_catalog, "catalog", removed_meanwhile):
             listed = agent_commands.listing({}, self.home)
         # Once it showed the agent as written by a newer Richi, with a command that could not work.
-        self.assertEqual([agent["id"] for agent in listed["agents"]], ["claude", "codex", "xagent"])
+        self.assertEqual([agent["id"] for agent in listed["agents"]], [*agents.builtin_ids(), "xagent"])
         self.assertNotIn("unknown_agents", listed)
         self.assertEqual([source["key"] for source in listed["agents"][-1]["sources"]], ["~/team"])
 
@@ -769,15 +823,15 @@ class AgentSettingsTests(IsolatedHome):
 
     def test_settings_changed_by_another_process_are_read_again(self):
         self.cli("skill-sources", "add", "first", "--name", "First", "--skills", "~/team")
-        self.assertEqual(agents.ids(), ("claude", "codex", "first"))
+        self.assertEqual(agents.ids(), (*agents.builtin_ids(), "first"))
         # A map that runs for days learns what a command wrote from the file itself, not from being told.
         path = agents.settings_path()
         settings = json.loads(path.read_text(encoding="utf-8"))
         settings["agents"]["second"] = dict(settings["agents"]["first"], name="Second")
         path.write_text(json.dumps(settings), encoding="utf-8")
-        self.assertEqual(agents.ids(), ("claude", "codex", "first", "second"))
+        self.assertEqual(agents.ids(), (*agents.builtin_ids(), "first", "second"))
         path.unlink()
-        self.assertEqual(agents.ids(), ("claude", "codex"))
+        self.assertEqual(agents.ids(), agents.builtin_ids())
 
     def test_one_writer_changes_the_settings_at_a_time(self):
         self.cli("skill-sources", "add", "first", "--name", "First", "--skills", "~/team")
@@ -798,7 +852,7 @@ class AgentSettingsTests(IsolatedHome):
                 self.assertFalse(reading.wait(0.5), "the settings were read while another writer held them")
             writer.join(10)
         self.assertTrue(reading.is_set())
-        self.assertEqual(agents.ids(), ("claude", "codex", "first", "second"))
+        self.assertEqual(agents.ids(), (*agents.builtin_ids(), "first", "second"))
 
     def test_the_settings_are_bounded(self):
         self.cli("skill-sources", "add", "first", "--name", "First", "--skills", "~/team")
@@ -813,7 +867,7 @@ class AgentSettingsTests(IsolatedHome):
             agents.forget_settings()
             listed = self.cli("skill-sources", "list")
             self.assertEqual(([agent["id"] for agent in listed["agents"]], str(path) in listed["problem"],
-                              listed["problem_code"]), (["claude", "codex"], True, "large"))
+                              listed["problem_code"]), (list(agents.builtin_ids()), True, "large"))
             refused = self.cli("skill-sources", "update", "claude", "--disable", "skills", ok=False)
             self.assertEqual((refused["code"], refused["subject"]), ("settings", "large"))
             self.assertNotIn("remove", listed["problem"] + refused["error"])
@@ -823,14 +877,14 @@ class AgentSettingsTests(IsolatedHome):
             agents.forget_settings()
             listed = self.cli("skill-sources", "list")
             self.assertEqual(([agent["id"] for agent in listed["agents"]], listed["problem"]),
-                             (["claude", "codex", "first"], None))
+                             ([*agents.builtin_ids(), "first"], None))
             self.assertEqual([item["id"] for item in listed["unknown_agents"]], ["second"])
             self.cli("skill-sources", "update", "claude", "--disable", "skills")
             refused = self.cli("skill-sources", "add", "third", "--name", "Third", "--skills", "~/team", ok=False)
             self.assertEqual((refused["code"], refused["subject"]), ("limit", "agents"))
         self.assertIn("second", json.loads(path.read_text(encoding="utf-8"))["agents"])
         agents.forget_settings()
-        self.assertEqual(agents.ids(), ("claude", "codex", "first", "second"))
+        self.assertEqual(agents.ids(), (*agents.builtin_ids(), "first", "second"))
 
     def test_a_folder_stored_for_a_builtin_agent_is_listed_once(self):
         adjusted = self.cli("skill-sources", "update", "claude", "--add-skills", "~/team")["agent"]
@@ -843,6 +897,28 @@ class AgentSettingsTests(IsolatedHome):
         claude = self.listed()["claude"]
         self.assertEqual([source["key"] for source in claude["sources"]], ["skills", "plugins", "claude-app", "~/team"])
         self.assertEqual((claude["skills"], adjusted["skills"]), (2, 2))
+
+    def test_enabling_one_builtin_source_keeps_others_at_a_former_folder_off(self):
+        path = agents.settings_path()
+        path.parent.mkdir(parents=True)
+        stored = {"updated_at": "t", "folders": [{"path": "~/.agents/skills", "enabled": False}]}
+        path.write_text(agent_commands._serialized({"codex": stored}), encoding="utf-8")
+        # With this profile both agents-skills and codex-skills read the saved folder.
+        with mock.patch.dict(os.environ, {"CODEX_HOME": str(self.home / ".agents")}):
+            before = path.read_bytes()
+            unchanged = self.cli("skill-sources", "update", "codex", "--expected-updated-at", "t",
+                                 "--disable", "agents-skills")
+            self.assertEqual((unchanged["results"][0]["status"], path.read_bytes()), ("unchanged", before))
+            changed = self.cli("skill-sources", "update", "codex", "--expected-updated-at", "t",
+                               "--enable", "agents-skills")["agent"]
+            enabled = {source["key"]: source["enabled"] for source in changed["sources"]}
+            self.assertTrue(enabled["agents-skills"])
+            self.assertFalse(enabled["codex-skills"])
+            self.cli("skill-sources", "update", "codex", "--expected-updated-at", changed["updated_at"],
+                     "--disable", "agents-skills")
+            restored = json.loads(path.read_text(encoding="utf-8"))["agents"]["codex"]
+            self.assertEqual(restored["folders"], stored["folders"])
+            self.assertNotIn("disabled", restored)
 
     def test_changes_are_validated_for_every_caller(self):
         for action, identifier, options in (
@@ -943,7 +1019,7 @@ class ListingTests(IsolatedHome):
         with mock.patch.object(skill_catalog, "catalog", wraps=skill_catalog.catalog) as scans:
             result = agent_commands.change("update", "claude", {"add_folders": ["~/team"]}, full=True)
         self.assertEqual(scans.call_count, 1)
-        self.assertEqual([agent["id"] for agent in result["listing"]["agents"]], ["claude", "codex"])
+        self.assertEqual([agent["id"] for agent in result["listing"]["agents"]], list(agents.builtin_ids()))
         self.assertEqual([skill["name"] for skill in result["listing"]["catalog"]["skills"]], ["release"])
         self.assertNotIn("listing", agent_commands.change("update", "claude", {
             "disable": ["plugins"], "expected_updated_at": result["agent"]["updated_at"]}))
@@ -954,10 +1030,14 @@ class ListingTests(IsolatedHome):
         with mock.patch.object(agent_setup, "agents_command", side_effect=ValueError("setup record is damaged")):
             listed = agent_commands.listing()
         self.assertIn("setup record is damaged", listed["connections_problem"])
-        self.assertEqual([agent["connection"] for agent in listed["agents"]], [None, None])
+        self.assertEqual([agent["connection"] for agent in listed["agents"]], [None] * len(agents.AGENTS))
+        (self.home / ".agents/skills").mkdir(parents=True)
         with mock.patch.object(agent_setup, "agents_command", return_value={"agents": [
                 {"agent": "claude", "detected": False, "status": "configured"}]}):
             listed = agent_commands.listing()
+            self.assertFalse(next(agent for agent in listed["agents"] if agent["id"] == "cursor")["detected"])
+            (self.home / ".cursor").mkdir()
+            self.assertTrue(self.listed()["cursor"]["detected"])
         self.assertEqual((listed["connections_problem"], listed["agents"][0]["connection"],
                           listed["agents"][0]["detected"]), (None, "configured", False))
 

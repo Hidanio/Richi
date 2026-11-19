@@ -40,7 +40,7 @@ richi --compact-json --project-path /work/example rules show
 своих агентов пользователя из этих настроек не узнают по их оболочке (свои скиллы
 они получают с `--agent ID`), их нельзя назвать в новых правилах, а один и тот же
 скилл всех агентов не объединяется в общий; правила, которые уже их называют,
-продолжают работать. Claude Code и Codex остаются известными. Ответы `rules add` и
+продолжают работать. Встроенные агенты остаются известными. Ответы `rules add` и
 `rules update` тоже его несут. `unsupported_rules`
 перечисляет правила, которые более новая версия Richi записала в формате, незнакомом
 этой версии: она пропускает их, чтобы не применить неверно, поэтому скажи
@@ -55,10 +55,10 @@ richi --compact-json --project-path /work/example rules show
 возвращает известных Richi агентов в поле `agents`, а о том, как пользователь
 добавляет ещё одного, рассказывает [AGENT_SKILLS.ru.md](AGENT_SKILLS.ru.md). Когда агент известен, поле
 `agent` называет его, а `use_skill` каждого правила — скилл, который этот агент
-использует, когда правило применимо (null — без скилла). Richi узнаёт агента по его
-оболочке: по идентификатору чата (`RICHI_CHAT_ID` вида `claude:…`) и по переменным,
-которые задаёт оболочка агента, — `CLAUDECODE` у Claude Code и `CODEX_THREAD_ID` у
-Codex. Все имеющиеся признаки должны указывать на одного агента. Агент, запущенный
+использует, когда правило применимо (null — без скилла). Richi узнаёт агента по
+идентификатору чата (например, `claude:…` или `--chat cursor:<id>` из хука Cursor)
+и по переменным его оболочки (`CLAUDECODE`, `CODEX_THREAD_ID` или `CURSOR_AGENT`).
+Все имеющиеся признаки должны указывать на одного агента. Агент, запущенный
 из терминала другого агента, несёт признаки обоих, и тогда Richi не называет ни
 одного, чтобы агент не получил чужой скилл. Если `agent` пришёл равным null, выполни
 команду снова с `--agent ID` и своим ID агента. Без агента `skills` правила
@@ -76,9 +76,9 @@ richi --compact-json rules add no-agent-prefix --global \
 richi --compact-json --project-path /work/example rules add branch-naming --project example \
   --text "Name branches EX-<task number>_<short description>." --source "claude:EXAMPLE"
 richi --compact-json rules add pr-skill --global \
-  --text "Use the pr-description skill for every pull request." --skill pr-description
+  --text "Use the pr-description skill for every pull request." --skill pr-description --source "cursor:EXAMPLE"
 richi --compact-json rules add review-skill --global --text "Use the code review skill for every review." \
-  --skill claude=engineering:code-review --skill codex=code-review
+  --skill code-review --skill claude=engineering:code-review --source "cursor:EXAMPLE"
 ```
 
 Добавляй, меняй или удаляй правило только по явной просьбе пользователя о постоянном
@@ -165,7 +165,8 @@ richi --compact-json rules apply --json rule-change.json
 ```json
 {"action": "add", "id": "review-skill", "scope": "global",
  "text": "Use the code review skill for every review.",
- "skills": {"claude": "engineering:code-review", "codex": "code-review"}}
+ "skill": "code-review", "skills": {"claude": "engineering:code-review"},
+ "source": "cursor:EXAMPLE"}
 ```
 
 `rules apply` принимает то же изменение, что `add`, `update` и `remove`, одним

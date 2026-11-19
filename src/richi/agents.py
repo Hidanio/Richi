@@ -76,7 +76,7 @@ class SkillSource(NamedTuple):
     source, the folder as the user wrote it for an added one. kind groups
     skills in the map: "skills", "system" (built into the agent) or "plugins".
     layout says how the directory holds them: "skills" has one skill per
-    subdirectory; "cache" is a plugin cache,
+    subdirectory; "nested-skills" also searches category subdirectories. "cache" is a plugin cache,
     <marketplace>/<plugin>/<version>/skills/<skill>; "claude-app" is the Claude
     app's <account>/<organization>/rpm/<plugin> with rpm/manifest.json, and
     skills-plugin/<account>/<organization> with its manifest of enabled skills.
@@ -116,6 +116,11 @@ class Agent(NamedTuple):
     # False where the chat identity is the agent's own ID of the chat instead (Codex: its thread
     # ID, as the launcher takes it from CODEX_THREAD_ID): it names no agent, the variables do.
     chat_prefix: bool = True
+    # How to scan extra skill folders the user adds to this agent.
+    folder_layout: str = "skills"
+    # Sources that indicate installation when the launcher has no adapter.
+    # By default any configured source is evidence for that agent.
+    detection_sources: tuple = ()
 
 
 def _home_variable(environ, home, variable, default):
@@ -138,11 +143,21 @@ def _codex_sources(environ, home):
             SkillSource("plugins", "plugins", "cache", profile / "plugins" / "cache")]
 
 
+def _cursor_sources(environ, home):
+    # Cursor also discovers personal skills in the Claude and Codex compatibility folders.
+    personal = [SkillSource(profile + "-skills", "skills", "nested-skills", home / ("." + profile) / "skills")
+                for profile in ("cursor", "agents", "claude", "codex")]
+    return personal + [SkillSource("system", "system", "nested-skills", home / ".cursor/skills-cursor")]
+
+
 AGENTS = (
     Agent(id="claude", name="Claude Code", variables={"CLAUDECODE": "1"},
           invocation="front-matter", plugin_commands=True, sources=_claude_sources),
     Agent(id="codex", name="Codex", variables={"CODEX_THREAD_ID": None},
           invocation="openai-yaml", plugin_commands=False, sources=_codex_sources, chat_prefix=False),
+    Agent(id="cursor", name="Cursor", variables={"CURSOR_AGENT": None},
+          invocation="front-matter", plugin_commands=False, sources=_cursor_sources, folder_layout="nested-skills",
+          detection_sources=("cursor-skills", "system")),
 )
 
 # Other agents a user may add as their own, with the user-wide skill folder
@@ -150,7 +165,6 @@ AGENTS = (
 # docs/agents.md, November 2026). They are suggestions for `skill-sources add`, not
 # agents Richi knows until the user adds one.
 PRESETS = (
-    ("cursor", "Cursor", "~/.cursor/skills"),
     ("gemini-cli", "Gemini CLI", "~/.gemini/skills"),
     ("opencode", "OpenCode", "~/.config/opencode/skills"),
     ("github-copilot", "GitHub Copilot", "~/.copilot/skills"),
@@ -498,8 +512,8 @@ def settings_complete(settings=None, environ=None, home=None):
     return settings.problem is None and not missing_agents(settings)
 
 
-def _folders(folders, home):
-    return [SkillSource(key=path, kind="skills", layout="skills", path=folder_path(path, home), enabled=enabled,
+def _folders(folders, home, layout="skills"):
+    return [SkillSource(key=path, kind="skills", layout=layout, path=folder_path(path, home), enabled=enabled,
                         added=True) for path, enabled in folders]
 
 
@@ -512,9 +526,13 @@ def _adjusted(agent, entry):
     disabled, folders = frozenset(entry.get("disabled", ())), _stored_folders(entry)
 
     def sources(environ, home, base=agent.sources):
-        built = [source._replace(enabled=source.key not in disabled) for source in base(environ, home)]
+        added = _folders(folders, home, agent.folder_layout)
+        # A previously added folder can become a built-in source after an upgrade.
+        off = {source.path for source in added if not source.enabled}
+        built = [source._replace(enabled=source.key not in disabled and source.path not in off)
+                 for source in base(environ, home)]
         taken = {source.path for source in built}
-        return built + [source for source in _folders(folders, home) if source.path not in taken]
+        return built + [source for source in added if source.path not in taken]
     return agent._replace(sources=sources, updated_at=entry["updated_at"])
 
 

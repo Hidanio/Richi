@@ -40,17 +40,19 @@ platforms are **macOS or Linux with Python 3.9+**. Code history features require
 Git. The `richi use` menu provides quick workspace selection. An MCP server is
 not included in this distribution yet.
 
+Choose an agent for your first installation. The example uses Codex. For
+Claude Code, replace `codex` with `claude`. For Cursor Agent, use `cursor` once
+the stable installer's `--help` lists it. Before that release, you can
+[install the checkout that adds Cursor support](docs/INSTALLATION.md).
+
 ```sh
-curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh | sh -s -- --yes
+curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh | sh -s -- --agent codex --yes
 ```
 
-The installer becomes available after the first stable release containing it.
-It installs Richi, connects Project Memory to all local chats in your Codex
-profile, preserves existing instructions and updates the skill with Richi.
-Open a new chat to choose its workspace, and a new terminal for the command.
-Prerequisites include curl and Python with venv, ensurepip and sqlite3.
-See [one-command setup](docs/SETUP.md) for preview, existing skills, recovery and
-offline installation, or [manual installation](docs/INSTALLATION.md) for source builds.
+The installer downloads a stable release from GitHub. Open a new chat in the
+selected agent to choose its workspace and a new terminal to run `richi`.
+Installation requires curl and Python with venv, ensurepip and sqlite3.
+[Connect an existing installation or recover one](docs/SETUP.md).
 
 For stable releases, use `richi update check`, `richi update apply` and
 `richi update rollback`. Updates retain the previous version, dev settings and
@@ -108,7 +110,8 @@ richi map
 richi use
 ```
 
-In a new chat, the agent asks once whether to use the current CLI workspace or
+In Cursor the agent adds the `--chat` argument supplied by this chat's
+`sessionStart` hook to each Richi command. In a new chat, the agent asks once whether to use the current CLI workspace or
 another workspace for that chat. `richi chat bind --current` saves the current
 choice; `richi chat bind NAME` selects a chat-specific workspace. Later changes
 through `richi use` do not redirect the chat. A detected unbound chat cannot
@@ -143,10 +146,7 @@ shared repositories and settings.
 - [Storage growth and index maintenance](docs/STORAGE.md): current records,
   history and files; preview and backup before optimization.
 
-For Codex, the installer performs global integration; use `richi setup --status`
-to inspect it or `richi setup --yes` to connect a supported existing installation.
-For Claude Code, run `richi setup --agent claude --yes`; `richi agents` discovers
-and connects clients installed later. See [setup](docs/SETUP.md).
+To connect another local client, open the `richi agents` menu in a terminal.
 For other agents, copy the entire `skills/project-memory` directory and configure
 access to the installed CLI. Scope memory authorization in agent/project
 instructions. See [setup](docs/SETUP.md) and the

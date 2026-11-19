@@ -23,7 +23,7 @@ The fixed synthetic cases exercise exact task identifiers, Unicode aliases,
 explicit cross-project links, historical exclusions, concept ambiguity and scope,
 unknown queries, and the distinction between implementation and release. The
 runner also checks source provenance, knowledge/work states, serialized output
-budgets, and that recall leaves the seeded database unchanged. It exits nonzero
+budgets, and byte equality of the main SQLite file before and after recall. It exits nonzero
 when a case fails and refuses to overwrite reports.
 
 Issue-key recognition has two datasets of its own. Each seeds a separate store
@@ -40,7 +40,7 @@ unknown numbers of a recorded series and technical tokens inside and outside suc
 a series. `recall_technical_token_cases.json` records no keys: `python3.13`,
 `sha256`, `fts5` and `gemma-4` must behave as ordinary words.
 
-`recall_cases.json` contains all seeds and expectations. These are acceptance
+`recall_cases.json` contains the seeds and expectations for the default run. These are acceptance
 checks, not a blind benchmark or a claim about production recall accuracy.
 Historical private datasets remain outside this repository; this fixture does
 not replace them or reproduce their results.
@@ -171,3 +171,13 @@ threshold, and operating-system caches are shared between processes.
 See the [2026-10-23 measured results](../docs/RETRIEVAL_STORAGE_EVAL.md), including
 the deliberately incomplete graph view and the absence of disk shrink after
 index maintenance.
+
+## Other experiments
+
+| Measurement | Runner | Protocol and recorded results |
+|---|---|---|
+| CLI startup in release and dev mode | `evaluate_cli_startup.py` | [Paired startup comparison](../docs/CLI_STARTUP.md) |
+| Compact JSON, output budgets and instruction size | `evaluate_compact_output.py` | [Compact output](../docs/COMPACT_OUTPUT.md) |
+| Tool calls and visible context for complete workflows | `evaluate_agent_workflows.py` | [Agent workflows](../docs/AGENT_WORKFLOW_EVAL.md) |
+| Retrieval latency, strict filters and CLI timing variability | `evaluate_indexed_filters.py`, `diagnose_cli_latency.py` | [Indexed filters](../docs/INDEXED_FILTERS_EVAL.md) |
+| Storage and lookup costs of two derived index layouts | `evaluate_index_layout.py` | [Index layout comparison](../docs/INDEX_LAYOUT_EVAL.md) |

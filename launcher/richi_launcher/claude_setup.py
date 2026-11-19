@@ -43,6 +43,10 @@ def activation_operations(ctx, record, site):
 # A standalone hook uses the permanent installation's Python, not shell PATH.
 HOOK = '''import json, os, re, shlex, sys
 payload = json.load(sys.stdin)
+# Cursor can import this Claude hook alongside its own sessionStart handler.
+if payload.get("hook_event_name") == "sessionStart" and isinstance(payload.get("cursor_version"), str) and payload["cursor_version"]:
+    print("{}")
+    raise SystemExit(0)
 session = payload.get("session_id")
 if payload.get("hook_event_name") != "SessionStart" or not isinstance(session, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", session):
     raise SystemExit("Richi: invalid Claude session identity")
@@ -106,5 +110,5 @@ def hook_operations(ctx, profile, current, content=None):
     if before["kind"] != "absent" and json.loads(files.contents(before)) == data:
         encoded = files.contents(before)
     return {"hook_sha256": files.digest(content), "hook_entry": hook}, [
-        files.change(script, files.file_value(content)),
-        files.change(settings, files.file_value(encoded, before.get("mode", 0o600)))]
+        files.change(script, files.file_value(content), before=value),
+        files.change(settings, files.file_value(encoded, before.get("mode", 0o600)), before=before)]

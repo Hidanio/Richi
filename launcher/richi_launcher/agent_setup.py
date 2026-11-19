@@ -189,7 +189,7 @@ def _manifest_op(ctx, records):
                 after = before
         except ConfigError:
             pass
-    return files.change(path, after)
+    return files.change(path, after, before=before)
 
 
 def _block(command, agent="codex"):
@@ -241,7 +241,7 @@ def _file_op(path, block, start=START, end=END, expected=None, instruction_limit
     data = merge_block(files.contents(before), block, start, end, expected)
     if instruction_limit is not None and len(data) > instruction_limit:
         raise ConfigError("Global instructions would exceed the agent discovery budget (" + str(instruction_limit // 1024) + " KiB); shorten them before setup")
-    return files.change(path, files.file_value(data, before.get("mode", 0o600)))
+    return files.change(path, files.file_value(data, before.get("mode", 0o600)), before=before)
 
 
 def _shell_profiles():
@@ -289,6 +289,9 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     installation._validate_layout(ctx)
     _seed_capable(ctx)
     state = installation._state(ctx)
+    # A setup process may have been waiting for a concurrent update or rollback.
+    if os.environ.get(installation.bootstrap.GENERATION_ENV, state["current"]) != state["current"]:
+        raise ConfigError("The active Richi release changed during setup; rerun the command")
     active = state["generations"][state["current"]]
     root, hashes = bundle(active["site"])
     records = _records(ctx)
@@ -296,6 +299,8 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     home = Path.home().resolve()
     adapter = agent_adapters.get(agent)
     profile, instructions, skill = adapter.paths(current)
+    if current and Path(current["skill"]) != skill:
+        raise ConfigError("Setup belongs to another skill directory; use its original profile")
     extra, adapter_ops = adapter.setup_operations(ctx, profile, current, replace_skill)
     command = home / ".local" / "bin" / "richi"
     executable = Path(ctx["original_prefix"]) / "bin" / "richi"
@@ -305,12 +310,9 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     # the others. A broken checkout plans the release link (repair).
     source = current.get("dev_source") if current else _shared_source(records)
     link, dev_source, _ = _desired_link(root, source)
-    skill_op = files.change(skill, {"kind": "link", "target": link})
-    if current:
-        _verify_skill(current)
-    elif skill_op["before"] == skill_op["after"]:
-        pass  # Already the exact managed link (for example a manual dev link).
-    elif skill_op["before"]["kind"] != "absent":
+    before = _verify_skill(current) if current else files.snapshot(skill)
+    skill_op = files.change(skill, {"kind": "link", "target": link}, before=before)
+    if not current and before != skill_op["after"] and before["kind"] != "absent":
         if not replace_skill:
             raise ConfigError("Project Memory already exists. Use --replace-skill to preserve it outside skill discovery and install this version")
         skill_op["backup"] = str(skill.parent.parent / "richi-skill-backups" / ("project-memory-" + uuid.uuid4().hex))
@@ -318,9 +320,16 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     if command_op["before"]["kind"] != "absent" and command_op["before"] != command_op["after"]:
         raise ConfigError("Another command owns " + str(command) + "; it was not overwritten")
     block = _block(command, agent)
-    ops = [skill_op, command_op, _file_op(instructions, block, expected=current.get("block_sha256") if current else None,
-                                                instruction_limit=adapter.INSTRUCTION_LIMIT)]
-    ops = adapter_ops + ops
+    expected = current.get("block_sha256") if current else None
+    instruction_file = getattr(adapter, "instruction_file", None)
+    if instruction_file is None:
+        instruction_op = _file_op(instructions, block, expected=expected, instruction_limit=adapter.INSTRUCTION_LIMIT)
+    else:
+        if current and expected is None:
+            raise ConfigError("Missing digest for the managed " + adapter.LABEL + " rule")
+        block = instruction_file(block)
+        instruction_op = files.managed_file(instructions, block, expected=expected, label=adapter.LABEL + " rule")
+    ops = adapter_ops + [skill_op, command_op, instruction_op]
     path_block = PATH_START + ("\nexport PATH=" + shlex.quote(str(command.parent)) + ':"$PATH"\n').encode() + PATH_END
     profiles = current.get("profiles", []) if current else [] if no_path else [str(p) for p in _shell_profiles()]
     for shell_profile in profiles:
@@ -341,16 +350,19 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
 
 
 def _verify_skill(record):
+    """Return the link snapshot whose ownership and release contents were verified."""
     # skill_target and skill_hashes always describe the release bundle, so a
     # manager without dev support refuses a dev link instead of adopting it.
-    if files.snapshot(record["skill"]) != {"kind": "link", "target": _link_target(record)}:
+    before = files.snapshot(record["skill"])
+    if before != {"kind": "link", "target": _link_target(record)}:
         raise ConfigError("Managed skill link was changed; preserved it. Reconcile it before updating Richi")
     if record.get("dev_source"):
-        return  # Checkout edits are development work, not drift.
+        return before  # Checkout edits are development work, not drift.
     root = Path(record["skill_target"])
     _, hashes = bundle(root.parent.parent)
     if hashes != record["skill_hashes"]:
         raise ConfigError("Managed skill contents were edited; back up and reconcile them before updating Richi")
+    return before
 
 
 def activation_operations(ctx, state):
@@ -367,7 +379,7 @@ def activation_operations(ctx, state):
     dev_capable = _dev_capable(site)
     ops = []
     for agent, record in records.items():
-        _verify_skill(record)
+        before = _verify_skill(record)
         extra, adapter_ops = agent_adapters.get(agent).activation_operations(ctx, record, site)
         ops.extend(adapter_ops)
         link, source, _ = _desired_link(target, record.get("dev_source") if dev_capable else None)
@@ -376,7 +388,7 @@ def activation_operations(ctx, state):
         if source:
             records[agent]["dev_source"] = source
         records[agent].update(extra)
-        ops.append(files.change(record["skill"], {"kind": "link", "target": link}))
+        ops.append(files.change(record["skill"], {"kind": "link", "target": link}, before=before))
     ops.append(_manifest_op(ctx, records))
     return ops
 
@@ -395,7 +407,7 @@ def _switch_operations(ctx, state, source):
             try:
                 # A release skill edited through its link stays protected:
                 # moving the link away would let a later update discard it.
-                _verify_skill(record)
+                operation["before"] = _verify_skill(record)
             except ConfigError as exc:
                 raise ConfigError(agent + ": " + str(exc)) from exc
         # Release hashes are kept as recorded, so later activation still
@@ -544,32 +556,12 @@ def setup_parser():
         Setup is installation-wide: workspace and storage options are rejected.""",
                     examples=(("Preview, then apply for Codex", ("richi setup --dry-run", "richi setup --yes")),
                               ("Connect Claude Code", "richi setup --agent claude --yes"),
+                              ("Connect Cursor", "richi setup --agent cursor --yes"),
                               ("Is the integration intact?", "richi setup --status --agent claude")),
                     see=("agents", "start"), guide="docs/SETUP.md")
 
 
-def command(argv):
-    from . import installation
-    args = setup_parser().parse_args(argv)
-    ctx = installation._context()
-    if args.status:
-        record = _load(ctx, args.agent)
-        if record is None:
-            return {"status": "not_configured"}
-        if (Path(ctx["root"]) / files.JOURNAL).exists():
-            return dict(record, status="recovery_required", pending_recovery=True)
-        # Replanning also detects shadowed/edited instructions and broken links.
-        _, operations = plan(ctx, agent=args.agent)
-        drift = [op["path"] for op in operations if op["before"] != op["after"]]
-        result = dict(record, status="repair_required" if drift else "configured", changes=drift,
-                      pending_recovery=False, skill_mode=_mode(record),
-                      skill_link=_link_target(record))
-        if record.get("dev_source"):
-            try:
-                dev_skill(record["dev_source"])
-            except ConfigError as exc:
-                result["dev_skill_error"] = str(exc) + "; repair links to the release or fix the checkout"
-        return result
+def _setup_plan(ctx, args):
     record, ops = plan(ctx, replace_skill=args.replace_skill, no_path=args.no_path, agent=args.agent)
     changed = [op["path"] for op in ops if op["before"] != op["after"]]
     result = {"status": "planned", "agent": args.agent, "scope": "user",
@@ -580,9 +572,67 @@ def command(argv):
               "skill_backups": [op["backup"] for op in ops if "backup" in op],
               "next_step": "Open a new " + agent_adapters.get(args.agent).LABEL + " chat and choose its workspace. Open a new terminal for PATH changes.",
               "path_configured": bool(record["profiles"])}
-    if args.dry_run:
-        return result
-    if not args.yes and changed:
+    return result, ops
+
+
+def _status(ctx, agent, record, pending):
+    if pending:
+        return dict(record or {}, status="recovery_required", pending_recovery=True)
+    if record is None:
+        return {"status": "not_configured"}
+    # Replanning also detects shadowed/edited instructions and broken links.
+    _, operations = plan(ctx, agent=agent)
+    drift = [op["path"] for op in operations if op["before"] != op["after"]]
+    result = dict(record, status="repair_required" if drift else "configured", changes=drift,
+                  pending_recovery=False, skill_mode=_mode(record),
+                  skill_link=_link_target(record))
+    if record.get("dev_source"):
+        try:
+            dev_skill(record["dev_source"])
+        except ConfigError as exc:
+            result["dev_skill_error"] = str(exc) + "; repair links to the release or fix the checkout"
+    return result
+
+
+def _inspect(ctx, args):
+    pending = (Path(ctx["root"]) / files.JOURNAL).exists()
+    if args.status or pending:
+        return _status(ctx, args.agent, _load(ctx, args.agent), pending)
+    return _setup_plan(ctx, args)[0]
+
+
+def _preview(ctx, inspect, *args):
+    """Read a complete setup transaction without creating lock files on first use."""
+    import fcntl
+    lock = Path(ctx["root"]) / "state.lock"
+    if not lock.exists():
+        # A first writer creates state.lock before touching any profile. If one
+        # appeared during the inspection, discard even an apparent conflict.
+        try:
+            result = inspect(ctx, *args)
+        except (ConfigError, OSError):
+            if not lock.exists():
+                raise
+        else:
+            if not lock.exists():
+                return result
+    with lock.open("rb") as stream:
+        fcntl.flock(stream, fcntl.LOCK_SH)
+        return inspect(ctx, *args)
+
+
+def command(argv):
+    from . import installation
+    args = setup_parser().parse_args(argv)
+    ctx = installation._context()
+    if args.status or args.dry_run:
+        return _preview(ctx, _inspect, args)
+    # Validate a first setup before creating its installation metadata.
+    if not args.yes or not (Path(ctx["root"]) / "state.lock").exists():
+        result = _preview(ctx, _inspect, args)
+    if not args.yes and result.get("pending_recovery"):
+        raise ConfigError("A setup transaction was interrupted; rerun setup to recover it")
+    if not args.yes and result["changes"]:
         try:
             with open("/dev/tty", "r+") as terminal:
                 # The plan is shown to someone who can answer; without a
@@ -599,12 +649,8 @@ def command(argv):
             return dict(result, status="cancelled")
     with installation._locked(ctx), installation._locked(ctx, state=True):
         files.recover(ctx)
-        record, ops = plan(ctx, replace_skill=args.replace_skill, no_path=args.no_path, agent=args.agent)
-        result["skill_backups"] = [op["backup"] for op in ops if "backup" in op]
-        result["changes"] = [op["path"] for op in ops if op["before"] != op["after"]]
-        result["skill_link"] = _link_target(record)
-        result["skill_mode"] = _mode(record)
-        if any(op["before"] != op["after"] for op in ops):
+        result, ops = _setup_plan(ctx, args)
+        if result["changes"]:
             transaction = files.begin(ctx, ops)
             files.finish(ctx, transaction)
     return dict(result, status="configured")
@@ -624,23 +670,27 @@ def agents_parser():
                     see=("setup",), guide="docs/SETUP.md")
 
 
+def _agents(ctx):
+    records = _records(ctx)
+    pending = (Path(ctx["root"]) / files.JOURNAL).exists()
+    items = []
+    for name in agent_adapters.AGENTS:
+        item = {"agent": name, "detected": agent_adapters.get(name).detected()}
+        try:
+            item["status"] = _status(ctx, name, records.get(name), pending)["status"]
+        except ConfigError as exc:
+            item.update(status="conflict", error=str(exc))
+        items.append(item)
+    return items
+
+
 def agents_command(argv):
     """Explicit discovery/menu; never runs on ordinary CLI calls."""
     from . import installation
     args = agents_parser().parse_args(argv)
+    ctx = installation._context()
     while True:
-        records = _records(installation._context())
-        items = []
-        for name in agent_adapters.AGENTS:
-            adapter = agent_adapters.get(name)
-            item = {"agent": name, "detected": adapter.detected(),
-                    "status": "not_configured"}
-            if name in records:
-                try:
-                    item["status"] = command(["--agent", name, "--status"])["status"]
-                except ConfigError as exc:
-                    item.update(status="conflict", error=str(exc))
-            items.append(item)
+        items = _preview(ctx, _agents)
         if args.status:
             return {"agents": items}
         try:

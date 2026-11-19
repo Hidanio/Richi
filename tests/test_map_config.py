@@ -76,7 +76,7 @@ class MapConfigTests(unittest.TestCase):
             good_config.write_text(json.dumps({"database": str(database), "data_dir": str(root)}))
             bad_config = root / "invalid.json"
             bad_config.write_text("this deliberately is not JSON")
-            environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_") and key != "CODEX_THREAD_ID"}
+            environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_") and key not in {"CODEX_THREAD_ID", "CURSOR_AGENT"}}
             # Running maps register in their installation's data directory.
             environment.update(HOME=str(root / "home"), XDG_CONFIG_HOME=str(root / "config"),
                                XDG_DATA_HOME=str(root / "data"))

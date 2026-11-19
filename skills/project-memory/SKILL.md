@@ -14,7 +14,11 @@ standing rules, loaded with `rules show`.
 
 ## Select the store before memory access
 
-1. At each new chat, run `richi chat current` and `richi workspace list`.
+1. In Cursor, take the exact `--chat cursor:<id>` from this conversation's
+   `sessionStart` hook and pass it before the subcommand on every Richi call,
+   including the first. If the ID is missing, continue independent work and wait
+   for the hook-provided identity before using Richi.
+   At each new chat, run `richi chat current` and `richi workspace list`.
    If unbound and the human has not explicitly selected a workspace here, ask
    once: current CLI workspace or another for this chat. Even one workspace is
    not consent. Continue independent code work while waiting, without memory access.
@@ -24,13 +28,12 @@ standing rules, loaded with `rules show`.
    Never install updates unless the human asks.
 2. The binding overrides the CLI default. Never run global `richi use`, bypass
    binding with storage/config overrides, or invent/unset chat identity.
-   Codex supplies `CODEX_THREAD_ID`; other clients supply stable `RICHI_CHAT_ID`
-   or `--chat ID`. `-w NAME` may repeat the binding; `chat bind NAME --replace`
+   `-w NAME` may repeat the binding. `chat bind NAME --replace`
    requires the human's explicit workspace change. New/forked chats choose
    independently; delegates inherit the confirmed selection and provided identity.
-   Claude Code setup supplies `RICHI_CHAT_ID` through its SessionStart hook.
-   If shell environment propagation is unavailable, use the exact `--chat ID`
-   supplied by that hook on every call; never generate a replacement session ID.
+   Codex supplies `CODEX_THREAD_ID`. Claude Code's SessionStart hook sets
+   `RICHI_CHAT_ID` and gives an explicit `--chat ID` for shells that need it.
+   Other integrations can supply a stable `--chat ID`.
 3. Run `richi config show` to resolve runtime and storage, then tell the human
    once in this chat which mode it uses: `dev` with its `development.source`, or
    the installed `release` with its version (`runtime`). If
@@ -39,6 +42,9 @@ standing rules, loaded with `rules show`.
    Do not guess paths, switch dev mode merely to read, or fall back to another store. Workspaces
    isolate knowledge/history/graph/artifacts; do not search or copy another
    workspace without task authorization. Runtime selection never migrates SQLite.
+   If `workspace list` showed `initialized: false` for the chosen workspace,
+   run `richi init` after binding, before project checks or rules. For a read-only
+   request, report the missing store.
 4. Before repository memory operations, run
    `richi project check /path/to/checkout --id PROJECT_ID`; inspect workspace,
    database, project and status. Resolve missing/ambiguous membership, do not

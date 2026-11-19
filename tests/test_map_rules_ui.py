@@ -40,7 +40,8 @@ class RulesPageLogicTests(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         for key in [key for key in os.environ if key.startswith("RICHI_")
-                    or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "XDG_CONFIG_HOME"}]:
+                    or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT", "CLAUDE_CONFIG_DIR", "CODEX_HOME",
+                               "XDG_CONFIG_HOME"}]:
             del os.environ[key]
         agents.forget_settings()
         self.addCleanup(agents.forget_settings)
@@ -168,12 +169,14 @@ assert.equal(becomesShared(null,{claude:'a',codex:'b'}),false);
 assert.equal(becomesShared(null,{claude:null,codex:null}),false);
 assert.equal(becomesShared(null,{}),false);
 // What the server makes of each choice is checked against the choice itself.
+setMapAgents(%s,++agentSequence);
+const allPick=skill=>Object.fromEntries(knownAgentIds().map(agent=>[agent,skill]));
 const chosen=[['review',{claude:'review',codex:'code-review'}],['review',{claude:'review',codex:null}],
-  ['review',{claude:'a',codex:'a'}],[null,{claude:'a',codex:null}],[null,'shared'],['review',''],
-  [null,{claude:'a',codex:'a'}],['general',{claude:'special',codex:'special'}]];
+  ['review',allPick('a')],[null,{claude:'a',codex:null}],[null,'shared'],['review',''],
+  [null,allPick('a')],['general',allPick('special')]];
 console.log(JSON.stringify(chosen.map(([base,choice])=>({base,choice,request:skillRequest(base,choice),
   shared:typeof choice==='object'&&becomesShared(base,choice)}))));
-""")
+""" % json.dumps(agents.describe()))
         database = self.root / "memory.sqlite3"
         conn = memory.connect(database, create=True)
         self.addCleanup(conn.close)
@@ -307,7 +310,7 @@ console.log(JSON.stringify({id:samples.id.map(value=>AGENT_ID.test(value)),varia
 
     def test_no_skill_for_an_agent_this_computer_does_not_list_is_kept(self):
         # A rule names gemini-cli, which the user then removed from this computer. In the per-agent lists
-        # they pick one skill for Claude Code and Codex, and "Без скилла" for gemini-cli.
+        # they pick one skill for all known agents, and "Без скилла" for gemini-cli.
         added = self.run_command("richi skill-sources add gemini-cli --name 'Gemini CLI' --skills ~/.gemini/skills")
         database = self.root / "memory.sqlite3"
         conn = memory.connect(database, create=True)
@@ -315,27 +318,30 @@ console.log(JSON.stringify({id:samples.id.map(value=>AGENT_ID.test(value)),varia
         memory.initialize(conn, database)
         with memory.transaction(conn):
             created = rules.change(conn, {"action": "add", "id": "review", "scope": "global", "text": "x",
-                                          "skills": {"claude": "old", "codex": "old", "gemini-cli": "gem"}}, memory)["rule"]
+                                          "skills": {**dict.fromkeys(agents.builtin_ids(), "old"), "gemini-cli": "gem"}},
+                                   memory)["rule"]
         self.run_command("richi skill-sources remove gemini-cli --expected-updated-at=VERSION",
                          VERSION=added["agent"]["updated_at"])
+        listed = json.dumps(agents.describe())
         request = self.evaluate(r"""
-setMapAgents([{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'}],++agentSequence);
-const rule=%s,picks={claude:'review',codex:'review','gemini-cli':null};
+setMapAgents(%s,++agentSequence);
+const rule=%s,picks=Object.fromEntries(knownAgentIds().map(agent=>[agent,'review']));
+picks['gemini-cli']=null;
 // Announced: the skill every agent of this computer gets is the skill of the action, and gemini-cli keeps its none.
 assert.equal(becomesShared(null,picks),true);
 console.log(JSON.stringify(ruleUpdate(rule,rule,rule.text,skillRequest(null,picks))));
-""" % json.dumps(created))
+""" % (listed, json.dumps(created)))
         with memory.transaction(conn):
             stored = rules.change(conn, request, memory)["rule"]
         self.assertEqual((stored["skill"], stored["skills"]), ("review", {"gemini-cli": None}))
         # Opened again, the form shows what is stored and has nothing to save.
         unchanged = self.evaluate(r"""
-setMapAgents([{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'}],++agentSequence);
+setMapAgents(%s,++agentSequence);
 const rule=%s,picks=Object.fromEntries(ruleAgentIds(rule).map(agent=>[agent,ruleSkillFor(rule,agent)]));
 console.log(JSON.stringify({picks,update:ruleUpdate(rule,rule,rule.text,skillRequest(rule.skill,picks)),
   announced:becomesShared(rule.skill,picks)}));
-""" % json.dumps(stored))
-        self.assertEqual(unchanged, {"picks": {"claude": "review", "codex": "review", "gemini-cli": None},
+""" % (listed, json.dumps(stored)))
+        self.assertEqual(unchanged, {"picks": {**dict.fromkeys(agents.builtin_ids(), "review"), "gemini-cli": None},
                                      "update": None, "announced": False})
 
     def test_a_retry_after_a_conflict_sends_only_what_the_form_changed(self):

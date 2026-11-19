@@ -2,7 +2,7 @@
 
 English | [Русский](INDEXED_FILTERS_EVAL.ru.md)
 
-The original v1 results below are preserved. See [Final audited v2](#final-audited-v2-2026-10-25) for the current implementation and the [workflow evaluation](AGENT_WORKFLOW_EVAL.md) for command/context costs.
+The original v1 results and the [v2 measurements from October 25](#final-audited-v2-2026-10-25) are both preserved below. The [workflow evaluation](AGENT_WORKFLOW_EVAL.md) measures command and context costs.
 
 This benchmark compares two **normally installed fixed packages** against the
 same disposable synthetic SQLite contents. It does not read a personal workspace,
