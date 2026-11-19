@@ -12,8 +12,7 @@ import json
 import os
 from pathlib import Path
 
-from . import agents, private_files, skill_catalog
-from .memory import now
+from . import agents, memory, private_files, skill_catalog
 from .output import cut_name, shell_word
 
 
@@ -131,7 +130,7 @@ def _looks_installed(roots, home):
     return False
 
 
-def listing(environ=None, home=None, catalog=False):
+def listing(environ=None, home=None, catalog=False, *, settings=None):
     """Every agent with its skill sources, plus agents that could be added.
 
     catalog=True also returns the skill catalog this listing was counted
@@ -141,7 +140,7 @@ def listing(environ=None, home=None, catalog=False):
     environ = os.environ if environ is None else environ
     home = Path(home) if home is not None else Path.home()
     # Read once: the list, the skill counts and unknown_agents below describe one version of the file.
-    settings = agents.read_settings(environ, home)
+    settings = agents.read_settings(environ, home) if settings is None else settings
     entries = settings.entries
     registry = agents.registry(environ, home, entries)
     skills = skill_catalog.catalog(environ, home, registry)
@@ -152,7 +151,7 @@ def listing(environ=None, home=None, catalog=False):
     items = []
     for agent in registry:
         own = roots.get(agent.id, [])
-        detected, connection = launcher.get(agent.id, (_looks_installed(own, home), None))
+        detected, connection = launcher[agent.id] if agent.id in launcher else (_looks_installed(own, home), None)
         items.append({
             "id": agent.id, "name": agent.name, "builtin": agent.builtin, "updated_at": agent.updated_at,
             "detected": detected,
@@ -210,11 +209,9 @@ def _removal(identifier, entry):
 def _read(path):
     """The settings to change (agents.Settings); AgentError when the file as a whole cannot be changed."""
     try:
-        with open(path, "rb") as handle:
-            data = handle.read(agents.MAX_SETTINGS + 1)
+        settings, _ = agents.read_settings_file(path)
     except FileNotFoundError:
         return agents.Settings({}, {}, {})
-    settings = agents.settings_from(data, path)
     if settings.code == "newer":
         # Not damage: this version must not rewrite what it cannot read, and removing it would lose it.
         raise AgentError("Cannot change agent settings: they were written by a newer Richi; update Richi to change "
@@ -233,12 +230,14 @@ def _serialized(entries, extra=None):
 
 def _write(path, entries, extra=None):
     text = _serialized(entries, extra)
+    data = text.encode("utf-8")
     # Richi would refuse to read a larger file and forget every setting in it.
-    if len(text.encode("utf-8")) > agents.MAX_SETTINGS:
+    if len(data) > agents.MAX_SETTINGS:
         raise AgentError("The agent settings would be larger than %d bytes, more than Richi reads; remove an agent "
                          "or a skill folder first" % agents.MAX_SETTINGS, "limit", "size")
     private_files.replace(path, text)
     agents.forget_settings()
+    return data
 
 
 def _folder(value, home):
@@ -251,6 +250,15 @@ def _folder(value, home):
     if not agents.valid_folder(text):
         raise AgentError(agents.FOLDER_HELP)
     return text
+
+
+def _find_folder(folders, key, home):
+    # The stored key may be absolute under HOME. Prefer the exact spelling, then match its path.
+    exact = next((folder for folder in folders if folder["path"] == key), None)
+    if exact is not None or not agents.valid_folder(key):
+        return exact
+    path = agents.folder_path(key, home)
+    return next((folder for folder in folders if agents.folder_path(folder["path"], home) == path), None)
 
 
 def _variable(value):
@@ -274,14 +282,15 @@ def _manual(value):
 
 
 def _strings(options, key):
-    values = options.get(key) or []
+    values = options.get(key)
+    if values is None:
+        return []
     if not isinstance(values, list) or not all(isinstance(value, str) for value in values):
         raise AgentError(key + " must be a list of strings")
     return values
 
 
-def _check_version(identifier, current, expected):
-    stored = agents.stored_version(current) if current is not None else None
+def _check_version(identifier, stored, expected):
     if expected != stored:
         raise AgentError("Agent update conflict for {}: expected {} but the current version is {}; read it again "
                          "with skill-sources list".format(identifier, expected or "no settings yet",
@@ -309,10 +318,9 @@ def _added(identifier, options, builtin, current, stored, home):
         raise AgentError("An agent needs at least one skill folder")
     if len(folders) > agents.MAX_FOLDERS:
         raise AgentError("An agent may have at most %d skill folders" % agents.MAX_FOLDERS, "limit", "folders")
-    timestamp = now()
+    manual = options.get("manual_skills")
     entry = {"name": _name(options.get("name")), "folders": [{"path": text, "enabled": True} for text in folders],
-             "manual_skills": _manual(options.get("manual_skills") or "none"),
-             "created_at": timestamp, "updated_at": timestamp}
+             "manual_skills": _manual("none" if manual is None else manual)}
     variable = _variable(options.get("variable"))
     if variable:
         entry["variable"] = variable
@@ -325,7 +333,8 @@ def _updated(identifier, options, builtin, current, environ, home):
         raise _newer(identifier, current, "not_found")
     if not builtin and current is None:
         raise AgentError("Unknown agent: " + identifier + "; see skill-sources list", "not_found", "agent")
-    _check_version(identifier, current, options.get("expected_updated_at"))
+    _check_version(identifier, agents.stored_version(current) if current is not None else None,
+                   options.get("expected_updated_at"))
     entry = copy.deepcopy(current) if current else {}
     base_keys, base_paths = set(), set()
     if builtin:
@@ -346,21 +355,21 @@ def _updated(identifier, options, builtin, current, environ, home):
     folders, disabled = entry.get("folders", []), set(entry.get("disabled", []))
     for value in _strings(options, "remove_folders"):
         text = _folder(value, home)
-        if not any(folder["path"] == text for folder in folders):
+        match = _find_folder(folders, value.strip(), home)
+        if match is None:
             raise AgentError("Not an added skill folder of " + identifier + ": " + text + "; see skill-sources list",
                              "not_found", "source")
-        folders = [folder for folder in folders if folder["path"] != text]
+        folders.remove(match)
     for value in _strings(options, "add_folders"):
         text = _folder(value, home)
-        if any(folder["path"] == text for folder in folders) or agents.folder_path(text, home) in base_paths:
+        if _find_folder(folders, text, home) is not None or agents.folder_path(text, home) in base_paths:
             raise AgentError("Already a skill source of " + identifier + ": " + text, "exists", "source")
         folders.append({"path": text, "enabled": True})
     if len(folders) > agents.MAX_FOLDERS:
         raise AgentError("An agent may have at most %d skill folders" % agents.MAX_FOLDERS, "limit", "folders")
     for key, enabled in ([(key, True) for key in _strings(options, "enable")]
                          + [(key, False) for key in _strings(options, "disable")]):
-        stored = _display(agents.folder_path(key, home), home) if agents.valid_folder(key.rstrip("/") or "/") else key
-        folder = next((folder for folder in folders if folder["path"] in {key, stored}), None)
+        folder = _find_folder(folders, key, home)
         if folder is not None:
             folder["enabled"] = enabled
         elif key in base_keys:
@@ -383,7 +392,6 @@ def _updated(identifier, options, builtin, current, environ, home):
     # something else: a field a newer Richi wrote is not this version's to drop.
     if builtin and not set(entry) - {"created_at", "updated_at"}:
         return "updated", None
-    entry["updated_at"] = now()
     return "updated", entry
 
 
@@ -411,7 +419,7 @@ def _apply(action, identifier, options, settings, environ, home):
         if action != "remove":
             # Also for a built-in agent, which is listed all the same: not "not found".
             raise _unusable(identifier, entry, why, "settings")
-        _check_version(identifier, entry, options.get("expected_updated_at"))
+        _check_version(identifier, agents.stored_version(entry), options.get("expected_updated_at"))
         return ("reset" if builtin else "removed"), None
     current = entries.get(identifier)
     if action == "add":
@@ -424,9 +432,12 @@ def _apply(action, identifier, options, settings, environ, home):
         if current is None:
             raise AgentError((identifier + " has no adjustments to remove" if builtin
                               else "Unknown agent: " + identifier + "; see skill-sources list"), "not_found", "agent")
-        _check_version(identifier, current, options.get("expected_updated_at"))
+        _check_version(identifier, agents.stored_version(current), options.get("expected_updated_at"))
         status, entry = ("reset" if builtin else "removed"), None
     if entry is not None and status != "unchanged":
+        entry["updated_at"] = memory.next_updated_at(entry.get("updated_at"), settings.extra.get("last_removed_at"))
+        if status == "created":
+            entry["created_at"] = entry["updated_at"]
         # Whatever is about to be stored must be readable again, by this version and the next call.
         try:
             agents.check_entry(identifier, entry)
@@ -463,6 +474,7 @@ def change(action, identifier, options=None, environ=None, home=None, full=False
         if status != "unchanged":
             # Private, as the launcher makes Richi's configuration directory.
             path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    written = None
     try:
         with private_files.locked(path, LOCK_SECONDS) if path.parent.is_dir() else contextlib.nullcontext():
             settings = _read(path)
@@ -470,14 +482,23 @@ def change(action, identifier, options=None, environ=None, home=None, full=False
             if status != "unchanged":
                 # What this version cannot use is written back as it was.
                 entries = {**settings.entries, **{key: value[0] for key, value in settings.unusable.items()}}
+                extra = settings.extra
                 if entry is None:
-                    entries.pop(identifier, None)
+                    # A recreated agent must not accept edits meant for the removed one, even after a
+                    # clock adjustment. One timestamp for all removals suffices; no per-agent tombstones.
+                    removed = entries.pop(identifier)
+                    extra = dict(extra, last_removed_at=memory.next_updated_at(
+                        agents.stored_version(removed), extra.get("last_removed_at")))
                 else:
                     entries[identifier] = entry
-                _write(path, entries, settings.extra)
+                written = _write(path, entries, extra)
     except TimeoutError as exc:
         raise AgentError("Another change of the agent settings is still running; try again", "busy") from exc
-    current = listing(*explicit, catalog=full)
+    # Another writer can replace the file as soon as we release the lock. Describe our committed
+    # version (including any agent now within the limit), without holding the lock during the scan.
+    if written is not None:
+        settings = agents.settings_from(written, path)
+    current = listing(*explicit, catalog=full, settings=settings)
     described = next((item for item in current["agents"] if item["id"] == identifier), None)
     result = {"results": [{"id": identifier, "status": status}], "agent": described}
     if full:

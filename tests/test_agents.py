@@ -338,7 +338,7 @@ class AgentSettingsTests(IsolatedHome):
         restored = self.cli("skill-sources", "update", "claude", "--expected-updated-at", adjusted["updated_at"],
                             "--enable", "skills", "--remove-skills", "~/team")["agent"]
         self.assertEqual((restored["updated_at"], restored["skills"]), (None, 1))
-        self.assertEqual(json.loads(agents.settings_path().read_text(encoding="utf-8")), {"version": 1, "agents": {}})
+        self.assertEqual(json.loads(agents.settings_path().read_text(encoding="utf-8"))["agents"], {})
         # A field that a newer Richi stored for the agent is not this version's to drop with the last adjustment.
         newer = self.cli("skill-sources", "update", "claude", "--disable", "plugins")["agent"]
         settings = json.loads(agents.settings_path().read_text(encoding="utf-8"))
@@ -351,7 +351,7 @@ class AgentSettingsTests(IsolatedHome):
         self.assertEqual((stored["future"], sorted(stored), all(source["enabled"] for source in kept["sources"])),
                          ({"keep": True}, ["future", "updated_at"], True))
         self.cli("skill-sources", "remove", "claude", "--expected-updated-at", kept["updated_at"])
-        self.assertEqual(json.loads(agents.settings_path().read_text(encoding="utf-8")), {"version": 1, "agents": {}})
+        self.assertEqual(json.loads(agents.settings_path().read_text(encoding="utf-8"))["agents"], {})
         again = self.cli("skill-sources", "update", "claude", "--disable", "claude-app")["agent"]
         reset = self.cli("skill-sources", "remove", "claude", "--expected-updated-at", again["updated_at"])
         self.assertEqual((reset["results"][0]["status"], reset["agent"]["updated_at"]), ("reset", None))
@@ -480,6 +480,62 @@ class AgentSettingsTests(IsolatedHome):
                          [("future", None), ("alpha", "this version uses at most 1 own agents")])
         agents.forget_settings()
 
+    def test_a_null_entry_can_be_removed_only_with_its_advertised_version(self):
+        path = agents.settings_path()
+        path.parent.mkdir(parents=True)
+        path.write_text(agent_commands._serialized({"own": None}), encoding="utf-8")
+        next_command = self.cli("skill-sources", "list")["unknown_agents"][0]["next"]
+        with self.assertRaises(agent_commands.AgentError) as refused:
+            agent_commands.change("remove", "own", {})
+        self.assertEqual(refused.exception.code, "conflict")
+        self.assertEqual(self.cli(*shlex.split(next_command)[1:])["results"], [{"id": "own", "status": "removed"}])
+
+    def test_versions_survive_a_stopped_clock_and_recreation(self):
+        with mock.patch.object(memory, "now", return_value="2026-01-02T03:04:05.000000Z"):
+            add = ("skill-sources", "add", "own", "--name", "Own", "--skills", "~/team")
+            first = self.cli(*add)["agent"]["updated_at"]
+            second = self.cli("skill-sources", "update", "own", "--expected-updated-at", first,
+                              "--name", "Renamed")["agent"]["updated_at"]
+            self.assertGreater(second, first)
+            self.cli("skill-sources", "remove", "own", "--expected-updated-at", second)
+            self.assertGreater(self.cli(*add)["agent"]["updated_at"], second)
+            for stale in (first, second):
+                self.assertEqual(self.cli("skill-sources", "remove", "own", "--expected-updated-at", stale,
+                                          ok=False)["code"], "conflict")
+
+    def test_a_change_describes_its_own_committed_version(self):
+        listing = agent_commands.listing
+
+        def edited_before_answer(*args, **kwargs):
+            # This writer gets the lock after creation but before the creator scans the skill folders.
+            with mock.patch.object(agent_commands, "listing", listing):
+                version = agents.read_settings().entries["own"]["updated_at"]
+                agent_commands.change("update", "own", {"expected_updated_at": version, "name": "Second"})
+            return listing(*args, **kwargs)
+
+        with mock.patch.object(agent_commands, "listing", edited_before_answer):
+            first = agent_commands.change("add", "own", {"name": "First", "folders": ["~/team"]}, full=True)
+        self.assertEqual(first["agent"]["name"], "First")
+        self.assertEqual(first["agent"], first["listing"]["agents"][-1])
+        self.assertEqual(self.listed()["own"]["name"], "Second")
+        self.assertEqual(self.cli("skill-sources", "remove", "own", "--expected-updated-at",
+                                  first["agent"]["updated_at"], ok=False)["code"], "conflict")
+
+    def test_a_stored_absolute_folder_can_be_switched_and_removed_by_either_spelling(self):
+        path = agents.settings_path()
+        path.parent.mkdir(parents=True)
+        absolute = str(self.home / "team")
+        path.write_text(agent_commands._serialized({"claude": {
+            "updated_at": "t", "folders": [{"path": absolute, "enabled": True}]}}), encoding="utf-8")
+        self.assertEqual(self.cli("skill-sources", "update", "claude", "--expected-updated-at", "t",
+                                  "--add-skills", "~/team", ok=False)["code"], "exists")
+        changed = self.cli("skill-sources", "update", "claude", "--expected-updated-at", "t", "--disable", "~/team")["agent"]
+        source = changed["sources"][-1]
+        self.assertEqual((source["key"], source["enabled"]), (absolute, False))
+        changed = self.cli("skill-sources", "update", "claude", "--expected-updated-at", changed["updated_at"],
+                           "--remove-skills", source["key"])["agent"]
+        self.assertNotIn(absolute, [source["key"] for source in changed["sources"]])
+
     def test_settings_this_version_does_not_use_are_named_within_bounds(self):
         # Only a hand edit makes a key longer than an ID, and only the file's size limits how many there are.
         path = agents.settings_path()
@@ -569,6 +625,18 @@ class AgentSettingsTests(IsolatedHome):
         self.assertNotIn("fix or remove", problem)
         # Not taken for damage: the next reading finds the agent.
         self.assertEqual(agents.ids(), ("claude", "codex", "first"))
+
+    def test_settings_reads_reject_special_files_and_nonfinite_fields(self):
+        path = agents.settings_path()
+        path.parent.mkdir(parents=True)
+        path.mkdir()
+        self.assertEqual(agents.read_settings().code, "unreadable")
+        path.rmdir()
+        raw = '{"version":1,"agents":{},"future":1e1000}'
+        path.write_text(raw, encoding="utf-8")
+        self.assertEqual(self.cli("skill-sources", "list")["problem_code"], "damaged")
+        self.cli("skill-sources", "update", "claude", "--disable", "skills", ok=False)
+        self.assertEqual(path.read_text(encoding="utf-8"), raw)
 
     def test_a_new_version_with_the_same_time_and_size_is_read(self):
         self.cli("skill-sources", "add", "abc", "--name", "Abc", "--skills", "~/team")
@@ -741,6 +809,8 @@ class AgentSettingsTests(IsolatedHome):
                 ("add", "x", {"name": "X", "folders": ["~/x"], "variable": "A B"}),
                 ("update", "claude", {"expected_updated_at": 5, "disable": ["skills"]}),
                 ("update", "claude", {"disable": "skills"}), ("drop", "claude", {}), ("add", 5, {}),
+                ("update", "claude", {"disable": {}, "add_folders": ["~/x"]}),
+                ("add", "x", {"name": "X", "folders": ["~/x"], "manual_skills": False}),
                 ("add", "x", ["name"]), (["add"], "x", {}), ({"add": 1}, "x", {}), (None, "x", {}),
                 # Half of a surrogate pair cannot be written to the settings file.
                 ("add", "x", {"name": "X", "folders": ["~/x"], "variable": "A=half \ud800"}),
@@ -803,6 +873,20 @@ class ListingTests(IsolatedHome):
         self.assertEqual(agent_commands.listing()["limits"], {"name": agents.MAX_NAME, "folder": agents.MAX_FOLDER})
         # The skill name pattern belongs to the agents, and rules use that one.
         self.assertIs(rules.valid_skill, agents.valid_skill)
+
+    def test_one_unreadable_child_does_not_hide_other_skills(self):
+        skills = self.home / ".claude" / "skills"
+        (skills / "unreadable").mkdir(parents=True)
+        write_skill(skills / "review", "---\nname: review\n---\n")
+        is_dir = Path.is_dir
+
+        def readable(path):
+            if path.name == "unreadable":
+                raise PermissionError("Cannot inspect this skill")
+            return is_dir(path)
+
+        with mock.patch.object(Path, "is_dir", readable):
+            self.assertEqual([skill["name"] for skill in skill_catalog.catalog()["skills"]], ["review"])
 
     def test_a_change_returns_the_whole_listing_once_when_asked(self):
         write_skill(self.home / "team" / "release", "---\nname: release\n---\n")

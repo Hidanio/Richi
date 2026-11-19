@@ -28,9 +28,11 @@ Stored rules may name agents this registry does not list, such as rules
 written by a newer Richi; they are kept and shown as they are.
 """
 import json
+import math
 import os
 from pathlib import Path
 import re
+import stat
 import sys
 from typing import Callable, Dict, NamedTuple, Optional
 
@@ -209,6 +211,8 @@ def _plain(what, entry, depth=0):
             items, text = value.values(), list(value)
         elif isinstance(value, list):
             items, text = value, []
+        elif isinstance(value, float) and not math.isfinite(value):
+            raise ValueError(what + " hold a number that is not finite")
         else:
             continue
         if not all(_utf8(part) for part in text):
@@ -430,18 +434,27 @@ def read_settings(environ=None, home=None):
     if cached is not None and cached[0] == _signature(info):
         return cached[1]
     try:
-        # What is read and the version it is cached as come from one open file.
-        with open(str(path), "rb") as handle:
-            info = os.fstat(handle.fileno())
-            data = handle.read(MAX_SETTINGS + 1)
+        settings, info = read_settings_file(path)
     except (FileNotFoundError, NotADirectoryError):
         return Settings({}, {}, {})
     except OSError as exc:
         return Settings({}, {}, {}, _unreadable(path, exc), "unreadable")
-    settings = settings_from(data, path)
     _cache.clear()
     _cache[str(path)] = (_signature(info), settings)
     return settings
+
+
+def read_settings_file(path):
+    """Parse and stat one open file, also for writers validating its current version under lock."""
+    def nonblocking(name, flags):
+        return os.open(name, flags | os.O_NONBLOCK)
+
+    with open(str(path), "rb", opener=nonblocking) as handle:
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise OSError("expected a regular file")
+        data = handle.read(MAX_SETTINGS + 1)
+    return settings_from(data, path), info
 
 
 def load_settings(environ=None, home=None):
@@ -530,9 +543,9 @@ def ids(environ=None, home=None):
     return tuple(agent.id for agent in registry(environ, home))
 
 
-def describe(environ=None, home=None):
+def describe(environ=None, home=None, entries=None):
     """The known agents in order, as commands report them."""
-    return [{"id": agent.id, "name": agent.name} for agent in registry(environ, home)]
+    return [{"id": agent.id, "name": agent.name} for agent in registry(environ, home, entries)]
 
 
 def variables(agent):
@@ -546,7 +559,7 @@ def _in_shell(agent, environ):
         for name, value in agent.variables.items())
 
 
-def detect(environ=None):
+def detect(environ=None, entries=None):
     """The agent whose shell runs this command, or None.
 
     Two signs name an agent: the chat identity its integration sets, where
@@ -559,6 +572,6 @@ def detect(environ=None):
     """
     environ = os.environ if environ is None else environ
     prefix, separator, _rest = (environ.get("RICHI_CHAT_ID") or "").partition(":")
-    named = {agent.id for agent in registry(environ)
+    named = {agent.id for agent in registry(environ, entries=entries)
              if (separator and agent.id == prefix) or _in_shell(agent, environ)}
     return named.pop() if len(named) == 1 else None

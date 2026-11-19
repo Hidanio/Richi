@@ -284,6 +284,7 @@ class ChatMapTests(unittest.TestCase):
         # Reuse the existing real-map fixture without importing its TestCase into
         # module globals (which would make unittest discover its tests twice).
         from test_workspace_map import WorkspaceMapTests
+        from cli_environment import stop_test_map
         from urllib.parse import urlsplit
         fixture = WorkspaceMapTests("test_maps_workers_and_dev_reload_remain_in_original_workspace")
         self.addCleanup(fixture.doCleanups)
@@ -304,7 +305,7 @@ class ChatMapTests(unittest.TestCase):
         port = fixture.free_port()
         started = fixture.cli("map", "--no-open", "--port", str(port))
         port = urlsplit(started["url"]).port
-        fixture.detached.append((started["pid"], port))
+        self.addCleanup(stop_test_map, started, alpha["database"])
         initial = fixture.health(port)
         self.assertEqual(initial["workspace"], "alpha")
         self.assertEqual(initial["database"], alpha["database"])

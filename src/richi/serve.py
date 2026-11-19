@@ -150,6 +150,8 @@ GRAPH_WORKER_OUTPUT_LIMIT = 32 * 1024 * 1024
 RULES_BODY_LIMIT = 64 * 1024
 RULES_WORKER_TIMEOUT = 20
 RULES_WORKER_OUTPUT_LIMIT = 1024 * 1024
+# Reading the whole workspace can legitimately be much larger than applying one change.
+RULES_LIST_OUTPUT_LIMIT = GRAPH_WORKER_OUTPUT_LIMIT
 # Error codes of a refused change and the HTTP status the map answers with; any other code is 400.
 CHANGE_ERROR_STATUS = {"not_found": 404, "conflict": 409, "exists": 409, "settings": 409, "busy": 503}
 # How long a request waits for its turn: reading for another reading, a change for another change.
@@ -359,6 +361,10 @@ def _git_worker():
     sys.stdout.write(json.dumps({"status": status, "payload": payload}, ensure_ascii=False))
 
 
+class WorkerOutputLimit(ValueError):
+    """The child produced more output than the caller can buffer."""
+
+
 def _read_worker_output(process, *, label, timeout, maximum, request=None):
     """Feed the request and drain both pipes within one budget, and always reap the owned worker."""
     selector = selectors.DefaultSelector()
@@ -400,7 +406,7 @@ def _read_worker_output(process, *, label, timeout, maximum, request=None):
                     continue
                 size += len(chunk)
                 if size > maximum:
-                    raise ValueError(label + " output exceeded the size limit")
+                    raise WorkerOutputLimit(label + " output exceeded the size limit")
                 output[key.data].append(chunk)
         process.wait(timeout=max(0.01, deadline - time.monotonic()))
         return process.returncode, b"".join(output["stdout"]), b"".join(output["stderr"])
@@ -517,6 +523,21 @@ def public_agents(payload, editing):
     return payload
 
 
+def _rules_list_worker(database, workspace):
+    """Private map read on the selected runtime and pinned database. It shares validation with the CLI."""
+    from . import memory
+
+    try:
+        with closing(memory.connect(Path(database), readonly=True)) as conn, memory.transaction(conn, write=False):
+            memory.backend(conn)
+            payload = rules.listing(conn, memory, workspace, fields=rules.KNOWN)
+    except (OSError, sqlite3.Error, memory.MemoryError) as exc:
+        print(json.dumps({"code": "busy" if memory._store_busy(exc) else "unavailable"}), file=sys.stderr)
+        return 1
+    sys.stdout.buffer.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    return 0
+
+
 def _run_rules_request(database, operation, runtime, config_file=None, workspace=None, config_required=False,
                        stdin=None):
     """Run a rules command for the map; its answer, or its error with a matching HTTP status."""
@@ -524,18 +545,32 @@ def _run_rules_request(database, operation, runtime, config_file=None, workspace
     if stdin is not None:
         # The change log names the map as the one who made the change.
         environment["RICHI_RULES_ACTOR"] = RULES_SOURCE
+    listing = operation == ["rules", "list"]
+    if listing:
+        # The stable launcher already dispatches the selected runtime's serve entry point.
+        # The map's internal operation never needs a new public CLI flag or a newer launcher.
+        arguments = ["_rules_list", str(database), workspace or ""]
+    else:
+        arguments = ["--compact-json", *config_arguments(config_file, config_required), "--db", str(database), *operation]
     try:
         process = subprocess.Popen(
-            runtime_command(runtime, [*config_arguments(config_file, config_required),
-                                      "--db", str(database), *operation]),
+            runtime_command(runtime, arguments, action="serve" if listing else "cli"),
             stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             pass_fds=lease_fds(), env=environment)
         status, output, error = _read_worker_output(process, label="Rules command",
-            timeout=RULES_WORKER_TIMEOUT, maximum=RULES_WORKER_OUTPUT_LIMIT, request=stdin)
+            timeout=RULES_WORKER_TIMEOUT, maximum=RULES_LIST_OUTPUT_LIMIT if listing else RULES_WORKER_OUTPUT_LIMIT,
+            request=stdin)
     except (TimeoutError, subprocess.TimeoutExpired):
         return 503, {"error": "The rules command timed out", "code": "timeout"}
+    except WorkerOutputLimit as exc:
+        if listing:
+            return 503, {"error": "The rule list is too large for the map; use richi rules list --global or "
+                                  "richi rules list --project ID", "code": "output_limit"}
+        return 503, {"error": str(exc), "code": "unavailable"}
     except (OSError, ValueError) as exc:
+        if listing:
+            return 503, {"error": "The map could not run the rule reader", "code": "unavailable"}
         return 503, {"error": str(exc)[:1000], "code": "unavailable"}
     try:
         payload = json.loads((error if status else output).decode("utf-8"))
@@ -544,9 +579,16 @@ def _run_rules_request(database, operation, runtime, config_file=None, workspace
     if not isinstance(payload, dict):
         return 503, {"error": "The rules command failed; run richi check", "code": "unavailable"}
     if status:
+        # A failed runner can include installation and configuration paths. Only its public status is needed.
+        if listing:
+            if payload.get("code") == "busy":
+                return 503, {"error": "The store is busy", "code": "busy"}
+            return 503, {"error": "The rules could not be read; run richi check", "code": "unavailable"}
         if "error" not in payload:
             return 503, {"error": "The rules command failed; run richi check", "code": "unavailable"}
         return CHANGE_ERROR_STATUS.get(payload.get("code"), 400), payload
+    if isinstance(payload.get("rule"), dict):
+        payload["rule"] = {field: payload["rule"][field] for field in rules.KNOWN}
     return 200, payload
 
 
@@ -900,7 +942,9 @@ def store_arguments(database, config_file=None, workspace=None, config_required=
     own storage variables.
     """
     database = Path(database)
-    if workspace is not None:
+    # A named workspace has isolated storage. The default allows RICHI_DB, RICHI_DATA_DIR
+    # and later config changes, so its name alone cannot pin the write to this map.
+    if workspace not in (None, "default"):
         try:
             if resolve_settings(workspace=workspace, environ={}).database == database:
                 return ["--workspace", workspace]
@@ -1103,19 +1147,11 @@ def _keep_listening(server):
         return None
 
 
-def _forget_secret(database, expected=None):
+def _forget_secret(database, *, own_only=False):
     try:
-        map_access.forget_secret(database, expected)
+        map_access.forget_secret(database, own_only=own_only)
     except OSError as exc:
         print("The edit key could not be removed: " + (exc.strerror or str(exc)), flush=True)
-
-
-def _secret_now(database):
-    """The edit key this map's pages hold, or None when there is none or it cannot be read now."""
-    try:
-        return map_access.secret(database)
-    except OSError:
-        return None
 
 
 def _main(argv=None):
@@ -1186,7 +1222,12 @@ def _main(argv=None):
                            + refused.value + "); it was left alone")
         restore_handoff()
         parser.error("Cannot listen on port %d: %s. Choose another --port." % (args.port, problem))
-    if not restarted:
+    if restarted:
+        try:
+            map_access.resume_secret(database, args.port)
+        except OSError as exc:
+            print("The previous map edit key could not be resumed: " + (exc.strerror or str(exc)), flush=True)
+    else:
         # A key from an earlier map process ends here: pages still holding it compose commands, and
         # the page this start opens gets a new one.
         _forget_secret(database)
@@ -1240,9 +1281,6 @@ def _main(argv=None):
         # code; only a map richi map knows to wait for (its entry) does that.
         kept = (_keep_listening(server) if reload_requested.is_set() and not terminating.is_set()
                 and registration is not None and follower.takes_listener() else None)
-        # The key this map's pages hold, read while it still has the port: once the port is free,
-        # a map started after this one may give its page a new key, which this one must not end.
-        own_key = _secret_now(database)
         server.server_close()
         # A transition preflight owns a bounded child process (15 seconds).
         # Let it reap that child before this process exits.
@@ -1256,8 +1294,8 @@ def _main(argv=None):
                 maps.unregister(registration)
             restore_handoff()
             # Whatever answers on this port next must not be handed a key that still works.
-            if own_key is not None:
-                _forget_secret(database, own_key)
+            # server_close has drained every accepted request, including the last ticket redemption.
+            _forget_secret(database, own_only=True)
             map_access.clear_port(database, args.port)
     if not restarting:
         return
@@ -1289,6 +1327,8 @@ def _main(argv=None):
 
 def main(argv=None):
     try:
+        if argv and argv[0] == "_rules_list" and len(argv) == 3:
+            return _rules_list_worker(argv[1], argv[2] or None)
         return _main(argv) or 0
     except (MemoryError, OSError, ValueError, RuntimeError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)

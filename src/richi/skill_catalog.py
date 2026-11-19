@@ -183,11 +183,20 @@ def _agent_may_choose(agent, directory, fields):
 def _children(directory, files=None):
     """Visible subdirectories by name, or files with this suffix; hidden ones hold agents' internal files."""
     try:
-        return sorted((child for child in directory.iterdir() if not child.name.startswith(".")
-                       and (child.is_dir() if files is None else child.is_file() and child.suffix == files)),
-                      key=lambda child: child.name)
+        children = sorted(directory.iterdir(), key=lambda child: child.name)
     except OSError:
         return []
+    found = []
+    for child in children:
+        if child.name.startswith("."):
+            continue
+        try:
+            if (files is None and child.is_dir()) or (child.suffix == files and child.is_file()):
+                found.append(child)
+        except OSError:
+            # A link into an unreadable directory does not hide its readable siblings.
+            continue
+    return found
 
 
 def _json(path):

@@ -1,5 +1,6 @@
 """Standing rules: scopes, guards, concurrency and isolation in synthetic stores."""
 from contextlib import closing, redirect_stderr, redirect_stdout
+from concurrent.futures import ThreadPoolExecutor
 import functools
 import hashlib
 import io
@@ -11,6 +12,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from unittest import mock
 
@@ -169,6 +171,60 @@ class RulesTests(unittest.TestCase):
         missing = self.command("alpha", "rules", "remove", "naming", "--expected-updated-at", changed["updated_at"], ok=False)
         self.assertEqual(missing["code"], "not_found")
 
+    def test_a_previous_runtime_can_append_a_newer_log_entry(self):
+        frozen = "2026-01-02T00:00:00.000000Z"
+        later = "2026-01-03T00:00:00.000000Z"
+        with mock.patch.object(memory, "now", return_value=frozen):
+            self.add("alpha", "first", "--global")
+            # The previous writer records its change in the log but knows nothing about rule_clock.
+            with closing(sqlite3.connect(self.configs["alpha"].parent / "memory.sqlite3")) as conn, conn:
+                conn.execute("INSERT INTO metadata(key, value) VALUES (?, ?)",
+                             ("rule-log:" + later + ":other", json.dumps({"at": later, "id": "other"})))
+            newest = self.add("alpha", "last", "--global")
+        self.assertGreater(newest["updated_at"], later)
+        self.assertEqual([item["id"] for item in self.command("alpha", "rules", "log")["entries"]],
+                         ["last", "other", "first"])
+
+    def test_repeated_clock_does_not_reuse_versions_or_drop_audit_entries(self):
+        frozen = "2026-01-02T00:00:00.000000Z"
+        with mock.patch.object(memory, "now", return_value=frozen):
+            first = self.add("alpha", "names", "--global")
+            second = self.command("alpha", "rules", "update", "names", "--expected-updated-at", first["updated_at"],
+                                  "--text", "New wording.")["rule"]
+            self.assertNotEqual(first["updated_at"], second["updated_at"])
+            self.assertEqual(self.command("alpha", "rules", "remove", "names", "--expected-updated-at",
+                                          first["updated_at"], ok=False)["code"], "conflict")
+            self.command("alpha", "rules", "remove", "names", "--expected-updated-at", second["updated_at"])
+            entries = self.command("alpha", "rules", "log")["entries"]
+            self.assertEqual([entry["action"] for entry in entries], ["removed", "updated", "created"])
+            self.command("alpha", "rules", "clear-log")
+        with mock.patch.object(memory, "now", return_value="2025-01-01T00:00:00.000000Z"):
+            replacement = self.add("alpha", "names", "--global")
+            self.assertGreater(replacement["updated_at"], entries[0]["at"])
+
+    def test_two_writers_of_the_same_version_commit_only_one_change(self):
+        rule = self.add("alpha", "naming", "--global")
+        database = self.configs["alpha"].parent / "memory.sqlite3"
+        ready = threading.Barrier(2, timeout=10)
+
+        def update(wording):
+            with closing(memory.connect(database)) as conn:
+                ready.wait()
+                try:
+                    with memory.transaction(conn):
+                        return rules.change(conn, {"action": "update", "id": "naming", "text": wording,
+                                                   "expected_updated_at": rule["updated_at"]}, memory)["rule"]["text"]
+                except memory.MemoryError as exc:
+                    return exc.code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(update, ["One.", "Two."]))
+        current = self.command("alpha", "rules", "show")["rules"][0]["text"]
+        self.assertCountEqual(results, ["conflict", current])
+        entries = self.command("alpha", "rules", "log")["entries"]
+        self.assertEqual([entry["action"] for entry in entries], ["updated", "created"])
+        self.assertEqual(entries[0]["after"]["text"], current)
+
     def test_rules_may_name_a_skill_and_errors_carry_codes(self):
         rule = self.add("alpha", "pr-skill", "--global", text="Use it for pull requests.", skill="plugin:pr-description")
         self.assertEqual(rule["skill"], "plugin:pr-description")
@@ -281,6 +337,26 @@ class RulesTests(unittest.TestCase):
         # Changes stay strict: a rule is never written from a path the workspace does not know.
         self.command("alpha", "--project-path", unregistered, "rules", "add", "y", "--global", "--text", "y", ok=False)
         self.command("alpha", "--project-path", unregistered, "rules", "list", ok=False)
+
+    def test_project_path_cannot_remove_a_rule_of_unverifiable_scope(self):
+        path = self.repos["alpha", "service"]
+        for identifier, fields in (("damaged", {"text": False}), ("newer", {"requires": rules.FORMAT + 1})):
+            rule = self.add("alpha", identifier, "--project", "tools")
+            self.stored("alpha", "rule:" + identifier, **fields)
+            remove = ["rules", "remove", identifier, "--expected-updated-at", rule["updated_at"]]
+            refused = self.command("alpha", "--project-path", path, *remove, ok=False)
+            self.assertIn("--project-path", refused["error"])
+            self.assertEqual(self.command("alpha", *remove)["results"][0]["status"], "removed")
+
+    def test_project_path_cannot_clear_workspace_rule_history(self):
+        self.add("alpha", "naming", "--project", "tools")
+        before = self.command("alpha", "rules", "log")["entries"]
+        self.assertEqual(len(before), 1)
+        for options in ([], ["--id", "naming"]):
+            error = self.command("alpha", "--project-path", self.repos["alpha", "service"],
+                                 "rules", "clear-log", *options, ok=False)
+            self.assertEqual(error["code"], "usage_error")
+            self.assertEqual(self.command("alpha", "rules", "log")["entries"], before)
 
     def test_apply_takes_the_same_change_as_the_command_options(self):
         def apply(change, ok=True, **options):
@@ -638,6 +714,7 @@ class RulesTests(unittest.TestCase):
         self.assertFalse(self.command("alpha", "rules", "log", "--id", "global")["more"])
         # A project nobody registered is an error, not an empty list.
         self.assertEqual(self.command("alpha", "rules", "show", "--project", "missing", ok=False)["code"], "not_found")
+        self.assertEqual(self.command("alpha", "rules", "show", "--project", "", ok=False)["code"], "not_found")
         self.assertEqual(self.command("alpha", "rules", "list", "--project", "missing", ok=False)["code"], "not_found")
 
     def test_an_update_or_removal_needs_the_version(self):
@@ -652,6 +729,9 @@ class RulesTests(unittest.TestCase):
         good = self.add("alpha", "good", "--global")
         # Each row is complete but for one field; no damaged row in the other tests reached these checks.
         broken = {"other-id": {"id": "someone-else"}, "text": {"text": 5}, "version": {"updated_at": 5},
+                  "long-text": {"text": "x" * (rules.MAX_TEXT + 1)}, "empty-text": {"text": "  "},
+                  "nul-text": {"text": "a\x00b"}, "long-version": {"updated_at": "v" * (rules.MAX_VERSION + 1)},
+                  "empty-version": {"updated_at": ""}, "bad-created": {"created_at": []},
                   "skill": {"skill": "two words"}, "skills": {"skills": {"codex": "two words"}},
                   "agent": {"skills": {"Codex": "x"}}, "empty-skills": {"skills": {}},
                   "requires-0": {"requires": 0}, "requires-true": {"requires": True},
@@ -783,6 +863,18 @@ class RulesTests(unittest.TestCase):
             self.assertEqual(words[0], "richi")
             self.assertEqual(self.command("alpha", *words[1:])["results"], [{"id": item["id"], "status": "removed"}])
         self.assertNotIn("invalid_rules", self.command("alpha", "rules", "list"))
+
+    def test_corrupt_keys_that_share_a_display_name_cannot_remove_each_other(self):
+        database = self.configs["alpha"].parent / "memory.sqlite3"
+        spelling = r"letter\xff"
+        with closing(sqlite3.connect(str(database))) as conn, conn:
+            for key in (b"rule:letter\xff", ("rule:" + spelling).encode(), b"rule:a\x00b"):
+                conn.execute("INSERT INTO metadata(key, value) VALUES (CAST(? AS TEXT), '{}')", (key,))
+        invalid = self.command("alpha", "rules", "list")["invalid_rules"]
+        self.assertCountEqual([item["id"] for item in invalid], [spelling, spelling, "a\x00b"])
+        self.assertTrue(all("next" not in item for item in invalid))
+        self.command("alpha", "rules", "remove", spelling, "--expected-updated-at", "invalid", ok=False)
+        self.assertEqual(self.command("alpha", "rules", "list")["invalid_rules"], invalid)
 
     def test_a_rule_that_needs_a_newer_format_is_left_out_not_served(self):
         paused = self.add("alpha", "paused", "--global", text="Use the old flow.")
@@ -994,6 +1086,22 @@ class RulesTests(unittest.TestCase):
         self.assertEqual(((answer["rule"]["skill"], answer["rule"]["skills"]), answer["agent_settings_problem"]["code"]),
                          ((None, {"claude": "review", "codex": "review"}), "agents"))
         self.assertLess(len(json.dumps(self.command("alpha", "rules", "show"))), 4000)
+
+    def test_each_rule_command_uses_one_agent_configuration(self):
+        self.command("alpha", "skill-sources", "add", "gem", "--name", "Gem", "--skills", "~/.gem/skills",
+                     "--variable", "GEM_TEST=1")
+        settings = agents.read_settings()
+        with mock.patch.dict(os.environ, {"GEM_TEST": "1"}):
+            for args in (["rules", "add", "pr", "--global", "--text", "x", "--skill", "gem=review"],
+                         ["rules", "show"], ["rules", "list"]):
+                with self.subTest(args=args), mock.patch.object(agents, "read_settings", side_effect=[settings]):
+                    answer = self.command("alpha", *args)
+                    if args[1] == "show":
+                        self.assertEqual((answer["agent"], answer["rules"][0]["use_skill"]), ("gem", "review"))
+                    elif args[1] == "list":
+                        self.assertIn({"id": "gem", "name": "Gem"}, answer["agents"])
+                    else:
+                        self.assertEqual(answer["rule"]["changed_by_agent"], "gem")
 
     def test_input_is_read_before_the_store_is_locked(self):
         database = self.configs["alpha"].parent / "memory.sqlite3"

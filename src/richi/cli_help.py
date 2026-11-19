@@ -613,7 +613,8 @@ DETAILS = {
         Deletes the recorded rule changes, all of them or those of one rule. The
         log keeps rule texts, removed rules included, so clear it when a rule
         held something that should not stay in the store. The rules themselves
-        are not touched.""",
+        are not touched. Omit --project-path even with --id because a deleted
+        rule ID can be reused in a different project.""",
         examples=(("Everything", "richi rules clear-log"),
                   ("The changes of one rule", "richi rules clear-log --id branch-naming"))),
     "rules apply": dict(about="""

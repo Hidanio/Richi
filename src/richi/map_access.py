@@ -16,8 +16,8 @@ one its pages held (forget_secret), so a page left open cannot hand a still
 valid key to whatever answers on that port later. A page opened without a
 valid one, such as a bookmark or an earlier tab, still shows the rules and
 composes the commands that change them. The ticket and the secret belong to
-one store: stores kept in one directory do not share them, and two maps of one
-store share one. So a map records beside the store on which port it listens
+one store, which has one active key. Only the process that issued a key can
+use or retire it; its PID survives an exec handoff. A map records beside the store on which port it listens
 (record_port), and richi map reuses the map it finds there instead of starting
 a second one; a second map started by hand (richi map serve) still ends the
 first one's key.
@@ -89,7 +89,8 @@ def _read_private(path):
     "no key" (a page would drop a key that still works).
     """
     try:
-        descriptor = os.open(str(path), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        # Check the descriptor itself. Opening a non-regular file must not wait for a writer.
+        descriptor = os.open(str(path), os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
     except OSError as exc:
         # Missing, or a link (O_NOFOLLOW refuses one with ELOOP, on some systems EMLINK): no usable file.
         if isinstance(exc, (FileNotFoundError, NotADirectoryError)) or exc.errno in (errno.ELOOP, errno.EMLINK):
@@ -105,16 +106,44 @@ def _read_private(path):
 
 
 def secret(database):
-    """The current edit secret of this store's map, or None when there is no usable one; OSError (_read_private)."""
-    value = (_read_private(secret_path(database)) or "").strip()
-    return value if _TOKEN.fullmatch(value) else None
+    """The active key if this process owns it."""
+    raw = (_read_private(secret_path(database)) or "").strip()
+    try:
+        record = json.loads(raw)
+    except (ValueError, RecursionError):
+        return None
+    if not isinstance(record, dict) or record.get("pid") != os.getpid():
+        return None
+    value = record.get("secret")
+    return value if isinstance(value, str) and _TOKEN.fullmatch(value) else None
+
+
+def _store_secret(database, value):
+    private_files.replace(secret_path(database, create=True), json.dumps({"pid": os.getpid(), "secret": value}))
+
+
+def resume_secret(database, port):
+    """Claim a previous-format key only on exec by the map registered for this store and port."""
+    path = secret_path(database)
+    if not path.parent.is_dir():
+        return
+    with private_files.locked(ticket_path(database), FORGET_LOCK_SECONDS):
+        value = (_read_private(path) or "").strip()
+        if not _TOKEN.fullmatch(value):
+            return
+        try:
+            registration = json.loads(_read_private(port_path(database)) or "null")
+        except (ValueError, RecursionError):
+            return
+        if isinstance(registration, dict) and registration.get("pid") == os.getpid() and registration.get("port") == port:
+            _store_secret(database, value)
 
 
 def _new_secret(database):
     # Each opened page gets a new secret, so a secret that leaked stops
     # working when the user next opens the map; earlier pages compose commands.
     value = secrets.token_hex(32)
-    private_files.replace(secret_path(database, create=True), value + "\n")
+    _store_secret(database, value)
     return value
 
 
@@ -152,29 +181,15 @@ def clear_port(database, port):
         pass
 
 
-def forget_secret(database, expected=None):
-    """End the edit key of this store's map: its pages compose commands until richi map opens a new one.
-
-    expected: end only that key, the one a stopping map's pages held. A map
-    started meanwhile (richi map restart goes on when the old map is slow to
-    finish its requests) may have given its page a new one, which stays.
-    """
+def forget_secret(database, *, own_only=False):
+    """On start clear the previous key. On stop clear only a key issued by this map."""
     path = secret_path(database)
-    if expected is not None:
-        if not path.parent.is_dir():
-            return
-        try:
-            # The lock with which a page redeems its ticket: no new key is written in between.
-            with private_files.locked(ticket_path(database), FORGET_LOCK_SECONDS):
-                if secret(database) != expected:
-                    return
-                os.unlink(str(path))
-        except (FileNotFoundError, TimeoutError):
-            # Gone already, or a page is being given a key right now: that one is newer.
-            pass
+    if not path.parent.is_dir():
         return
     try:
-        os.unlink(str(path))
+        with private_files.locked(ticket_path(database), FORGET_LOCK_SECONDS):
+            if not own_only or secret(database) is not None:
+                os.unlink(str(path))
     except FileNotFoundError:
         pass
 

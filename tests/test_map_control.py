@@ -26,7 +26,7 @@ import richi_bootstrap
 import richi_launcher
 from richi_launcher import maps
 
-from cli_environment import cli_environment, free_port
+from cli_environment import cli_environment, free_port, stop_test_map
 
 
 def alive(pid):
@@ -184,8 +184,6 @@ class MapControlTests(unittest.TestCase):
         self.port = free_port()
         self.command = [sys.executable, "-B", "-m", "richi", "--config", str(self.config)]
         self.run_cli("init")
-        self.started = set()
-        self.addCleanup(self.stop_started)
 
     def run_cli(self, *arguments, ok=True):
         result = subprocess.run(self.command + list(arguments), capture_output=True, text=True,
@@ -195,14 +193,9 @@ class MapControlTests(unittest.TestCase):
 
     def map(self, *arguments, ok=True):
         result = self.run_cli("map", *arguments, "--port", str(self.port), ok=ok)
-        if ok and isinstance(result, dict) and result.get("pid"):
-            self.started.add(result["pid"])
+        if ok and isinstance(result, dict) and result.get("status") in {"started", "restarted"}:
+            self.addCleanup(stop_test_map, result, self.database)
         return result
-
-    def stop_started(self):
-        for pid in self.started:
-            if alive(pid) and maps.process_arguments(pid):
-                os.kill(pid, signal.SIGTERM)
 
     def health(self, port=None):
         return maps.read_health(port or self.port)
@@ -379,6 +372,7 @@ class MapControlTests(unittest.TestCase):
         stale = subprocess.Popen([sys.executable, "-I", "-B", "-c", runner, str(site), "--config", str(self.config),
                                   "map", "serve", "--port", str(self.port)],
                                  env=self.environment, stdout=log, stderr=log, cwd=self.root)
+        self.addCleanup(stale.wait, 10)
         self.addCleanup(lambda: stale.poll() is None and stale.kill())
         deadline = time.monotonic() + 20
         while not (maps.is_map(self.health()) and self.health()["runtime"]["version"] == "0.0.1"):
@@ -431,6 +425,7 @@ class MapControlTests(unittest.TestCase):
                 old = subprocess.Popen([sys.executable, "-I", "-B", "-c", runner, str(site), "--config",
                                         str(self.config), "map", "serve", "--port", str(self.port)],
                                        env=self.environment, stdout=log, stderr=log, cwd=self.root)
+                self.addCleanup(old.wait, 10)
                 self.addCleanup(lambda process=old: process.poll() is None and process.terminate())
                 deadline = time.monotonic() + 20
                 while not maps.is_map(self.health()):

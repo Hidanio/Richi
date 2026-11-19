@@ -5,8 +5,6 @@ import json
 import os
 from pathlib import Path
 import shutil
-import signal
-import socket
 import subprocess
 import sys
 import tempfile
@@ -17,7 +15,7 @@ from urllib.parse import urlencode, urlsplit
 from richi import git_evidence, git_sources, memory, serve
 import richi_launcher
 
-from cli_environment import free_port
+from cli_environment import free_port, stop_test_map
 
 
 @unittest.skipIf(sys.platform == "win32", "Map launch/reload targets macOS and Linux")
@@ -40,7 +38,6 @@ class WorkspaceMapTests(unittest.TestCase):
         self.environment.update(HOME=str(self.root / "home"), XDG_CONFIG_HOME=str(self.root / "config"),
                                 XDG_DATA_HOME=str(self.root / "data"))
         self.processes = []
-        self.detached = []
         self.addCleanup(self.stop_maps)
 
     def stop_maps(self):
@@ -52,20 +49,6 @@ class WorkspaceMapTests(unittest.TestCase):
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait(timeout=5)
-        for pid, _port in self.detached:
-            try:
-                os.kill(pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
-        # Reap foreground processes and wait for detached servers to close before
-        # TemporaryDirectory removes their copied packages and databases.
-        deadline = time.monotonic() + 5
-        for _pid, port in self.detached:
-            while time.monotonic() < deadline:
-                with socket.socket() as check:
-                    if check.connect_ex(("127.0.0.1", port)) != 0:
-                        break
-                time.sleep(0.05)
 
     def cli(self, *arguments):
         result = subprocess.run(self.command + list(arguments), cwd=self.root, env=self.environment,
@@ -171,7 +154,7 @@ class WorkspaceMapTests(unittest.TestCase):
         result_b = self.cli("map", "--no-open", "--port", str(port_a))
         self.assertEqual(result_b["status"], "started")
         port_b = urlsplit(result_b["url"]).port
-        self.detached.append((result_b["pid"], port_b))
+        self.addCleanup(stop_test_map, result_b, beta["database"])
         self.assertNotEqual(port_b, port_a)
         initial_b = self.health(port_b)
         self.assertEqual(initial_b["workspace"], "beta")

@@ -45,11 +45,14 @@ class RulesPageLogicTests(unittest.TestCase):
         agents.forget_settings()
         self.addCleanup(agents.forget_settings)
 
-    def evaluate(self, script):
+    def evaluate(self, script, sections=()):
         """Run the page's DOM-free lines under Node; what the script prints, as JSON."""
         source = MAP.read_text(encoding="utf-8")
         self.assertIn("RULE_SOURCE='%s'" % serve.RULES_SOURCE, source)
         block = source[source.index(BEGIN):source.index(END)]
+        for begin, end in sections:
+            start = source.index(begin)
+            block += source[start:source.index(end, start)]
         result = subprocess.run([shutil.which("node"), "-e", PRELUDE % json.dumps(serve.RULES_SOURCE) + block + script],
                                 text=True, capture_output=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -75,12 +78,12 @@ class RulesPageLogicTests(unittest.TestCase):
 
     def test_skills_are_read_and_sent_per_agent(self):
         requests = self.evaluate(r"""
-setMapAgents([{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'},{name:'no id'},null]);
+setMapAgents([{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'},{name:'no id'},null],++agentSequence);
 assert.deepEqual(knownAgentIds(),['claude','codex']);
 assert.equal(agentName('codex'),'Codex');
 assert.equal(agentName('cursor'),'cursor');
 // An answer without agents keeps the list; any answer with them replaces it.
-setMapAgents(undefined);
+setMapAgents(undefined,++agentSequence);
 assert.deepEqual(knownAgentIds(),['claude','codex']);
 // A rule may name an agent this computer does not list.
 const rule={skill:'review',skills:{cursor:'cursor-review',codex:null}};
@@ -314,7 +317,7 @@ console.log(JSON.stringify({id:samples.id.map(value=>AGENT_ID.test(value)),varia
         self.run_command("richi skill-sources remove gemini-cli --expected-updated-at=VERSION",
                          VERSION=added["agent"]["updated_at"])
         request = self.evaluate(r"""
-setMapAgents([{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'}]);
+setMapAgents([{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'}],++agentSequence);
 const rule=%s,picks={claude:'review',codex:'review','gemini-cli':null};
 // Announced: the skill every agent of this computer gets is the skill of the action, and gemini-cli keeps its none.
 assert.equal(becomesShared(null,picks),true);
@@ -325,7 +328,7 @@ console.log(JSON.stringify(ruleUpdate(rule,rule,rule.text,skillRequest(null,pick
         self.assertEqual((stored["skill"], stored["skills"]), ("review", {"gemini-cli": None}))
         # Opened again, the form shows what is stored and has nothing to save.
         unchanged = self.evaluate(r"""
-setMapAgents([{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'}]);
+setMapAgents([{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'}],++agentSequence);
 const rule=%s,picks=Object.fromEntries(ruleAgentIds(rule).map(agent=>[agent,ruleSkillFor(rule,agent)]));
 console.log(JSON.stringify({picks,update:ruleUpdate(rule,rule,rule.text,skillRequest(rule.skill,picks)),
   announced:becomesShared(rule.skill,picks)}));
@@ -335,7 +338,7 @@ console.log(JSON.stringify({picks,update:ruleUpdate(rule,rule,rule.text,skillReq
 
     def test_a_retry_after_a_conflict_sends_only_what_the_form_changed(self):
         self.evaluate(r"""
-setMapAgents([{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'}]);
+setMapAgents([{id:'claude',name:'Claude Code'},{id:'codex',name:'Codex'}],++agentSequence);
 const opened={id:'review',text:'Review code.',skill:null,skills:null,updated_at:'v1'};
 // Meanwhile another window gave the rule a skill for one agent.
 const fresh={...opened,skills:{codex:'review-helper'},updated_at:'v2'};
@@ -444,11 +447,52 @@ for(const explain of [ruleRefusal,agentRefusal]){
 }
 """)
 
+    def test_overlapping_reads_cannot_replace_a_newer_skill_catalog_or_agent_list(self):
+        self.evaluate(r"""
+const state={mode:'agents'},agentsState={request:0},RULE_HEADER='X-Richi-Map-Secret';
+Object.assign(rulesState,{skills:null,request:0});
+let agentsController=null,rulesController=null,ruleSecret='';
+function renderAgents(){} function renderRules(){} function setMapEditing(){}
+const pending=new Map();
+const fetch=url=>new Promise((resolve,reject)=>pending.set(url,{
+  respond:data=>resolve({ok:true,json:async()=>data}),fail:()=>reject(new Error('offline'))}));
+const listing=name=>({agents:[{id:name,name}],catalog:{agents:[{id:name,name}],skills:[{name}]}});
+function current(agent,skill){assert.deepEqual(knownAgentIds(),[agent]);assert.deepEqual([...rulesState.skillMap.keys()],[skill]);}
+(async()=>{
+  // A change finishes first. Neither the old rules answer nor either outcome of the old skill scan
+  // changes the saved registry. The rule list itself remains useful.
+  for(const failed of [false,true]){
+    const skills=loadSkills(),rules=loadRules(),agents=loadAgents();
+    acceptAgents(listing('saved'));
+    pending.get('/api/rules').respond({rules:[{id:'keep'}],agents:listing('old').agents});await rules;
+    pending.get('/api/agents').respond(listing('old'));await agents;
+    const reading=pending.get('/api/skills');if(failed)reading.fail();else reading.respond(listing('old').catalog);
+    await skills;current('saved','saved');assert.equal(rulesState.data.rules[0].id,'keep');
+  }
+  // A newer agent reading supplies both lists. A slower skills reading cannot replace either.
+  let skills=loadSkills(),agents=loadAgents();
+  pending.get('/api/agents').respond(listing('later'));await agents;
+  pending.get('/api/skills').respond(listing('earlier').catalog);await skills;current('later','later');
+  // Conversely the newer skill reading wins even if the older agent listing finishes last.
+  // Its agent details still load through their own endpoint.
+  agents=loadAgents();skills=loadSkills();
+  pending.get('/api/skills').respond(listing('latest').catalog);await skills;
+  pending.get('/api/agents').respond(listing('earlier'));await agents;current('latest','latest');
+  assert.equal(agentsState.data.agents[0].id,'earlier');
+  // Rules supply names only: accept the skills from an earlier reading without rolling those names back.
+  skills=loadSkills();const rules=loadRules();
+  pending.get('/api/rules').respond({rules:[],agents:listing('names').agents});await rules;
+  pending.get('/api/skills').respond(listing('catalog').catalog);await skills;current('names','catalog');
+})().catch(error=>{console.error(error);process.exitCode=1;});
+""", sections=(("  async function loadSkills(", "  function redeemRuleTicket("),
+               ("  async function loadAgents(", "  function agentChangeProblem("),
+               ("  function setAgents(", "  const freshAgent=")))
+
     def test_saving_from_a_form_reports_what_really_happened(self):
         self.evaluate(r"""
 function form(alive=true){
   const log=[],submit={disabled:false,textContent:'Сохранить'};
-  const panel={open:alive,alive(){return this.open;},dialog:{close(){log.push('closed');panel.open=false;}}};
+  const panel={body:{inert:false},open:alive,alive(){return this.open;},dialog:{close(){log.push('closed');panel.open=false;}}};
   const steps=extra=>({busy:'Сохраняем…',send:async()=>({ok:true}),saved:answer=>log.push('saved:'+answer.ok),
     explain:error=>'explained:'+error.message,problem:text=>log.push('problem:'+text),lost:text=>log.push('lost:'+text),
     commands:()=>log.push('commands'),label:()=>{submit.textContent='Сохранить';},...extra});
@@ -464,7 +508,7 @@ function form(alive=true){
   // Refused: the form stays, says why and can be sent again.
   f=form();await saveFromForm(f.panel,f.submit,f.steps({send:async()=>{throw new Error('conflict');}}));
   assert.deepEqual(f.log,['problem:explained:conflict']);
-  assert.deepEqual([f.submit.disabled,f.submit.textContent,f.panel.open],[false,'Сохранить',true]);
+  assert.deepEqual([f.submit.disabled,f.submit.textContent,f.panel.open,f.panel.body.inert],[false,'Сохранить',true,false]);
   // A better explanation, found by looking again, replaces the plain one.
   f=form();await saveFromForm(f.panel,f.submit,f.steps({send:async()=>{throw new Error('conflict');},failed:async()=>'reloaded'}));
   assert.deepEqual(f.log,['problem:reloaded']);
@@ -482,7 +526,8 @@ function form(alive=true){
   assert.deepEqual(f.log,['closed']);
   // While it is being sent the button cannot send it again.
   f=form();let release;const sending=saveFromForm(f.panel,f.submit,f.steps({send:()=>new Promise(resolve=>{release=resolve;})}));
-  assert.deepEqual([f.submit.disabled,f.submit.textContent],[true,'Сохраняем…']);
+  assert.deepEqual([f.submit.disabled,f.submit.textContent,f.panel.body.inert],[true,'Сохраняем…',true]);
+  await saveFromForm(f.panel,f.submit,f.steps());assert.deepEqual(f.log,[]);
   release({ok:true});await sending;
 })().catch(error=>{console.error(error);process.exitCode=1;});
 """)

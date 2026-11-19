@@ -205,8 +205,9 @@ change.
   the store (in every installation, managed or not), so the workspace's map is
   found there too (for example one started with another `--port`) instead of a
   second map being started; the map that answers there is checked like any
-  other. Two maps of one store share one edit key: a second one started by hand
-  (`richi map serve`) ends the key of the first one's page.
+  other. Each store has one active edit key. Starting a second map by hand
+  (`richi map serve`) ends editing in the first map's page. Stopping the first
+  process later preserves the key issued by the second.
 
 To stop or restart the selected workspace's map explicitly:
 

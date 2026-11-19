@@ -28,7 +28,8 @@ not know, the global rules still come back and `project_path_problem` says why
 the project's rules do not: follow the global rules and tell the user.
 `invalid_rules` lists stored rules that cannot be read. Agents do not get them,
 so tell the user; `next` is the command that removes such a row, and a row
-without it can be removed only with an SQLite tool.
+without it can be removed only with an SQLite tool. Remove an unreadable or newer-format
+rule at workspace scope, without `--project-path`, since Richi cannot verify its project.
 `agent_settings_problem` says that Richi cannot use the user's agent settings,
 all of them or some own agents' (`code`: `damaged`, `unreadable`, `newer`, `large` or
 `agents`); tell the user what `next` says. Meanwhile the user's own agents
@@ -145,6 +146,8 @@ richi --compact-json rules clear-log
 The log keeps rule texts, removed rules included, and backups carry it. Clear
 it, for one rule or entirely, only when the user asks, for example after a rule
 held something that should not stay in the store.
+Run the command without `--project-path`, including when using `--id`. A rule ID can
+have history in several projects if it was deleted and created again.
 
 ## Apply a change given as JSON
 
@@ -182,10 +185,12 @@ skills an agent only runs when the user invokes them are left out. The map
 accepts changes of rules and of agent settings
 ([AGENT_SKILLS.md](AGENT_SKILLS.md)), and only from such a page; knowledge stays
 read-only. Any other page, such as a bookmark, composes the `richi rules`
-command instead, naming the workspace or store the map shows. Rules added in
+command instead, naming the workspace or store the map shows. For the default
+workspace or a custom database, run the generated command with its explicit
+database path in a terminal. Rules added in
 the map have the source `richi map`, and the change log names the map for every
-change made there. A stored rule that cannot be read is listed with a button
-that removes it.
+change made there. The map offers removal of an unreadable rule when its
+stored key identifies one row unambiguously.
 
 ## Preferences saved as entries
 

@@ -20,7 +20,7 @@ import unittest
 from unittest import mock
 
 from richi import agent_commands, agents, map_access, memory, private_files, rules, serve, skill_catalog
-from richi_launcher import config
+from richi_launcher import config, workspaces
 
 
 def write_skill(directory, header):
@@ -372,6 +372,13 @@ class MapAccessTests(unittest.TestCase):
         self.assertEqual(len(issued), 1)
         self.assertIsNotNone(map_access.redeem(self.database, issued[0]))
 
+    def test_private_runtime_files_are_opened_without_waiting_before_validation(self):
+        path = self.root / "status"
+        private_files.replace(path, "synthetic")
+        with mock.patch.object(os, "open", wraps=os.open) as opened:
+            self.assertEqual(map_access._read_private(path), "synthetic")
+        self.assertTrue(opened.call_args.args[1] & os.O_NONBLOCK)
+
     def test_a_key_file_that_cannot_be_read_now_is_not_taken_for_no_key(self):
         value = map_access.redeem(self.database, map_access.issue_ticket(self.database))
         real_open = os.open
@@ -397,23 +404,18 @@ class MapAccessTests(unittest.TestCase):
         map_access.forget_secret(self.database)
         self.assertFalse(map_access.secret_path(self.database).exists())
 
-    def test_a_stopping_map_forgets_only_the_key_its_pages_held(self):
-        earlier = map_access.redeem(self.database, map_access.issue_ticket(self.database))
-        # A map started after it gave its own page a new key meanwhile: that one stays.
-        later = map_access.redeem(self.database, map_access.issue_ticket(self.database))
-        map_access.forget_secret(self.database, earlier)
-        self.assertTrue(map_access.authorized(self.database, later))
-        map_access.forget_secret(self.database, later)
-        self.assertFalse(map_access.authorized(self.database, later))
-        # Nothing to forget: no key, or no directory for it.
-        map_access.forget_secret(self.database, later)
-        map_access.forget_secret(self.root / "elsewhere" / "memory.sqlite3", later)
-        # While a page is being given a key, the stopping map does not wait long, and the key stays.
-        current = map_access.redeem(self.database, map_access.issue_ticket(self.database))
-        with private_files.locked(map_access.ticket_path(self.database)), \
-                mock.patch.object(map_access, "FORGET_LOCK_SECONDS", 0.2):
-            map_access.forget_secret(self.database, current)
-        self.assertTrue(map_access.authorized(self.database, current))
+    def test_a_stopping_map_forgets_only_the_key_it_issued(self):
+        map_access.redeem(self.database, map_access.issue_ticket(self.database))
+        other_pid = os.getpid() + 1
+        with mock.patch.object(os, "getpid", return_value=other_pid):
+            later = map_access.redeem(self.database, map_access.issue_ticket(self.database))
+        map_access.forget_secret(self.database, own_only=True)
+        with mock.patch.object(os, "getpid", return_value=other_pid):
+            self.assertTrue(map_access.authorized(self.database, later))
+            map_access.forget_secret(self.database, own_only=True)
+            self.assertFalse(map_access.authorized(self.database, later))
+        map_access.forget_secret(self.database, own_only=True)
+        map_access.forget_secret(self.root / "elsewhere" / "memory.sqlite3", own_only=True)
 
     def test_a_ticket_lock_held_too_long_is_an_error_not_a_hang(self):
         ticket = map_access.issue_ticket(self.database)
@@ -547,10 +549,35 @@ class MapKeyLifetimeTests(unittest.TestCase):
         map_access.clear_port(self.database, port)
         self.assertEqual(map_access.recorded_port(self.database), port)
 
+    def map_request(self, method, path, port, body=None, headers=None):
+        request_headers = {"Content-Type": "application/json", "Origin": serve.url(port).rstrip("/")}
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+        try:
+            conn.request(method, path, body=json.dumps(body) if body is not None else None,
+                         headers={**request_headers, **(headers or {})})
+            response = conn.getresponse()
+            data = json.loads(response.read())
+            self.assertEqual(response.status, 200, data)
+            return data
+        finally:
+            conn.close()
+
+    def open_page(self, port):
+        return self.map_request("POST", "/api/session", port, {"ticket": map_access.issue_ticket(self.database)})["secret"]
+
+    def can_edit(self, port, key):
+        return self.map_request("GET", "/api/rules", port, headers={map_access.HEADER: key})["editing"]
+
     def test_a_stopping_map_leaves_the_key_of_a_map_started_after_it(self):
-        # richi map restart starts the next map when the old one is slow to finish its requests: the
-        # old one may still be draining when the new map's page gets its key. Here that happens while
-        # the old map closes, after it has let its port go.
+        first = self.serve()
+        self.serve()
+        port = map_access.recorded_port(self.database)
+        active = self.open_page(port)
+        self.stop(first)
+        self.assertTrue(self.can_edit(port, active))
+
+    def test_a_key_issued_by_the_last_draining_request_ends_with_the_map(self):
+        # Complete an accepted redemption while server_close is draining requests.
         script = (
             "import sys\n"
             "from richi import map_access, serve\n"
@@ -562,27 +589,44 @@ class MapKeyLifetimeTests(unittest.TestCase):
             "serve.LoopbackHTTPServer.server_close = server_close\n"
             "sys.exit(serve.main(['--db', database, '--port', sys.argv[2]]))\n")
         process = self.serve(command=[sys.executable, "-c", script, str(self.database)])
-        own = map_access.redeem(self.database, map_access.issue_ticket(self.database))
         self.stop(process)
         self.assertEqual(process.returncode, 0)
-        later = map_access.secret(self.database)
-        self.assertNotIn(later, (None, own))
-        self.assertFalse(map_access.authorized(self.database, own))
+        self.assertFalse(map_access.secret_path(self.database).exists())
+
+    def test_an_exec_handoff_keeps_its_own_editing_page(self):
+        script = (
+            "import os, sys\n"
+            "from richi import map_access, serve\n"
+            "database, port = sys.argv[1:]\n"
+            "map_access.redeem(database, map_access.issue_ticket(database))\n"
+            "os.environ[serve.RESTARTED_ENV] = '1'\n"
+            "os.execv(sys.executable, [sys.executable, '-m', 'richi.serve', '--db', database, '--port', port])\n")
+        process = self.serve(command=[sys.executable, "-c", script, str(self.database)])
+        record = json.loads(map_access.secret_path(self.database).read_text())
+        self.assertEqual(record["pid"], process.pid)
+        self.assertTrue(self.can_edit(map_access.recorded_port(self.database), record["secret"]))
+        self.stop(process)
+        self.assertFalse(map_access.secret_path(self.database).exists())
 
     def test_a_new_map_process_ends_the_previous_key_and_so_does_a_stop(self):
         earlier = map_access.redeem(self.database, map_access.issue_ticket(self.database))
         process = self.serve()
-        # A page left open from the map before holds a key nobody may use now.
+        port = map_access.recorded_port(self.database)
         self.assertFalse(map_access.authorized(self.database, earlier))
-        current = map_access.redeem(self.database, map_access.issue_ticket(self.database))
-        self.assertTrue(map_access.authorized(self.database, current))
+        current = self.open_page(port)
+        self.assertTrue(self.can_edit(port, current))
         self.stop(process)
-        # Whatever answers on the port next must not be handed a key that still works.
-        self.assertFalse(map_access.authorized(self.database, current))
-        # A process that replaces its map (a reload, a hand-off) keeps the key of its pages.
-        kept = map_access.redeem(self.database, map_access.issue_ticket(self.database))
-        self.serve(**{serve.RESTARTED_ENV: "1"})
-        self.assertTrue(map_access.authorized(self.database, kept))
+        self.assertFalse(map_access.secret_path(self.database).exists())
+        # Only the legacy map that is handing off may claim its raw key. Another map stopping
+        # against the same store leaves it untouched.
+        private_files.replace(map_access.secret_path(self.database), current + "\n")
+        map_access.record_port(self.database, port)
+        with mock.patch.object(os, "getpid", return_value=os.getpid() + 1):
+            map_access.forget_secret(self.database, own_only=True)
+            map_access.resume_secret(self.database, port)
+            self.assertIsNone(map_access.secret(self.database))
+        map_access.resume_secret(self.database, port)
+        self.assertTrue(map_access.authorized(self.database, current))
 
 
 class MapRulesAPITests(unittest.TestCase):
@@ -689,6 +733,41 @@ class MapRulesAPITests(unittest.TestCase):
                               text="Names.", source="someone else")["rule"]
         self.assertEqual((renamed["source"], renamed["changed_by"]), ("richi map", "richi map"))
         self.change(secret, 400, action="update", id="naming", expected_updated_at=renamed["updated_at"], source="x")
+
+    def test_map_reads_large_rule_sets_and_edits_without_losing_extensions(self):
+        stamp = memory.now()
+        extension = "e" * 48000
+        base = {"scope": "global", "project_id": None, "text": "x", "source": "s" * rules.MAX_SOURCE,
+                "created_at": stamp, "updated_at": stamp}
+        count = 2000
+        with closing(memory.connect(self.database)) as conn, memory.transaction(conn):
+            for index in range(count):
+                rule = dict(base, id="rule-%04d" % index)
+                if index < 24:
+                    rule["future"] = extension
+                conn.execute("INSERT INTO metadata(key, value) VALUES (?, ?)",
+                             ("rule:" + rule["id"], json.dumps(rule)))
+
+        listed = self.listed()
+        self.assertEqual((len(listed["rules"]), listed["characters"]), (count, count))
+        self.assertGreater(len(json.dumps(listed["rules"], separators=(",", ":"))), serve.RULES_WORKER_OUTPUT_LIMIT)
+        self.assertGreater(24 * len(extension), serve.RULES_WORKER_OUTPUT_LIMIT)
+        self.assertFalse(any("future" in rule for rule in listed["rules"]))
+        first = listed["rules"][0]
+        updated = self.change(self.secret(), action="update", id=first["id"], expected_updated_at=first["updated_at"],
+                              text="edited")["rule"]
+        self.assertEqual(updated["text"], "edited")
+        self.assertNotIn("future", updated)
+        # The ordinary CLI list still reads the entire committed record, including the newer writer's field.
+        with closing(memory.connect(self.database, readonly=True)) as conn, memory.transaction(conn, write=False):
+            stored = rules.listing(conn, memory)["rules"][0]
+            self.assertEqual((stored["future"], stored["text"], stored["updated_at"]),
+                             (extension, "edited", updated["updated_at"]))
+
+        with mock.patch.object(serve, "RULES_LIST_OUTPUT_LIMIT", 512):
+            status, error = self.request("GET", "/api/rules")
+        self.assertEqual((status, error["code"]), (503, "output_limit"))
+        self.assertIn("richi rules list", error["error"])
 
     def test_a_worker_is_fed_and_read_within_one_budget(self):
         request = b"x" * 1_000_000
@@ -963,7 +1042,14 @@ class MapRulesAPITests(unittest.TestCase):
                 "sys.stderr.write(json.dumps({'error': 'database is locked', 'code': 'busy'})); sys.exit(1)")
         with mock.patch.object(serve, "runtime_command", return_value=[sys.executable, "-I", "-c", code]):
             payload = self.change(secret, 503, action="add", id="late", scope="global", text="x")
+            status, failed = self.request("GET", "/api/rules")
         self.assertEqual(payload, {"error": "database is locked", "code": "busy"})
+        self.assertEqual((status, failed["code"]), (503, "busy"))
+        # Failure to open the private reader or load its runtime must not expose installation paths.
+        with mock.patch.object(serve, "runtime_command", side_effect=OSError("private-path")):
+            status, failed = self.request("GET", "/api/rules")
+        self.assertEqual((status, failed["code"]), (503, "unavailable"))
+        self.assertNotIn("private-path", str(failed))
 
     def test_a_key_that_cannot_be_read_now_is_not_taken_for_none(self):
         secret = self.secret()
@@ -1112,22 +1198,25 @@ class MapRulesAPITests(unittest.TestCase):
         # The default workspace is named with the file: --db alone is refused in a terminal whose
         # current workspace is a named one.
         by_file = ["--workspace", "default", "--db", str(self.database)]
-        self.assertEqual(serve.store_arguments(own, None, "default"), ["--workspace", "default"])
+        self.assertEqual(serve.store_arguments(own, None, "default"), ["--workspace", "default", "--db", str(own)])
         # A map started with --db keeps the workspace's name and shows another file.
         self.assertEqual(serve.store_arguments(self.database, None, "default"), by_file)
         # What selected storage for the map's own process says nothing about the user's terminal.
         with mock.patch.dict(os.environ, {"RICHI_DB": str(self.database), "RICHI_DATA_DIR": str(self.root)}):
             self.assertEqual(serve.store_arguments(self.database, None, "default"), by_file)
-            self.assertEqual(serve.store_arguments(own, None, "default"), ["--workspace", "default"])
+            self.assertEqual(serve.store_arguments(own, None, "default"), ["--workspace", "default", "--db", str(own)])
             # The launcher resolves a name with the variables it is given, the process's own by default.
             self.assertEqual((config.resolve_settings(workspace="default").database,
                               config.resolve_settings(workspace="default", environ={}).database), (self.database, own))
         settings = self.root / "config.json"
         self.assertEqual(serve.store_arguments(self.database, settings, None, True),
                          ["--config", str(settings), "--db", str(self.database)])
+        workspaces.create_workspace("named")
+        named = config.resolve_settings(workspace="named").database
+        self.assertEqual(serve.store_arguments(named, None, "named"), ["--workspace", "named"])
         # An installed launcher older than this runtime cannot resolve the name by itself: the file is named.
         with mock.patch.object(serve, "resolve_settings", lambda workspace=None: config.resolve_settings(workspace=workspace)):
-            self.assertEqual(serve.store_arguments(own, None, "default"), ["--workspace", "default", "--db", str(own)])
+            self.assertEqual(serve.store_arguments(named, None, "named"), ["--workspace", "default", "--db", str(named)])
         for workspace in ("no-such-workspace", "Not A Name", None):
             self.assertEqual(serve.store_arguments(self.database, None, workspace), by_file)
 

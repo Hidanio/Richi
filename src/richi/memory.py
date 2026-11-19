@@ -3,7 +3,7 @@
 
 import argparse
 from contextlib import closing, contextmanager
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
 import os
@@ -97,6 +97,27 @@ def _help_target(prog):
 
 def now():
     return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+def next_updated_at(*previous):
+    """Allocate a UTC version while the caller holds the write lock.
+
+    The clock can repeat or go backwards. Advance past versions written by
+    Richi, while leaving older formats and opaque versions readable.
+    """
+    current = now()
+    for stamp in previous:
+        if not isinstance(stamp, str) or len(stamp) != 27 or stamp < current or not stamp.endswith("Z"):
+            continue
+        try:
+            parsed = datetime.fromisoformat(stamp[:-1])
+        except ValueError:
+            continue
+        # A hand-written maximum timestamp has no successor. Like an opaque
+        # version it still participates in CAS, but cannot seed a new clock.
+        if parsed != datetime.max and parsed.isoformat(timespec="microseconds") + "Z" == stamp:
+            current = (parsed + timedelta(microseconds=1)).isoformat(timespec="microseconds") + "Z"
+    return current
 
 
 def dumps(value):
@@ -457,7 +478,7 @@ def entry_put(conn, obj):
         if expected_updated_at != actual_updated_at:
             raise MemoryError("Entry update conflict for {}: expected_updated_at does not match the current record; read it again before updating".format(record["id"]))
     if status != "unchanged":
-        changed_at = now()
+        changed_at = next_updated_at(old["updated_at"] if old else None)
         record["created_at"] = old["created_at"] if old else changed_at
         record["updated_at"] = changed_at
         stored = dict(record)
@@ -793,6 +814,8 @@ def global_option_rules(path, apply=False):
         rules["--project-path"] = "Use project upsert without --project-path for deliberate registration changes."
     elif command == "storage" and action == "optimize" and apply:
         rules["--project-path"] = "Storage optimization affects the whole workspace; omit --project-path."
+    elif command == "rules" and action == "clear-log":
+        rules["--project-path"] = "Rule history belongs to the whole workspace; omit --project-path to clear it."
     elif command == "skill-sources":
         rules["--project-path"] = "Agents are described for this computer, not for a project; omit --project-path."
     return rules

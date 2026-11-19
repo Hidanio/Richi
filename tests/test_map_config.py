@@ -5,7 +5,6 @@ import io
 import json
 import os
 from pathlib import Path
-import signal
 import sqlite3
 import subprocess
 import sys
@@ -17,7 +16,7 @@ from urllib.parse import urlsplit
 
 from richi import memory, serve
 
-from cli_environment import free_port
+from cli_environment import free_port, stop_test_map
 
 
 @unittest.skipIf(sys.platform == "win32", "Detached launcher currently uses flock")
@@ -91,14 +90,14 @@ class MapConfigTests(unittest.TestCase):
                                     capture_output=True, text=True, timeout=10, env=environment)
             self.assertEqual(seeded.returncode, 0, seeded.stderr)
             port = free_port()
-            child_pid = None
+            started = None
             try:
                 launched = subprocess.run(command + ["map", "--no-open", "--port", str(port)],
                                           capture_output=True, text=True, timeout=20, env=environment)
                 self.assertEqual(launched.returncode, 0, launched.stderr)
                 result = json.loads(launched.stdout)
                 self.assertEqual(result["status"], "started")
-                child_pid = result["pid"]
+                started = result
                 address = urlsplit(result["url"])
                 connection = http.client.HTTPConnection(address.hostname, address.port, timeout=10)
                 try:
@@ -117,11 +116,8 @@ class MapConfigTests(unittest.TestCase):
                     connection.close()
                 self.assertEqual(bad_config.read_text(), "this deliberately is not JSON")
             finally:
-                if child_pid is not None:
-                    try:
-                        os.kill(child_pid, signal.SIGTERM)
-                    except ProcessLookupError:
-                        pass
+                if started is not None:
+                    stop_test_map(started, database)
 
 
 if __name__ == "__main__":

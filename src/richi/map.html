@@ -828,8 +828,18 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   // rules-agents-pure: begin. No DOM here: tests/test_map_rules_ui.py runs these lines under Node.
   // Agents as the server last listed them (a rules, skills or agents answer). A rule may also
   // name agents this list lacks, and those are kept and shown as they are.
-  let mapAgents=[];
-  const setMapAgents=value=>{if(Array.isArray(value))mapAgents=value.filter(agent=>agent&&typeof agent.id==='string').map(agent=>({id:agent.id,name:agent.name}));};
+  // Rules, skills and agent listings share the agent names; the latter two also share a catalog.
+  // Apply each part in request order. A committed edit supersedes every read already in flight.
+  let mapAgents=[],agentSequence=0,namesSequence=0,catalogSequence=0;
+  function setMapAgents(value,sequence){
+    if(!Array.isArray(value)||sequence<namesSequence)return;
+    namesSequence=sequence;mapAgents=value.filter(agent=>agent&&typeof agent.id==='string').map(agent=>({id:agent.id,name:agent.name}));
+  }
+  function setSkills(catalog,sequence){
+    if(sequence<catalogSequence)return;
+    catalogSequence=sequence;setMapAgents(catalog?.agents,sequence);rulesState.skills=catalog;
+    rulesState.skillMap=new Map(list(catalog?.skills).filter(skill=>skill&&typeof skill.name==='string').map(skill=>[skill.name,skill]));
+  }
   const knownAgentIds=()=>mapAgents.map(agent=>agent.id);
   const agentName=id=>mapAgents.find(agent=>agent.id===id)?.name||id;
   const agentList=ids=>ids.map(agentName).join(', ');
@@ -1037,7 +1047,10 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   // steps: send, saved(answer), explain(error) -> text, failed(error) -> a better text or '' (it
   // may reload what the form edits), lost(text), problem(text), commands(), label(), busy.
   async function saveFromForm(panel,submit,steps){
-    submit.disabled=true;if(steps.busy)submit.textContent=steps.busy;
+    // The submitted values are already captured. Keep the draft visible and the close button usable
+    // while saving, but do not accept edits that the success callback would silently discard.
+    if(submit.disabled)return;
+    submit.disabled=true;panel.body.inert=true;if(steps.busy)submit.textContent=steps.busy;
     let answer,failure=null;
     try{answer=await steps.send();}catch(error){failure=error;}
     if(failure){
@@ -1045,7 +1058,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         const explained=steps.explain(failure),message=(steps.failed?await steps.failed(failure):'')||explained;
         if(!panel.alive())steps.lost(message);
         else{steps.problem(message);if(!rulesState.editing)steps.commands();}
-      }finally{if(panel.alive()){submit.disabled=false;steps.label();}}
+      }finally{if(panel.alive()){panel.body.inert=false;submit.disabled=false;steps.label();}}
       return;
     }
     // Saved. Whatever happens while the page takes the answer in is not a failed save.
@@ -1095,25 +1108,24 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 
   // One edit key serves rules and agents: a page either saves both or composes commands for both.
   function setMapEditing(editing,sent){rulesState.editing=editing;if(sent&&!editing){storeRuleSecret('');rulesState.notice='expired';}}
-  function setSkills(catalog){setMapAgents(catalog?.agents);rulesState.skills=catalog;rulesState.skillMap=new Map(list(catalog?.skills).filter(skill=>skill&&typeof skill.name==='string').map(skill=>[skill.name,skill]));}
   const skillsKnown=()=>Boolean(rulesState.skills)&&!rulesState.skills.unavailable&&!rulesState.skills.truncated;
   async function loadSkills(){
-    if(rulesState.skillsLoading)return;rulesState.skillsLoading=true;
+    if(rulesState.skillsLoading)return;const sequence=++agentSequence;rulesState.skillsLoading=true;
     // Like the other lists: a reading that never ends must not leave the pickers loading for good.
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
-    try{const response=await fetch('/api/skills',{cache:'no-store',signal:controller.signal});const data=await response.json();if(!response.ok||!data||!Array.isArray(data.skills))throw new Error(data&&data.error||'HTTP '+response.status);setSkills(data);}
-    catch(_error){setSkills({skills:[],unavailable:true});}
+    try{const response=await fetch('/api/skills',{cache:'no-store',signal:controller.signal});const data=await response.json();if(!response.ok||!data||!Array.isArray(data.skills))throw new Error(data&&data.error||'HTTP '+response.status);setSkills(data,sequence);}
+    catch(_error){setSkills({skills:[],unavailable:true},sequence);}
     finally{clearTimeout(timeout);rulesState.skillsLoading=false;if(state.mode==='rules')renderRules();if(state.mode==='agents')renderAgents();}
   }
   async function loadRules(){
-    if(rulesController)rulesController.abort();const request=++rulesState.request,sent=ruleSecret;rulesState.loading=true;rulesState.error='';renderRules();
+    if(rulesController)rulesController.abort();const request=++rulesState.request,sequence=++agentSequence,sent=ruleSecret;rulesState.loading=true;rulesState.error='';renderRules();
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);rulesController=controller;
     try{
       const response=await fetch('/api/rules',{cache:'no-store',headers:sent?{[RULE_HEADER]:sent}:{},signal:controller.signal});let data=null;try{data=await response.json();}catch{data=null;}
       if(!response.ok)throw new Error(data&&data.error||'Сервер вернул HTTP '+response.status);if(!data||!Array.isArray(data.rules))throw new Error('Неожиданный формат ответа сервера');
       if(request!==rulesState.request)return;
       if(sent!==ruleSecret){rulesState.loading=false;loadRules();return;}
-      rulesState.data=data;rulesState.failure='';setMapAgents(data.agents);setMapEditing(data.editing===true,sent);
+      rulesState.data=data;rulesState.failure='';setMapAgents(data.agents,sequence);setMapEditing(data.editing===true,sent);
     }catch(error){if(request!==rulesState.request)return;rulesState.error=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;}
     finally{clearTimeout(timeout);if(request===rulesState.request){rulesState.loading=false;rulesController=null;if(state.mode==='rules'){renderProjectOptions();renderRules();}if(state.mode==='agents')renderAgents();}}
     if(!rulesState.skills&&state.mode!=='agents')loadSkills();
@@ -1402,7 +1414,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     if(rulesState.editing)content.append(make('strong','','Редактирование включено'),make('span','',saved));
     else{
       const line=make('span');line.append(document.createTextNode(rulesState.notice==='expired'?'Ключ редактирования больше не действует: карту перезапустили или открыли заново в другой вкладке. ':rulesState.notice==='ticket'?'Ключ из ссылки не подошёл: он уже использован или устарел. ':rulesState.notice==='unavailable'?'Карта не смогла выдать ключ редактирования: ей не удалось записать его рядом с хранилищем. ':'Вкладка открыта без ключа редактирования, например по закладке. '),
-        document.createTextNode('Форма соберёт команду richi для терминала или агента. Чтобы сохранять прямо здесь, откройте карту командой '),make('code','','richi map'),document.createTextNode('.'));
+        document.createTextNode('Форма соберёт команду richi. Чтобы сохранять прямо здесь, откройте карту командой '),make('code','','richi map'),document.createTextNode('.'));
       content.append(make('strong','','Режим команд'),line);
     }
     box.append(icon,content);root.append(box);
@@ -1477,14 +1489,14 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     return query.split(/\s+/).filter(Boolean).every(word=>fields.some(field=>field.includes(word)));
   }
   async function loadAgents(){
-    if(agentsController)agentsController.abort();const request=++agentsState.request,sent=ruleSecret;agentsState.loading=true;agentsState.error='';renderAgents();
+    if(agentsController)agentsController.abort();const request=++agentsState.request,sequence=++agentSequence,sent=ruleSecret;agentsState.loading=true;agentsState.error='';renderAgents();
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);agentsController=controller;
     try{
       const response=await fetch('/api/agents',{cache:'no-store',headers:sent?{[RULE_HEADER]:sent}:{},signal:controller.signal});let data=null;try{data=await response.json();}catch{data=null;}
       if(!response.ok)throw new Error(data&&data.error||'Сервер вернул HTTP '+response.status);if(!data||!Array.isArray(data.agents))throw new Error('Неожиданный формат ответа сервера');
       if(request!==agentsState.request)return;
       if(sent!==ruleSecret){agentsState.loading=false;loadAgents();return;}
-      setAgents(data);setMapEditing(data.editing===true,sent);
+      setAgents(data,sequence);setMapEditing(data.editing===true,sent);
     }catch(error){if(request!==agentsState.request)return;agentsState.error=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;}
     finally{clearTimeout(timeout);if(request===agentsState.request){agentsState.loading=false;agentsController=null;if(state.mode==='agents')renderAgents();}}
   }
@@ -1493,9 +1505,9 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     return agentRefusal(error,agentsState.data?.settings_file);
   }
   // An agents answer: the list, and the skill catalog it was counted from.
-  function setAgents(data){const {catalog,...listing}=data;agentsState.data=listing;if(catalog&&Array.isArray(catalog.skills))setSkills(catalog);setMapAgents(listing.agents);}
+  function setAgents(data,sequence){const {catalog,...listing}=data;agentsState.data=listing;if(catalog&&Array.isArray(catalog.skills))setSkills(catalog,sequence);setMapAgents(listing.agents,sequence);}
   // The answer to a saved change is the newest list: a list still on its way is older and is dropped.
-  function acceptAgents(data){agentsState.request++;if(agentsController){agentsController.abort();agentsController=null;}agentsState.loading=false;agentsState.error='';setAgents(data);}
+  function acceptAgents(data){agentsState.request++;if(agentsController){agentsController.abort();agentsController=null;}agentsState.loading=false;agentsState.error='';setAgents(data,++agentSequence);}
   const freshAgent=agent=>agentItems().find(item=>item.id===agent.id)||agent;
   const closeFolderForm=()=>{agentsState.addingFolder='';agentsState.folderDraft='';};
   function openAgentCommand(change,title='Команда для терминала'){
