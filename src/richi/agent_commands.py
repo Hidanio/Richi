@@ -385,12 +385,21 @@ def _updated(identifier, options, builtin, current, environ, home):
             disabled.difference_update(source for source, directory in base_sources.items() if directory == path)
         elif key in base_sources:
             path = base_sources[key]
-            for added in folders:
-                if not added["enabled"] and agents.folder_path(added["path"], home) == path:
-                    # Transfer the old folder switch to all source keys at that path before changing one.
-                    disabled.update(source for source, directory in base_sources.items() if directory == path)
-                    added["enabled"] = True
-            (disabled.discard if enabled else disabled.add)(key)
+            added = [folder for folder in folders if agents.folder_path(folder["path"], home) == path]
+            if not added:
+                (disabled.discard if enabled else disabled.add)(key)
+                continue
+            keys = {source for source, directory in base_sources.items() if directory == path}
+            off = keys.intersection(disabled) if all(folder["enabled"] for folder in added) else keys.copy()
+            if (key not in off) == enabled:
+                continue
+            (off.discard if enabled else off.add)(key)
+            # Keep the folder switch readable by older versions. Only a split between keys needs exceptions.
+            for folder in added:
+                folder["enabled"] = off != keys
+            disabled.difference_update(keys)
+            if off != keys:
+                disabled.update(off)
         else:
             raise AgentError("Unknown skill source of " + identifier + ": " + key + "; see skill-sources list",
                              "not_found", "source")

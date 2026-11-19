@@ -247,13 +247,24 @@ class AgentSettingsTests(IsolatedHome):
         refused = self.cli("skill-sources", "update", "cursor", *version, "--name", "Other", ok=False)
         self.assertEqual(refused["code"], "builtin")
         self.assertEqual(path.read_bytes(), before)
-        enabled = self.cli("skill-sources", "update", "cursor", *version, "--enable", "cursor-skills")["agent"]
-        self.assertTrue(enabled["sources"][0]["enabled"])
+        current = listed
+        for wanted in (False, True, True, False, False):
+            before = path.read_bytes()
+            was = current["sources"][0]["enabled"]
+            changed = self.cli("skill-sources", "update", "cursor", "--expected-updated-at", current["updated_at"],
+                               "--enable" if wanted else "--disable", "cursor-skills")
+            self.assertEqual(changed["results"][0]["status"], "unchanged" if was == wanted else "updated")
+            if was == wanted:
+                self.assertEqual((path.read_bytes(), changed["agent"]["updated_at"]), (before, current["updated_at"]))
+            current = changed["agent"]
+            self.assertEqual(current["sources"][0]["enabled"], wanted)
+            with mock.patch.object(agents, "AGENTS", previous):
+                self.assertEqual(self.listed()["cursor"]["sources"][0]["enabled"], wanted)
         self.assertEqual(self.cli("skill-sources", "remove", "cursor", *version, ok=False)["code"], "conflict")
         stored = json.loads(path.read_text(encoding="utf-8"))["agents"]["cursor"]
         for field in ("name", "variable", "manual_skills", "created_at", "future"):
             self.assertEqual(stored[field], data["agents"]["cursor"][field])
-        reset = self.cli("skill-sources", "remove", "cursor", "--expected-updated-at", enabled["updated_at"])
+        reset = self.cli("skill-sources", "remove", "cursor", "--expected-updated-at", current["updated_at"])
         self.assertEqual(reset["results"], [{"id": "cursor", "status": "reset"}])
         self.assertIsNone(reset["agent"]["updated_at"])
         self.assertEqual([s["path"] for s in reset["agent"]["sources"]],
@@ -893,11 +904,20 @@ class AgentSettingsTests(IsolatedHome):
         path.write_text(agent_commands._serialized({"codex": stored}), encoding="utf-8")
         # With this profile both agents-skills and codex-skills read the saved folder.
         with mock.patch.dict(os.environ, {"CODEX_HOME": str(self.home / ".agents")}):
+            before = path.read_bytes()
+            unchanged = self.cli("skill-sources", "update", "codex", "--expected-updated-at", "t",
+                                 "--disable", "agents-skills")
+            self.assertEqual((unchanged["results"][0]["status"], path.read_bytes()), ("unchanged", before))
             changed = self.cli("skill-sources", "update", "codex", "--expected-updated-at", "t",
                                "--enable", "agents-skills")["agent"]
             enabled = {source["key"]: source["enabled"] for source in changed["sources"]}
             self.assertTrue(enabled["agents-skills"])
             self.assertFalse(enabled["codex-skills"])
+            self.cli("skill-sources", "update", "codex", "--expected-updated-at", changed["updated_at"],
+                     "--disable", "agents-skills")
+            restored = json.loads(path.read_text(encoding="utf-8"))["agents"]["codex"]
+            self.assertEqual(restored["folders"], stored["folders"])
+            self.assertNotIn("disabled", restored)
 
     def test_changes_are_validated_for_every_caller(self):
         for action, identifier, options in (

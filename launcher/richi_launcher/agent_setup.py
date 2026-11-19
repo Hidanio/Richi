@@ -299,6 +299,8 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     home = Path.home().resolve()
     adapter = agent_adapters.get(agent)
     profile, instructions, skill = adapter.paths(current)
+    if current and Path(current["skill"]) != skill:
+        raise ConfigError("Setup belongs to another skill directory; use its original profile")
     extra, adapter_ops = adapter.setup_operations(ctx, profile, current, replace_skill)
     command = home / ".local" / "bin" / "richi"
     executable = Path(ctx["original_prefix"]) / "bin" / "richi"
@@ -308,12 +310,9 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     # the others. A broken checkout plans the release link (repair).
     source = current.get("dev_source") if current else _shared_source(records)
     link, dev_source, _ = _desired_link(root, source)
-    skill_op = files.change(skill, {"kind": "link", "target": link})
-    if current:
-        _verify_skill(current)
-    elif skill_op["before"] == skill_op["after"]:
-        pass  # Already the exact managed link (for example a manual dev link).
-    elif skill_op["before"]["kind"] != "absent":
+    before = _verify_skill(current) if current else files.snapshot(skill)
+    skill_op = files.change(skill, {"kind": "link", "target": link}, before=before)
+    if not current and before != skill_op["after"] and before["kind"] != "absent":
         if not replace_skill:
             raise ConfigError("Project Memory already exists. Use --replace-skill to preserve it outside skill discovery and install this version")
         skill_op["backup"] = str(skill.parent.parent / "richi-skill-backups" / ("project-memory-" + uuid.uuid4().hex))
@@ -351,16 +350,19 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
 
 
 def _verify_skill(record):
+    """Return the link snapshot whose ownership and release contents were verified."""
     # skill_target and skill_hashes always describe the release bundle, so a
     # manager without dev support refuses a dev link instead of adopting it.
-    if files.snapshot(record["skill"]) != {"kind": "link", "target": _link_target(record)}:
+    before = files.snapshot(record["skill"])
+    if before != {"kind": "link", "target": _link_target(record)}:
         raise ConfigError("Managed skill link was changed; preserved it. Reconcile it before updating Richi")
     if record.get("dev_source"):
-        return  # Checkout edits are development work, not drift.
+        return before  # Checkout edits are development work, not drift.
     root = Path(record["skill_target"])
     _, hashes = bundle(root.parent.parent)
     if hashes != record["skill_hashes"]:
         raise ConfigError("Managed skill contents were edited; back up and reconcile them before updating Richi")
+    return before
 
 
 def activation_operations(ctx, state):
@@ -377,7 +379,7 @@ def activation_operations(ctx, state):
     dev_capable = _dev_capable(site)
     ops = []
     for agent, record in records.items():
-        _verify_skill(record)
+        before = _verify_skill(record)
         extra, adapter_ops = agent_adapters.get(agent).activation_operations(ctx, record, site)
         ops.extend(adapter_ops)
         link, source, _ = _desired_link(target, record.get("dev_source") if dev_capable else None)
@@ -386,7 +388,7 @@ def activation_operations(ctx, state):
         if source:
             records[agent]["dev_source"] = source
         records[agent].update(extra)
-        ops.append(files.change(record["skill"], {"kind": "link", "target": link}))
+        ops.append(files.change(record["skill"], {"kind": "link", "target": link}, before=before))
     ops.append(_manifest_op(ctx, records))
     return ops
 
@@ -405,7 +407,7 @@ def _switch_operations(ctx, state, source):
             try:
                 # A release skill edited through its link stays protected:
                 # moving the link away would let a later update discard it.
-                _verify_skill(record)
+                operation["before"] = _verify_skill(record)
             except ConfigError as exc:
                 raise ConfigError(agent + ": " + str(exc)) from exc
         # Release hashes are kept as recorded, so later activation still

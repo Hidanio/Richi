@@ -174,3 +174,17 @@ class CursorSetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         self.assertEqual(self.script.read_bytes(), initial)
         self.assertIn("Synthetic release 0.1.0", (self.skill / "SKILL.md").read_text())
         self.assertEqual(self.settings.read_bytes(), original_settings)
+
+        activation = cursor_setup.activation_operations
+
+        def edit_after_verification(*args):
+            operations = activation(*args)
+            self.skill.unlink()
+            self.skill.write_text("user replacement")
+            return operations
+
+        with patch.object(cursor_setup, "activation_operations", side_effect=edit_after_verification):
+            with self.assertRaisesRegex(ConfigError, "changed"):
+                installation._activate(self.ctx, candidate, "updated")
+        self.assertEqual(self.skill.read_text(), "user replacement")
+        self.assertEqual(installation._state(self.ctx)["current"], previous["current"])

@@ -204,6 +204,10 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
 
     def test_changed_profile_and_new_override_are_not_silently_ignored(self):
         self.configure()
+        other_home = self.home / "different-home"
+        with patch.dict(os.environ, HOME=str(other_home)), self.assertRaisesRegex(ConfigError, "skill directory"):
+            self.configure()
+        self.assertFalse(other_home.exists())
         shell = self.home / ".zshrc"
         shell.write_text("my own PATH")
         with self.assertRaisesRegex(ConfigError, "removed"):
