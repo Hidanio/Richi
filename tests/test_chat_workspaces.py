@@ -180,7 +180,7 @@ class ChatCliTests(unittest.TestCase):
         for source, target in ((ROOT / "launcher/richi_launcher", "richi_launcher"), (ROOT / "src/richi", "richi")):
             shutil.copytree(source, self.installed / target, ignore=ignored)
         self.environment = {key: value for key, value in os.environ.items()
-                            if not key.startswith("RICHI_") and key not in {"CODEX_THREAD_ID", "CODEX_SESSION_ID"}}
+                            if not key.startswith("RICHI_") and key not in {"CODEX_THREAD_ID", "CODEX_SESSION_ID", "CURSOR_AGENT"}}
         self.environment.update(HOME=str(self.root / "home"), XDG_CONFIG_HOME=str(self.root / "config"),
                                 XDG_DATA_HOME=str(self.root / "data"))
 
@@ -265,11 +265,17 @@ class ChatCliTests(unittest.TestCase):
 
     def test_explicit_chat_and_project_path_are_forwarded_without_becoming_storage_selectors(self):
         self.command("workspace", "create", "alpha")
-        self.command("--chat", "generic", "chat", "bind", "alpha", chat="automatic")
+        cursor = {"CURSOR_AGENT": "1", "RICHI_CHAT_ID": "parent-chat"}
+        self.command("chat", "bind", "default", chat="parent-chat")
+        for inherited in ({"CURSOR_AGENT": "1"}, cursor, dict(cursor, CODEX_THREAD_ID="automatic")):
+            with self.subTest(inherited=inherited):
+                self.assertEqual(self.command("init", env=inherited, ok=False)["code"], "chat_id_required")
+        self.assertFalse(list(self.root.rglob("*.sqlite3")))
+        self.command("--chat", "generic", "chat", "bind", "alpha", chat="automatic", env=cursor)
         self.assertFalse(self.command("chat", "current", chat="automatic")["bound"])
         path = self.root / "shared repo"
         captured = self.command("--project-path=" + str(path), "--chat=generic", "-walpha", "project", "list",
-                                chat="automatic", runner=CAPTURE)
+                                chat="automatic", env=cursor, runner=CAPTURE)
         args = captured["argv"]
         self.assertEqual(args[args.index("--project-path") + 1], str(path))
         self.assertEqual(captured["env"]["RICHI_CHAT_ID"], "generic")
@@ -303,7 +309,8 @@ class ChatMapTests(unittest.TestCase):
         fixture.environment["CODEX_THREAD_ID"] = "map-chat"
         fixture.cli("chat", "bind", "alpha")
         port = fixture.free_port()
-        started = fixture.cli("map", "--no-open", "--port", str(port))
+        with mock.patch.dict(fixture.environment, {"CURSOR_AGENT": "1"}):
+            started = fixture.cli("--chat", "map-chat", "map", "--no-open", "--port", str(port))
         port = urlsplit(started["url"]).port
         self.addCleanup(stop_test_map, started, alpha["database"])
         initial = fixture.health(port)

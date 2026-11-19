@@ -81,7 +81,9 @@ asking again.
 
 In Codex, the launcher obtains the ID from `CODEX_THREAD_ID`. In local Cursor
 Agent, pass the exact `--chat cursor:<id>` supplied by the session hook on every
-Richi command, starting with `chat current`. Each conversation in the same
+Richi command, starting with `chat current`. When the shell carries
+`CURSOR_AGENT`, the launcher requires an explicit chat ID for workspace access,
+even if the shell inherited another chat's ID. Each conversation in the same
 repository has its own ID. Other integrations can pass their own stable ID:
 
 ```sh
@@ -91,7 +93,7 @@ richi --chat task-123 project list
 richi --chat task-123 chat bind personal --replace
 ```
 
-You can set `RICHI_CHAT_ID` instead of passing a flag; explicit `--chat` takes
+Outside Cursor Agent you can supply `RICHI_CHAT_ID`. Explicit `--chat` takes
 precedence. Until a choice is saved, a detected chat cannot read or write
 knowledge, even with `-w`. A `-w` that repeats the bound workspace is allowed;
 another workspace and direct database/config overrides are rejected.
