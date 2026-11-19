@@ -3,10 +3,8 @@
 
 English | [Русский](SETUP.ru.md)
 
-Choose an agent for your first installation. The example uses Codex. For
-Claude Code, replace `codex` with `claude`. For Cursor Agent, use `cursor` once
-the stable installer's `--help` lists it. Before that release, you can
-[install the checkout that adds Cursor support](INSTALLATION.md).
+The example connects Codex. For Claude Code, replace `codex` with `claude`.
+With Richi 1.2.0 or later, use `cursor` for local Cursor Agent.
 
 ```sh
 curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh | sh -s -- --agent codex --yes
@@ -193,9 +191,10 @@ the interactive menu. Connect each client you want to use.
 
 On Richi 1.0.1, use `richi setup --yes` to connect Codex and `richi setup --status`
 to inspect it. That launcher predates the agents menu and the `--agent` option.
-If `richi setup --help` does not list the client you want, run `richi update apply`
-once a stable release supports it, then check help again. Even in dev mode,
-the installed launcher supplies the agent choices.
+Claude Code requires Richi 1.1.0 or later, and local Cursor Agent requires 1.2.0
+or later. To connect either client from an older installation, run `richi update apply`
+and check the available agents with `richi setup --help`. The installed launcher
+supplies the agent choices even in dev mode.
 
 ### Local Cursor Agent
 

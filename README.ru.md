@@ -39,10 +39,8 @@ SQLite-хранилище, Git-навигацию, локальную карту
 нужен установленный Git. Для быстрого выбора workspace доступно меню `richi use`. Готовый MCP-сервер
 пока не входит в эту поставку.
 
-Для первой установки выберите агента. В примере выбран Codex. Для Claude Code
-замените `codex` на `claude`. Для Cursor Agent используйте `cursor`, когда это
-имя появится в `--help` установщика стабильного релиза. До релиза можно
-[установить пакет из checkout с поддержкой Cursor](docs/INSTALLATION.ru.md).
+В примере установщик подключает Codex. Для Claude Code замените `codex`
+на `claude`. Начиная с Richi 1.2.0, для локального Cursor Agent используйте `cursor`.
 
 ```sh
 curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh | sh -s -- --agent codex --yes
