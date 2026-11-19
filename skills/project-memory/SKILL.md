@@ -14,7 +14,11 @@ standing rules, loaded with `rules show`.
 
 ## Select the store before memory access
 
-1. At each new chat, run `richi chat current` and `richi workspace list`.
+1. In Cursor, take the exact `--chat cursor:<id>` from this conversation's
+   `sessionStart` hook and pass it before the subcommand on every Richi call,
+   including the first. If the ID is missing, continue independent work and wait
+   for the hook-provided identity before using Richi.
+   At each new chat, run `richi chat current` and `richi workspace list`.
    If unbound and the human has not explicitly selected a workspace here, ask
    once: current CLI workspace or another for this chat. Even one workspace is
    not consent. Continue independent code work while waiting, without memory access.

@@ -323,6 +323,9 @@ Checkout и установленный launcher сверяют версию пр
 глобальные инструкции. `richi setup --dry-run` показывает конфликты;
 `--replace-skill` явно сохраняет резервную копию существующего skill перед
 принятием под управление. Управляемый skill следует обновлениям релиза и откату.
+Для Claude Code выполните `richi setup --agent claude --yes`. Для локального
+Cursor Agent выполните `richi setup --agent cursor --yes` и откройте новый чат.
+Хук сессии Cursor передаёт точный аргумент `--chat` для каждой команды Richi.
 Для других агентов скопируйте весь каталог `skills/project-memory`, включая
 файлы `references/`, в каталог skills агента.
 

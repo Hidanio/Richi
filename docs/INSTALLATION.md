@@ -317,7 +317,10 @@ from a supported dedicated installation. It installs the complete skill in
 `~/.agents/skills/project-memory` and preserves existing global instructions.
 `richi setup --dry-run` previews conflicts; `--replace-skill` explicitly backs
 up an existing skill before adoption. The managed skill follows release updates
-and rollback. For other agents, copy the complete `skills/project-memory`
+and rollback. For Claude Code, run `richi setup --agent claude --yes`. For local
+Cursor Agent, run `richi setup --agent cursor --yes` and open a new chat. Cursor's
+session hook supplies the exact `--chat` argument for each Richi command.
+For other agents, copy the complete `skills/project-memory`
 directory, including its `references/` files, to the agent's skill directory.
 
 Make sure the agent process can find the `richi` executable and the selected

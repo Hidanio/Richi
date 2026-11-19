@@ -61,6 +61,7 @@ First steps with Richi
      richi setup --dry-run
      richi setup --yes                     # Codex
      richi setup --agent claude --yes      # Claude Code
+     richi setup --agent cursor --yes      # Cursor
 
 2. Create the knowledge store of the current workspace (safe to repeat).
      richi init
@@ -208,6 +209,8 @@ agent chats:
   RICHI_CHAT_ID     stable chat identity for workspace binding; Claude Code
                     setup provides it through its SessionStart hook
   CODEX_THREAD_ID   chat identity supplied by Codex
+  In Cursor chats, pass the exact --chat cursor:<id> from the sessionStart
+  hook on every command. It takes precedence over the shell environment.
   In a chat, RICHI_CONFIG, RICHI_DB and RICHI_DATA_DIR are rejected: the
   chat's binding selects the store.
 

@@ -318,9 +318,16 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     if command_op["before"]["kind"] != "absent" and command_op["before"] != command_op["after"]:
         raise ConfigError("Another command owns " + str(command) + "; it was not overwritten")
     block = _block(command, agent)
-    ops = [skill_op, command_op, _file_op(instructions, block, expected=current.get("block_sha256") if current else None,
-                                                instruction_limit=adapter.INSTRUCTION_LIMIT)]
-    ops = adapter_ops + ops
+    expected = current.get("block_sha256") if current else None
+    instruction_file = getattr(adapter, "instruction_file", None)
+    if instruction_file is None:
+        instruction_op = _file_op(instructions, block, expected=expected, instruction_limit=adapter.INSTRUCTION_LIMIT)
+    else:
+        if current and expected is None:
+            raise ConfigError("Missing digest for the managed " + adapter.LABEL + " rule")
+        block = instruction_file(block)
+        instruction_op = files.managed_file(instructions, block, expected=expected, label=adapter.LABEL + " rule")
+    ops = adapter_ops + [skill_op, command_op, instruction_op]
     path_block = PATH_START + ("\nexport PATH=" + shlex.quote(str(command.parent)) + ':"$PATH"\n').encode() + PATH_END
     profiles = current.get("profiles", []) if current else [] if no_path else [str(p) for p in _shell_profiles()]
     for shell_profile in profiles:
@@ -544,6 +551,7 @@ def setup_parser():
         Setup is installation-wide: workspace and storage options are rejected.""",
                     examples=(("Preview, then apply for Codex", ("richi setup --dry-run", "richi setup --yes")),
                               ("Connect Claude Code", "richi setup --agent claude --yes"),
+                              ("Connect Cursor", "richi setup --agent cursor --yes"),
                               ("Is the integration intact?", "richi setup --status --agent claude")),
                     see=("agents", "start"), guide="docs/SETUP.md")
 

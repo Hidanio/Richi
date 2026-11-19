@@ -79,7 +79,10 @@ question on each message or after context restoration. If the user has already
 explicitly named a workspace in this chat, the agent uses that choice without
 asking again.
 
-In Codex, the launcher obtains the ID from `CODEX_THREAD_ID`. For other integrations:
+In Codex, the launcher obtains the ID from `CODEX_THREAD_ID`. In local Cursor
+Agent, pass the exact `--chat cursor:<id>` supplied by the session hook on every
+Richi command, starting with `chat current`. Each conversation in the same
+repository has its own ID. Other integrations can pass their own stable ID:
 
 ```sh
 richi --chat task-123 chat bind work

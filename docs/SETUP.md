@@ -14,7 +14,7 @@ published; merging the code alone does not publish it. On Debian/Ubuntu, Python
 may also need `python3-venv`. The installer explains missing prerequisites and
 never invokes sudo or installs system Python. Git is needed for repository history.
 
-The command installs a fixed release in `~/.local/share/richi/venv`, adds
+By default, the command installs a fixed release in `~/.local/share/richi/venv`, adds
 `~/.local/bin/richi`, installs Project Memory in `~/.agents/skills/`, and adds
 a managed block to the effective global Codex instructions. Existing instruction
 bytes, permissions, data and workspace settings are preserved. Without `--yes`,
@@ -169,20 +169,49 @@ and installation generations intact for recovery. If files changed after a
 crash, back up both versions and reconcile the reported path before retrying;
 automatic recovery refuses to overwrite those edits.
 
-To disconnect manually, first disable automatic updates. Remove only the
-`richi:project-memory` marker block from the reported global instruction file
-and `richi:path` blocks from reported profiles. Verify targets before removing
+To remove this Richi installation manually, first disable automatic updates. For Cursor, remove the
+Richi `sessionStart` entry from `~/.cursor/hooks.json` and the dedicated
+`~/.cursor/richi/session_start.py` and `~/.cursor/rules/richi-project-memory.mdc`
+files. For Codex or Claude Code, remove only the `richi:project-memory` block
+from the reported global instruction file. For Claude Code also remove the Richi
+`SessionStart` entry from its `settings.json` and the managed session script.
+Remove the `richi:path` blocks from the reported shell profiles. Verify targets before removing
 the managed skill and command symlinks; optionally restore the reported skill
 backup. Then remove the dedicated environment and its installation metadata if
 unused. Keep workspace data. This release has no automatic uninstaller; removing
 the integration never requires deleting the whole AGENTS.md file.
 
-## Claude Code and agents installed later
+## Connecting Codex, Claude Code and Cursor
 
-Run `richi agents` to discover and connect Codex or Claude Code, or
+Run `richi agents` to discover and connect local clients, or
 `richi agents --status` for read-only status. Discovery checks executables/profile
-folders; it is not a client health check. The menu can rescan after a new client
-is installed. Existing default behavior remains Codex.
+folders. The menu can rescan after a new client is installed. Codex is the
+default. To connect several clients, run setup once for each. On first
+installation, you can pass `--agent cursor` or `--agent claude` to the installer.
+
+### Local Cursor Agent
+
+```sh
+richi setup --agent cursor --dry-run
+richi setup --agent cursor --yes
+richi setup --agent cursor --status
+```
+
+Setup links `~/.cursor/skills/project-memory`, installs the user rule
+`~/.cursor/rules/richi-project-memory.mdc` and adds a `sessionStart` hook to
+`~/.cursor/hooks.json` alongside your existing hooks. The hook runs
+`~/.cursor/richi/session_start.py`. [Cursor skills](https://cursor.com/docs/skills)
+and [user rules](https://cursor.com/help/customization/rules).
+
+Open a new local Cursor Agent chat. The hook gives the agent the exact
+`--chat cursor:<id>` argument for every Richi command, including the first
+`chat current`. Choose a workspace once per conversation. Richi reuses that
+binding whenever Cursor supplies the same chat ID. If the agent has no
+hook-provided ID, it waits for one before calling Richi. Check the Hooks output
+channel in Cursor and open a new chat after fixing the hook.
+[Cursor hooks](https://cursor.com/docs/hooks#sessionstart).
+
+### Claude Code
 
 ```sh
 richi setup --agent claude --dry-run
@@ -190,8 +219,7 @@ richi setup --agent claude --yes
 richi setup --agent claude --status
 ```
 
-The installer also accepts `--agent claude`. Run setup separately for each client
-to connect both. Claude setup installs the bundled skill under
+Claude setup installs the bundled skill under
 `~/.claude/skills/project-memory`, a managed block in `~/.claude/CLAUDE.md`, and a
 SessionStart hook in `settings.json`, preserving unrelated settings and hooks.
 `CLAUDE_CONFIG_DIR` selects an alternate profile. Existing copied skills require
@@ -201,13 +229,16 @@ Start a new local Claude Code session. The hook uses the actual session ID as
 `RICHI_CHAT_ID=claude:<session_id>` and provides an explicit `--chat` fallback in
 session context. Resumed sessions retain identity; new sessions choose a workspace
 independently. Setup does not override disabled hooks or permission policies.
-This supports Claude Code, not ordinary Claude chat or MCP. Managed skills and
-Claude's session script follow package updates/rollback together. Releases that
-cannot maintain any configured agent are blocked before activation.
-Launcher changes require installing a new package, even with dev mode on.
-
-Claude contracts: [profile layout](https://code.claude.com/docs/en/claude-directory)
+[Claude profile layout](https://code.claude.com/docs/en/claude-directory)
 and [SessionStart hooks](https://code.claude.com/docs/en/hooks#sessionstart).
+
+### Package compatibility
+
+Managed skills and session scripts follow package updates and rollbacks together.
+Richi checks that each configured agent has a compatible adapter in the selected
+release before activation. This applies to Cursor when rolling back to a package
+that predates its adapter. Launcher changes require installing a new package,
+even with dev mode on.
 
 ## Adding another agent to Richi
 
@@ -224,6 +255,9 @@ Put agent-specific behavior in its module, following `codex_setup.py` or
 - `detected()` checks the client's executable/profile without writes.
 - `paths(current=None)` returns the profile, effective instruction file and
   skill path. Validate overrides and an existing record's profile here.
+- An optional `instruction_file(block)` returns the complete file as bytes when
+  an adapter owns a dedicated instruction file. Cursor uses this to add the MDC
+  frontmatter to its user rule. Richi checks the complete file for local edits.
 - `setup_operations(ctx, profile, current, replace_skill)` and
   `activation_operations(ctx, record, site)` return `(extra_metadata, operations)`.
   Plan changes with `setup_files`; never write directly. The activation method
@@ -238,7 +272,7 @@ version describes the adapter's persisted metadata/resource contract, not the
 Richi release. Compatible releases retain it; incompatible versions fail closed
 until an explicit migration exists. Release inspection reads literal data without
 executing candidate code. Preserve literal `AGENTS`, `DEV_SKILL_PROTOCOL` and
-Claude `HOOK` assignments.
+the session adapters' `HOOK` assignments.
 
 Each adapter must provide a stable chat identity and preserve the user's explicit
 workspace choice. Test its profile/settings behavior in a synthetic home;

@@ -116,7 +116,7 @@ class ClaudeSetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
     def test_discovery_does_not_write_or_create_profiles(self):
         before = self.paths()
         result = agent_setup.agents_command(['--status'])
-        self.assertEqual({item['agent'] for item in result['agents']}, {'codex', 'claude'})
+        self.assertEqual({item['agent'] for item in result['agents']}, {'codex', 'claude', 'cursor'})
         self.assertEqual(before, self.paths())
 
     def test_claude_skill_adoption_preserves_manual_copy(self):

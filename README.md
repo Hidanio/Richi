@@ -145,8 +145,9 @@ shared repositories and settings.
 
 For Codex, the installer performs global integration; use `richi setup --status`
 to inspect it or `richi setup --yes` to connect a supported existing installation.
-For Claude Code, run `richi setup --agent claude --yes`; `richi agents` discovers
-and connects clients installed later. See [setup](docs/SETUP.md).
+For Claude Code, run `richi setup --agent claude --yes`. For local Cursor Agent,
+run `richi setup --agent cursor --yes` and open a new chat. Use `richi agents`
+to connect clients installed later.
 For other agents, copy the entire `skills/project-memory` directory and configure
 access to the installed CLI. Scope memory authorization in agent/project
 instructions. See [setup](docs/SETUP.md) and the

@@ -1,4 +1,4 @@
-"""A third, synthetic adapter exercises the shared flow without special cases."""
+"""A synthetic adapter exercises the shared flow without special cases."""
 import contextlib
 import io
 import json
@@ -40,7 +40,9 @@ class AgentAdapterTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
     def catalog(self, site, data):
         launcher = site / "richi_launcher"
         (launcher / "agent_adapters.py").write_text("AGENTS = " + repr(agent_adapters.AGENTS) + "\n")
-        (launcher / "codex_setup.py").write_text("# fixture\n")
+        for name, (module, _) in agent_adapters.AGENTS.items():
+            if name != "demo" and not (launcher / (module + ".py")).exists():
+                (launcher / (module + ".py")).write_text("# fixture\n")
         (launcher / "demo_setup.py").write_text("DATA = " + repr(data) + "\n")
 
     def test_catalog_drives_discovery_menu_installer_and_setup(self):
@@ -55,7 +57,7 @@ class AgentAdapterTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         self.assertEqual(before, self.paths())
         terminal = MagicMock()
         terminal.__enter__.return_value = terminal
-        terminal.readline.side_effect = ["4\n", "3\n"]  # rescan, then third agent
+        terminal.readline.side_effect = [str(len(items) + 1) + "\n", str(len(items)) + "\n"]
         with patch("builtins.open", return_value=terminal), patch.object(agent_setup, "command") as setup:
             agent_setup.agents_command([])
             setup.assert_called_once_with(["--agent", "demo"])
@@ -68,7 +70,7 @@ class AgentAdapterTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         self.assertEqual(set(agent_setup._records(self.ctx)), {"codex", "demo"})
         self.assertEqual((self.profile / "session.cfg").read_text(), "seed")
 
-    def test_third_agent_activation_and_rollback_include_its_files(self):
+    def test_extra_adapter_activation_and_rollback_include_its_files(self):
         self.catalog(self.site, "seed")
         self.configure("--agent", "demo")
         old = installation._state(self.ctx)

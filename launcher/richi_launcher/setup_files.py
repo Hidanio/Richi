@@ -66,6 +66,18 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def managed_file(path, data, *, expected, label):
+    """Plan an edit to a dedicated file owned by this installation."""
+    path = safe_path(path)
+    before = snapshot(path)
+    if expected is None:
+        if before["kind"] != "absent":
+            raise ConfigError("Another file owns the " + label + " path: " + str(path))
+    elif before["kind"] != "file" or digest(contents(before)) != expected:
+        raise ConfigError("Managed " + label + " was edited or removed: " + str(path))
+    return {"path": str(path), "before": before, "after": file_value(data, before.get("mode", 0o600))}
+
+
 def _sync(directory):
     descriptor = os.open(str(directory), os.O_RDONLY)
     try:
