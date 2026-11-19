@@ -238,7 +238,7 @@ class AgentSettingsTests(IsolatedHome):
                          (True, "Cursor", ["CURSOR_AGENT"], saved["updated_at"]))
         self.assertEqual([(s["key"], s["added"], s["enabled"]) for s in listed["sources"]],
                          [("cursor-skills", False, False), ("agents-skills", False, True), ("claude-skills", False, True),
-                          ("codex-skills", False, True), ("~/.gemini/skills", True, True)])
+                          ("codex-skills", False, True), ("system", False, True), ("~/.gemini/skills", True, True)])
         # The extra folder is still scanned, using Cursor's built-in rule for manual invocation.
         self.assertEqual(listed["sources"][-1]["skills"], 1)
         self.assertEqual(agents.detect({"CURSOR_AGENT": "1"}), "cursor")
@@ -268,7 +268,8 @@ class AgentSettingsTests(IsolatedHome):
         self.assertEqual(reset["results"], [{"id": "cursor", "status": "reset"}])
         self.assertIsNone(reset["agent"]["updated_at"])
         self.assertEqual([s["path"] for s in reset["agent"]["sources"]],
-                         ["~/.cursor/skills", "~/.agents/skills", "~/.claude/skills", "~/.codex/skills"])
+                         ["~/.cursor/skills", "~/.agents/skills", "~/.claude/skills", "~/.codex/skills",
+                          "~/.cursor/skills-cursor"])
 
     def test_an_own_agent_is_described_detected_and_gets_its_skill(self):
         before = self.cli("skill-sources", "list")

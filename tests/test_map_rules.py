@@ -168,6 +168,7 @@ class SkillCatalogTests(unittest.TestCase):
             home, profile = root / "home", root / "claude-profile"
             codex = home / ".agents" / "skills"
             write_skill(home / ".cursor" / "skills" / "native", "---\nname: native\n---\n")
+            write_skill(home / ".cursor" / "skills-cursor" / "create-rule", "---\nname: create-rule\n---\n")
             write_skill(profile / "skills" / "pr-description", "---\nname: pr-description\ndescription: Claude copy\n---\n")
             write_skill(codex / "pr-description", "---\nname: pr-description\ndescription: Codex copy\n---\n")
             write_skill(codex / "no-header", "Just instructions\n")
@@ -176,9 +177,11 @@ class SkillCatalogTests(unittest.TestCase):
             (codex / ".hidden").mkdir()
             (codex / "without-skill-file").mkdir()
             result = skill_catalog.catalog({"CLAUDE_CONFIG_DIR": str(profile)}, home)
-        self.assertEqual([skill["name"] for skill in result["skills"]], ["long", "native", "no-header", "pr-description"])
+        self.assertEqual([skill["name"] for skill in result["skills"]],
+                         ["long", "native", "no-header", "pr-description", "create-rule"])
         skills = {skill["name"]: skill for skill in result["skills"]}
         self.assertEqual(skills["native"]["agents"], ["cursor"])
+        self.assertEqual((skills["create-rule"]["kind"], skills["create-rule"]["agents"]), ("system", ["cursor"]))
         self.assertEqual(skills["pr-description"], {"name": "pr-description", "description": "Claude copy",
                                                     "kind": "skills", "agents": ["claude", "codex", "cursor"]})
         self.assertEqual(skills["no-header"], {"name": "no-header", "description": "", "kind": "skills",
@@ -188,7 +191,7 @@ class SkillCatalogTests(unittest.TestCase):
                          [("claude", "skills", True), ("claude", "plugins", False), ("claude", "plugins", False),
                           ("codex", "skills", True), ("codex", "skills", False), ("codex", "system", False),
                           ("codex", "plugins", False), ("cursor", "skills", True), ("cursor", "skills", True),
-                          ("cursor", "skills", False), ("cursor", "skills", False)])
+                          ("cursor", "skills", False), ("cursor", "skills", False), ("cursor", "system", True)])
         self.assertFalse(result["truncated"])
 
     def test_cursor_finds_nested_skills_once_in_its_enabled_user_roots(self):

@@ -78,7 +78,8 @@ richi --compact-json skill-sources add gemini-cli --name "Gemini CLI" \
 ## Подстрой агента
 
 Cursor читает скиллы из `~/.cursor/skills`, `~/.agents/skills`, `~/.claude/skills`
-и `~/.codex/skills`. Richi находит скиллы и во вложенных папках этих источников,
+и `~/.codex/skills`. Встроенные скиллы Cursor находятся в `~/.cursor/skills-cursor`.
+Richi находит скиллы и во вложенных папках этих источников,
 а также в папках, добавленных для Cursor. Для каждого источника Richi проверяет
 до 100 000 записей в каталогах. Если у источника есть признак `truncated`,
 фактическое число скиллов может быть больше указанного.

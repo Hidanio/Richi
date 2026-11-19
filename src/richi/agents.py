@@ -142,8 +142,9 @@ def _codex_sources(environ, home):
 
 def _cursor_sources(environ, home):
     # Cursor also discovers personal skills in the Claude and Codex compatibility folders.
-    return [SkillSource(profile + "-skills", "skills", "nested-skills", home / ("." + profile) / "skills")
-            for profile in ("cursor", "agents", "claude", "codex")]
+    personal = [SkillSource(profile + "-skills", "skills", "nested-skills", home / ("." + profile) / "skills")
+                for profile in ("cursor", "agents", "claude", "codex")]
+    return personal + [SkillSource("system", "system", "nested-skills", home / ".cursor/skills-cursor")]
 
 
 AGENTS = (
