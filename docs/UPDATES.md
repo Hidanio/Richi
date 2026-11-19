@@ -9,8 +9,9 @@ installation, obtain published stable versions with:
 ```sh
 richi update check
 richi update apply
-richi update rollback
 ```
+
+To return to the previous release later, run `richi update rollback`.
 
 `check` only queries the official `Hidanio/Richi` repository and shows the current
 and previous installed versions. `apply` downloads the latest stable release.
@@ -29,6 +30,10 @@ its skill. Broken dev sources do not block release checks or installation.
 Releases up to 1.1.0 cannot maintain checkout skill links: run
 `richi config set dev false` before rolling back to one of them
 ([what dev switches](INSTALLATION.md#what-dev-switches)).
+
+Before a rollback, check the connected agents with `richi agents --status`.
+If Cursor is configured, Richi refuses a release that lacks a compatible Cursor
+adapter even with `dev false`. The current release stays active.
 
 <a id="установка-и-откат"></a>
 ## Installation and rollback
@@ -305,9 +310,9 @@ installation was previously enabled. Older settings without an explicit
 (the schedule) and `auto_install` (permission to install) separately.
 
 ```sh
-# Выключить автоустановку, оставить проверку:
+# Turn off automatic installation and keep checking.
 richi update auto enable --interval 6h
-# Выключить весь фоновый режим и снять системное задание:
+# Disable background checks and remove the scheduled job.
 richi update auto disable
 ```
 

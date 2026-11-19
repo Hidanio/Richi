@@ -24,39 +24,32 @@ wheel, manifest и установщиком, а затем он публикуе
 workflow: обновлятор увидит его до появления manifest и wheel, а финальный шаг
 `gh release create` рассчитывает сам создать релиз. Отправляйте только тег;
 публикацию проверенных артефактов выполняет workflow.
-Тег `v1.0.0` был опубликован из кода с версией `0.1.0`, поэтому проверка упала.
-Исправленная версия — `1.0.1`, с новым тегом на коммите исправления версии.
-Старые теги сохраняются. После слияния исправления и обновления `main` проверьте
-сборку и отправьте только нужный тег:
-
-```sh
-git switch main
-git pull --ff-only origin main
-python -m build --wheel --outdir dist_release
-python scripts/release_manifest.py dist_release/richi-1.0.1-py3-none-any.whl --tag v1.0.1 --output dist_release/richi-release.json
-git tag v1.0.1
-git push origin refs/tags/v1.0.1
-```
-
-Выполняйте команды тега только после успешных сборки и проверки. Дождитесь
-успеха всех заданий релиза, включая публикацию, затем запустите
-`richi update check`. На совместимой старой установке ожидаются версия `1.0.1`
-и `can_apply: true`. Если задание релиза упало, изучите его лог, прежде чем
-передавать ссылку установщика коллегам.
+Версия в теге должна совпадать с версией пакета. У исторического тега
+`v1.0.0` они различались. Исправление вышло отдельным релизом `v1.0.1`.
 
 По умолчанию workflow использует `contents: read`. Только финальное задание
 публикации получает `contents: write` через встроенный `GH_TOKEN`; оно не
 выполняет код checkout. Последовательность создания draft и публикации следует
 [командам релизов GitHub CLI](https://cli.github.com/manual/gh_release_create).
 
-Для локальной подготовки без публикации:
+На слитом коммите релиза задайте переменной оболочки `release_tag` значение
+нового тега `vX.Y.Z`. Активируйте новое виртуальное окружение и выполните
+проверки из корня репозитория.
 
 ```sh
-python -m build --wheel
-python scripts/release_manifest.py dist/richi-1.0.1-py3-none-any.whl --tag v1.0.1
-python scripts/build_installer.py dist/richi-1.0.1-py3-none-any.whl
-python tests/installer_release_smoke.py dist
+release_dir="$(mktemp -d)"
+python -m pip install build
+python -m build --wheel --outdir "$release_dir"
+python scripts/release_manifest.py "$release_dir"/*.whl --tag "${release_tag:?}" --output "$release_dir/richi-release.json"
+python scripts/build_installer.py "$release_dir"/*.whl --output "$release_dir/richi-installer.pyz"
+python -m pip install --no-deps "$release_dir"/*.whl
+python tests/installer_release_smoke.py "$release_dir"
 ```
+
+После успешной проверки создайте тег на проверенном коммите командой
+`git tag "$release_tag"` и отправьте его через `git push origin "refs/tags/$release_tag"`.
+Когда workflow опубликует релиз, проверьте `richi update check` на совместимой
+старой установке. В ответе должна быть новая версия и `can_apply: true`.
 
 `scripts/release_manifest.py` проверяет имя wheel, метаданные пакета, встроенную
 версию исходников, версию исходного checkout и необязательный тег, прежде чем

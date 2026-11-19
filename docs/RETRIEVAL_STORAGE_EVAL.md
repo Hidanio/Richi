@@ -74,8 +74,8 @@ with 49,152 free bytes available for SQLite reuse. No disk shrink or search-spee
 gain was measured. This is why `storage optimize` promises index maintenance,
 not garbage collection. See [storage contracts and next steps](STORAGE.md).
 
-The next search experiment should target indexed ID/alias candidate lookup and
-defer loading large payloads. The next storage experiment should compare skipping
+The [subsequent search experiment](INDEXED_FILTERS_EVAL.md) measured indexed
+candidate lookup by ID and alias. The proposed storage follow-up was to compare skipping
 unchanged-text FTS updates and deduplicating revision payloads. A cold archive
 needs separate retention, evidence reachability and restoration checks.
 

@@ -4,15 +4,26 @@
 English | [Русский](INSTALLATION.ru.md)
 
 <a id="обычная-установка"></a>
-## Standard installation
+<a id="standard-installation"></a>
+## Install from source
 
 Richi requires macOS or Linux and Python 3.9+ with the `sqlite3` module. Git must
 be in PATH for Git sources. The runtime uses the Python standard library.
 Windows support is not claimed for this release.
 
+For a published release, use the [installer](SETUP.md). To build the default branch, first get its sources.
+
 ```sh
 git clone https://github.com/Hidanio/Richi.git
 cd Richi
+```
+
+To test a different branch or pull request, start the next block in the root
+of that checkout. The commands assume a fresh installation with unused
+environment and command paths. If an existing installation owns those paths, a separate OS user provides
+a clean home for a side-by-side agent trial.
+
+```sh
 python3 -m venv "$HOME/.local/share/richi/venv"
 "$HOME/.local/share/richi/venv/bin/python" -m pip install --upgrade pip
 "$HOME/.local/share/richi/venv/bin/python" -m pip install .
@@ -22,14 +33,16 @@ export PATH="$HOME/.local/bin:$PATH"
 richi config show
 ```
 
+For agent integration, run `richi agents` in this terminal and choose the client.
+
 These commands install a fixed package copy in a dedicated Python environment.
 Normal mode runs that copy: editing, removing or switching branches in the source
 checkout does not change the installed version. Installation does not require Codex.
 Upgrading pip provides support for modern `pyproject.toml` packaging, including
 fresh environments created by older Python distributions.
 
-The `ln -s` command above creates a new command. If `~/.local/bin/richi` already
-exists, inspect its target and replace only the previous Richi symlink. Add
+An existing Richi command may belong to a managed installation. Inspect its
+target with `ls -l ~/.local/bin/richi` before choosing an installation path. Add
 `~/.local/bin` to your shell's PATH for new terminals. You do not need to activate
 the environment afterward. If an agent does not inherit the shell's PATH,
 configure that directory or use the command's absolute path in local instructions.
@@ -47,16 +60,16 @@ For updates from published stable GitHub Releases, use:
 ```sh
 richi update check
 richi update apply
-# Возврат к предыдущей установленной версии:
+# Return to the previously installed release.
 richi update rollback
-# Необязательно: фоновая проверка каждые 6 часов, без установки:
+# Optional background checks every six hours.
 richi update auto enable --interval 6h
 richi update auto status
-# Только если вы хотите также устанавливать обновления автоматически:
+# To enable automatic installation too.
 richi update auto enable --interval 6h --install
-# Возврат к одной проверке (выключает автоустановку):
+# Return to checks only.
 richi update auto enable --interval 6h
-# Отключение фонового режима:
+# Disable background updates.
 richi update auto disable
 ```
 
@@ -90,11 +103,11 @@ The equivalent JSON settings are:
 }
 ```
 
-`dev` defaults to `false`. This setting applies to every command, agent and map
-using this configuration in the selected workspace, and moves the managed agent
-skills to the checkout ([what dev switches](#what-dev-switches)). Each CLI invocation in dev
-uses the current source; edits and branch switches immediately affect subsequent
-work. The map automatically reloads its server when Python or SQL files change.
+`dev` defaults to `false`. When enabled, knowledge commands run the current
+checkout's runtime for the selected workspace, including calls from agents.
+The installed launcher still handles commands such as `setup` and `update`.
+Changing dev mode also moves the managed agent skills
+([what dev switches](#what-dev-switches)). The map automatically reloads its server when Python or SQL files change.
 Refresh the browser page to load interface changes.
 
 ```sh
@@ -245,7 +258,7 @@ the subcommand; `--port` applies to map commands.
 export RICHI_CONFIG=/path/to/config.json
 richi config show
 richi project list
-# Разовая работа с другой базой без изменения конфигурации:
+# Use another database for this command.
 richi --db /path/to/another.sqlite3 check
 ```
 
@@ -276,10 +289,10 @@ project paths.
 
 ```sh
 richi map
-# Сервер в текущем терминале; Ctrl+C завершает его:
+# Run in the foreground. Press Ctrl+C to stop.
 richi map serve --open
 richi map serve --port 8766 --open
-# Остановить или перезапустить фоновую карту:
+# Stop or restart the background map.
 richi map stop
 richi map restart
 ```
@@ -312,19 +325,16 @@ stop or replace them. Update whichever side is older (the installation with
 <a id="подключение-агента"></a>
 ## Agent integration
 
-For Codex, use the [one-command installer](SETUP.md), or run `richi setup --yes`
-from a supported dedicated installation. It installs the complete skill in
-`~/.agents/skills/project-memory` and preserves existing global instructions.
-`richi setup --dry-run` previews conflicts; `--replace-skill` explicitly backs
-up an existing skill before adoption. The managed skill follows release updates
-and rollback. For Claude Code, run `richi setup --agent claude --yes`. For local
-Cursor Agent, run `richi setup --agent cursor --yes` and open a new chat. Cursor's
-session hook supplies the exact `--chat` argument for each Richi command.
+After installing the package, run `richi agents --status` to see which
+clients it supports. Follow [setup for Codex, Claude Code and Cursor](SETUP.md)
+to connect the client you use.
+
 For other agents, copy the complete `skills/project-memory`
 directory, including its `references/` files, to the agent's skill directory.
 
 Make sure the agent process can find the `richi` executable and the selected
-configuration. First run `richi chat current` and `richi workspace list`. If the
+configuration. In Cursor, insert the `--chat` argument from this chat's
+`sessionStart` hook after `richi` on every call. First run `richi chat current` and `richi workspace list`. If the
 chat is unbound, ask the user whether to use the current CLI workspace or another
 one for this chat; save the answer with `chat bind --current` or `chat bind NAME`.
 Then check `richi config show` and `richi check`: the mode, source and database
@@ -334,14 +344,18 @@ environment in an IDE or desktop application.
 Example project instructions that explicitly authorize local updates:
 
 ```markdown
+In Cursor, add this chat's exact `--chat` argument from the `sessionStart` hook
+after `richi` on every call. If no ID is available yet, defer memory work.
 At the start of a new chat, inspect `richi chat current` and `richi workspace list`.
 If unbound, ask once whether to use the current CLI workspace or another one for
 this chat. An explicit workspace already named by the user is sufficient.
 Save the answer with `richi chat bind --current` or `richi chat bind NAME`.
 Reuse the binding in later turns and after compaction; do not change the global
 CLI default. Rebinding requires the user's explicit request and `--replace`.
-Before repository work, verify `richi project check PATH --id PROJECT_ID`, then
-use `--project-path PATH` on knowledge operations. Do not infer a workspace from cwd.
+After binding, load the workspace's standing rules with `richi rules show`.
+For repository work, verify `richi project check PATH --id PROJECT_ID`, then use
+`--project-path PATH` on the rules check and knowledge operations. In Cursor,
+request rules with `rules show --agent cursor`. Do not infer a workspace from cwd.
 Use the project-memory skill to recall prior engineering work and save reusable
 findings, decisions, failed experiments, and task outcomes. Use the configured
 Richi store; inspect `richi config show` if its location is unclear. Local memory

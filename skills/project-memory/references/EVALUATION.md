@@ -57,9 +57,9 @@ knowledge truth or the quality of all subsequent agent decisions.
 ## Checking task-card splitting
 
 The synthetic example and measurements are described in
-[CURRENT_CARDS.md](../../../docs/CURRENT_CARDS.md). The fixture is in
-[card_maintenance.json](../../../tests/fixtures/card_maintenance.json),
-and [test_card_maintenance.py](../../../tests/test_card_maintenance.py) checks the scenario
+[CURRENT_CARDS.md](https://github.com/Hidanio/Richi/blob/main/docs/CURRENT_CARDS.md). The fixture is in
+[card_maintenance.json](https://github.com/Hidanio/Richi/blob/main/tests/fixtures/card_maintenance.json),
+and [test_card_maintenance.py](https://github.com/Hidanio/Richi/blob/main/tests/test_card_maintenance.py) checks the scenario
 through existing CLI/API operations in a temporary database. This checks preservation
 of access to knowledge, sources and states; retrieval algorithms and Templates
 are unchanged in this stage.
@@ -104,9 +104,10 @@ as full coverage, and candidates do not change integrity health. The contract is
 
 ## Measuring memory growth
 
+Run the examples below from the root of a Richi source checkout.
 The synthetic runner measures existing behavior separately from acceptance
-evaluation. The matrix and parameters are in [evals/README.md](../../../evals/README.md),
-and run results are in [MEMORY_GROWTH.md](../../../docs/MEMORY_GROWTH.md).
+evaluation. The matrix and parameters are in [evals/README.md](https://github.com/Hidanio/Richi/blob/main/evals/README.md),
+and run results are in [MEMORY_GROWTH.md](https://github.com/Hidanio/Richi/blob/main/docs/MEMORY_GROWTH.md).
 
 ```sh
 python evals/evaluate_memory_growth.py --quick --repeats 1

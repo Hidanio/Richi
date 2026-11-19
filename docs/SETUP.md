@@ -3,34 +3,33 @@
 
 English | [Русский](SETUP.ru.md)
 
-For **macOS/Linux with Python 3.9+, curl, sqlite3, venv and ensurepip**:
+Choose an agent for your first installation. The example uses Codex. For
+Claude Code, replace `codex` with `claude`. For Cursor Agent, use `cursor` once
+the stable installer's `--help` lists it. Before that release, you can
+[install the checkout that adds Cursor support](INSTALLATION.md).
 
 ```sh
-curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh | sh -s -- --yes
+curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh | sh -s -- --agent codex --yes
 ```
 
-This URL becomes available after a stable release containing the installer is
-published; merging the code alone does not publish it. On Debian/Ubuntu, Python
-may also need `python3-venv`. The installer explains missing prerequisites and
-never invokes sudo or installs system Python. Git is needed for repository history.
+You need macOS or Linux, curl and Python 3.9+ with sqlite3, venv and ensurepip.
+On Debian/Ubuntu you may also need `python3-venv`. Git is required for repository history.
 
-By default, the command installs a fixed release in `~/.local/share/richi/venv`, adds
-`~/.local/bin/richi`, installs Project Memory in `~/.agents/skills/`, and adds
-a managed block to the effective global Codex instructions. Existing instruction
-bytes, permissions, data and workspace settings are preserved. Without `--yes`,
-the installer displays its plan and asks for confirmation in a terminal.
+The installer puts a fixed release in `~/.local/share/richi/venv`, creates the
+`~/.local/bin/richi` command and connects Project Memory to the agent you chose.
+Omitting `--agent` selects Codex. Omitting `--yes` lets you inspect the plan
+and confirm it in a terminal.
 
-Open a **new Codex chat** so it discovers the skill and instructions. Open a new
-terminal for PATH changes, or use `~/.local/bin/richi` immediately. The first chat
-asks which workspace to use and binds that choice. It initializes an empty
-workspace only after selection. Installation never reads, creates, migrates or
-merges knowledge databases, or imports old chats.
+Open a new chat in the selected agent and choose its workspace. The agent can
+initialize an empty store after selection. Open a new terminal for the PATH
+change or use `~/.local/bin/richi` immediately. The installer can run before you have a workspace database. It leaves existing
+workspace settings, chat bindings and data in place.
 
 <a id="область-действия-и-существующие-настройки"></a>
 ## Scope and existing settings
 
-Setup covers local Codex chats for this OS user and Codex profile, including
-projectless chats. It uses `${CODEX_HOME:-$HOME/.codex}/AGENTS.md`, unless a nonempty
+For Codex, setup links `~/.agents/skills/project-memory` and covers local chats
+in the selected profile, including projectless chats. It uses `${CODEX_HOME:-$HOME/.codex}/AGENTS.md`, unless a nonempty
 `AGENTS.override.md` takes precedence. Other profiles, remote hosts, cloud agents
 and other agent products need their own setup. Open chats may retain old instructions.
 
@@ -54,13 +53,14 @@ stable absolute command included in the instruction block.
 <a id="проверка-повторный-запуск-и-принятие-существующих-skills"></a>
 ## Inspect, repeat and adopt existing skills
 
-To inspect the script before execution:
+For a preview, download the installer and inspect its supported agents. This example uses Codex.
 
 ```sh
 curl -fL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh -o richi-install.sh
 less richi-install.sh
-sh richi-install.sh --dry-run
-sh richi-install.sh --yes
+sh richi-install.sh --help
+sh richi-install.sh --agent codex --dry-run
+sh richi-install.sh --agent codex --yes
 ```
 
 The bootstrap downloads a standalone installer over HTTPS and verifies its
@@ -73,7 +73,8 @@ Repeating the command reuses an installer-owned environment, checks for a newer
 stable release and reconciles setup without duplicate instruction blocks.
 Interrupted first environments are retained as `.interrupted-*` backups before
 retrying creation. Installer `--dry-run` previews paths and prerequisites only;
-the installed command performs the complete integration conflict check:
+the installed command checks for integration conflicts. The examples below use
+Codex. For other clients, pass the same `--agent` as at first installation.
 
 ```sh
 richi setup --dry-run
@@ -84,12 +85,12 @@ richi setup --status
 Existing custom skills require explicit adoption:
 
 ```sh
-sh richi-install.sh --yes --replace-skill
+sh richi-install.sh --agent codex --yes --replace-skill
 # Or, with a supported existing installation:
 richi setup --yes --replace-skill
 ```
 
-Existing directories/links are moved to `~/.agents/richi-skill-backups/`, outside
+For Codex, existing directories/links are moved to `~/.agents/richi-skill-backups/`, outside
 skill discovery. Symlink targets remain untouched. Legacy `${CODEX_HOME}/skills/project-memory`
 copies are backed up under `${CODEX_HOME}/richi-skill-backups/`, avoiding duplicate skills. Unrelated command files,
 symlinked instructions/parent directories and edited managed blocks cause an
@@ -107,8 +108,9 @@ Never use `pip install -U` on a managed installation with staged releases.
 ```sh
 richi update check
 richi update apply
-richi update rollback
 ```
+
+To return to the previous release later, use `richi update rollback`.
 
 The complete skill and references are bundled from `skills/project-memory/` into
 the wheel. Update and rollback switch its managed link to the matching package.
@@ -145,7 +147,8 @@ existing skills still require it. Setup never edits the source checkout.
 ## Offline installation
 
 Download `richi-installer.pyz`, its checksum, `richi-release.json` and the wheel
-from the same trusted release. Verify the archive checksum, then run:
+from the same trusted release. Verify the archive checksum. This example connects
+Codex. For another agent, add the option listed by `python3 -I richi-installer.pyz --help`.
 
 ```sh
 python3 -I richi-installer.pyz --yes --wheel richi-X.Y.Z-py3-none-any.whl --manifest richi-release.json
@@ -183,11 +186,16 @@ the integration never requires deleting the whole AGENTS.md file.
 
 ## Connecting Codex, Claude Code and Cursor
 
-Run `richi agents` to discover and connect local clients, or
-`richi agents --status` for read-only status. Discovery checks executables/profile
-folders. The menu can rescan after a new client is installed. Codex is the
-default. To connect several clients, run setup once for each. On first
-installation, you can pass `--agent cursor` or `--agent claude` to the installer.
+If Richi is already installed, start with `richi agents --status` in a terminal.
+This read-only command lists the clients this package supports, whether it
+detected each client and whether it is configured. Run `richi agents` to open
+the interactive menu. Connect each client you want to use.
+
+On Richi 1.0.1, use `richi setup --yes` to connect Codex and `richi setup --status`
+to inspect it. That launcher predates the agents menu and the `--agent` option.
+If `richi setup --help` does not list the client you want, run `richi update apply`
+once a stable release supports it, then check help again. Even in dev mode,
+the installed launcher supplies the agent choices.
 
 ### Local Cursor Agent
 

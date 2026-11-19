@@ -2,59 +2,37 @@
 
 English | [Русский](TESTING.ru.md)
 
-This guide targets local Codex on macOS or Linux and the corrected stable
-release **1.0.1**. Start after its [release workflow](https://github.com/Hidanio/Richi/actions/workflows/release.yml)
-has finished successfully and the [release page](https://github.com/Hidanio/Richi/releases/tag/v1.0.1)
-contains the wheel, `richi-release.json`, `richi-installer.pyz`, its SHA256 file,
-and `install.sh`. The earlier empty `v1.0.0` release cannot install or update Richi.
+Check whether a new chat can read a synthetic note saved by another chat in the
+same workspace. Use local Codex, Claude Code or Cursor Agent on macOS or Linux.
 
-## Install and connect Codex
+## Prepare your chosen agent
 
-You need Python 3.9+ with `sqlite3`, `venv` and `ensurepip`, plus `curl` and network
-access. On Debian/Ubuntu a missing `venv` may require `python3-venv`.
-In an ordinary terminal, download the official installer wrapper and run it:
+Follow [installation or connection to an existing installation](SETUP.md). Choose
+a stable release that supports your agent. To test a change before publication,
+install the candidate checkout in its own environment using the
+[source installation guide](INSTALLATION.md), then connect the client through `richi agents`.
 
-```sh
-(
-  set -eu
-  richi_install_script=$(mktemp)
-  trap 'rm -f "$richi_install_script"' EXIT HUP INT TERM
-  curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
-    https://github.com/Hidanio/Richi/releases/latest/download/install.sh \
-    -o "$richi_install_script"
-  sh "$richi_install_script" --yes
-)
-```
-
-This installs the latest stable release in a dedicated environment and configures
-the command, Project Memory skill, and global Codex instructions for this OS user.
-It does not import old conversations or create a workspace database. If an existing
-command or custom skill conflicts, stop and follow [setup recovery](SETUP.md);
-do not overwrite an old installation or add `--replace-skill` blindly.
-
-Open a **new terminal and new Codex chat**. In the terminal, check:
+Open a new terminal and check:
 
 ```sh
 command -v richi
 richi --version
-richi setup --status
-richi update check
+richi setup --help
 ```
 
-Expect `Richi 1.0.1` (or a later stable version), setup `configured`, and an update
-check without errors. If PATH has not refreshed, use `~/.local/bin/richi`.
-Existing managed installations use `richi update check` then `richi update apply`
-to update; workspace dev mode can still select local sources. See [updates](UPDATES.md).
-An older bootstrap without setup support needs the separate-environment procedure
-in [setup](SETUP.md). Do not use pip to overwrite a managed staged installation.
+If help offers `--agent`, run `richi agents --status` and look for
+`configured` next to your chosen agent. On 1.0.1, which supports only Codex,
+use `richi setup --status` and look for the same status. Both checks are read-only. If PATH has not refreshed, use
+`~/.local/bin/richi`. In Cursor the `sessionStart` hook gives the agent the
+command prefix for its current chat.
 
 ## Check memory between two chats
 
-Open a new projectless Codex chat and send:
+Open a new chat in the selected agent and send this message:
 
 > Use only workspace `richi_test` for this chat. Create it if needed, bind this
-> chat to it and initialize its empty store if necessary. Use the installed
-> release (`dev false`) in this workspace. Do not read other workspaces. Create
+> chat to it and initialize its store if necessary. Report the runtime mode from
+> `richi config show`. Do not read other workspaces. Create
 > synthetic project `test_demo` without a repository path. Save a confirmed note
 > `note:orion-test` titled “Orion test”: “Synthetic test: Orion uses a 30-second
 > timeout. This is not production.” Assign it to `test_demo` and cite the source

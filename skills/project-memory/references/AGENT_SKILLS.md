@@ -2,9 +2,9 @@
 
 English | [Русский](AGENT_SKILLS.ru.md)
 
-A standing rule may name a skill, and agents do not share skills: each keeps
-them in its own folders and names plugin skills its own way. Richi therefore
-knows which agents work on this computer and where each finds skills. A rule
+A standing rule may name a skill. Agents can read some of the same folders,
+but each has its own discovery and naming rules. Richi lists the skills available
+to each agent on this computer. A rule
 then names one skill for every agent or a different one per agent (see
 [RULES.md](RULES.md)), and `rules show` gives each agent its own.
 
@@ -24,8 +24,11 @@ richi --compact-json skill-sources list
 `agents` holds every agent in order: `id` (used in `--skill ID=NAME` and
 `rules show --agent ID`), `name`, `builtin`, `detected` (it looks installed for
 this user), `skills` (how many it can use) and `sources`. Richi gets `detected`
-from setup for agents it can connect. For other agents Richi checks their folders
-and returns null when all sources are switched off. A source has a `key`,
+from the installed launcher for agents it can connect. If an older launcher has
+no Cursor adapter, `connection` is null. Richi then checks Cursor’s own profile
+folders for detection and returns null if both of those sources are disabled.
+For a custom agent, Richi checks its enabled skill folders and returns null when
+all are disabled. A source has a `key`,
 its `path`, whether the folder `exists` (`denied` when this user may not read
 it; neither is checked for a source switched off), whether it is `enabled`,
 whether the user `added` it, and how many `skills` it gives. `chat_prefix` says

@@ -16,12 +16,15 @@ knowledge, history, captured Git bytes and other local materials.
    editable installation, reinstall with `pip install --force-reinstall /path/to/Richi`.
    To develop features, set `development.source` and enable `dev` with
    `richi config set`; the installation remains fixed.
-2. Check the existing database at its actual path:
+2. Record the existing database path. Use an ordinary terminal without
+   `RICHI_DB`, `RICHI_CONFIG` or `RICHI_DATA_DIR` for the migration commands.
+   The explicit `-w default` allows a database path for these commands even
+   when the terminal normally selects a named workspace.
 
    ```sh
-   richi --db /path/to/old-data/memory.sqlite3 check
-   richi --db /path/to/old-data/memory.sqlite3 project list
-   richi --db /path/to/old-data/memory.sqlite3 recall 'известное решение'
+   richi -w default --db /path/to/old-data/memory.sqlite3 check
+   richi -w default --db /path/to/old-data/memory.sqlite3 project list
+   richi -w default --db /path/to/old-data/memory.sqlite3 recall 'known decision'
    ```
 
 3. Save the previous config, agent instructions and shortcut for diagnostics.
@@ -33,15 +36,21 @@ knowledge, history, captured Git bytes and other local materials.
 <a id="перенос-данных"></a>
 ## Moving data
 
-Choose a permanent Richi directory outside the checkout and Python environment.
-Platform defaults are listed under [storage settings](INSTALLATION.md#selecting-storage).
-The following paths are synthetic: replace them with your own and create the
-destination directory before running the command.
+Choose the destination before copying the database.
+
+- For `default`, choose a permanent directory outside the source checkout, the
+  Python environment and other workspaces. Create the directory if needed.
+- For a named workspace, run `richi workspace create NAME` if it is new, then
+  `richi -w NAME workspace current`. Use the reported `database` path as the
+  destination. It must still be unused (`initialized: false`). The backup
+  creates the database, so skip `init`.
+
+Replace the example paths below with the source file and your chosen destination.
 
 ```sh
-richi --db /path/to/old-data/memory.sqlite3 backup \
+richi -w default --db /path/to/old-data/memory.sqlite3 backup \
   --output /path/to/richi-data/memory.sqlite3
-richi --db /path/to/richi-data/memory.sqlite3 check
+richi -w default --db /path/to/richi-data/memory.sqlite3 check
 ```
 
 `backup` uses SQLite's backup API and does not overwrite an existing file.
@@ -73,19 +82,24 @@ execution configuration separately.
 <a id="переключение-команды-агента-и-карты"></a>
 ## Switching the command, agent and map
 
-1. Put the new `database` path in Richi's configuration. Set `data_dir` if needed;
-   update or remove `RICHI_DB` and `RICHI_CONFIG` overrides in the shell, IDE and
-   agent environment. Configuration does not move data itself.
-2. Run `richi config show` and `richi check` from both the terminal and agent
-   environment. They must select the same migrated database.
-3. Install the entire current `skills/project-memory` directory after preserving
-   local additions to the previous skill. Replace calls to old `memory.py`,
+1. For `default`, use `richi -w default workspace current` to find its registered
+   `config_file` and set the `database` field there to the new absolute path.
+   Create the JSON file and its parent directory if needed. Preserve other
+   settings in an existing file. A named workspace already points to its assigned
+   database. Remove direct storage overrides from the agent environment too.
+2. For Codex, Claude Code and Cursor, follow the [managed setup](SETUP.md) to
+   install or adopt the skill. For a manually integrated client, preserve any
+   local additions before replacing your copy of `skills/project-memory`.
+   Replace calls to old `memory.py`,
    `serve.py` and `launch_map.py` scripts in project instructions with direct
    `richi` commands. Preserve write permissions and source-verification rules.
-4. Point the map shortcut to `richi map`. Select development mode with the shared
-   `richi config set dev true` after configuring `development.source`; the shortcut
-   and agent commands do not change when switching modes. A GUI shortcut may need
-   the command's absolute path if it does not inherit the terminal's PATH.
+3. In a terminal, run `richi -w NAME config show` and `richi -w NAME check`,
+   replacing `NAME` with the destination workspace. In a new chat, choose that
+   workspace and check the same database with `richi config show` and
+   `richi check`. In Cursor, pass the exact `--chat` from this chat's
+   `sessionStart` hook immediately after `richi` on every call.
+4. Point the map shortcut to `richi -w NAME map` for that workspace. A GUI
+   shortcut may need the absolute path to `richi` if it has a different PATH.
 5. Repeat known queries, compare projects and entries, and open the map, sources,
    history and diffs. Confirm that the new server uses the new database.
 6. Remove previous executable scripts and wrappers from active paths. You can
@@ -105,14 +119,14 @@ Changing the invocation method or switching `dev` does not alter the SQLite
 schema, selected database or Git-source format. Run `richi config set dev false`
 to return to installed code; restoring an older database copy is unnecessary.
 Richi continues reading existing knowledge, including previously recorded `git:`
-references. This is data-format support, not support for old executable scripts.
-If `check` reports an unknown schema, investigate the cause; do not delete the
-database to reinstall. Schema 1 is upgraded to the graph separately, using a
-backup and explicit `migrate`, as described in the
+references.
+If `check` reports an unknown schema, preserve the database and investigate the
+version it reports. To upgrade schema 1 or 2 to schema 3, take a backup and run
+`richi migrate` on the intended workspace. See the
 [graph reference](../skills/project-memory/references/GRAPH.md).
 
-Before writes resume, an incorrect switch can be reversed by selecting the old
-intact database in configuration. After new entries appear in the new store,
+Before writes resume, you can return to the original workspace or restore the
+previous `database` setting in `default`. After new entries appear in the new store,
 restoring the old copy over it would lose other agents' work. First stop writes
 and preserve both databases, then investigate differences through normal commands
 and history. Use `expected_updated_at` for targeted record corrections. An old

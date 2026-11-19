@@ -54,7 +54,7 @@ are not final implementation results.
 | Measurement | V1 | V2 |
 |---|---:|---:|
 | One in-process build | 463.17 ms | 281.83 ms |
-| Median of 38 candidate-lookup case p50s | 0.0512 ms | 0.0556 ms |
+| Median of the 36 recorded candidate-lookup p50s | 0.0512 ms | 0.0556 ms |
 | Entry metadata update p50, 20 writes | 0.2596 ms | 0.2456 ms |
 | Entry summary update p50, 20 writes | 0.2499 ms | 0.2341 ms |
 
@@ -63,8 +63,10 @@ The record-map join adds a small lookup cost: broad entity cases increased
 using complete retrieval latency as well as disk usage. The table is not a
 claim of faster lookup or stable production tail latency.
 
-Lookup calls alternated arms for 40 repeats; only their p50s were retained in
-the original diagnostic report. Build ran once per arm, v1 then v2. Writes
+Each lookup alternated arms for 40 repeats. The 19 queries included
+`hiddenprobe` twice. Both entry and entity lookups ran each time, giving 38
+comparisons. The report stores p50s by family and query text, so it retains
+36 distinct p50s per arm. Build ran once per arm, v1 then v2. Writes
 ran 20 times per kind, v1 then v2; their individual samples are retained.
 Caches were not flushed, and no confidence interval or concurrent-load
 control was applied. Build includes derived status calculation but excludes
@@ -85,31 +87,32 @@ changes, missing indexes, and reserved-name collisions.
 `search-index build` explicitly upgrades derived version 1 to 2. Reads never
 upgrade it. Older version-1 readers see an unsupported derived version and
 fall back to their scans; the frozen old reader was exercised on a v2 store.
-Application `user_version` remains 2. An upgrade can leave old pages on SQLite's
+The experiment used application `user_version` 2 before and after the index
+build. The derived index has its own version. An upgrade can leave old pages on SQLite's
 freelist; the measured reduction does not imply that an existing database file
 immediately shrinks. No automatic VACUUM is introduced.
 
 The public [reproduction harness](../evals/evaluate_index_layout.py) only
 creates disposable synthetic databases and never accepts a user database.
-Run it from this checkout with a Python environment containing Richi's test
-dependencies and SQLite `dbstat` support. The checkout must contain the frozen
-old revision in its Git history; the candidate implementation and synthetic
-fixture are loaded from that checkout's source files:
+Run it with a Python environment containing Richi's test dependencies and SQLite
+`dbstat` support. To compare the implementations in the report, use a checkout
+at `208432183f0f01b6b514475b5f1534fa09cb29ae`. Its harness and candidate
+module match the report's `harness_sha256` and `candidate_source_sha256`.
+Fetch the frozen v1 commit into that disposable checkout if it is missing.
+The runner loads the candidate and fixture from the checkout passed to `--checkout`.
 
 ```sh
-/path/to/python evals/evaluate_index_layout.py \
-  --checkout /path/to/Richi \
+git -C /path/to/Richi-2084321 fetch --depth=1 https://github.com/Hidanio/Richi.git \
+  84e1b6c3684dd17ca7385d511fcd1b408d11a68a
+/path/to/python /path/to/Richi-2084321/evals/evaluate_index_layout.py \
+  --checkout /path/to/Richi-2084321 \
   --old-revision 84e1b6c3684dd17ca7385d511fcd1b408d11a68a \
   --output /path/to/new-layout-report.json
 ```
 
-The published numbers retain the original diagnostic timings; promoting the
-harness did not rerun or replace them. This script was saved after that initial
-measurement and is byte-identical to the retained local `reproduce.py`. Unlike
-the original diagnostic, it also retains raw lookup samples on future runs.
-The original observations remain locally in
-`/private/tmp/richi-indexed-v2-layout-20261025/`; reproducing the comparison does
-not require that directory. Ordinary-response parity was checked separately
-without collecting new timings. Identical serialized
+The published numbers retain the original diagnostic timings. The reproduction
+harness also saves raw lookup samples. Running a later checkout measures that
+checkout's code and produces a new comparison. The original experiment checked
+ordinary-response parity separately without collecting new timings. Identical serialized
 responses imply identical response-token counts under a fixed tokenizer;
 this change alone claims no reduction in response tokens or agent errors.

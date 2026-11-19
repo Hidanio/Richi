@@ -4,15 +4,27 @@
 [English](INSTALLATION.md) | Русский
 
 <a id="standard-installation"></a>
-## Обычная установка
+<a id="обычная-установка"></a>
+## Установка из исходников
 
 Нужны macOS или Linux и Python 3.9+ с модулем `sqlite3`. Для Git-источников нужен
 Git в PATH. Runtime использует стандартную библиотеку Python. Поддержка Windows
 в этой поставке не заявлена.
 
+Для установки опубликованного релиза используйте [установщик](SETUP.ru.md).
+Для сборки из основной ветки сначала получите исходники:
+
 ```sh
 git clone https://github.com/Hidanio/Richi.git
 cd Richi
+```
+
+Если проверяете другую ветку или pull request, начните следующий блок в корне
+уже выбранного checkout. Команды рассчитаны на первую установку в свободные
+пути окружения и команды. Если они уже заняты рабочей установкой, для проверки агента в другом окружении
+можно использовать отдельного пользователя ОС.
+
+```sh
 python3 -m venv "$HOME/.local/share/richi/venv"
 "$HOME/.local/share/richi/venv/bin/python" -m pip install --upgrade pip
 "$HOME/.local/share/richi/venv/bin/python" -m pip install .
@@ -22,14 +34,16 @@ export PATH="$HOME/.local/bin:$PATH"
 richi config show
 ```
 
-Команда устанавливает фиксированную копию пакета в отдельное окружение Python.
+Чтобы подключить агента, выполните в этом терминале `richi agents` и выберите клиент.
+
+Команды устанавливают фиксированную копию пакета в отдельное окружение Python.
 Обычный режим работает из этой копии: правки, удаление или переключение веток
 исходного checkout не меняют установленную версию. Установка не требует Codex.
 Обновление pip обеспечивает поддержку современной упаковки `pyproject.toml`,
 в том числе в новых окружениях старых поставок Python.
 
-`ln -s` выше создаёт новую команду: если `~/.local/bin/richi` уже существует,
-проверьте его назначение и замените только прежнюю ссылку Richi. Для новых
+Уже существующая команда Richi может принадлежать управляемой установке.
+Перед выбором пути установки посмотрите, куда ведёт ссылка, через `ls -l ~/.local/bin/richi`. Для новых
 терминалов добавьте `~/.local/bin` в PATH своей оболочки. Активация окружения после
 этого не нужна. Если агент не наследует PATH оболочки, настройте этот каталог
 или укажите полный путь к команде в локальных инструкциях. Личный путь не нужно
@@ -91,12 +105,11 @@ JSON-настройки этого режима:
 }
 ```
 
-По умолчанию `dev` равен `false`. Настройка действует на все команды, агентов
-и карту, использующих этот конфиг выбранного workspace, и переводит управляемые
-skills агентов на checkout ([что переключает dev](#что-переключает-dev)).
-Каждый вызов CLI в dev использует текущие
-исходники; правки и переключение веток checkout сразу влияют на дальнейшую
-работу. Карта автоматически перезагружает сервер при изменении Python- и
+По умолчанию `dev` равен `false`. В режиме dev команды работы с памятью
+в выбранном workspace выполняются из текущего checkout, в том числе при вызове
+из агента. Команды `setup` и `update` выполняет установленный лаунчер.
+При переключении режима также меняется источник управляемых skills
+([что переключает dev](#что-переключает-dev)). Карта автоматически перезагружает сервер при изменении Python- и
 SQL-файлов. Для изменений интерфейса обновите страницу браузера.
 
 ```sh
@@ -317,20 +330,15 @@ Checkout и установленный launcher сверяют версию пр
 <a id="agent-integration"></a>
 ## Подключение агента
 
-Для Codex используйте [установщик одной командой](SETUP.ru.md) или выполните
-`richi setup --yes` из поддерживаемой выделенной установки. Он устанавливает
-полный skill в `~/.agents/skills/project-memory` и сохраняет существующие
-глобальные инструкции. `richi setup --dry-run` показывает конфликты;
-`--replace-skill` явно сохраняет резервную копию существующего skill перед
-принятием под управление. Управляемый skill следует обновлениям релиза и откату.
-Для Claude Code выполните `richi setup --agent claude --yes`. Для локального
-Cursor Agent выполните `richi setup --agent cursor --yes` и откройте новый чат.
-Хук сессии Cursor передаёт точный аргумент `--chat` для каждой команды Richi.
+После установки пакета посмотрите поддерживаемые клиенты командой `richi agents --status`.
+Подключите нужный клиент по [инструкции для Codex, Claude Code и Cursor](SETUP.ru.md).
+
 Для других агентов скопируйте весь каталог `skills/project-memory`, включая
 файлы `references/`, в каталог skills агента.
 
 Убедитесь, что процесс агента видит исполняемый файл `richi` и выбранную
-конфигурацию. Сначала вызовите `richi chat current` и `richi workspace list`.
+конфигурацию. В Cursor добавляйте после `richi` аргумент `--chat` из хука
+`sessionStart` текущего чата в каждой команде. Сначала вызовите `richi chat current` и `richi workspace list`.
 Если чат ещё не привязан, спросите пользователя: текущая область CLI или другая
 для этого чата; сохраните ответ через `chat bind --current` либо `chat bind NAME`.
 Затем проверьте `richi config show` и `richi check`: режим,
@@ -340,21 +348,24 @@ Cursor Agent выполните `richi setup --agent cursor --yes` и откро
 Пример инструкции проекта для явно разрешённых локальных обновлений:
 
 ```markdown
-At the start of a new chat, inspect `richi chat current` and `richi workspace list`.
-If unbound, ask once whether to use the current CLI workspace or another one for
-this chat. An explicit workspace already named by the user is sufficient.
-Save the answer with `richi chat bind --current` or `richi chat bind NAME`.
-Reuse the binding in later turns and after compaction; do not change the global
-CLI default. Rebinding requires the user's explicit request and `--replace`.
-Before repository work, verify `richi project check PATH --id PROJECT_ID`, then
-use `--project-path PATH` on knowledge operations. Do not infer a workspace from cwd.
-Use the project-memory skill to recall prior engineering work and save reusable
-findings, decisions, failed experiments, and task outcomes. Use the configured
-Richi store; inspect `richi config show` if its location is unclear. Local memory
-updates are authorized during this project's work. Search before creating a new
-record, preserve sources and scope, and use expected_updated_at for updates.
-Code, task trackers, and pull requests remain authoritative for current state.
-This authorization does not permit external messages or unrelated changes.
+В Cursor добавляй после `richi` точный аргумент `--chat` из хука `sessionStart`
+текущего чата во всех командах. Если ID ещё нет, отложи работу с памятью.
+В начале нового чата выполни `richi chat current` и `richi workspace list`.
+Если пользователь уже выбрал workspace в этом чате, используй его выбор. Иначе
+для непривязанного чата один раз уточни, выбрать текущий workspace CLI или другой.
+Сохрани выбор через `richi chat bind --current` или `richi chat bind NAME`.
+Используй эту привязку после сжатия контекста и в следующих сообщениях. Меняй
+её только по прямой просьбе пользователя, через `--replace`. Сохрани глобальный выбор CLI.
+После привязки прочитай постоянные правила workspace через `richi rules show`.
+Для репозитория выполни `richi project check PATH --id PROJECT_ID`, затем добавляй
+`--project-path PATH` к запросу правил и операциям со знаниями. В Cursor
+запрашивай правила через `rules show --agent cursor`. Выбор workspace определяет пользователь.
+С помощью project-memory находи прежние решения и сохраняй выводы, неудачные
+эксперименты и результаты работы. Для проверки пути хранилища используй `richi config show`.
+Для этого проекта разрешены локальные обновления памяти. Ищи прежние записи до
+создания новой, сохраняй источники и область применимости, используй expected_updated_at.
+Текущее состояние определяй по коду, задачам и pull requests. Для внешних
+сообщений и действий за пределами задачи требуется отдельное разрешение.
 ```
 
 Эта инструкция — образец выбора режима владельцем проекта. Сам skill не

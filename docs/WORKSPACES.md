@@ -36,7 +36,7 @@ changes.
 ```sh
 richi use personal
 richi use default
-# В терминале без имени — пронумерованный список для быстрого выбора:
+# In a terminal, omit the name to choose from a numbered list.
 richi use
 ```
 
@@ -64,10 +64,16 @@ The CLI's current workspace and a chat's workspace are separate settings.
 chat first asks whether to use the current CLI workspace or choose another one
 for that chat only.
 
+Codex supplies `CODEX_THREAD_ID`. Claude Code's SessionStart hook supplies
+`RICHI_CHAT_ID` and an explicit `--chat` fallback. In local Cursor Agent,
+insert the exact `--chat cursor:<id>` from this chat's `sessionStart` hook after
+`richi` on every call, starting with the first two commands below. With `CURSOR_AGENT` set,
+an inherited ID is insufficient. If the hook has not supplied an ID, defer memory work.
+
 ```sh
 richi chat current
 richi workspace list
-# После ответа пользователя — один из вариантов:
+# After the user chooses, run one of the next two commands.
 richi chat bind --current
 richi chat bind work
 ```
@@ -79,17 +85,12 @@ question on each message or after context restoration. If the user has already
 explicitly named a workspace in this chat, the agent uses that choice without
 asking again.
 
-In Codex, the launcher obtains the ID from `CODEX_THREAD_ID`. In local Cursor
-Agent, pass the exact `--chat cursor:<id>` supplied by the session hook on every
-Richi command, starting with `chat current`. When the shell carries
-`CURSOR_AGENT`, the launcher requires an explicit chat ID for workspace access,
-even if the shell inherited another chat's ID. Each conversation in the same
-repository has its own ID. Other integrations can pass their own stable ID:
+Other integrations can pass their own stable ID:
 
 ```sh
 richi --chat task-123 chat bind work
 richi --chat task-123 project list
-# Только по явному указанию изменить область этого чата:
+# Only when the user explicitly asks to change this chat's workspace.
 richi --chat task-123 chat bind personal --replace
 ```
 

@@ -247,12 +247,16 @@ def chat_parser():
     selection.add_argument("--current", action="store_true", help="Bind the workspace that is the CLI default now")
     bind.add_argument("--replace", action="store_true", help="Replace an existing binding; only on the user's explicit request")
     document(parser, "Show or set the workspace bound to an agent chat.", """
-        A chat is identified by RICHI_CHAT_ID, CODEX_THREAD_ID or --chat ID; agent
-        setup provides it. The binding overrides the terminal default only for
-        that chat. Until a chat is bound it cannot read or write knowledge. No
+        Pass --chat ID to identify a chat explicitly. When CURSOR_AGENT is set,
+        workspace commands require the active client's explicit ID. In Cursor,
+        use the ID from its sessionStart hook. Other shells can use RICHI_CHAT_ID
+        or Codex's CODEX_THREAD_ID.
+        The binding overrides the terminal default only for that chat.
+        Until a chat is bound it cannot read or write knowledge. No
         agent chat may run richi use, bound or not, and a bound chat also rejects
         storage overrides.""",
              examples=(("At the start of a chat", "richi chat current"),
+                       ("Cursor, using the ID from its hook", "richi --chat cursor:example-42 chat current"),
                        ("After the user chooses", ("richi chat bind --current", "richi chat bind work")),
                        ("Explicitly move this chat to another workspace", "richi chat bind other --replace")),
              see=("workspace", "environment"), guide="WORKSPACES.md")

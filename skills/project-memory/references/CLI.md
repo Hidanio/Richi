@@ -268,11 +268,11 @@ are shown by `richi config show`. Startup logs are stored in `runtime/` alongsid
 
 ```sh
 richi map
-# Для сервера в текущем терминале:
+# Run the server in this terminal:
 richi map serve --open
-# Другая база и порт задаются явно:
+# Select a different database and port:
 richi --db /path/to/memory.sqlite3 map serve --port 8766 --open
-# Остановить или перезапустить карту выбранного workspace:
+# Stop or restart the selected workspace’s map:
 richi map stop
 richi map restart --no-open
 ```
@@ -301,11 +301,11 @@ runtime, listening on that port itself, is ever stopped or reused; other program
 on the port are left alone. `richi map` may therefore also report `refused` with
 a `reason` (exit code 1): for example `not_permitted` in a sandbox, which cannot
 tell the user's map from a copy; ask the user to run it from a terminal. Details:
-[UPDATES.md](../../../docs/UPDATES.md#работающая-карта-и-первоначальный-переход).
+[Running maps and the initial transition](https://github.com/Hidanio/Richi/blob/main/docs/UPDATES.md#running-maps-and-the-initial-transition).
 
 The initial view shows projects. Map search finds titles, descriptions, tags and aliases of loaded objects; selecting an object reveals its neighborhood within 1–3 hops. Nodes can be dragged, and the mouse changes zoom and position. A node card shows the full summary, work state, verification date and sources. An edge card shows direction, meaning, provenance and evidence. Hypotheses and superseded knowledge are enabled separately. Record membership in a project comes automatically from `project_ids`; it does not prove an effect on service behavior.
 
-The refresh button rereads the database, including records from other tasks. There is no automatic polling or editing through the map: new knowledge and relationships are written through the CLI and skill. The server serves the map, graph data and stored Git sources through bounded APIs; it accepts reads only from loopback and uses no external libraries, analytics or CDN. External sources open only when a link is clicked; a local document path can be copied.
+The refresh button rereads the database, including records from other tasks. Graph records and relationships are written through the CLI. A map opened with editing access can save standing rules and agent skill sources from the Rules and Agents tabs. The server serves the map, graph data and stored Git sources through bounded APIs; it accepts reads only from loopback and uses no external libraries, analytics or CDN. External sources open only when a link is clicked; a local document path can be copied.
 
 Git sources have **Code**, **History**, **Diff** and **Check** buttons.
 They also work for legacy `git:<full SHA>:<path>` links; whole-commit

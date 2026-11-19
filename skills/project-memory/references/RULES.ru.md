@@ -76,9 +76,9 @@ richi --compact-json rules add no-agent-prefix --global \
 richi --compact-json --project-path /work/example rules add branch-naming --project example \
   --text "Name branches EX-<task number>_<short description>." --source "claude:EXAMPLE"
 richi --compact-json rules add pr-skill --global \
-  --text "Use the pr-description skill for every pull request." --skill pr-description
+  --text "Use the pr-description skill for every pull request." --skill pr-description --source "cursor:EXAMPLE"
 richi --compact-json rules add review-skill --global --text "Use the code review skill for every review." \
-  --skill claude=engineering:code-review --skill codex=code-review
+  --skill code-review --skill claude=engineering:code-review --source "cursor:EXAMPLE"
 ```
 
 Добавляй, меняй или удаляй правило только по явной просьбе пользователя о постоянном
@@ -165,7 +165,8 @@ richi --compact-json rules apply --json rule-change.json
 ```json
 {"action": "add", "id": "review-skill", "scope": "global",
  "text": "Use the code review skill for every review.",
- "skills": {"claude": "engineering:code-review", "codex": "code-review"}}
+ "skill": "code-review", "skills": {"claude": "engineering:code-review"},
+ "source": "cursor:EXAMPLE"}
 ```
 
 `rules apply` принимает то же изменение, что `add`, `update` и `remove`, одним

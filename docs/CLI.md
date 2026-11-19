@@ -3,17 +3,16 @@
 
 English | [Русский](CLI.ru.md)
 
-Global Codex integration: `richi setup --dry-run`, `richi setup --yes`,
-`richi setup --status`. Setup is installation-wide, needs no chat binding,
-rejects workspace/storage selectors and preserves existing instructions.
-See [SETUP.md](SETUP.md) for installation, adoption flags and recovery.
+Use `richi agents --status` to see which local clients Richi detects and which
+are connected. Setup defaults to Codex. Select Claude Code or Cursor with
+`--agent claude` or `--agent cursor`. Setup applies to the installation
+and runs before workspace selection. See the [setup guide](SETUP.md).
 
-After installation, use `richi` from any working directory. `richi config show`
-displays selected settings and runtime. Global database and configuration options
-precede the subcommand:
+Use `richi config show` to inspect the selected settings and runtime. In a
+regular terminal, put database and configuration options before the subcommand:
 
 ```sh
-richi --db /path/to/memory.sqlite3 recall 'локальный кеш'
+richi --db /path/to/memory.sqlite3 recall 'local cache'
 richi --config /path/to/config.json check
 ```
 
@@ -83,7 +82,7 @@ installed launcher, which also runs these commands, so their changes appear
 only after the package is reinstalled.
 
 Agents can add global `--compact-json` before the subcommand:
-`richi --compact-json recall 'локальный кеш'`. Successful stdout JSON omits
+`richi --compact-json recall 'local cache'`. Successful stdout JSON omits
 indentation; the default format is preserved. `--max-chars` uses the selected
 format, so more data may fit a tight budget. Errors, help, `--output` files and
 the map are unchanged; combining the flag with `map` is rejected. See the
@@ -96,14 +95,14 @@ richi config set development.source /path/to/Richi
 richi config set dev true
 richi config show
 richi map
-# Сервер в текущем терминале; Ctrl+C завершает его:
+# Run in the foreground. Press Ctrl+C to stop.
 richi map serve --open
-# Возврат к установленной версии:
+# Return to the installed version.
 richi config set dev false
 ```
 
-Normally, CLI uses the fixed installed package. In dev, commands use current
-code from the selected checkout, and the map reloads its server after source
+Normally, CLI uses the fixed installed package. In dev, knowledge commands use
+the runtime from the selected checkout, and the map reloads its server after source
 changes. A running map also detects mode switches after validating the new
 runtime. Refresh the browser page for interface changes. The database and
 knowledge history are shared; SQLite is never migrated automatically.
@@ -122,47 +121,43 @@ richi -w work init
 richi -w work project add /path/to/service-example
 richi use work
 richi use
-richi -w work recall 'локальный кеш' --project service-example
+richi -w work recall 'local cache' --project service-example
 ```
 
 `richi use` opens its menu only in an ordinary terminal. In a new chat, the agent
-asks for a workspace once, then saves the selection:
+checks the binding and asks once if the user has yet to choose a workspace.
+In Cursor, insert the exact `--chat cursor:<id>` from the session hook after
+`richi` in every chat example below. The `next_commands` returned by
+`chat current` and `chat bind` already include it.
 
 ```sh
 richi chat current
-richi chat bind --current
-# Или другая область только для чата:
-richi chat bind work
-richi project check /path/to/service-example --id service-example
-richi --project-path /path/to/service-example recall 'локальный кеш' --project service-example
-# Просмотр и последующий импорт папки репозиториев:
-richi project scan /path/to/repositories
-richi project scan /path/to/repositories --apply
+richi workspace list
 ```
 
-The `bind` alternatives are mutually exclusive: run only the user's selection.
-Once bound, the agent loads the user's standing rules: global rules of the
-workspace, plus the project's own rules with `--project-path`:
+Save the user's choice with `richi chat bind --current` or `richi chat bind work`.
+If the chosen workspace is new, run `richi init` when the user has authorized
+creating its store. Use `richi rules show` for workspace-wide work.
+In a repository, verify membership and include its path when loading rules
+and recalling memory.
 
 ```sh
-richi rules show
+richi project check /path/to/service-example --id service-example
 richi --project-path /path/to/service-example rules show
-richi rules add no-agent-prefix --global --text "Never prefix branch names with the agent name."
-richi rules add branch-naming --project service-example --text "Name branches SE-<number>_<topic>."
-richi rules add pr-skill --global --text "Use the pr-description skill for pull requests." --skill pr-description
-richi rules add review-skill --global --text "Use the code review skill for reviews." --skill claude=engineering:code-review --skill codex=code-review
-richi rules log
+richi --project-path /path/to/service-example recall 'local cache' --project service-example
 ```
 
-Rules are instructions, not knowledge: search never returns them, and agents
-change them only at the user's request. `rules log` shows who changed which rule,
-with the rule before and after. See [standing rules](../skills/project-memory/references/RULES.md).
+To register several repositories, preview `richi project scan /path/to/repositories`
+before applying the result with `--apply`. Change rules only at the user's
+request. For creation examples and the `rules log` change history, see
+[standing rules](../skills/project-memory/references/RULES.md).
+
 The map's **Rules** tab shows them and, in a page opened by `richi map`, adds
 and edits them with templates and a list of installed skills: one skill for every agent, or
 one per agent when they differ.
 
-Richi knows which agents work on this computer and where each finds skills.
-Claude Code, Codex and Cursor are built in. You can switch their skill sources,
+The skill catalog lists sources for the built-in Claude Code, Codex and Cursor
+profiles, including clients that have yet to be connected. You can switch their skill sources,
 add skill folders or describe another agent. These settings apply to every workspace.
 
 ```sh
@@ -176,8 +171,7 @@ map's **Agents** tab shows and changes the same settings.
 
 In a bound chat, `-w` may only repeat the stored workspace. Direct `--db`,
 `--config` and corresponding storage environment variables are rejected.
-For another client, pass a stable ID through `--chat ID` or `RICHI_CHAT_ID`;
-Codex supplies `CODEX_THREAD_ID`. See [workspaces and knowledge isolation](WORKSPACES.md).
+See [workspaces and chat identity](WORKSPACES.md) for the other supported clients.
 
 Unified context and path checks:
 

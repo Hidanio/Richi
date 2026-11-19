@@ -22,38 +22,32 @@ Do not publish an empty release with GitHub's **New release** button while the
 workflow is running: the updater can see it before the manifest and wheel exist,
 and the final `gh release create` step expects to create the release itself.
 Push only the tag and let the workflow publish the tested artifacts.
-The `v1.0.0` tag was published from code reporting `0.1.0`; its validation failed.
-The corrected version is `1.0.1`, with a new tag on the version-fix commit.
-Keep the old tags intact. After merging the fix and pulling `main`, verify and
-push only the intended tag:
-
-```sh
-git switch main
-git pull --ff-only origin main
-python -m build --wheel --outdir dist_release
-python scripts/release_manifest.py dist_release/richi-1.0.1-py3-none-any.whl --tag v1.0.1 --output dist_release/richi-release.json
-git tag v1.0.1
-git push origin refs/tags/v1.0.1
-```
-
-Run the tag commands only after the build and validation succeed. Wait for all
-release jobs, including publication, to succeed, then run `richi update check`.
-Expect version `1.0.1` and `can_apply: true` on a compatible older installation.
-If any release job fails, inspect its logs before sharing the installer URL.
+The tag must match the package version. The historical `v1.0.0` tag failed
+that check. The correction shipped under the new tag `v1.0.1`.
 
 The workflow uses `contents: read` by default. Only the final publication job
 receives `contents: write`, through its built-in `GH_TOKEN`; it does not run
 checkout code. The draft and publish sequence follows the [GitHub CLI release
 commands](https://cli.github.com/manual/gh_release_create).
 
-For local preparation without publishing:
+On the merged release commit, set the shell variable `release_tag` to the new
+`vX.Y.Z` tag. Activate a fresh virtual environment and run the release checks
+from the repository root.
 
 ```sh
-python -m build --wheel
-python scripts/release_manifest.py dist/richi-1.0.1-py3-none-any.whl --tag v1.0.1
-python scripts/build_installer.py dist/richi-1.0.1-py3-none-any.whl
-python tests/installer_release_smoke.py dist
+release_dir="$(mktemp -d)"
+python -m pip install build
+python -m build --wheel --outdir "$release_dir"
+python scripts/release_manifest.py "$release_dir"/*.whl --tag "${release_tag:?}" --output "$release_dir/richi-release.json"
+python scripts/build_installer.py "$release_dir"/*.whl --output "$release_dir/richi-installer.pyz"
+python -m pip install --no-deps "$release_dir"/*.whl
+python tests/installer_release_smoke.py "$release_dir"
 ```
+
+After validation succeeds, tag the tested commit with `git tag "$release_tag"`
+and push it with `git push origin "refs/tags/$release_tag"`. Once the workflow
+publishes the release, run `richi update check` on a compatible older
+installation. Expect the new version and `can_apply: true`.
 
 `scripts/release_manifest.py` checks the wheel's filename, package metadata,
 embedded source version, source checkout version and optional tag before
