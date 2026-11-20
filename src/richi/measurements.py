@@ -277,14 +277,18 @@ def lexical_text(text, spellings):
 def query_terms(text, unit_starts=None):
     from . import recall
     terms = {}
+    rate_end = 0
     for token, unit, _ in _tokens(text):
         if token["number"]:
+            if token.start() < rate_end:
+                continue  # A scale such as "per 100 requests" belongs to its numerator.
             word = token["number"] + unit
+            start = token.end("number")
+            if text[start:start + 1] == " ":
+                start += 1
+            rate, rate_end = _rate_at(text, start)
             if unit_starts is not None and (word in terms or len(terms) < 64):
-                start = token.end("number")
-                if text[start:start + 1] == " ":
-                    start += 1
-                unit_starts.setdefault(_number(token["number"]), []).append((start, word))
+                unit_starts.setdefault(_number(token["number"]), []).append((start, word, rate))
         else:
             word = token[0]
             folded = recall.normalize(word)
@@ -307,11 +311,38 @@ def _number(value):
     return re.sub(r"^(-?)\.", r"\g<1>0.", value)
 
 
-_UNIT_CONTINUATION = re.compile(r"\w|[-.:/]\w")
+_UNIT_CONTINUATION = re.compile(r"\w|[-.:/]\w|\s+per\s+[0-9]", re.IGNORECASE)
+_RATE_SEPARATOR = re.compile(r"(?:\s+per\s+|\s*/\s*)(?=[^\W\d_]|[%‰°])", re.IGNORECASE)
+_UNIT_RATE_SEPARATOR = re.compile(r"(?<=[^\W\d_]|[%‰°])" + _RATE_SEPARATOR.pattern, re.IGNORECASE)
+_PER_WORD = re.compile(r"\bper\b", re.IGNORECASE)
+_RATE = re.compile(r"(?P<numerator>[^\W\d_]+(?:\s+[^\W\d_]+)*?)"
+                   + r"(?:\s+per\s+(?P<scale>" + _NUMBER + r")\s+|" + _RATE_SEPARATOR.pattern + r")"
+                   + r"(?P<denominator>[^\W\d_]+)", re.IGNORECASE)
+
+
+def _rate_at(text, start):
+    """Read a written numerator and denominator without crossing into the next claim."""
+    from . import recall
+    rate = _RATE.match(text, start)
+    if rate and not any(part.casefold() in recall.STOPWORDS or part.casefold() in _RANGE_WORDS
+                        for part in rate["numerator"].split()[1:]):
+        separator = " per " + rate["scale"] + " " if rate["scale"] else "/"
+        return rate["numerator"] + separator + rate["denominator"], rate.end()
+    return "", start
 
 
 def _phrase_at(text, start, unit):
-    return text.startswith(unit, start) and not _UNIT_CONTINUATION.match(text, start + len(unit))
+    """Match the full unit. 'RPCs' is a total; 'RPCs per second' and 'RPCs/second' are rates."""
+    for index, part in enumerate(unit.split("/")):
+        if index:
+            separator = _RATE_SEPARATOR.match(text, start)
+            if separator is None:
+                return False
+            start = separator.end()
+        if not text.startswith(part, start):
+            return False
+        start += len(part)
+    return not _UNIT_CONTINUATION.match(text, start) and not _RATE_SEPARATOR.match(text, start)
 
 
 class MeasurementQuery:
@@ -365,48 +396,59 @@ class MeasurementQuery:
 
     def _declared_phrase_hits(self, number, unit):
         """Bind the full recorded unit, such as 'completed RPCs', to its query number."""
-        for start, term in self.unit_starts.get(number, ()):
-            if _phrase_at(self.text, start, unit):
+        for start, term, required_rate in self.unit_starts.get(number, ()):
+            if (not required_rate or unit.startswith(required_rate)) and _phrase_at(self.text, start, unit):
                 yield term
 
     def quantity_hits(self, row, fields=FIELDS):
         """Match recorded quantities and unit symbols, including the MW part of 5MW."""
         declared_unit = row["unit"].strip()
-        declared_phrase = " ".join(declared_unit.split()) if self.numbers else ""
+        declared_phrase = _UNIT_RATE_SEPARATOR.sub("/", " ".join(declared_unit.split())) if self.numbers else ""
         unit_hits = {declared_unit} if "unit" in fields and declared_unit in self.unit_words else set()
         numbers = set()
         for field in fields:
             text = row[field]
             if not self.numbers and not (any(unit in text for unit in self.unit_words) and re.search("[0-9]", text)):
                 continue
+            if self.numbers:
+                # Retain "100 per mode" as a sample count; normalize separators after a written unit.
+                text = _UNIT_RATE_SEPARATOR.sub("/", text)
+            has_rate = self.numbers and ("/" in text or _PER_WORD.search(text))
+            rate_end = _rate_at(text, 0)[1] if field == "unit" and has_rate else 0
             for token, unit, end in _tokens(text):
                 literal = token["number"]
-                if literal is None:
+                if literal is None or token.start() < rate_end:
                     continue
                 if unit in self.unit_words:
                     unit_hits.add(unit)
                 if self.numbers:
                     number = _number(literal)
-                    written = self.numbers.get((number, unit), ())
+                    start = end - len(unit)
+                    rate = ""
+                    if unit and has_rate:
+                        rate, rate_end = _rate_at(text, start)
+                        unit = rate or unit
+                    written = set(self._declared_phrase_hits(number, unit)) if unit else set()
                     if field == "value" and unit and declared_phrase.startswith(unit + " "):
-                        if _phrase_at(text, end - len(unit), declared_phrase):
-                            unit, written = declared_phrase, ()
-                        else:
-                            # A shared first word cannot establish the full written unit.
-                            written = set(written).difference(self._declared_phrase_hits(number, declared_phrase))
+                        # A shared first word cannot establish the full written unit.
+                        written = ()
+                        if _phrase_at(text, start, declared_phrase):
+                            unit = declared_phrase
                     numbers.update(written)
+                    if written and rate:
+                        unit_hits.add(rate)
                     if not token["unit"] or unit == declared_unit:
                         numbers.update(self.numbers.get((number, ""), ()))
                     # The declaration fills a missing unit only. In "5 ms → 1 s"
                     # a declaration of "s" cannot turn the first value into 5 s.
                     if field == "value" and (not unit or unit == declared_phrase):
-                        if not unit:
-                            numbers.update(self.numbers.get((number, declared_unit), ()))
-                        if " " in declared_phrase:
-                            phrase_hits = set(self._declared_phrase_hits(number, declared_phrase))
-                            if phrase_hits:
-                                numbers.update(phrase_hits)
+                        phrase_hits = set(self._declared_phrase_hits(number, declared_phrase))
+                        if phrase_hits:
+                            numbers.update(phrase_hits)
+                            if " " in declared_phrase:
                                 unit_hits.update(declared_phrase.split())
+                            if "/" in declared_phrase:
+                                unit_hits.add(declared_phrase)
         return numbers | {self.unit_words[unit] for unit in unit_hits if unit in self.unit_words}, unit_hits
 
 

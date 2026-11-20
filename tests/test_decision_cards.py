@@ -586,19 +586,96 @@ class DecisionCardTests(unittest.TestCase):
                 self.assertEqual(results("RPCs")[0]["measurements"][0]["unit"], "completed RPCs")
 
     def test_shared_unit_prefix_keeps_the_requested_denominator(self):
-        for index, unit in enumerate(("completed RPCs", "completed RPCs per second")):
-            row = {"metric": "Throughput", "value": "92 " + unit + ".", "unit": unit, "sample": "per second"}
-            record = {"reference": "test://report/" + str(index), "measurements": [row]}
-            self.put(dict(self.task, id="trial-" + str(index), jira_key=None, title="Trial", summary="Result",
-                          sources=[record]))
-        for indexed in (False, True):
-            if indexed:
-                with memory.transaction(self.conn):
-                    search_index.build(self.conn, memory)
-            args = SimpleNamespace(query="92 completed RPCs per second?", limit=1, max_chars=16000)
-            card, = task_brief.brief(self.conn, args, memory, self.db)["results"]
-            row = card["measurements"][0]
-            self.assertEqual((row["unit"], row["source"]["reference"]), ("completed RPCs per second", "test://report/1"))
+        def citation(label, value, unit):
+            row = {"metric": "Count", "value": value, "unit": unit, "sample": "Entire trial"}
+            return {"reference": "test://report/" + label, "measurements": [row]}
+
+        def results(question):
+            return task_brief.brief(self.conn, SimpleNamespace(query=question, limit=5, max_chars=16000),
+                                    memory, self.db)["results"]
+
+        cases = (("EX-22", "92", "completed RPCs", "second", "92", "completed RPCs per second"),
+                 ("EX-23", "17", "bytes", "packet", "17 bytes/packet.", "bytes/packet"),
+                 ("EX-24", "31", "events", "minute", "31 events per minute", "items"))
+        for mode in ("scan", "indexed", "older"):
+            for present in (False, True):
+                for key, n, numerator, denominator, value, unit in cases:
+                    total = citation("total", n, numerator)
+                    other_rate = citation("hourly", n + " " + numerator + " per hour", numerator + "/hour")
+                    sources = [total, other_rate] * 4
+                    if present:
+                        sources.append(citation(key + "-rate", value, unit))
+                    version = (memory.entry_record(self.conn, key) or {}).get("updated_at")
+                    self.put(dict(self.task, id=key, jira_key=key, title="Trial", summary="Result",
+                                  expected_updated_at=version, sources=sources))
+                if mode != "scan":
+                    with memory.transaction(self.conn):
+                        search_index.build(self.conn, memory)
+                        if mode == "older":
+                            self.conn.execute("DELETE FROM " + search_index.ANNOTATIONS + " WHERE prefix = ?",
+                                              (search_index.ANNOTATION_COMPLETE,))
+                for key, n, numerator, denominator, value, unit in cases:
+                    for separator in (" per ", "/", " / "):
+                        query = n + " " + numerator + separator + denominator + "?"
+                        for scoped in (False, True):
+                            with self.subTest(mode=mode, present=present, query=query, scoped=scoped):
+                                cards = results(key + " " + query if scoped else query)
+                                if present:
+                                    card, = cards
+                                    row = card["measurements"][0]
+                                    self.assertEqual((row["value"], row["unit"], row["source_index"], row["source"]),
+                                                     (value, unit, 9, {"reference": "test://report/" + key + "-rate"}))
+                                elif scoped:
+                                    card, = cards
+                                    self.assertNotIn("measurement", card["query_match_reasons"])
+                                else:
+                                    self.assertEqual(cards, [])
+                    total, = results(n + " " + numerator)
+                    self.assertEqual(total["measurements"][0]["source"]["reference"], "test://report/total")
+
+    def test_written_rates_and_scaled_denominators_cannot_supply_totals_or_other_rates(self):
+        def save(identity, field, text, value, unit):
+            row = {"metric": "Count", "sample": "Entire experiment", "value": value, "unit": unit}
+            row[field] = text
+            self.put(dict(self.task, id=identity, jira_key=None, title="Trial", summary="Result",
+                          sources=[{"reference": "test://" + identity, "measurements": [row]}]))
+
+        save("total", "value", "92", "92", "errors")
+        save("denominator", "value", "100", "100", "requests")
+        save("wrong-scale", "value", "92", "92", "errors per 1000 requests")
+        save("metric", "metric", "Efficiency at 24 completed RPCs per second", "50", "%")
+        save("sample", "sample", "Efficiency at 25 completed RPCs per second", "50", "%")
+        save("explicit", "value", "26 completed RPCs per second", "26", "completed RPCs")
+        save("written-total", "metric", "Efficiency at 27 completed RPCs", "50", "%")
+        for mode in ("scan", "indexed", "older", "dirty"):
+            for positive in (False, True):
+                version = (memory.entry_record(self.conn, "scaled") or {}).get("updated_at")
+                declared = "errors per 100 requests"
+                source = {"reference": "test://scaled", "measurements": [
+                    {"metric": "Count", "value": "92" if positive else "71", "unit": declared, "sample": "560 per mode"}]}
+                self.put(dict(self.task, id="scaled", jira_key="EX-22", title="Trial", summary="Result",
+                              sources=[source], expected_updated_at=version))
+                if mode != "scan":
+                    with memory.transaction(self.conn):
+                        search_index.build(self.conn, memory)
+                        if mode == "older":
+                            self.conn.execute("DELETE FROM " + search_index.ANNOTATIONS + " WHERE prefix = ?",
+                                              (search_index.ANNOTATION_COMPLETE,))
+                        elif mode == "dirty":
+                            self.conn.execute("UPDATE metadata SET value = value WHERE key GLOB ?",
+                                              (measurements.KEY_PREFIX + "*",))
+                checks = [("92 errors per 100 requests?", ["scaled"] if positive else []),
+                          ("92 errors per 1000 requests?", ["wrong-scale"]), ("92 errors", ["total"]),
+                          ("100 requests", ["denominator"]), ("27 completed RPCs per second", [])]
+                for n, owner in ((24, "metric"), (25, "sample"), (26, "explicit")):
+                    checks.extend([(str(n) + " completed RPCs" + suffix, expected) for suffix, expected in
+                                   ((" per second", [owner]), ("/second", [owner]), (" per request", []), ("", []))])
+                for question, wanted in checks:
+                    with self.subTest(mode=mode, positive=positive, question=question):
+                        args = SimpleNamespace(query=question, limit=8, max_chars=16000)
+                        cards = task_brief.brief(self.conn, args, memory, self.db)["results"]
+                        self.assertEqual([(c["id"], c["measurements"][0]["source"]["reference"]) for c in cards],
+                                         [(name, "test://" + name) for name in wanted])
 
     def test_structured_match_applies_the_entity_project_boost(self):
         memory.project_put(self.conn, {"id": "service", "name": "Service"})

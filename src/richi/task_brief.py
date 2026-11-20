@@ -89,7 +89,8 @@ def _annotation_matches(conn, query, terms, keys, states, project, api, *, decis
             continue
         # A compact quantity like "5ms" may match a value and unit in separate fields.
         written_units = measured.matched_quantity_units(measurement_hits)
-        annotated = dict(record, summary=" ".join((record["summary"], card_text, narrative, *units, *measurement_hits, *written_units)))
+        annotated = dict(record, summary=" ".join((record["summary"], card_text, narrative, *units,
+                                                   *measurement_hits, *written_units, *exact_units)))
         if not keys and (not recall.matches_subject(annotated, subjects)
                          or not recall.matches_short_subjects(annotated, symbols)):
             continue
