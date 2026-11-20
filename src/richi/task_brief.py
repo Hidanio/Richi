@@ -43,7 +43,8 @@ def _annotation_payloads(conn, states, terms):
 
 def _annotation_matches(conn, query, terms, keys, states, project, api, *, decision_terms=None):
     """Search the current structured evidence before ranking and graph expansion."""
-    decision_terms = [term for term in terms if len(term) > 1] if decision_terms is None else decision_terms
+    if decision_terms is None:
+        decision_terms = [recall.normalize(term) for term in terms if len(term) > 1]
     measured = measurements.MeasurementQuery(terms)
     probes = measured.lookup_terms().union(decision_terms)
     if not probes:
@@ -65,22 +66,27 @@ def _annotation_matches(conn, query, terms, keys, states, project, api, *, decis
         decision = record.get("decision_card")
         card_text = recall.normalize(" ".join(decision_cards.search_fields(decision))) if decision else ""
         rows = [row for source in record["sources"] for row in source.get("measurements", ())]
-        claims = recall.normalize(" ".join(row[field] for row in rows for field in measurements.FIELDS))
+        narrative = " ".join(row[field] for row in rows for field in measurements.NARRATIVE_FIELDS)
+        units = {row["unit"].strip() for row in rows}
         decision_hits = {term for term in decision_terms if recall.matches_term(term, card_text)}
-        measurement_hits = measured.word_hits(claims)
-        if measured.numbers:
-            for row in rows:
-                measurement_hits.update(measured.number_hits(row))
+        word_hits = measured.word_hits(narrative, units)
+        measurement_hits, exact_units = set(word_hits), set()
+        for row in rows:
+            numbers, spelled_units = measured.quantity_hits(row, word_hits)
+            measurement_hits.update(numbers)
+            exact_units.update(spelled_units)
         reasons = [reason for reason, hits in (("decision_card", decision_hits), ("measurement", measurement_hits)) if hits]
         matched = decision_hits | measurement_hits
         if not matched:
             continue
         # A compact quantity like "5ms" may match a value and unit in separate fields.
-        annotated = dict(record, summary=" ".join((record["summary"], card_text, claims, *measurement_hits)))
+        annotated = dict(record, summary=" ".join((record["summary"], card_text, narrative, *units, *measurement_hits)))
         if not keys and (not recall.matches_subject(annotated, subjects)
                          or not recall.matches_short_subjects(annotated, symbols)):
             continue
         score = 2 * len(matched) + 30 * len(matched) / max(len(terms), len(decision_terms), len(matched))
+        if exact_units:
+            score += 0.5 * len(exact_units) / len(terms)
         reason = recall.project_match_reason(conn, ref, record, states, project)
         if reason:
             score += 18

@@ -336,7 +336,64 @@ class DecisionCardTests(unittest.TestCase):
         self.put(dict(self.task, sources=[source("mW"), source("MW")]))
         terms, question, keys = recall._routed_terms(self.conn, "Straße DEMO-72 5MW")
         self.assertEqual((terms, keys), (["strasse", "5mw"], ["demo-72"]))
-        self.assertEqual(measurements.query_terms(question), ["strasse", "5MW"])
+        self.assertEqual(measurements.query_terms(question), ["Straße", "5MW"])
+
+    def test_bare_unit_selects_the_correct_source_beyond_eight_rows(self):
+        def source(unit, index):
+            row = {"metric": "Power", "value": str(index), "unit": unit, "sample": "Canary cohort"}
+            return {"reference": "test://power/" + unit + "/" + str(index), "measurements": [row]}
+
+        for identity, units in (("a", ["mW"]), ("z", ["mW"] * 8 + ["MW"])):
+            self.put(dict(self.task, id=identity, jira_key=None, title="Trial", summary="Recorded results.",
+                          sources=[source(unit, index) for index, unit in enumerate(units)]))
+        for indexed in (False, True):
+            if indexed:
+                with memory.transaction(self.conn):
+                    search_index.build(self.conn, memory)
+            for query, identity, unit, index in (("MW", "z", "MW", 8), ("power in MW", "z", "MW", 8),
+                                                 ("mW", "a", "mW", 0), ("POWER in mW", "a", "mW", 0)):
+                with self.subTest(query=query, indexed=indexed):
+                    args = SimpleNamespace(query=query, limit=2, max_chars=16000)
+                    cards = task_brief.brief(self.conn, args, memory, self.db)["results"]
+                    if query == "MW":
+                        self.assertEqual([card["id"] for card in cards], ["z"])
+                    row = cards[0]["measurements"][0]
+                    self.assertEqual((cards[0]["id"], row["unit"], row["source_index"], row["source"]["reference"]),
+                                     (identity, unit, index + 1, source(unit, index)["reference"]))
+            for query in ("pOwEr", "cAnArY"):
+                result = task_brief.brief(self.conn, SimpleNamespace(query=query, limit=2, max_chars=16000),
+                                          memory, self.db)
+                self.assertEqual({card["id"] for card in result["results"]}, {"a", "z"})
+
+    def test_written_quantities_and_single_letter_units_select_their_calculation(self):
+        def source(identity, field, quantity):
+            row = {"metric": "Efficiency", "value": "91", "unit": "%", "sample": "Steady load"}
+            row[field] = quantity
+            return {"reference": "test://calculation/" + identity, "measurements": [row]}
+
+        cases = (
+            ("power", "sample", "5 mW baseline", "5 MW baseline", ("5MW", "5 MW", "MW")),
+            ("rate", "metric", "Cost at 4 Mb/s", "Cost at 4 MB/s", ("4MB/s", "4 MB/s", "MB/s")),
+            ("deadline", "metric", "RPCs completed within 200 s", "RPCs completed within 200 ms", ("200ms", "200 ms")),
+            ("current", "unit", "W", "A", ("91A", "91 A", "A")),
+        )
+        for key, field, wrong, right, _ in cases:
+            wrong_source = source(key + "-other", field, wrong)
+            right_source = source(key + "-target", field, right)
+            for identity, sources in (("a-" + key, [wrong_source]), ("z-" + key, [wrong_source, right_source])):
+                self.put(dict(self.task, id=identity, jira_key=None, title="Trial", summary="Recorded results.", sources=sources))
+        for indexed in (False, True):
+            if indexed:
+                with memory.transaction(self.conn):
+                    search_index.build(self.conn, memory)
+            for key, _, _, _, queries in cases:
+                for query in queries:
+                    with self.subTest(query=query, indexed=indexed):
+                        args = SimpleNamespace(query=query, limit=1, max_chars=16000)
+                        card, = task_brief.brief(self.conn, args, memory, self.db)["results"]
+                        row = card["measurements"][0]
+                        self.assertEqual((card["id"], row["source_index"], row["source"]["reference"]),
+                                         ("z-" + key, 2, "test://calculation/" + key + "-target"))
 
     def test_structured_match_applies_the_entity_project_boost(self):
         memory.project_put(self.conn, {"id": "service", "name": "Service"})

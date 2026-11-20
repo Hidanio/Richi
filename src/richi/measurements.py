@@ -7,6 +7,7 @@ import sqlite3
 
 
 FIELDS = ("metric", "value", "unit", "sample")
+NARRATIVE_FIELDS = ("metric", "value", "sample")
 BRIEF_LIMIT = 8
 KEY_PREFIX = "source-measurements:v1:"
 INLINE_PREDICATE = """instr(sources, '"measurements"') > 0"""
@@ -199,22 +200,28 @@ _SPACED_UNIT = re.compile(r"\s+(" + _UNIT + r")(?!\w|[-.:/]\w)", re.IGNORECASE)
 _TOKEN = re.compile(_QUANTITY.pattern + r"(?!\w|[-.:/]\w)|[^\W_]+(?:[-_.:/][^\W_]+)*", re.IGNORECASE)
 
 
+def _tokens(text):
+    """Keep a separate unit eligible for both lexical and exact quantity matches."""
+    for token in _TOKEN.finditer(text):
+        number, unit = token["number"], token["unit"]
+        yield token[0], number, unit or ""
+        if number is not None and not unit:
+            spaced = _SPACED_UNIT.match(text, token.end())
+            if spaced:
+                yield number + spaced[1], number, spaced[1]
+
+
 def query_terms(text):
     from . import recall
     terms = {}
-    for token in _TOKEN.finditer(text):
-        if token["number"] is not None:
-            terms[token[0]] = None
-            if not token["unit"]:
-                # A separate word can be an ordinary search term or a unit.
-                # Give an exact quantity/unit pair its own hit when both match.
-                unit = _SPACED_UNIT.match(text, token.end())
-                if unit and recall.normalize(unit[1]) not in recall.STOPWORDS:
-                    terms[token[0] + unit[1]] = None
-        else:
-            word = recall.normalize(token[0])
-            if len(word) > 1 and word not in recall.STOPWORDS:
-                terms[word] = None
+    for word, number, _ in _tokens(text):
+        if number is None:
+            folded = recall.normalize(word)
+            # A standalone symbol such as W or A can identify the declared unit.
+            single_symbol = len(word) == 1 and (word.isupper() or word == text.strip())
+            if folded in recall.STOPWORDS and not single_symbol:
+                continue
+        terms[word] = None
     return list(terms)[:64]
 
 
@@ -231,19 +238,23 @@ def _number(value):
 
 class MeasurementQuery:
     def __init__(self, terms):
-        self.words, self.numbers = [], {}
+        from . import recall
+        self.words, self.unit_words, self.numbers = set(), {}, {}
         for term in terms:
             quantity = _QUANTITY.fullmatch(term)
             if quantity:
                 key = (_number(quantity["number"]), quantity["unit"] or "")
                 self.numbers.setdefault(key, set()).add(term)
             else:
-                self.words.append(term)
+                folded = recall.normalize(term)
+                self.unit_words[term] = folded
+                if len(term) > 1 and folded not in recall.STOPWORDS:
+                    self.words.add(folded)
 
     def lookup_terms(self):
         # All published prefix indexes have the unsigned leading digits. A
         # leading decimal point (".5") can also stand for a zero integer part.
-        result = set(self.words)
+        result = set(self.unit_words.values())
         for number, _ in self.numbers:
             digits = re.findall("[0-9]+", number)
             result.add(digits[0])
@@ -255,31 +266,43 @@ class MeasurementQuery:
                 result.add(digits[1])
         return result
 
-    def word_hits(self, text):
+    def word_hits(self, narrative, units=()):
         from . import recall
-        return {term for term in self.words if recall.matches_term(term, text)}
-
-    def number_hits(self, row, fields=FIELDS):
-        found = set()
-        if self.numbers:
-            declared_unit = row["unit"].strip()
-            for field in fields:
-                for token in _TOKEN.finditer(row[field]):
-                    if token["number"] is None:
-                        continue
-                    number = _number(token["number"])
-                    unit = token["unit"] or ""
-                    found.update(self.numbers.get((number, unit), ()))
-                    if unit == declared_unit:
-                        found.update(self.numbers.get((number, ""), ()))
-                    elif field == "value" and not unit:
-                        found.update(self.numbers.get((number, declared_unit), ()))
+        normalized = recall.normalize(narrative)
+        found = {term for term in self.words if recall.matches_term(term, normalized)}
+        for unit in units:
+            for spelling, folded in self.unit_words.items():
+                if unit == spelling or (len(spelling) > 1 and recall.matches_term(spelling, unit)):
+                    found.add(folded)
         return found
+
+    def quantity_hits(self, row, word_hits, fields=FIELDS):
+        """A unit's exact spelling breaks ties between ordinary lexical matches."""
+        possible_units = {word for word, folded in self.unit_words.items() if folded in word_hits}
+        declared_unit = row["unit"].strip()
+        unit_hits = {declared_unit} if "unit" in fields and declared_unit in possible_units else set()
+        numbers = set()
+        for field in fields:
+            text = row[field]
+            if not self.numbers and not (any(unit in text for unit in possible_units) and re.search("[0-9]", text)):
+                continue
+            for _, literal, unit in _tokens(text):
+                if literal is None:
+                    continue
+                if unit in possible_units:
+                    unit_hits.add(unit)
+                if self.numbers:
+                    number = _number(literal)
+                    numbers.update(self.numbers.get((number, unit), ()))
+                    if unit == declared_unit:
+                        numbers.update(self.numbers.get((number, ""), ()))
+                    elif field == "value" and not unit:
+                        numbers.update(self.numbers.get((number, declared_unit), ()))
+        return numbers, unit_hits
 
 
 def attach(card, sources, terms):
     """Choose observations across *all* sources, including ones outside the source excerpt."""
-    from . import recall
     count = sum(len(source.get("measurements", ())) for source in sources)
     if not count:
         return
@@ -287,11 +310,12 @@ def attach(card, sources, terms):
     def matches():
         for index, source in enumerate(sources, 1):
             for row in source.get("measurements", ()):
-                words = recall.normalize(" ".join(row[field] for field in FIELDS))
-                hits = query.word_hits(words) | query.number_hits(row)
-                metric = recall.normalize(row["metric"])
-                metric_hits = query.word_hits(metric) | query.number_hits(row, ("metric",))
-                yield (len(hits), len(metric_hits)), index, row
+                narrative = " ".join(row[field] for field in NARRATIVE_FIELDS)
+                words = query.word_hits(narrative, (row["unit"].strip(),))
+                numbers, units = query.quantity_hits(row, words)
+                metric_words = query.word_hits(row["metric"])
+                metric_numbers, _ = query.quantity_hits(row, metric_words, ("metric",))
+                yield (len(words | numbers), len(units), len(metric_words | metric_numbers)), index, row
 
     card["measurements"] = []
     for _, index, row in heapq.nlargest(BRIEF_LIMIT, matches(), key=lambda item: item[0]):

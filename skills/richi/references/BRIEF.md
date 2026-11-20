@@ -78,6 +78,9 @@ For a number, cite the `source` inside its `measurements` row. Each row keeps
 the metric, value, unit and sample together with that calculation, even if it
 comes from the last source on a long task. Up to eight observations are
 selected by overlap with the question, with ties in recorded order.
+Use the unit's recorded spelling when searching for measurements such as `5 MW`
+or `5 mW`. A query for `200ms` can also find a metric such as “RPCs completed
+within 200 ms”. Read the metric and unit together to distinguish a deadline from the reported count.
 `measurements_omitted` counts whole observations omitted by selection or
 budget. Use `read_more` for the complete record. On older records without
 these annotations, verify numbers against the original calculation.
