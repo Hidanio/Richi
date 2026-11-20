@@ -9,6 +9,8 @@ Sources, history and evidence bodies are never copied into this index.
 import json
 import re
 
+from . import decision_cards, measurements
+
 
 VERSION = "2"
 VERSION_KEY = "richi_search_index_version"
@@ -33,6 +35,96 @@ FILTER_INDEXES = {
     "richi_search_entries_state_work": ("entries", "knowledge_state, work_state"),
     "richi_search_entities_state_kind": ("entities", "knowledge_state, kind"),
 }
+
+# A separate optional index lets releases that understand lookup format 2 keep
+# using and rebuilding it. Store short lexical prefixes, never citations or rows.
+ANNOTATIONS = "richi_brief_prefixes_v1"
+ANNOTATION_VERSION = "richi_brief_prefix_version"
+ANNOTATION_TRIGGERS = (ANNOTATIONS + "_insert", ANNOTATIONS + "_update", ANNOTATIONS + "_delete")
+ANNOTATION_PREFIX_CHARS = 12
+# Longer than every stored prefix, including a user-supplied unit.
+ANNOTATION_COMPLETE = "complete-with-units:v2"
+_WORD_START = re.compile(r"(?<![^\W_])(?=([^\W_][\w./:-]{0,%d}))" % (ANNOTATION_PREFIX_CHARS - 1))
+
+
+def _annotation_terms(key, payload):
+    from . import recall
+
+    decision = key.startswith(decision_cards.KEY_PREFIX)
+    if decision:
+        texts = decision_cards.search_fields(payload["card"])
+    else:
+        for rows in payload["rows"].values():
+            for row in rows:
+                yield recall.normalize(row["unit"].strip())
+        texts = (row[field] for rows in payload["rows"].values() for row in rows for field in measurements.FIELDS)
+    for text in texts:
+        for word in _WORD_START.finditer(recall.normalize(text)):
+            yield word.group(1)
+        if not decision and re.search("[0-9]", text):
+            for _, unit, _ in measurements._tokens(text):
+                if unit:
+                    yield recall.normalize(unit)
+
+
+def _annotation_prefixes(key, raw):
+    # Old readers use the empty marker. New readers also require the unit keys.
+    prefixes = {"", ANNOTATION_COMPLETE}
+    for term in _annotation_terms(key, json.loads(raw)):
+        prefixes.add(term[:ANNOTATION_PREFIX_CHARS])
+        if len(prefixes) > MAX_RECORD_KEYS:
+            return ()
+    return prefixes
+
+
+def _build_annotation_index(conn, objects, api):
+    version = conn.execute("SELECT value FROM metadata WHERE key = ?", (ANNOTATION_VERSION,)).fetchone()
+    owned = {ANNOTATIONS, *ANNOTATION_TRIGGERS}
+    if version is None and owned.intersection(objects):
+        raise api.MemoryError("Reserved brief search index objects exist without an ownership marker")
+    if version is not None and version[0] != "1":
+        raise api.MemoryError("Unsupported derived brief search index version")
+    for name in ANNOTATION_TRIGGERS:
+        conn.execute("DROP TRIGGER IF EXISTS " + name)
+    conn.execute("DROP TABLE IF EXISTS " + ANNOTATIONS)
+    conn.execute("CREATE TABLE " + ANNOTATIONS + " (sidecar TEXT, prefix TEXT, "
+                 "PRIMARY KEY (sidecar, prefix)) WITHOUT ROWID")
+    families = (decision_cards.KEY_PREFIX + "*", measurements.KEY_PREFIX + "*")
+    for key, raw in conn.execute("SELECT key, value FROM metadata WHERE key GLOB ? OR key GLOB ?", families):
+        try:
+            prefixes = _annotation_prefixes(key, raw)
+        except (ValueError, TypeError, KeyError, AttributeError, RecursionError):
+            continue  # The reader still checks the original payload.
+        conn.executemany("INSERT INTO " + ANNOTATIONS + " VALUES (?, ?)", ((key, prefix) for prefix in prefixes))
+    # A writer of any generation invalidates the looked-up key in its own
+    # transaction. Missing rows use the authoritative value until the next build.
+    events = (("INSERT", ("NEW.key",)), ("UPDATE OF key, value", ("OLD.key", "NEW.key")),
+              ("DELETE", ("OLD.key",)))
+    for name, (event, references) in zip(ANNOTATION_TRIGGERS, events):
+        condition = " OR ".join(f"{ref} GLOB '{pattern}'" for ref in references for pattern in families)
+        conn.execute(f"CREATE TRIGGER {name} AFTER {event} ON metadata WHEN {condition} "
+                     f"BEGIN DELETE FROM {ANNOTATIONS} WHERE sidecar IN ({', '.join(references)}); END")
+    conn.execute("INSERT OR REPLACE INTO metadata VALUES (?, '1')", (ANNOTATION_VERSION,))
+
+
+def annotation_gate(conn, terms):
+    """SQL for sidecar rows that could match. Missing indexes and dirty rows always pass."""
+    names = (ANNOTATIONS, *ANNOTATION_TRIGGERS)
+    installed = dict(conn.execute("SELECT name,type FROM sqlite_master WHERE name IN (?,?,?,?)", names))
+    if installed.get(ANNOTATIONS) != "table" or any(installed.get(n) != "trigger" for n in ANNOTATION_TRIGGERS):
+        return "", []
+    version = conn.execute("SELECT value FROM metadata WHERE key = ?", (ANNOTATION_VERSION,)).fetchone()
+    if not version or version[0] != "1":
+        return "", []
+    # Query terms and supported unit symbols (e.g. %, °C) contain no GLOB
+    # metacharacters. Numeric boundaries and symbol case are checked on the record.
+    patterns = sorted({term[:ANNOTATION_PREFIX_CHARS] + "*" for term in terms})
+    lookup = f"SELECT 1 FROM {ANNOTATIONS} a WHERE a.sidecar = m.key AND "
+    # Use one range seek per term. Multiple GLOBs on the same row can make
+    # SQLite scan every prefix of each sidecar, even for terms with no matches.
+    probes = [f"NOT EXISTS ({lookup}a.prefix = ?)"]
+    probes.extend(f"EXISTS ({lookup}a.prefix GLOB ?)" for _ in patterns)
+    return " AND (" + " OR ".join(probes) + ")", [ANNOTATION_COMPLETE, *patterns]
 
 
 def _trigger_names(table):
@@ -211,6 +303,8 @@ def build(conn, api):
         raise api.MemoryError("Reserved record-map object already exists outside the version 1 index")
     conn.execute("SAVEPOINT richi_search_build")
     try:
+        measurements.index_inline_sources(conn)
+        _build_annotation_index(conn, objects, api)
         for table in TABLES:
             for name in _trigger_names(table):
                 conn.execute("DROP TRIGGER IF EXISTS " + name)

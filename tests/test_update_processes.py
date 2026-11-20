@@ -170,6 +170,23 @@ class UpdateCliRoutingTests(unittest.TestCase):
         self.fetch.assert_not_called()
         self.local_status.assert_not_called()
 
+    def test_applied_update_points_to_review_inside_the_selected_workspace(self):
+        self.fetch.return_value = self.release()
+        self.apply.return_value = {"status": "updated"}
+        with mock.patch.object(update.maps, "after_activation", side_effect=lambda result: result):
+            report = self.command("update", "apply")
+        self.assertEqual(report["preference_review"]["command"], "richi rules review-preferences")
+
+    def test_update_limits_the_page_and_bounds_worker_output(self):
+        def large_review(command, **streams):
+            self.assertEqual(command[-4:], ["rules", "review-preferences", "--limit", "3"])
+            streams["stdout"].write(b" " * (1024 * 1024 + 1))
+            return subprocess.CompletedProcess(command, 0)
+
+        with mock.patch.object(update.subprocess, "run", side_effect=large_review):
+            result = update._preference_review(None)
+        self.assertIn("output limit", result["error"])
+
     def test_auto_invalid_interval_cannot_register_a_job(self):
         from richi_launcher import auto_update
         with mock.patch.object(auto_update, "enable") as enable:

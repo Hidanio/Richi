@@ -13,6 +13,17 @@ richi update apply
 
 To return to the previous release later, run `richi update rollback`.
 
+For the first upgrade from a version without preference review, run
+`richi update apply`, then `richi rules review-preferences` in the new version.
+On subsequent upgrades, `richi update apply --review-preferences` shows the first
+page of historical preferences immediately after activation. At a terminal,
+plain `update apply` also offers this review. The review uses the current CLI
+workspace or the chat's binding. Use the returned `next_after` with
+`rules review-preferences --after` for the next page.
+The next load of standing rules also shows pending historical preferences for
+that scope. Confirm the original wording and scope of each preference you want
+to carry into new chats. [Reviewing preferences](../skills/richi/references/RULES.md#preferences-saved-as-entries)
+
 `check` only queries the official `Hidanio/Richi` repository and shows the current
 and previous installed versions. `apply` downloads the latest stable release.
 To select a specific release, use `--version X.Y.Z` with `check` or `apply`.
@@ -21,8 +32,9 @@ Drafts and prereleases are not installed. When no releases exist, the result is
 Network failures do not change the installed code.
 
 Updates affect the **entire installation**, across every workspace using it.
-Update commands do not accept `-w`, `--config`, `--db` or `--project-path`, do not
-read databases, and do not require workspace selection in a new chat. Existing
+Update commands do not accept `-w`, `--config`, `--db` or `--project-path`.
+Installing a release runs independently of workspace selection and database reads.
+The optional preference review reads the selected store after installation succeeds. Existing
 chat bindings, `dev` settings, source paths, SQLite and captured Git bytes remain
 unchanged. With dev enabled, memory commands keep using source code and managed
 skill links stay on the checkout; `dev false` selects the installed release and

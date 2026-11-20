@@ -72,6 +72,25 @@ original spelling, so a rollback also uses the name available to that agent.
 
 ## Add a rule the user asked to keep
 
+An explicit check lets an agent test the exact proposed name before creating a branch.
+For example, save a ticket convention with the user's agreement and then test a name.
+
+```sh
+richi rules add ticket-branches --project example --text "Name branches EX-<number>_<description>." --branch-format 'EX-{number}_{description}'
+richi --project-path /work/example rules check branch-name EX-42_fix
+```
+
+`{number}` matches one or more ASCII digits, and `{description}` matches letters,
+digits, periods, underscores and hyphens. Each placeholder occurs at most once.
+For a single forbidden prefix, use `--forbid-branch-prefix codex/`.
+`rules update --clear-check` removes the automated check while keeping the instruction.
+A violation exits with code 1 and reports the rule and the expected name convention.
+`manual_rules` lists rules whose wording the agent must still review.
+In an unregistered repository the check evaluates the workspace's global rules
+and returns `project_path_problem`. An ambiguous or unreadable path or an
+explicit project mismatch stops the check. The map shows the current branch
+check on the rule and lets you edit or clear it alongside the instruction.
+
 ```sh
 richi --compact-json rules add no-agent-prefix --global \
   --text "Never prefix branch names with the agent name, such as codex/." \
@@ -202,7 +221,29 @@ stored key identifies one row unambiguously.
 
 ## Preferences saved as entries
 
-Earlier preferences may exist as ordinary entries, which only a matching search
-returns. To make one a rule, confirm the wording with the user, add the rule,
-then update the entry following [ENTRY_WRITE.md](ENTRY_WRITE.md), for example by
-naming the rule and marking the entry `superseded`.
+After an update, inspect pending `preference:*` entries in the selected workspace.
+`rules show` includes a short `preference_review` for the applicable scope.
+Show the candidates to the user. Use the full review to read the exact wording
+and scope before asking which to promote.
+
+```sh
+richi rules review-preferences
+richi rules review-preferences --limit 3 --after preference:branch-naming
+richi --project-path /work/example rules review-preferences
+richi rules promote preference:branch-naming --project example --expected-updated-at 2026-01-02T03:04:05.000000Z
+```
+
+Use the entry's actual `updated_at`. Promotion records the original summary as
+the instruction and links the rule to the entry. The user can confirm revised
+wording with `--text`, another rule ID with `--rule-id`, or an explicit branch
+check with `--forbid-branch-prefix` or `--branch-format`. Unlinked entries offer
+`--global`. When several projects still need review, one copy of the entry
+lists their individual `scopes` and suggested rule IDs. Each scope has its own decision.
+Use `next_after` with `--after` to continue in the same workspace and project.
+If `text_truncated` or `title_truncated` is set, use `read_more` to read the original
+entry before confirming it. On an explicit decision to keep it
+as knowledge, pass `--dismiss`. Both decisions remove that suggestion from
+subsequent reviews. To promote a dismissed scope, read the entry again and obtain
+a new confirmation before adding `--reconsider-dismissed`. A repeated promotion
+reports a conflict if the original rule was removed or replaced. The original
+entry and its evidence stay available.

@@ -13,9 +13,11 @@ import sqlite3
 import sys
 from . import graph
 from . import compact
+from . import measurements
 from .compact import bounded
 from . import output
 from . import revisions
+from . import decision_cards
 
 
 # Newest storage schema: new stores are created with it and migrate targets it.
@@ -165,7 +167,8 @@ def sources(value):
     for source in value:
         if not isinstance(source, dict):
             raise MemoryError("Each source must be an object with a reference")
-        fields(source, {"reference", "label", "observed_at", "type", "revision", "locator", "sha256", "git"})
+        fields(source, {"reference", "label", "observed_at", "type", "revision", "locator", "sha256", "git",
+                        "measurements"})
         item = {"reference": string(source.get("reference"), "source.reference")}
         for key in ("label", "type"):
             if key in source:
@@ -183,6 +186,12 @@ def sources(value):
             item["sha256"] = digest.lower()
         if "observed_at" in source:
             item["observed_at"] = timestamp(source["observed_at"], "source.observed_at")
+        if "measurements" in source:
+            try:
+                measurements.validate(source["measurements"])
+            except ValueError as exc:
+                raise MemoryError(str(exc)) from exc
+            item["measurements"] = source["measurements"]
         if "git" in source:
             from . import git_evidence
             item["git"] = source["git"]
@@ -336,6 +345,7 @@ def initialize(conn, path):
             raise MemoryError("Refusing to initialize a nonempty database with an unknown schema")
         execute_script(conn, (BASE / "schema.sql").read_text(encoding="utf-8"))
         execute_script(conn, (BASE / "graph_schema.sql").read_text(encoding="utf-8"))
+        measurements.index_inline_sources(conn)
         conn.execute("SAVEPOINT optional_fts")
         try:
             execute_script(conn, FTS_SQL)
@@ -418,20 +428,30 @@ def require_project(conn, project_id):
     return dict(row)
 
 
-def entry_record(conn, entry_id):
-    row = conn.execute("SELECT * FROM entries WHERE 1=1 AND id = ?", (entry_id,)).fetchone()
+def entry_record(conn, entry_id, *, counts_only=False):
+    row = conn.execute("SELECT e.*, m.value AS decision_card FROM entries e LEFT JOIN metadata m "
+                       "ON e.kind = 'task' AND m.key = ? WHERE e.id = ?",
+                       (decision_cards.KEY_PREFIX + entry_id, entry_id)).fetchone()
     if row is None:
         return None
     record = dict(row)
+    raw_card = record.pop("decision_card")
+    if raw_card is not None:
+        # Older writers advance the entry revision without updating this
+        # metadata row. Their edit can revoke an earlier recorded decision.
+        saved = json.loads(raw_card)
+        if saved.get("updated_at") == record["updated_at"]:
+            record["decision_card"] = saved["card"]
     for key in ("sources", "tags", "aliases"):
         record[key] = json.loads(record[key])
+    measurements.restore(conn, "entry", record, counts_only=counts_only)
     record["project_ids"] = [x[0] for x in conn.execute(
         "SELECT project_id FROM entry_projects WHERE 1=1 AND entry_id = ? ORDER BY project_id", (entry_id,))]
     return record
 
 
 def entry_put(conn, obj):
-    allowed = set(ENTRY_FIELDS) - {"created_at", "updated_at"} | {"project_ids", "event_id", "expected_updated_at"}
+    allowed = set(ENTRY_FIELDS) - {"created_at", "updated_at"} | {"project_ids", "event_id", "expected_updated_at", "decision_card"}
     fields(obj, allowed)
     record = {"id": identifier(obj.get("id")), "kind": enum(obj.get("kind"), "kind", KINDS),
               "title": string(obj.get("title"), "title"), "summary": string(obj.get("summary"), "summary"),
@@ -442,6 +462,10 @@ def entry_put(conn, obj):
               "tags": string_list(obj.get("tags", []), "tags"),
               "aliases": string_list(obj.get("aliases", []), "aliases"),
               "verified_at": timestamp(obj.get("verified_at"), "verified_at")}
+    if obj.get("decision_card") is not None:
+        if record["kind"] != "task":
+            raise MemoryError("Only a task entry can have a decision_card")
+        record["decision_card"] = decision_cards.validate(obj["decision_card"], sys.modules[__name__])
     projects = obj.get("project_ids", [])
     if not isinstance(projects, list) or len(projects) > 100:
         raise MemoryError("project_ids must be an array of at most 100 IDs")
@@ -471,14 +495,25 @@ def entry_put(conn, obj):
         record["created_at"] = old["created_at"] if old else changed_at
         record["updated_at"] = changed_at
         stored = dict(record)
-        for key in ("sources", "tags", "aliases"):
+        stored["sources"] = dumps(measurements.headers(record["sources"]))
+        for key in ("tags", "aliases"):
             stored[key] = dumps(record[key])
         upsert(conn, "entries", ENTRY_FIELDS, stored)
+        if "decision_card" in record:
+            conn.execute("INSERT INTO metadata(key, value) VALUES (?, ?) "
+                         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                         (decision_cards.KEY_PREFIX + record["id"],
+                          dumps({"updated_at": changed_at, "card": record["decision_card"]})))
+        elif old:
+            conn.execute("DELETE FROM metadata WHERE key = ?", (decision_cards.KEY_PREFIX + record["id"],))
         conn.execute("DELETE FROM entry_projects WHERE 1=1 AND entry_id = ?", (record["id"],))
         conn.executemany("INSERT INTO entry_projects(entry_id, project_id) VALUES (?, ?)",
                          [(record["id"], x) for x in record["project_ids"]])
-        conn.execute("INSERT INTO entry_history(entry_id, changed_at, before_json, after_json, event_id) VALUES (?, ?, ?, ?, ?)",
-                     (record["id"], changed_at, dumps(old) if old else None, dumps(record), event_id))
+        history = conn.execute("INSERT INTO entry_history(entry_id, changed_at, before_json, after_json, event_id) VALUES (?, ?, ?, ?, ?)",
+                               (record["id"], changed_at, dumps(old) if old else None, dumps(record), event_id))
+        measurements.store(conn, "entry", record, history.lastrowid)
+    elif old:
+        measurements.separate_inline(conn, "entry", old, dumps)
     if event_id:
         conn.execute("INSERT INTO entry_events(event_id, entry_id, payload_hash) VALUES (?, ?, ?)",
                      (event_id, record["id"], digest))
@@ -508,8 +543,8 @@ def relation_put(conn, obj):
     return {"id": record["id"], "status": status}
 
 
-def entry_get(conn, entry_id, history=False):
-    record = entry_record(conn, entry_id)
+def entry_get(conn, entry_id, history=False, *, counts_only=False):
+    record = entry_record(conn, entry_id, counts_only=counts_only)
     if record is None:
         raise MemoryError("Unknown entry: " + entry_id)
     if not history:
@@ -874,7 +909,7 @@ def run(args, cli=None):
         # Like a payload, a rule change is read before the store is locked: it may wait for stdin.
         rule_request = rules.read_request(args, sys.modules[__name__]) if writing_rules else None
         checked_project = unmatched_path = None
-        loading_rules = args.command == "rules" and args.action == "show" and args.project is None
+        infer_rule_scope = args.command == "rules" and args.action in {"show", "check"} and args.project is None
         with transaction(conn, write=writing or source_attach or adding_project or applying_scan or building_index or writing_rules):
             if project_path is not None:
                 from .projects import ensure_project_context
@@ -883,7 +918,9 @@ def run(args, cli=None):
                 except MemoryError as exc:
                     # The user's global rules bind an agent in any repository, so loading
                     # them does not depend on this one being registered.
-                    if not loading_rules:
+                    # A preflight may pass only if we know which rules apply. In
+                    # particular, an ambiguous or unreadable path may have project rules.
+                    if not infer_rule_scope or (args.action == "check" and exc.code != "project_unregistered"):
                         raise
                     project, unmatched_path = None, str(exc)
                 checked_project = project["id"] if project else None
@@ -941,7 +978,7 @@ def run(args, cli=None):
             if args.command == "project":
                 return {"projects": [dict(row) for row in conn.execute("SELECT * FROM projects ORDER BY id")]}
             if args.command == "entry":
-                record = entry_get(conn, args.id, history=getattr(args, "history", False))
+                record = entry_get(conn, args.id, history=getattr(args, "history", False), counts_only=args.action == "read")
                 if args.action == "read":
                     return compact.fit_response({"entry": compact.card(record, "entry:" + args.id)}, args.max_chars)
                 return record

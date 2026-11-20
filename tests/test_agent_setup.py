@@ -75,6 +75,27 @@ class AgentSetupFixture:
 
 
 class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
+    def test_existing_managed_codex_block_can_be_refreshed_after_frozen_update(self):
+        configured = self.configure()
+        path = Path(configured["instructions"])
+        current = path.read_bytes()
+        record = agent_setup._load(self.ctx)
+        modern = agent_setup._block(record["command"])
+        old = agent_setup._block(record["command"], name=agent_setup.LEGACY_NAME).replace(
+            b"`project-memory` skill", b"`richi` skill")
+        path.write_bytes(current.replace(modern, old))
+        manifest = self.root / agent_setup.MANIFEST
+        data = json.loads(manifest.read_bytes())
+        data["block_sha256"] = setup_files.digest(old)
+        manifest.write_text(json.dumps(data))
+        notice, = agent_setup.rules_setup_notices()
+        self.assertEqual(notice["next_command"], "richi setup --agent codex --yes")
+        self.configure()
+        self.assertIn(b"chat current --with-rules PATH", path.read_bytes())
+        self.assertIn(b"chat bind NAME --with-rules PATH", path.read_bytes())
+        self.assertIn(b"richi --project-path PATH rules check branch-name NAME", path.read_bytes())
+        self.assertEqual(agent_setup.rules_setup_notices(), [])
+
     def test_preserves_exact_user_bytes_and_repeated_setup_is_idempotent(self):
         instructions = self.home / ".codex/AGENTS.md"
         instructions.parent.mkdir()

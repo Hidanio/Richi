@@ -197,6 +197,36 @@ console.log(JSON.stringify(chosen.map(([base,choice])=>({base,choice,request:ski
                     else choice or None
                 self.assertEqual(rules.skill_for(stored, "unlisted"), unlisted)
 
+    def test_branch_check_roundtrips_through_the_editor_and_command_mode(self):
+        database = self.root / "rules.sqlite3"
+        self.run_command("richi --db " + shlex.quote(str(database)) + " init")
+        commands = self.evaluate(r"""
+const store=['--db',%s],format=branchCheckFromForm('format','EX-{number}_{description}'),
+      prefix=branchCheckFromForm('forbid_prefix',"--'tmp/"),clear=branchCheckFromForm('','');
+assert.match(branchCheckLabel(format),/EX-\{number\}/);
+assert.equal(clear,null);
+for(const invalid of ['EX-x','{number}{number}','{wat}','{description} ','\u0001{number}']){
+  assert.equal(typeof branchCheckFromForm('format',invalid),'string');
+}
+assert.equal(typeof branchCheckFromForm('forbid_prefix','x'.repeat(129)),'string');
+const opened={id:'branch',scope:'global',text:'Use EX.',updated_at:'VERSION',created_at:'C',check:format};
+const current={...opened,check:prefix},skills={skill:null,skills:null};
+assert.equal(ruleUpdate(opened,current,opened.text,skills,format),null);
+assert.deepEqual(ruleUpdate(opened,current,'My text.',skills,prefix,current.check),
+  {action:'update',id:'branch',expected_updated_at:'VERSION',text:'My text.'});
+console.log(JSON.stringify([
+  ruleCommand({action:'add',id:'branch',scope:'global',text:opened.text,check:format},store),
+  ruleCommand(ruleUpdate(opened,opened,opened.text,skills,prefix),store),
+  ruleCommand(ruleUpdate(opened,current,opened.text,skills,clear,current.check),store)
+]));
+""" % json.dumps(str(database)))
+        original = self.run_command(commands[0])["rule"]
+        self.assertEqual(original["check"]["format"], "EX-{number}_{description}")
+        updated = self.run_command(commands[1], VERSION=original["updated_at"])["rule"]
+        self.assertEqual(updated["check"]["forbid_prefix"], "--'tmp/")
+        cleared = self.run_command(commands[2], VERSION=updated["updated_at"])["rule"]
+        self.assertIsNone(cleared["check"])
+
     def test_a_composed_command_names_the_store_and_survives_a_shell(self):
         database = self.root / "my store" / "memory.sqlite3"
         database.parent.mkdir()

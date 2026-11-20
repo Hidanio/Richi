@@ -726,6 +726,20 @@ class MapRulesAPITests(unittest.TestCase):
         self.assertEqual(status, 200, payload)
         return payload
 
+    def test_branch_check_is_visible_and_editable_with_the_map(self):
+        secret = self.secret()
+        check = {"action": "branch-name", "format": "EX-{number}"}
+        rule = self.change(secret, action="add", id="branch", scope="global", text="Use EX.", check=check)["rule"]
+        self.assertEqual(self.listed()["rules"][0]["check"], check)
+        prefix = {"action": "branch-name", "forbid_prefix": "temp/"}
+        edited = self.change(secret, action="update", id="branch", expected_updated_at=rule["updated_at"],
+                             text="Skip temp branches.", check=prefix)["rule"]
+        self.assertEqual(self.listed()["rules"][0]["check"], prefix)
+        self.assertEqual(self.change(secret, 409, action="update", id="branch", expected_updated_at=rule["updated_at"],
+                                     check=None)["code"], "conflict")
+        self.change(secret, action="update", id="branch", expected_updated_at=edited["updated_at"], check=None)
+        self.assertIsNone(self.listed()["rules"][0]["check"])
+
     def test_rules_change_only_with_the_edit_secret(self):
         empty = self.listed()
         self.assertEqual((empty["rules"], empty["editing"]), ([], False))

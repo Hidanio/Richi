@@ -51,8 +51,10 @@ raise the budget or use the individual get. Projects have no individual get;
 for a project above the maximum budget, `project list` provides full project
 records in the selected workspace and is unbounded. `read_limit` means encoded storage
 is too large for the bounded read, not a proven serialized size. Inspect such
-records individually only when needed. A default fetch uses 16000 characters;
-the same 2000–100000 bounds include all JSON formatting and the final newline,
+records individually only when needed. The read limit includes source annotations
+and revisions consulted to verify citations after an edit by an older writer.
+A default fetch uses 16000 characters. The 2000–100000 bounds for the response
+include all JSON formatting and the final newline,
 not tokens or UTF-8 bytes. Compact JSON usually fits more whole records.
 
 If `remaining_count` is nonzero, repeat the **original ref list in the same

@@ -458,10 +458,10 @@ def main(argv=None):
             from .agent_setup import command as setup_command
             return _emit(setup_command(tail), compact_json=compact_json)
         if command == "update":
-            # Package updates are installation-wide and never select/read a
-            # workspace, chat registry, configuration, or knowledge store.
+            # Installation is independent of workspaces. An optional review
+            # runs afterwards through the public CLI with the same chat identity.
             from .update import command as update_command
-            return _emit(update_command(tail), compact_json=compact_json)
+            return _emit(update_command(tail, chat_id=selectors.get("chat_id")), compact_json=compact_json)
         try:
             chat_id = detect_chat(selectors.pop("chat_id", None))
         except ChatError:

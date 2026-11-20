@@ -9,8 +9,10 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import venv
 from unittest import mock
 
+from cli_environment import cli_environment
 from richi_launcher import chats, config, workspaces
 
 
@@ -179,10 +181,9 @@ class ChatCliTests(unittest.TestCase):
         ignored = shutil.ignore_patterns("__pycache__", "*.pyc")
         for source, target in ((ROOT / "launcher/richi_launcher", "richi_launcher"), (ROOT / "src/richi", "richi")):
             shutil.copytree(source, self.installed / target, ignore=ignored)
-        self.environment = {key: value for key, value in os.environ.items()
-                            if not key.startswith("RICHI_") and key not in {"CODEX_THREAD_ID", "CODEX_SESSION_ID", "CURSOR_AGENT"}}
-        self.environment.update(HOME=str(self.root / "home"), XDG_CONFIG_HOME=str(self.root / "config"),
-                                XDG_DATA_HOME=str(self.root / "data"))
+        self.environment = cli_environment(self.root, HOME=str(self.root / "home"),
+                                           XDG_CONFIG_HOME=str(self.root / "config"), XDG_DATA_HOME=str(self.root / "data"))
+        self.environment.pop("CODEX_SESSION_ID", None)
 
     def command(self, *args, chat=None, env=None, ok=True, payload=None, runner=BOOTSTRAP):
         environment = dict(self.environment, **(env or {}))
@@ -193,6 +194,55 @@ class ChatCliTests(unittest.TestCase):
                                 input=json.dumps(payload) if payload is not None else None)
         self.assertEqual(result.returncode == 0, ok, result.stdout + result.stderr)
         return json.loads(result.stdout if ok else result.stderr)
+
+    def test_promoted_branch_rule_reaches_new_and_restored_agent_sessions(self):
+        from richi_launcher import claude_setup, cursor_setup
+        repo = self.root / "service"
+        repo.mkdir()
+        self.command("init")
+        self.command("project", "add", repo, "--id", "service")
+        self.command("entry", "put", "--json", "-", payload={
+            "id": "preference:branch-names", "kind": "note", "title": "Branch naming",
+            "summary": "Name branches EX-<number>_<description>.", "project_ids": ["service"],
+            "sources": [{"reference": "test://user-request"}]})
+        self.assertNotIn("rules_context", self.command("chat", "current", "--with-rules", repo, chat="codex-new"))
+        candidate, = self.command("rules", "review-preferences")["candidates"]
+        self.command("rules", "promote", candidate["entry_id"], "--project", "service",
+                     "--expected-updated-at", candidate["updated_at"], "--branch-format", "EX-{number}_{description}")
+        self.command("rules", "add", "workspace-rule", "--global", "--text", "Keep global release notes.")
+        for args in (("bind", "default"), ("current",)):
+            shown = self.command("chat", *args, "--with-rules", repo, chat="codex-new")["rules_context"]
+            self.assertEqual((shown["workspace"], shown["agent"], shown["project"]), ("default", "codex", "service"))
+            self.assertEqual({item["id"] for item in shown["rules"]}, {"branch-names", "workspace-rule"})
+            rejected = self.command("--project-path", repo, "rules", "check", "branch-name", "codex/EX-42",
+                                    chat="codex-new", ok=False)
+            self.assertEqual(rejected["code"], "rule_violation")
+            self.assertIn("EX-{number}_{description}", rejected["violations"][0]["message"])
+        global_rules = self.command("chat", "current", "--with-rules", chat="codex-new")["rules_context"]
+        self.assertEqual([item["id"] for item in global_rules["rules"]], ["workspace-rule"])
+        self.assertNotIn("rules_context", self.command("chat", "current", chat="codex-new"))
+        # Native hooks invoke the installation's Python in isolated mode. Use a
+        # disposable interpreter with only the fixture's package on its import path.
+        prefix = self.root / "hook-venv"
+        venv.EnvBuilder(with_pip=False).create(prefix)
+        python = prefix / "bin/python"
+        site = subprocess.check_output([python, "-I", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"],
+                                       text=True).strip()
+        (Path(site) / "fixture.pth").write_text(str(self.installed) + "\n")
+        (self.installed / "richi_bootstrap.py").write_text("from richi_launcher.cli import main\n")
+        cases = ((claude_setup.HOOK, "claude", {"hook_event_name": "SessionStart", "source": "resume", "cwd": str(repo)}),
+                 (claude_setup.HOOK, "claude", {"hook_event_name": "SessionStart", "source": "compact", "cwd": str(repo)}),
+                 (cursor_setup.HOOK, "cursor", {"hook_event_name": "sessionStart", "workspace_roots": [str(repo)]}))
+        for hook, agent, payload in cases:
+            for session, bound in (("unbound", False), ("bound", True)):
+                if bound:
+                    self.command("--chat", agent + ":" + session, "chat", "bind", "default")
+                result = subprocess.run([python, "-I", "-c", hook], input=json.dumps(dict(payload, session_id=session)),
+                                        text=True, capture_output=True, cwd=self.root, env=self.environment, check=True)
+                event = json.loads(result.stdout)
+                context = event.get("additional_context") or event["hookSpecificOutput"]["additionalContext"]
+                self.assertEqual("Name branches EX-<number>_<description>." in context, bound, context)
+                self.assertEqual("Keep global release notes." in context, bound, context)
 
     def test_unbound_cannot_read_write_or_select_around_choice_but_metadata_and_help_work(self):
         self.command("workspace", "create", "alpha", chat="new")

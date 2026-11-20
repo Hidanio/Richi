@@ -71,7 +71,7 @@ def _bound(value, maximum=16000):
         raise ValueError("Git response metadata exceeds the output budget; choose a larger --max-chars")
 
 
-def _record(conn, ref, api):
+def _record(conn, ref, api, *, citations_only=False):
     if not isinstance(ref, str):
         raise api.MemoryError("Use a full entry:, entity:, or edge: reference")
     family, separator, identity = ref.partition(":")
@@ -79,9 +79,15 @@ def _record(conn, ref, api):
         raise api.MemoryError("Use a full entry:, entity:, or edge: reference")
     api.identifier(identity)
     if family == "entry":
-        return family, api.entry_get(conn, identity)
-    graph.require_v2(conn, api)
-    return family, graph.get(conn, family, identity, api, history=False)
+        record = api.entry_get(conn, identity, counts_only=citations_only)
+    else:
+        graph.require_v2(conn, api)
+        record = graph.get(conn, family, identity, api, history=False, counts_only=citations_only)
+    if citations_only:
+        for source in record["sources"]:
+            source.pop("measurements_omitted", None)
+            source.pop("measurements", None)
+    return family, record
 
 
 def _read_source(path, api):
@@ -113,7 +119,7 @@ def _selected_source(conn, args, api, allow_legacy=False):
         if getattr(args, "source", 1) != 1:
             raise api.MemoryError("--source is an index into a record's sources and requires --ref")
         return _read_source(path, api), None
-    _, record = _record(conn, ref, api)
+    _, record = _record(conn, ref, api, citations_only=True)
     index = getattr(args, "source", 1)
     if not isinstance(index, int) or index < 1 or index > len(record["sources"]):
         raise api.MemoryError("--source must be a 1-based index into the full record's sources array")
@@ -189,15 +195,28 @@ def attach(conn, args, api, database):
         raise api.MemoryError("Source attach conflict: --expected-updated-at must match the current record; read it again")
     # show verifies the complete captured bytes/hash before returning its excerpt.
     git_evidence.show(source, repo, artifact_dir=_artifacts(database), max_bytes=1)
-    if source in record["sources"]:
-        return _bound({"ref": args.ref, "status": "unchanged", "source_index": record["sources"].index(source) + 1,
-                "updated_at": record["updated_at"]}, getattr(args, "max_chars", 16000))
+    # Adding a measurement to a citation does not change which capture it is.
+    citation = {key: value for key, value in source.items() if key != "measurements"}
+    sources = list(record["sources"])
+    for index, existing in enumerate(sources):
+        if {key: value for key, value in existing.items() if key != "measurements"} != citation:
+            continue
+        previous = existing.get("measurements", [])
+        added = [row for row in source.get("measurements", []) if row not in previous]
+        if not added:
+            return _bound({"ref": args.ref, "status": "unchanged", "source_index": index + 1,
+                           "updated_at": record["updated_at"]}, getattr(args, "max_chars", 16000))
+        sources[index] = dict(existing, measurements=previous + added)
+        break
+    else:
+        index = len(sources)
+        sources.append(source)
     payload = {key: value for key, value in record.items() if key not in ("created_at", "updated_at", "history")}
-    payload["sources"] = record["sources"] + [source]
+    payload["sources"] = sources
     payload["expected_updated_at"] = expected
     result = api.entry_put(conn, payload) if family == "entry" else graph.put(conn, payload, family, api)
     _, after = _record(conn, args.ref, api)
-    return _bound({"ref": args.ref, "status": result["status"], "source_index": len(after["sources"]),
+    return _bound({"ref": args.ref, "status": result["status"], "source_index": index + 1,
             "updated_at": after["updated_at"], "verified_at": after["verified_at"],
             "notice": "Appended evidence while preserving all other record fields and history."},
             getattr(args, "max_chars", 16000))
@@ -242,7 +261,7 @@ def _scan(conn, api, refs=None, repo_id=None):
             if coverage["source_chars_scanned"] >= MAX_SCAN_SOURCE_CHARS:
                 coverage["scan_complete"] = False
                 break
-            _, record = _record(conn, ref, api)
+            _, record = _record(conn, ref, api, citations_only=True)
             coverage["source_chars_scanned"] += len(json.dumps(record["sources"], ensure_ascii=False))
             collect(ref, record)
     else:
@@ -352,7 +371,7 @@ def navigate(conn, args, api, database):
         from . import git_legacy
         if ref is None:
             raise api.MemoryError("Legacy Git references require --ref for explicit repository scope")
-        _, record = _record(conn, ref, api)
+        _, record = _record(conn, ref, api, citations_only=True)
         options = {"action": action, "ref": ref, "source": getattr(args, "source", 1),
                    "max_chars": maximum, "limit": limit,
                    "target": getattr(args, "target", None),

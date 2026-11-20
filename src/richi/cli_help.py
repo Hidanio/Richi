@@ -318,8 +318,9 @@ DETAILS = {
 
         Required: id, kind, title, summary. Optional: project_ids, work_state,
         knowledge_state (default hypothesis), sources, jira_key, tags, aliases,
-        verified_at, expected_updated_at. Confirmed facts and decisions need at
-        least one source.""",
+        verified_at, expected_updated_at. Tasks can carry a decision_card with a
+        question, observations, recommendation, recorded outcome and review
+        condition. Confirmed facts and decisions need at least one source.""",
         examples=(("", "richi entry put --json entry.json"), ("From stdin", "richi entry put --json - < entry.json")),
         see=("records", "entry get")),
     "entry get": dict(about="""
@@ -564,6 +565,29 @@ DETAILS = {
         tell the user.""",
         examples=(("", "richi rules show"), ("", "richi --project-path /path/to/service rules show"),
                   ("As a particular agent", "richi rules show --agent codex"))),
+    "rules review-preferences": dict(about="""
+        Shows active preference: entries that still need a decision in this workspace.
+        Each candidate includes wording, entry version and all pending scopes in view.
+        Continue with --after next_after. For truncated wording, read the original via read_more.
+        With --project-path, includes only workspace-wide entries and that project's entries.""",
+        examples=(("", "richi rules review-preferences"),)),
+    "rules promote": dict(about="""
+        After the user reviews a candidate and confirms its wording and scope,
+        creates a standing rule and links it to the original entry. --dismiss keeps
+        the preference as knowledge. Each linked project is reviewed independently.
+        A different entry version requires a fresh review. A previously dismissed scope
+        requires new explicit approval and --reconsider-dismissed. A missing or replaced
+        rule produces a conflict on retry.""",
+        examples=(("", "richi rules promote preference:branch-naming --project example "
+                       "--expected-updated-at 2026-01-02T03:04:05.000000Z"),)),
+    "rules check": dict(about="""
+        Checks a proposed branch name against the global and selected project's explicit
+        checks. A violated check exits with code 1 and gives the rule text and expected
+        format or forbidden prefix. manual_rules identifies rules to review yourself.
+        An unregistered repository uses the workspace's global checks and reports
+        project_path_problem. Ambiguous paths and explicit project mismatches are errors.
+        An action is never performed by this command.""",
+        examples=(("", "richi --project-path /work/example rules check branch-name EX-42_fix"),)),
     "rules list": dict(about="""
         Lists every stored rule of the workspace as it is stored, with where it
         came from, who changed it last and the total size of all rules (also with
@@ -623,7 +647,7 @@ DETAILS = {
     "rules apply": dict(about="""
         Takes the same change as rules add, update and remove, as one JSON object:
         action, id and that action's fields (scope, project, text, skill, skills,
-        source, expected_updated_at). skills maps an agent ID to its skill. Useful
+        source, check, expected_updated_at). skills maps an agent ID to its skill. Useful
         for text with quotes or line breaks and for programs; the map saves rules
         through it.""",
         examples=(("", "richi rules apply --json rule-change.json"),

@@ -67,7 +67,8 @@ class SourceWatchTests(unittest.TestCase):
         declared = dict(reference=str(self.file), label="Authoritative local report",
                         type="measurement", observed_at="2026-09-30T10:00:00Z",
                         revision="git:abc123", locator="paragraph two (metadata only)",
-                        sha256=hashlib.sha256(self.file.read_bytes()).hexdigest())
+                        sha256=hashlib.sha256(self.file.read_bytes()).hexdigest(),
+                        measurements=[dict(metric="p95 latency", value="12.40", unit="ms", sample="50 trials")])
         self.put_entry("one", sources=[declared])
         before = list(self.conn.iterdump())
         readonly = memory.connect(self.db, readonly=True)

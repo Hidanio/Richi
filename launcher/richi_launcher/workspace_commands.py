@@ -5,7 +5,9 @@ commands never compile these parsers and pages.
 """
 import argparse
 from dataclasses import replace
+import json
 import os
+import subprocess
 import sys
 
 from .config import ConfigError, _path_text, resolve_settings, set_config_value
@@ -246,6 +248,9 @@ def chat_parser():
     selection.add_argument("name", nargs="?", type=workspace_name, help="Workspace to bind this chat to")
     selection.add_argument("--current", action="store_true", help="Bind the workspace that is the CLI default now")
     bind.add_argument("--replace", action="store_true", help="Replace an existing binding; only on the user's explicit request")
+    for action in (current, bind):
+        action.add_argument("--with-rules", nargs="?", const="", metavar="PATH",
+                            help="Include this bound chat's standing rules, optionally for a repository path")
     document(parser, "Show or set the workspace bound to an agent chat.", """
         Pass --chat ID to identify a chat explicitly. When CURSOR_AGENT is set,
         workspace commands require the active client's explicit ID. In Cursor,
@@ -261,7 +266,8 @@ def chat_parser():
                        ("Explicitly move this chat to another workspace", "richi chat bind other --replace")),
              see=("workspace", "environment"), guide="WORKSPACES.md")
     document(current, about="""
-        Reads only metadata and never opens a knowledge database. When a release
+        Reads only metadata by default. --with-rules optionally includes the bound
+        workspace's current rules for this chat and the supplied project path. When a release
         check has recorded an available update, the result also carries an update
         notice. During the skill rename it also lists occupied discovery paths
         in skill_conflicts, with the managed SKILL.md when ownership can be verified.""",
@@ -274,6 +280,32 @@ def chat_parser():
     return complete(parser)
 
 
+def _include_rules(state, path):
+    """Go through the selected runtime. A concurrent rebind cannot select another store."""
+    if path is None or not state["bound"]:
+        return
+    from .runtime import bootstrap_command, lease_fds
+    chat = state["chat_id"]
+    args = ["--chat", chat, "--workspace", state["workspace"], "--compact-json"]
+    if path:
+        args += ["--project-path", path]
+    args += ["rules", "show"]
+    if chat.startswith("cursor:"):
+        args += ["--agent", "cursor"]
+    try:
+        result = subprocess.run(bootstrap_command(args), capture_output=True, text=True, timeout=10,
+                                pass_fds=lease_fds())
+        payload = json.loads(result.stderr if result.returncode else result.stdout)
+        if result.returncode:
+            state["rules_problem"] = payload
+        elif isinstance(payload, dict) and isinstance(payload.get("rules"), list):
+            state["rules_context"] = payload
+        else:
+            state["rules_problem"] = {"error": "The selected runtime did not return rules"}
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        state["rules_problem"] = {"error": "Cannot load this chat's standing rules: " + str(exc)}
+
+
 def chat_command(argv, selectors, chat_id, *, compact_json=False):
     args = chat_parser().parse_args(argv)
     if args.action == "current":
@@ -284,11 +316,15 @@ def chat_command(argv, selectors, chat_id, *, compact_json=False):
         pending = auto_update.notice()
         if pending is not None:
             result["update"] = pending
-        from .agent_setup import rename_conflicts
+        from .agent_setup import rename_conflicts, rules_setup_notices
         conflicts = rename_conflicts()
         if conflicts:
             result["skill_conflicts"] = conflicts
-        return _emit(result, compact_json=compact_json)
-    reject_storage_overrides(selectors)
-    return _emit(bind_chat(chat_id, workspace=args.name, current=args.current, replace=args.replace),
-                 compact_json=compact_json)
+        notices = rules_setup_notices()
+        if notices:
+            result["rules_setup"] = notices
+    else:
+        reject_storage_overrides(selectors)
+        result = bind_chat(chat_id, workspace=args.name, current=args.current, replace=args.replace)
+    _include_rules(result, args.with_rules)
+    return _emit(result, compact_json=compact_json)

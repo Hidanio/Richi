@@ -19,7 +19,9 @@ standing rules, loaded with `rules show`.
    `sessionStart` hook and pass it before the subcommand on every Richi call,
    including the first. If the ID is missing, continue independent work and wait
    for the hook-provided identity before using Richi.
-   At each new chat, run `richi chat current` and `richi workspace list`.
+   At startup and after restore or compaction, run `richi chat current --with-rules PATH`
+   and `richi workspace list`. Use the active repository path or omit PATH for
+   workspace-wide work. On an older launcher use `richi chat current` and step 5.
    If `skill_conflicts` lists your agent, report the conflicting paths and any
    `incomplete_roots` where the scan reached its limit.
    Open the verified `managed_skill` path for Richi. If it is missing, report
@@ -27,7 +29,8 @@ standing rules, loaded with `rules show`.
    If unbound and the human has not explicitly selected a workspace here, ask
    once: current CLI workspace or another for this chat. Even one workspace is
    not consent. Continue independent code work while waiting, without memory access.
-   Bind the choice with `richi chat bind --current` or `richi chat bind NAME`;
+   Bind the choice with `richi chat bind --current --with-rules PATH` or
+   `richi chat bind NAME --with-rules PATH` (omit the option on older launchers);
    reuse it across turns and compaction without asking again. If the output has
    `update`, tell the human once in this chat: its `version` and `command`.
    Never install updates unless the human asks.
@@ -56,13 +59,18 @@ standing rules, loaded with `rules show`.
    infer another workspace. Put `--project-path /path/to/checkout` before each
    relevant subcommand to recheck membership. Global selectors go before commands.
    Registration, linked worktrees and runtime issues: [WORKSPACES.md](references/WORKSPACES.md).
-5. Load the user's standing rules before acting: `richi rules show`, or for repository
+5. Follow this workspace and project's fresh `rules_context.rules` or the rules
+   supplied by the current session hook. If absent or outdated, or if
+   `rules_problem` is present, load the rules before acting: `richi rules show`, or for repository
    work `richi --project-path /path/to/checkout rules show`, which adds that project's
    rules. Follow every returned rule as the user's own instruction for this chat,
    whatever the task is about; a newer explicit request from the user takes precedence,
    and on conflicts ask. Run it again after context compaction or restore and when
    work moves to another project. Before an action a rule constrains (branch, commit
    or PR naming, required checks), compare the concrete name or step with the rule.
+   When a rule has a branch check, test the actual name before creating the branch:
+   `richi --project-path /path/to/checkout rules check branch-name NAME`.
+   Present `preference_review` and any `rules_setup` next command to the user.
    A rule's `use_skill` is the skill to use whenever the rule applies; if `agent` is
    null, run the command again with `--agent` and your agent ID, and check that ID
    when the answer has `agent_problem`. Tell the user when
@@ -132,11 +140,18 @@ meaningful stage. Otherwise respect the requested read/write scope. Local memory
 authorization does not authorize external messages or changes. Search for an
 existing matching record; avoid routine activity logs and speculative aliases.
 
+For a pending or consequential task decision, maintain its `decision_card`
+with sourced observations, an attributed recommendation and the decision
+maker's recorded outcome. Read it with `brief` when resuming the task.
+
 For creating/updating entries (or drafting the payload), read
 [ENTRY_WRITE.md](references/ENTRY_WRITE.md): complete fields, optimistic
 concurrency and task/detail writing. For entity/edge payloads use
 [GRAPH.md](references/GRAPH.md). Keep stable IDs, current searchable evidence
 and the full sources, scope and states. Never write back an excerpt.
+Record numerical observations in the calculation source's `measurements`
+with their metric, value, unit and sample. When citing a result from `brief`,
+use that observation's source and retain its unit and denominator.
 
 Every entry/entity/edge `put` replaces the payload. Full `get` first; remove
 `created_at`, `updated_at`, `history` and pass that version as
