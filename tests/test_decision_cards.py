@@ -468,10 +468,10 @@ class DecisionCardTests(unittest.TestCase):
             row[field] = text
             return {"reference": "test://samples/" + label, "measurements": [row]}
 
-        cases = (("canary", "sample", "50 canary requests", ("Canary", "cana")),
+        cases = (("canary", "sample", "50 canary requests", ("Canary", "cana", "50 canary?")),
                  ("replays", "sample", "5 replays", ("replay", "REPLAYS")),
                  ("success", "metric", "5 successful replays", ("success", "SUCCESSFUL")),
-                 ("running", "value", "12 consecutive runs", ("Consecutive", "12ms")),
+                 ("running", "value", "12 consecutive runs", ("Consecutive", "12")),
                  ("russian", "sample", "50 новых запросов", ("НОВЫХ", "нов")))
         for index, (name, field, text, _) in enumerate(cases):
             self.put(dict(self.task, id="trial-" + str(index), jira_key=None, title="Trial", summary="Result",
@@ -487,11 +487,59 @@ class DecisionCardTests(unittest.TestCase):
                         args = SimpleNamespace(query=query, limit=5, max_chars=16000)
                         found = {card["id"]: card for card in task_brief.brief(self.conn, args, memory, self.db)["results"]}
                         card = found["trial-" + str(index)]
+                        if query == "50 canary?":
+                            self.assertEqual(list(found), ["trial-" + str(index)])
                         self.assertIn("measurement", card["query_match_reasons"])
                         row = card["measurements"][0]
                         self.assertEqual((row["source_index"], row["source"]), (9, {"reference": "test://samples/" + name}))
         self.assertEqual(measurements.query_terms("Was it 5 MW for 50 canary requests?"),
-                         ["5MW", "50", "canary", "requests"])
+                         ["5MW", "50canary", "requests"])
+        args = SimpleNamespace(query="12ms", limit=5, max_chars=16000)
+        self.assertEqual(task_brief.brief(self.conn, args, memory, self.db)["results"], [])
+
+    def test_written_unit_owns_its_endpoint_regardless_of_spelling(self):
+        def citation(label, value, unit):
+            return {"reference": "test://measure/" + label, "measurements": [
+                {"metric": "Reading", "value": value, "unit": unit, "sample": "Fixture"}]}
+
+        def put(identity, sources):
+            self.put(dict(self.task, id=identity, jira_key=None, title="Trial", summary="Result",
+                          sources=sources,
+                          expected_updated_at=(memory.entry_record(self.conn, identity) or {}).get("updated_at")))
+
+        cases = (("time", "5", "min", "s", " → "), ("amount", "19", "mol", "kg", " to "),
+                 ("angle", "21", "rad", "Hz", " versus "), ("pressure", "29", "bar", "Pa", " — "),
+                 ("light", "31", "lux", "V", "–"), ("custom", "37", "zelons", "J", " / "),
+                 ("length", "43", "in", "ft", " to "), ("duration", "47", "с", "Вт", " → "),
+                 ("noted", "53", "ms", "s", " baseline → "), ("cohort", "59", "min", "s", " baseline → "))
+        for identity, number, unit, declared, separator in cases:
+            put(identity + "-wrong-unit", [citation("other", number, declared)])
+            put(identity + "-wrong-number", [citation("another", "71", unit)])
+        for index_mode in ("scan", "indexed"):
+            for present in (False, True):
+                for identity, number, unit, declared, sep in cases:
+                    value = number + " " + unit + sep + "1 " + declared
+                    target = [citation(identity, value, declared)] if present else []
+                    put(identity, [citation("background", "82", declared)] * 8 + target)
+                if index_mode == "indexed":
+                    with memory.transaction(self.conn):
+                        search_index.build(self.conn, memory)
+                for identity, number, unit, declared, sep in cases:
+                    queries = (number + unit, number + " " + unit, "Was it " + number + " " + unit + "?")
+                    for query in queries:
+                        with self.subTest(query=query, present=present, index_mode=index_mode):
+                            args = SimpleNamespace(query=query, limit=10, max_chars=32000)
+                            cards = task_brief.brief(self.conn, args, memory, self.db)["results"]
+                            self.assertEqual([card["id"] for card in cards], [identity] if present else [])
+                            if present:
+                                row = cards[0]["measurements"][0]
+                                self.assertEqual((row["value"], row["source_index"], row["source"]["reference"]),
+                                                 (number + " " + unit + sep + "1 " + declared, 9,
+                                                  "test://measure/" + identity))
+                    if present:
+                        args = SimpleNamespace(query=number + declared, limit=10, max_chars=32000)
+                        cards = task_brief.brief(self.conn, args, memory, self.db)["results"]
+                        self.assertEqual([card["id"] for card in cards], [identity + "-wrong-unit"])
 
     def test_structured_match_applies_the_entity_project_boost(self):
         memory.project_put(self.conn, {"id": "service", "name": "Service"})

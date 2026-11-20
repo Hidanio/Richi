@@ -201,22 +201,27 @@ _SPACED_UNIT = re.compile(r"\s+(" + _UNIT + r")(?!\w|[-.:/]\w)", re.IGNORECASE)
 _TOKEN = re.compile(_QUANTITY.pattern + r"(?!\w|[-.:/]\w)|" + _SYMBOL + r"|[^\W_]+(?:[-_.:/][^\W_]+)*", re.IGNORECASE)
 # In a reported range these words connect or qualify values without supplying
 # their unit. For example, both ends of "87 to 92" take the row's declared unit.
-_RANGE_WORDS = frozenset("to through versus vs and or before after then compared followed "
+_RANGE_WORDS = frozenset("to through versus vs and or before after then compared followed per "
                          "до против и или от после затем".split())
 
 
-def _spaced_symbol(word):
-    """Recognize symbol notation without treating a following descriptive word as a unit."""
+def _description_after(text, end):
+    """A word a preposition can introduce, as in '5 in July'."""
+    from . import recall
+    word = _SPACED_UNIT.match(text, end)
+    if word is None:
+        return False
+    folded = word[1].casefold()
+    return folded not in _RANGE_WORDS and folded not in recall.STOPWORDS
+
+
+def _connector(word, text, end):
+    """Inside prose a preposition can separate terms. At an endpoint it can be a unit (in, с)."""
     from . import recall
     folded = word.casefold()
-    if folded in _RANGE_WORDS or (folded in recall.STOPWORDS and not (len(word) == 1 and word.isupper())):
-        return False
-    if not word.isalpha() or len(word) <= 2:
-        return True
-    # Compact abbreviations such as mWh, Mbps and rpm can accompany a number
-    # in prose. Longer words and ordinary capitalized words remain searchable.
-    return len(word) <= 5 and (any(c.isupper() for c in word[1:])
-                               or (word.isascii() and not re.search("[aeiouy]", folded)))
+    if folded in _RANGE_WORDS:
+        return _TOKEN.search(text, end) is not None
+    return folded in recall.STOPWORDS and not (len(word) == 1 and word.isupper()) and _description_after(text, end)
 
 
 def _tokens(text):
@@ -228,19 +233,23 @@ def _tokens(text):
         unit, end = token["unit"] or "", token.end()
         if token["number"] and not unit:
             spaced = _SPACED_UNIT.match(text, end)
-            if spaced and _spaced_symbol(spaced[1]):
+            if spaced and not _connector(spaced[1], text, spaced.end()):
                 unit, end = spaced[1], spaced.end()
         consumed = end
         yield token, unit, end
 
 
 def lexical_text(text):
-    """Leave written units to the case-sensitive matcher; do not join across fields."""
+    """Keep ordinary words for prefix search; case-bearing symbols have a separate exact match."""
     if not re.search("[0-9]", text):
         return text
     parts, start = [], 0
-    for _, unit, end in _tokens(text):
-        if unit:
+    for token, unit, end in _tokens(text):
+        # In unstructured prose a word after a count can describe its sample.
+        # Preserve such words, including uppercase headings. Reserve a visibly
+        # cased abbreviation (MW, mW, MB/s) for literal symbol matching.
+        if unit and (token["unit"] or len(unit) <= 2 or not unit.isalpha() or
+                     (any(c.isupper() for c in unit[1:]) and (not unit.isupper() or len(unit) <= 3))):
             parts.append(text[start:end - len(unit)])
             start = end
     return " ".join([*parts, text[start:]]) if parts else text

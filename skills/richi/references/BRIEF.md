@@ -80,7 +80,9 @@ comes from the last source on a long task. Up to eight observations are
 selected by overlap with the question, with ties in recorded order.
 Use the unit's recorded spelling when searching for measurements such as `5 MW`
 or `5 mW`. In a question such as “Was it 5 MW?”, the number and symbol are matched
-together. Words describing the sample remain searchable by prefix, so `cana`
+together. Each endpoint keeps its written unit. In `5 min → 1 s`, searches for
+`5min` and `1s` find their respective endpoints. A bare value such as `12` can
+take the row’s declared unit. Words describing the sample remain searchable by prefix, so `cana`
 can find “50 canary requests”. A query for `200ms` can also find a metric such as “RPCs completed
 within 200 ms”. Read the metric and unit together to distinguish a deadline from the reported count.
 `measurements_omitted` counts whole observations omitted by selection or

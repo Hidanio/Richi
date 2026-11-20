@@ -34,6 +34,8 @@ class MeasurementTests(unittest.TestCase):
             ("current", "sample", "Load at 7 A", ("A", "7A", "7 A")),
             ("fraction", "unit", "%", ("%", "92%")),
             ("temperature", "unit", "°C", ("°C", "92 °C")),
+            ("milli", "sample", "Elapsed at 13 ms baseline", ("ms", "13ms", "13 ms")),
+            ("mega", "sample", "Elapsed at 13 Ms baseline", ("Ms", "13Ms", "13 Ms")),
         )
 
         def add(identity, field, text):
