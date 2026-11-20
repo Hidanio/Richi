@@ -193,26 +193,58 @@ _MANTISSA = (r"[0-9]{1,3}(?:,[0-9]{3})+\.[0-9]+|"
              rf"[0-9]{{1,3}}(?:[{_SPACES}][0-9]{{3}})+(?:[.,][0-9]+)?|"
              r"[0-9]+(?:[.,][0-9]+)?|[.,][0-9]+")
 _NUMBER = r"[+\-−]?(?:" + _MANTISSA + r")(?:e[+\-−]?[0-9]+)?"
-_UNIT = r"[^\W\d_]+(?:/[^\W\d_]+)?|[%‰]|°[cf]?"
+_SYMBOL = r"[%‰]|°[cf]?"
+_UNIT = r"[^\W\d_]+(?:/[^\W\d_]+)?|" + _SYMBOL
 _QUANTITY = re.compile("(?P<number>" + _NUMBER + ")(?P<unit>" + _UNIT + ")?", re.IGNORECASE)
 _SPACED_UNIT = re.compile(r"\s+(" + _UNIT + r")(?!\w|[-.:/]\w)", re.IGNORECASE)
 # Consume identifiers as a whole, including v0.5, p95, EX-5 and 1.2.3.
-_TOKEN = re.compile(_QUANTITY.pattern + r"(?!\w|[-.:/]\w)|[^\W_]+(?:[-_.:/][^\W_]+)*", re.IGNORECASE)
+_TOKEN = re.compile(_QUANTITY.pattern + r"(?!\w|[-.:/]\w)|" + _SYMBOL + r"|[^\W_]+(?:[-_.:/][^\W_]+)*", re.IGNORECASE)
+# In a reported range these words connect or qualify values without supplying
+# their unit. For example, both ends of "87 to 92" take the row's declared unit.
+_RANGE_WORDS = frozenset("to through versus vs and or before after then compared followed "
+                         "до против и или от после затем".split())
+
+
+def _tokens_with_unit(text):
+    """Keep the following word beside the number so the caller can distinguish a written unit."""
+    for token in _TOKEN.finditer(text):
+        spaced = _SPACED_UNIT.match(text, token.end()) if token["number"] and not token["unit"] else None
+        yield token, spaced
 
 
 def _tokens(text):
     """Keep a separate unit eligible for both lexical and exact quantity matches."""
-    for token in _TOKEN.finditer(text):
-        number, unit = token["number"], token["unit"]
-        yield token[0], number, unit or ""
-        if number is not None and not unit:
-            spaced = _SPACED_UNIT.match(text, token.end())
-            if spaced:
-                yield number + spaced[1], number, spaced[1]
+    for token, spaced in _tokens_with_unit(text):
+        yield token[0], token["number"], token["unit"] or ""
+        if spaced:
+            yield token["number"] + spaced[1], token["number"], spaced[1]
+
+
+def lexical_text(text):
+    """Leave written units to the case-sensitive matcher; do not join across fields."""
+    if not re.search("[0-9]", text):
+        return text
+    parts, start = [], 0
+    for token, spaced in _tokens_with_unit(text):
+        if token["unit"]:
+            begin, end = token.span("unit")
+        elif spaced and spaced[1].casefold() not in _RANGE_WORDS:
+            begin, end = spaced.span(1)
+        else:
+            continue
+        parts.append(text[start:begin])
+        start = end
+    return " ".join([*parts, text[start:]]) if parts else text
 
 
 def query_terms(text):
     from . import recall
+    stripped = text.strip()
+    first = _TOKEN.match(stripped)
+    if first and first["number"] and not first["unit"]:
+        unit = _SPACED_UNIT.fullmatch(stripped, first.end())
+        if unit and (unit[1] not in recall.STOPWORDS or unit[1].isupper()):
+            return [first["number"] + unit[1]]
     terms = {}
     for word, number, _ in _tokens(text):
         if number is None:
@@ -276,29 +308,36 @@ class MeasurementQuery:
                     found.add(folded)
         return found
 
-    def quantity_hits(self, row, word_hits, fields=FIELDS):
-        """A unit's exact spelling breaks ties between ordinary lexical matches."""
-        possible_units = {word for word, folded in self.unit_words.items() if folded in word_hits}
+    def matched_quantity_units(self, hits):
+        return {unit for (_, unit), terms in self.numbers.items() if unit and not terms.isdisjoint(hits)}
+
+    def quantity_hits(self, row, fields=FIELDS):
+        """Match recorded quantities and unit symbols, including the MW part of 5MW."""
         declared_unit = row["unit"].strip()
-        unit_hits = {declared_unit} if "unit" in fields and declared_unit in possible_units else set()
+        unit_hits = {declared_unit} if "unit" in fields and declared_unit in self.unit_words else set()
         numbers = set()
         for field in fields:
             text = row[field]
-            if not self.numbers and not (any(unit in text for unit in possible_units) and re.search("[0-9]", text)):
+            if not self.numbers and not (any(unit in text for unit in self.unit_words) and re.search("[0-9]", text)):
                 continue
-            for _, literal, unit in _tokens(text):
+            for token, following in _tokens_with_unit(text):
+                literal = token["number"]
                 if literal is None:
                     continue
-                if unit in possible_units:
+                spaced = following[1] if following else None
+                unit = token["unit"] or spaced or ""
+                if unit in self.unit_words:
                     unit_hits.add(unit)
                 if self.numbers:
                     number = _number(literal)
                     numbers.update(self.numbers.get((number, unit), ()))
-                    if unit == declared_unit:
+                    if not token["unit"] or unit == declared_unit:
                         numbers.update(self.numbers.get((number, ""), ()))
-                    elif field == "value" and not unit:
+                    # The declaration fills a missing unit only. In "5 ms → 1 s"
+                    # a declaration of "s" cannot turn the first value into 5 s.
+                    if field == "value" and not token["unit"] and (not spaced or spaced.casefold() in _RANGE_WORDS):
                         numbers.update(self.numbers.get((number, declared_unit), ()))
-        return numbers, unit_hits
+        return numbers | {self.unit_words[unit] for unit in unit_hits}, unit_hits
 
 
 def attach(card, sources, terms):
@@ -310,11 +349,11 @@ def attach(card, sources, terms):
     def matches():
         for index, source in enumerate(sources, 1):
             for row in source.get("measurements", ()):
-                narrative = " ".join(row[field] for field in NARRATIVE_FIELDS)
+                narrative = " ".join(lexical_text(row[field]) for field in NARRATIVE_FIELDS) if query.words else ""
                 words = query.word_hits(narrative, (row["unit"].strip(),))
-                numbers, units = query.quantity_hits(row, words)
-                metric_words = query.word_hits(row["metric"])
-                metric_numbers, _ = query.quantity_hits(row, metric_words, ("metric",))
+                numbers, units = query.quantity_hits(row)
+                metric_words = query.word_hits(lexical_text(row["metric"])) if query.words else set()
+                metric_numbers, _ = query.quantity_hits(row, ("metric",))
                 yield (len(words | numbers), len(units), len(metric_words | metric_numbers)), index, row
 
     card["measurements"] = []

@@ -67,12 +67,14 @@ def _annotation_matches(conn, query, terms, keys, states, project, api, *, decis
         card_text = recall.normalize(" ".join(decision_cards.search_fields(decision))) if decision else ""
         rows = [row for source in record["sources"] for row in source.get("measurements", ())]
         narrative = " ".join(row[field] for row in rows for field in measurements.NARRATIVE_FIELDS)
+        lexical = (" ".join(measurements.lexical_text(row[field]) for row in rows for field in measurements.NARRATIVE_FIELDS)
+                   if measured.words else "")
         units = {row["unit"].strip() for row in rows}
         decision_hits = {term for term in decision_terms if recall.matches_term(term, card_text)}
-        word_hits = measured.word_hits(narrative, units)
+        word_hits = measured.word_hits(lexical, units)
         measurement_hits, exact_units = set(word_hits), set()
         for row in rows:
-            numbers, spelled_units = measured.quantity_hits(row, word_hits)
+            numbers, spelled_units = measured.quantity_hits(row)
             measurement_hits.update(numbers)
             exact_units.update(spelled_units)
         reasons = [reason for reason, hits in (("decision_card", decision_hits), ("measurement", measurement_hits)) if hits]
@@ -80,7 +82,8 @@ def _annotation_matches(conn, query, terms, keys, states, project, api, *, decis
         if not matched:
             continue
         # A compact quantity like "5ms" may match a value and unit in separate fields.
-        annotated = dict(record, summary=" ".join((record["summary"], card_text, narrative, *units, *measurement_hits)))
+        written_units = measured.matched_quantity_units(measurement_hits)
+        annotated = dict(record, summary=" ".join((record["summary"], card_text, narrative, *units, *measurement_hits, *written_units)))
         if not keys and (not recall.matches_subject(annotated, subjects)
                          or not recall.matches_short_subjects(annotated, symbols)):
             continue

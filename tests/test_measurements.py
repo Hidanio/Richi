@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from richi import compact, graph, measurements, memory, recall, retrieval_tools, task_brief
+from richi import compact, graph, measurements, memory, recall, retrieval_tools, search_index, task_brief
 
 
 class MeasurementTests(unittest.TestCase):
@@ -27,6 +27,38 @@ class MeasurementTests(unittest.TestCase):
             if kind == "entry":
                 return memory.entry_put(self.conn, payload)
             return graph.put(self.conn, payload, kind, memory)
+
+    def test_brief_recovers_exact_units_from_written_quantities_and_symbols(self):
+        cases = (
+            ("power", "metric", "Conversion at 5MW", ("MW", "5MW", "5 MW")),
+            ("current", "sample", "Load at 7 A", ("A", "7A", "7 A")),
+            ("fraction", "unit", "%", ("%", "92%")),
+            ("temperature", "unit", "°C", ("°C", "92 °C")),
+        )
+
+        def add(identity, field, text):
+            row = {"metric": "Sensor", "value": "92", "unit": "points", "sample": "Trial"}
+            row[field] = text
+            self.put("entry", {"id": identity, "kind": "experiment", "title": "Trial", "summary": "Observation",
+                               "knowledge_state": "confirmed", "sources": [
+                                   {"reference": "test://" + identity, "measurements": [row]}]})
+
+        def results(question):
+            args = SimpleNamespace(query=question, limit=4, max_chars=16000)
+            return [(card["id"], card["measurements"][0]["source"]["reference"])
+                    for card in task_brief.brief(self.conn, args, memory, self.db)["results"]]
+
+        add("other", "metric", "Conversion at 5 mW")
+        for key, field, text, _ in cases:
+            add(key, field, text)
+        for indexed in (False, True):
+            if indexed:
+                with memory.transaction(self.conn):
+                    search_index.build(self.conn, memory)
+            for key, _, _, questions in cases:
+                for question in questions:
+                    with self.subTest(indexed=indexed, question=question):
+                        self.assertEqual(results(question), [(key, "test://" + key)])
 
     def get(self, kind, history=False):
         if kind == "entry":

@@ -94,6 +94,42 @@ class SearchIndexTests(unittest.TestCase):
         self.conn.execute("DROP TRIGGER " + search_index.ANNOTATION_TRIGGERS[0])
         self.assertEqual(copied(self.conn, "missing"), ["entry:first", "entry:second"])
 
+    def test_written_and_declared_unit_prefixes_and_earlier_index_fallback(self):
+        cases = (("sample", "at 5MW", "mw"), ("metric", "Cost per 4MB/s", "mb/s"),
+                 ("value", "3‰", "‰"), ("sample", "at 10 °C", "°c"),
+                 ("unit", "%", "%"), ("unit", "°F", "°f"))
+        with memory.transaction(self.conn):
+            for index, (field, text, _) in enumerate(cases):
+                row = {"metric": "Efficiency", "value": "10", "unit": "items", "sample": "fixture"}
+                row[field] = text
+                memory.entry_put(self.conn, {"id": str(index), "kind": "task", "title": "Trial", "summary": "Result",
+                                             "knowledge_state": "confirmed",
+                                             "sources": [{"reference": "test://table", "measurements": [row]}]})
+        self.build()
+
+        def candidates(term):
+            return [ref for ref, _ in task_brief._annotation_payloads(self.conn, ["confirmed"], [term])]
+
+        for index, (_, _, term) in enumerate(cases):
+            with self.subTest(term=term):
+                self.assertEqual(candidates(term), ["entry:" + str(index)])
+        table = search_index.ANNOTATIONS
+        key = measurements.KEY_PREFIX + "entry:0"
+        existing = {row[0] for row in self.conn.execute("SELECT prefix FROM " + table + " WHERE sidecar = ?", (key,))}
+        self.assertTrue({"", "5mw", "mw", search_index.ANNOTATION_COMPLETE} <= existing)
+        raw = self.conn.execute("SELECT value FROM metadata WHERE key = ?", (key,)).fetchone()[0]
+        with mock.patch.object(search_index, "MAX_RECORD_KEYS", len(existing) - 1):
+            self.assertEqual(search_index._annotation_prefixes(key, raw), ())
+        # An earlier builder indexed the word 5mw, without its unit or the
+        # new completeness marker. Readers must scan that sidecar until rebuilt.
+        self.conn.execute("DELETE FROM " + table + " WHERE sidecar = ? AND prefix IN (?, ?)",
+                          (key, "mw", search_index.ANNOTATION_COMPLETE))
+        self.assertEqual(candidates("mw"), ["entry:0"])
+        self.assertEqual(candidates("absent"), ["entry:0"])
+        self.build()
+        self.assertEqual(candidates("mw"), ["entry:0"])
+        self.assertEqual(candidates("absent"), [])
+
     def test_common_measurement_ranks_without_retaining_owners_or_source_headers(self):
         long_text = "x" * 65536
         measurement = {"metric": "canary", "value": "19", "unit": "ms", "sample": "40 requests"}

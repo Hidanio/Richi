@@ -395,6 +395,43 @@ class DecisionCardTests(unittest.TestCase):
                         self.assertEqual((card["id"], row["source_index"], row["source"]["reference"]),
                                          ("z-" + key, 2, "test://calculation/" + key + "-target"))
 
+    def test_reported_comparison_uses_each_written_unit_before_the_row_declaration(self):
+        def source(label, value):
+            row = {"metric": "Elapsed time", "value": value, "unit": "s", "sample": "Before and after"}
+            return {"reference": "test://trial/" + label, "measurements": [row]}
+
+        slower = source("slower", "5 ms → 1 s")
+        seconds = source("seconds", "1 s → 5 s")
+        for identity, sources in (("a", [slower]), ("z", [slower, seconds])):
+            self.put(dict(self.task, id=identity, jira_key=None, title="Trial", summary="Observed.",
+                          sources=sources))
+        for identity, value in (("arrow", "87 → 92"), ("connective", "31 to 49"), ("versus", "73 VS 76"),
+                                ("dash", "56–58")):
+            self.put(dict(self.task, id=identity, jira_key=None, title="Trial", summary="Observed.",
+                          sources=[source(identity, value)]))
+
+        for indexed in (False, True):
+            if indexed:
+                with memory.transaction(self.conn):
+                    search_index.build(self.conn, memory)
+            for query, identity, expected_source in (("5s", "z", seconds), ("5 s", "z", seconds),
+                                                     ("5ms", "a", slower), ("5 ms", "a", slower)):
+                with self.subTest(indexed=indexed, query=query):
+                    args = SimpleNamespace(query=query, limit=5, max_chars=16000)
+                    cards = task_brief.brief(self.conn, args, memory, self.db)["results"]
+                    if query == "5s":
+                        self.assertEqual([card["id"] for card in cards], ["z"])
+                    self.assertEqual(cards[0]["id"], identity)
+                    winner = cards[0]["measurements"][0]
+                    self.assertEqual((winner["value"], winner["source"]["reference"]),
+                                     (expected_source["measurements"][0]["value"], expected_source["reference"]))
+            for identity, endpoints in (("arrow", (87, 92)), ("connective", (31, 49)), ("versus", (73, 76)),
+                                        ("dash", (56, 58))):
+                for endpoint in endpoints:
+                    args = SimpleNamespace(query=str(endpoint) + "s", limit=5, max_chars=16000)
+                    card, = task_brief.brief(self.conn, args, memory, self.db)["results"]
+                    self.assertEqual(card["measurements"][0]["source"]["reference"], "test://trial/" + identity)
+
     def test_structured_match_applies_the_entity_project_boost(self):
         memory.project_put(self.conn, {"id": "service", "name": "Service"})
         evidence = {"reference": "synthetic://trial", "measurements": [

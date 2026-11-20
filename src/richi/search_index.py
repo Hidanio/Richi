@@ -42,23 +42,38 @@ ANNOTATIONS = "richi_brief_prefixes_v1"
 ANNOTATION_VERSION = "richi_brief_prefix_version"
 ANNOTATION_TRIGGERS = (ANNOTATIONS + "_insert", ANNOTATIONS + "_update", ANNOTATIONS + "_delete")
 ANNOTATION_PREFIX_CHARS = 12
+# Longer than every stored prefix, including a user-supplied unit.
+ANNOTATION_COMPLETE = "complete-with-units:v2"
 _WORD_START = re.compile(r"(?<![^\W_])(?=([^\W_][\w./:-]{0,%d}))" % (ANNOTATION_PREFIX_CHARS - 1))
 
 
-def _annotation_prefixes(key, raw):
+def _annotation_terms(key, payload):
     from . import recall
 
-    payload = json.loads(raw)
-    if key.startswith(decision_cards.KEY_PREFIX):
+    decision = key.startswith(decision_cards.KEY_PREFIX)
+    if decision:
         texts = decision_cards.search_fields(payload["card"])
     else:
+        for rows in payload["rows"].values():
+            for row in rows:
+                yield recall.normalize(row["unit"].strip())
         texts = (row[field] for rows in payload["rows"].values() for row in rows for field in measurements.FIELDS)
-    prefixes = {""}  # A complete, possibly empty, set. Absence means scan the original.
     for text in texts:
         for word in _WORD_START.finditer(recall.normalize(text)):
-            prefixes.add(word.group(1))
-            if len(prefixes) > MAX_RECORD_KEYS:
-                return ()
+            yield word.group(1)
+        if not decision and re.search("[0-9]", text):
+            for _, _, unit in measurements._tokens(text):
+                if unit:
+                    yield recall.normalize(unit)
+
+
+def _annotation_prefixes(key, raw):
+    # Old readers use the empty marker. New readers also require the unit keys.
+    prefixes = {"", ANNOTATION_COMPLETE}
+    for term in _annotation_terms(key, json.loads(raw)):
+        prefixes.add(term[:ANNOTATION_PREFIX_CHARS])
+        if len(prefixes) > MAX_RECORD_KEYS:
+            return ()
     return prefixes
 
 
@@ -101,15 +116,15 @@ def annotation_gate(conn, terms):
     version = conn.execute("SELECT value FROM metadata WHERE key = ?", (ANNOTATION_VERSION,)).fetchone()
     if not version or version[0] != "1":
         return "", []
-    # terms_for only returns letters, numbers and -_.:/, so GLOB's only
-    # metacharacter here is the final '*'. Numeric boundaries are checked on the record.
+    # Query terms and supported unit symbols (e.g. %, °C) contain no GLOB
+    # metacharacters. Numeric boundaries and symbol case are checked on the record.
     patterns = sorted({term[:ANNOTATION_PREFIX_CHARS] + "*" for term in terms})
     lookup = f"SELECT 1 FROM {ANNOTATIONS} a WHERE a.sidecar = m.key AND "
     # Use one range seek per term. Multiple GLOBs on the same row can make
     # SQLite scan every prefix of each sidecar, even for terms with no matches.
-    probes = [f"NOT EXISTS ({lookup}a.prefix = '')"]
+    probes = [f"NOT EXISTS ({lookup}a.prefix = ?)"]
     probes.extend(f"EXISTS ({lookup}a.prefix GLOB ?)" for _ in patterns)
-    return " AND (" + " OR ".join(probes) + ")", patterns
+    return " AND (" + " OR ".join(probes) + ")", [ANNOTATION_COMPLETE, *patterns]
 
 
 def _trigger_names(table):
