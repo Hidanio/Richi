@@ -67,6 +67,47 @@ class MeasurementTests(unittest.TestCase):
             return memory.entry_get(self.conn, "shared", history)
         return graph.get(self.conn, kind, "shared", memory, history)
 
+    def test_bare_written_symbols_require_the_recorded_case_in_both_directions(self):
+        def save(samples):
+            sources = [{"reference": "test://reading/" + str(index), "measurements": [
+                {"metric": "Efficiency", "value": "92", "unit": "%", "sample": sample}]}
+                       for index, sample in enumerate(samples, 1)]
+            self.put("entry", {"id": "trial", "kind": "experiment", "title": "Trial", "summary": "Observation",
+                               "knowledge_state": "confirmed", "sources": sources})
+
+        def brief(query):
+            args = SimpleNamespace(query=query, limit=4, max_chars=16000)
+            return task_brief.brief(self.conn, args, memory, self.db)["results"]
+
+        for indexed in (False, True):
+            for written, other in (("Mbps", "MBps"), ("MBps", "Mbps"), ("Mbar", "mbar"), ("mbar", "Mbar"),
+                                   ("mmol", "Mmol"), ("Mrad", "mrad")):
+                with self.subTest(written=written, other=other, indexed=indexed):
+                    baseline = ["Measured at 5 " + written] * 8
+                    save(baseline)
+                    if indexed:
+                        with memory.transaction(self.conn):
+                            search_index.build(self.conn, memory)
+                    self.assertEqual(brief(other), [])
+                    stored, = brief(written)
+                    self.assertEqual(stored["measurements"][0]["source"]["reference"], "test://reading/1")
+                    save(baseline + ["Measured at 5 " + other])
+                    if indexed:
+                        with memory.transaction(self.conn):
+                            search_index.build(self.conn, memory)
+                    matched, = brief(other)
+                    row = matched["measurements"][0]
+                    self.assertEqual((row["source_index"], row["source"]["reference"]), (9, "test://reading/9"))
+
+            save(["50 baseline requests"] * 8 + ["50 warm requests, 50 новых запросов and 5 replays"])
+            if indexed:
+                with memory.transaction(self.conn):
+                    search_index.build(self.conn, memory)
+            for word in ("Warm", "war", "Новых", "нов", "REPLAYS", "replay"):
+                with self.subTest(word=word, indexed=indexed):
+                    matched, = brief(word)
+                    self.assertEqual(matched["measurements"][0]["source_index"], 9)
+
     def create(self):
         for kind in ("entry", "entity", "edge"):
             fields = ({"kind": "metric", "title": "Unrelated trial", "summary": "A related experiment."}

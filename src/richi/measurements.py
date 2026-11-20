@@ -239,7 +239,16 @@ def _tokens(text):
         yield token, unit, end
 
 
-def lexical_text(text):
+# A prefixed alphabetic unit like Mbar can look exactly like a capitalized word.
+# This distinction is only for bare lexical queries, never qualified quantities.
+_BARE_UNIT_BASES = {"bar", "bit", "bps", "byte", "kat", "lux", "mol", "rad"}
+
+
+def _symbol_case(word):
+    return any(c.isupper() for c in word[1:]) and (not word.isupper() or len(word) <= 3)
+
+
+def lexical_text(text, spellings):
     """Keep ordinary words for prefix search; case-bearing symbols have a separate exact match."""
     if not re.search("[0-9]", text):
         return text
@@ -248,19 +257,34 @@ def lexical_text(text):
         # In unstructured prose a word after a count can describe its sample.
         # Preserve such words, including uppercase headings. Reserve a visibly
         # cased abbreviation (MW, mW, MB/s) for literal symbol matching.
-        if unit and (token["unit"] or len(unit) <= 2 or not unit.isalpha() or
-                     (any(c.isupper() for c in unit[1:]) and (not unit.isupper() or len(unit) <= 3))):
+        if not unit:
+            continue
+        # Also recognize the distinction from the question. For example, Mbps
+        # alone looks like a capitalized word, but MBps distinguishes bits
+        # from bytes. A differing prefix on the same base distinguishes Mbar
+        # from mbar without suppressing ordinary titlecase words like Warm.
+        folded = unit.casefold()
+        case_variant = any(
+            word != unit and word.casefold() == folded and
+            ((len(word) <= 5 and _symbol_case(word)) or folded[1:] in _BARE_UNIT_BASES)
+            for word in spellings)
+        if token["unit"] or len(unit) <= 2 or not unit.isalpha() or _symbol_case(unit) or case_variant:
             parts.append(text[start:end - len(unit)])
             start = end
     return " ".join([*parts, text[start:]]) if parts else text
 
 
-def query_terms(text):
+def query_terms(text, unit_starts=None):
     from . import recall
     terms = {}
     for token, unit, _ in _tokens(text):
         if token["number"]:
             word = token["number"] + unit
+            if unit_starts is not None and (word in terms or len(terms) < 64):
+                start = token.end("number")
+                if text[start:start + 1] == " ":
+                    start += 1
+                unit_starts.setdefault(_number(token["number"]), []).append((start, word))
         else:
             word = token[0]
             folded = recall.normalize(word)
@@ -283,11 +307,21 @@ def _number(value):
     return re.sub(r"^(-?)\.", r"\g<1>0.", value)
 
 
+_UNIT_CONTINUATION = re.compile(r"\w|[-.:/]\w")
+
+
+def _phrase_at(text, start, unit):
+    return text.startswith(unit, start) and not _UNIT_CONTINUATION.match(text, start + len(unit))
+
+
 class MeasurementQuery:
-    def __init__(self, terms):
+    def __init__(self, text):
         from . import recall
+        self.text = " ".join(text.split())
+        self.unit_starts = {}
+        self.terms = query_terms(self.text, self.unit_starts)
         self.words, self.unit_words, self.numbers = set(), {}, {}
-        for term in terms:
+        for term in self.terms:
             quantity = _QUANTITY.fullmatch(term)
             if quantity:
                 key = (_number(quantity["number"]), quantity["unit"] or "")
@@ -326,16 +360,26 @@ class MeasurementQuery:
     def matched_quantity_units(self, hits):
         return {unit for (_, unit), terms in self.numbers.items() if unit and not terms.isdisjoint(hits)}
 
+    def has_quantity_hit(self, hits):
+        return any(not terms.isdisjoint(hits) for terms in self.numbers.values())
+
+    def _declared_phrase_hits(self, number, unit):
+        """Bind the full recorded unit, such as 'completed RPCs', to its query number."""
+        for start, term in self.unit_starts.get(number, ()):
+            if _phrase_at(self.text, start, unit):
+                yield term
+
     def quantity_hits(self, row, fields=FIELDS):
         """Match recorded quantities and unit symbols, including the MW part of 5MW."""
         declared_unit = row["unit"].strip()
+        declared_phrase = " ".join(declared_unit.split()) if self.numbers else ""
         unit_hits = {declared_unit} if "unit" in fields and declared_unit in self.unit_words else set()
         numbers = set()
         for field in fields:
             text = row[field]
             if not self.numbers and not (any(unit in text for unit in self.unit_words) and re.search("[0-9]", text)):
                 continue
-            for token, unit, _ in _tokens(text):
+            for token, unit, end in _tokens(text):
                 literal = token["number"]
                 if literal is None:
                     continue
@@ -343,31 +387,44 @@ class MeasurementQuery:
                     unit_hits.add(unit)
                 if self.numbers:
                     number = _number(literal)
-                    numbers.update(self.numbers.get((number, unit), ()))
+                    written = self.numbers.get((number, unit), ())
+                    if field == "value" and unit and declared_phrase.startswith(unit + " "):
+                        if _phrase_at(text, end - len(unit), declared_phrase):
+                            unit, written = declared_phrase, ()
+                        else:
+                            # A shared first word cannot establish the full written unit.
+                            written = set(written).difference(self._declared_phrase_hits(number, declared_phrase))
+                    numbers.update(written)
                     if not token["unit"] or unit == declared_unit:
                         numbers.update(self.numbers.get((number, ""), ()))
                     # The declaration fills a missing unit only. In "5 ms → 1 s"
                     # a declaration of "s" cannot turn the first value into 5 s.
-                    if field == "value" and not unit:
-                        numbers.update(self.numbers.get((number, declared_unit), ()))
-        return numbers | {self.unit_words[unit] for unit in unit_hits}, unit_hits
+                    if field == "value" and (not unit or unit == declared_phrase):
+                        if not unit:
+                            numbers.update(self.numbers.get((number, declared_unit), ()))
+                        if " " in declared_phrase:
+                            phrase_hits = set(self._declared_phrase_hits(number, declared_phrase))
+                            if phrase_hits:
+                                numbers.update(phrase_hits)
+                                unit_hits.update(declared_phrase.split())
+        return numbers | {self.unit_words[unit] for unit in unit_hits if unit in self.unit_words}, unit_hits
 
 
-def attach(card, sources, terms):
+def attach(card, sources, query):
     """Choose observations across *all* sources, including ones outside the source excerpt."""
     count = sum(len(source.get("measurements", ())) for source in sources)
     if not count:
         return
-    query = MeasurementQuery(terms)
     def matches():
         for index, source in enumerate(sources, 1):
             for row in source.get("measurements", ()):
-                narrative = " ".join(lexical_text(row[field]) for field in NARRATIVE_FIELDS) if query.words else ""
+                narrative = " ".join(lexical_text(row[field], query.unit_words) for field in NARRATIVE_FIELDS) if query.words else ""
                 words = query.word_hits(narrative, (row["unit"].strip(),))
                 numbers, units = query.quantity_hits(row)
-                metric_words = query.word_hits(lexical_text(row["metric"])) if query.words else set()
+                metric_words = query.word_hits(lexical_text(row["metric"], query.unit_words)) if query.words else set()
                 metric_numbers, _ = query.quantity_hits(row, ("metric",))
-                yield (len(words | numbers), len(units), len(metric_words | metric_numbers)), index, row
+                yield (query.has_quantity_hit(numbers), len(words | numbers), len(units),
+                       len(metric_words | metric_numbers)), index, row
 
     card["measurements"] = []
     for _, index, row in heapq.nlargest(BRIEF_LIMIT, matches(), key=lambda item: item[0]):

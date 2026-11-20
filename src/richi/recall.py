@@ -847,7 +847,7 @@ def recall(conn, args, api, *, bounded=True, additional_matches=None):
 
 
 def recall_with_terms(conn, args, api, *, bounded=True, additional_matches=None):
-    """Return the response and terms for selecting observations, excluding issue routing keys."""
+    """Return the response and the measurement query with issue routing keys removed."""
     # CLI callers already own a read transaction. Direct API callers need the
     # same snapshot across routing, payload lookup, and graph expansion. Never
     # commit or roll back a transaction owned by the caller.
@@ -883,11 +883,12 @@ def _recall(conn, args, api, *, bounded=True, additional_matches=None):
             if not selection_filter.matches_ref(conn, trace.expected["ref"]):
                 trace.expected["direct_stage"] = "filtered_where"
     terms, question_text, keys = _routed_terms(conn, query)
-    observation_terms = measurements.query_terms(question_text)
+    observation_query = measurements.MeasurementQuery(question_text) if additional_matches is not None else None
     options = {"selection_filter": selection_filter} if selection_filter else {}
     direct_by_ref, fts_truncated, backend, discarded_weak = candidates(conn, query, terms, keys, states, project, api, trace, **options)
     if additional_matches is not None:
-        for item in additional_matches(conn, query, observation_terms, keys, states, project, api, decision_terms=terms):
+        for item in additional_matches(conn, query, observation_query.terms, keys, states, project, api,
+                                       decision_terms=terms, measured=observation_query):
             existing = direct_by_ref.get(item["ref"])
             if existing is None:
                 direct_by_ref[item["ref"]] = item
@@ -967,6 +968,6 @@ def _recall(conn, args, api, *, bounded=True, additional_matches=None):
     if not bounded:
         # In-process composition applies its own single output budget. Selection,
         # guards and excerpts are exactly the same as for standalone recall.
-        return response, observation_terms
+        return response, observation_query
     response = fit_explained_response(response, args.max_chars, trace) if trace else compact.fit_response(response, args.max_chars)
-    return response, observation_terms
+    return response, observation_query

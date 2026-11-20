@@ -541,6 +541,65 @@ class DecisionCardTests(unittest.TestCase):
                         cards = task_brief.brief(self.conn, args, memory, self.db)["results"]
                         self.assertEqual([card["id"] for card in cards], [identity + "-wrong-unit"])
 
+    def test_multilingual_declared_unit_phrase_keeps_value_sample_and_source_together(self):
+        def source(label, value, unit):
+            row = {"metric": "Count", "value": value, "unit": unit, "sample": "100 per mode, " + label}
+            return {"reference": "test://trial/" + label, "measurements": [row]}
+
+        def results(question):
+            args = SimpleNamespace(query=question, limit=5, max_chars=16000)
+            return task_brief.brief(self.conn, args, memory, self.db)["results"]
+
+        cases = (("EX-22", "completed RPCs", "completed batches"),
+                 ("EX-23", "готовых запросов за час", "готовых записей за час"))
+        for index, (_, unit, other_unit) in enumerate(cases):
+            self.put(dict(self.task, id="trial-" + str(index), jira_key=None, title="Trial", summary="Result",
+                          sources=[source("other", "92", other_unit), source("wrong-number", "92.5", unit),
+                                   source("longer-word", "92 " + unit + "Extra", unit)]))
+
+        for indexed in (False, True):
+            for present in (False, True):
+                for key, unit, _ in cases:
+                    sources = [source("baseline-" + str(n), str(n), unit) for n in range(70, 78)]
+                    if present:
+                        sources.append(source(key + "-target", "87 → 92", unit))
+                    version = (memory.entry_record(self.conn, key) or {}).get("updated_at")
+                    self.put(dict(self.task, id=key, jira_key=key, title="Trial", summary="Result",
+                                  expected_updated_at=version, sources=sources))
+                if indexed:
+                    with memory.transaction(self.conn):
+                        search_index.build(self.conn, memory)
+                for key, unit, _ in cases:
+                    for question in ("92 " + unit, key + " 92 " + unit, "Was it 92 " + unit + "?"):
+                        with self.subTest(indexed=indexed, present=present, question=question):
+                            cards = results(question)
+                            if present:
+                                card, = cards
+                                target = source(key + "-target", "87 → 92", unit)
+                                self.assertEqual((card["id"], card["measurements"][0]), (key, dict(
+                                    target["measurements"][0], source_index=9, source={"reference": target["reference"]})))
+                            elif question.startswith(key):
+                                card, = cards
+                                self.assertNotIn("measurement", card["query_match_reasons"])
+                            else:
+                                self.assertEqual(cards, [])
+                self.assertEqual(results("RPCs")[0]["measurements"][0]["unit"], "completed RPCs")
+
+    def test_shared_unit_prefix_keeps_the_requested_denominator(self):
+        for index, unit in enumerate(("completed RPCs", "completed RPCs per second")):
+            row = {"metric": "Throughput", "value": "92 " + unit + ".", "unit": unit, "sample": "per second"}
+            record = {"reference": "test://report/" + str(index), "measurements": [row]}
+            self.put(dict(self.task, id="trial-" + str(index), jira_key=None, title="Trial", summary="Result",
+                          sources=[record]))
+        for indexed in (False, True):
+            if indexed:
+                with memory.transaction(self.conn):
+                    search_index.build(self.conn, memory)
+            args = SimpleNamespace(query="92 completed RPCs per second?", limit=1, max_chars=16000)
+            card, = task_brief.brief(self.conn, args, memory, self.db)["results"]
+            row = card["measurements"][0]
+            self.assertEqual((row["unit"], row["source"]["reference"]), ("completed RPCs per second", "test://report/1"))
+
     def test_structured_match_applies_the_entity_project_boost(self):
         memory.project_put(self.conn, {"id": "service", "name": "Service"})
         evidence = {"reference": "synthetic://trial", "measurements": [

@@ -41,11 +41,12 @@ def _annotation_payloads(conn, states, terms):
             yield family + ":" + identity, raw
 
 
-def _annotation_matches(conn, query, terms, keys, states, project, api, *, decision_terms=None):
+def _annotation_matches(conn, query, terms, keys, states, project, api, *, decision_terms=None, measured=None):
     """Search the current structured evidence before ranking and graph expansion."""
     if decision_terms is None:
         decision_terms = [recall.normalize(term) for term in terms if len(term) > 1]
-    measured = measurements.MeasurementQuery(terms)
+    if measured is None:
+        measured = measurements.MeasurementQuery(query)
     probes = measured.lookup_terms().union(decision_terms)
     if not probes:
         return
@@ -67,7 +68,8 @@ def _annotation_matches(conn, query, terms, keys, states, project, api, *, decis
         card_text = recall.normalize(" ".join(decision_cards.search_fields(decision))) if decision else ""
         rows = [row for source in record["sources"] for row in source.get("measurements", ())]
         narrative = " ".join(row[field] for row in rows for field in measurements.NARRATIVE_FIELDS)
-        lexical = (" ".join(measurements.lexical_text(row[field]) for row in rows for field in measurements.NARRATIVE_FIELDS)
+        lexical = (" ".join(measurements.lexical_text(row[field], measured.unit_words)
+                            for row in rows for field in measurements.NARRATIVE_FIELDS)
                    if measured.words else "")
         units = {row["unit"].strip() for row in rows}
         decision_hits = {term for term in decision_terms if recall.matches_term(term, card_text)}
@@ -77,6 +79,10 @@ def _annotation_matches(conn, query, terms, keys, states, project, api, *, decis
             numbers, spelled_units = measured.quantity_hits(row)
             measurement_hits.update(numbers)
             exact_units.update(spelled_units)
+        if measured.numbers and not measured.has_quantity_hit(measurement_hits):
+            # A unit word alone cannot source the quantity asked for.
+            measurement_hits.clear()
+            exact_units.clear()
         reasons = [reason for reason, hits in (("decision_card", decision_hits), ("measurement", measurement_hits)) if hits]
         matched = decision_hits | measurement_hits
         if not matched:
@@ -318,7 +324,7 @@ def brief(conn, args, api, database):
     stage_limit = min(100, max(12, args.limit * 2)) if base else args.limit
     stage_args = SimpleNamespace(**vars(args))
     stage_args.limit, stage_args.max_chars = stage_limit, 100000
-    query, claim_terms = recall.recall_with_terms(conn, stage_args, api, bounded=False,
+    query, observation_query = recall.recall_with_terms(conn, stage_args, api, bounded=False,
                                                  additional_matches=_annotation_matches)
     diff = git_impact.impact(conn, stage_args, api, database, bounded=False, states=states) if base else None
     cards, query_order, code_order, related_order = {}, [], [], []
@@ -332,7 +338,7 @@ def brief(conn, args, api, database):
             if ref.startswith("edge:"):
                 cards[ref].update(from_ref=record["from_ref"], to_ref=record["to_ref"])
             cards[ref]["sources_scope"] = "record"
-            measurements.attach(cards[ref], record.get("sources", []), claim_terms)
+            measurements.attach(cards[ref], record.get("sources", []), observation_query)
             cards[ref].update(selected_by=[], connections=[], connections_omitted=0)
             if "decision_card" in record:
                 cards[ref]["decision_card"] = record["decision_card"]
