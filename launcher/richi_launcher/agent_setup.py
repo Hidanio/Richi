@@ -530,7 +530,11 @@ def _foreign_skills(records, names):
         if variable:
             environ[variable] = str(Path(record["instructions"]).parent)
     registry = [agent for agent in agents.registry(environ=environ) if agent.id in names]
-    discovered = skill_catalog.catalog(environ=environ, registry=registry, rule_aliases_only=True)["richi_paths"]
+    catalog = skill_catalog.catalog(environ=environ, registry=registry, rule_aliases_only=True)
+    incomplete = {}
+    for root in catalog["roots"]:
+        if root.get("truncated"):
+            incomplete.setdefault(root["agent"], []).append(root["path"])
     owned = set()
     for record in records.values():
         path = Path(record["skill"])
@@ -539,8 +543,12 @@ def _foreign_skills(records, names):
                 owned.add(path.parent.resolve() / path.name)
         except OSError:
             continue  # Missing, replaced or no longer a symlink.
-    return {agent: {str(path) for path in map(Path, paths) if path.parent.resolve() / path.name not in owned}
-            for agent, paths in discovered.items()}
+    result = {}
+    for agent in names:
+        paths = map(Path, catalog["richi_paths"].get(agent, ()))
+        foreign = {str(path) for path in paths if path.parent.resolve() / path.name not in owned}
+        result[agent] = (foreign, incomplete.get(agent, []))
+    return result
 
 
 def _rename_candidates(records, name):
@@ -555,7 +563,11 @@ def _reserved_paths(record, alternate):
 def _check_foreign_paths(agent, record, conflicts, alternate):
     # Setup may back up an occupied reserved path with consent. A matching
     # name elsewhere (possibly in another client's profile) remains user-owned.
-    elsewhere = conflicts.get(agent, set()) - _reserved_paths(record, alternate)
+    paths, incomplete = conflicts[agent]
+    if incomplete:
+        raise ConfigError("Skill scan limit reached for " + agent + " at " + ", ".join(incomplete)
+                          + ". Move unrelated files outside these skill directories, then retry.")
+    elsewhere = paths - _reserved_paths(record, alternate)
     if elsewhere:
         raise ConfigError("Another skill named richi is visible to " + agent + " at " + ", ".join(sorted(elsewhere))
                           + ". Move or rename it outside this agent's skill discovery, then retry.")
@@ -579,13 +591,18 @@ def rename_conflicts():
             continue
         alternate = _alternate_skill_paths(agent, record, registered)
         reserved = {path for path in _reserved_paths(record, alternate) if Path(path).name == SKILL_NAME}
-        paths = sorted({path for path in reserved if os.path.lexists(path)} | foreign.get(agent, set()))
-        if not paths:
+        found, incomplete = foreign[agent]
+        paths = sorted({path for path in reserved if os.path.lexists(path)} | found)
+        if not paths and not incomplete:
             continue
         notice = {"agent": agent, "conflicting_paths": paths,
                   "message": "Show the conflicting skill paths to the user. The owner can move or rename "
                              "the competing skill before retrying the update."}
-        if all(path in reserved for path in paths):
+        if incomplete:
+            notice["incomplete_roots"] = incomplete
+            notice["message"] = ("Skill discovery reached its scan limit. Report the incomplete roots and any "
+                                 "known conflicts. Move unrelated files outside these skill directories, then retry.")
+        elif all(path in reserved for path in paths):
             notice["preview_command"] = "richi setup --agent " + agent + " --replace-skill --dry-run"
         try:
             _verify_skill(record)

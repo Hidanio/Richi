@@ -130,6 +130,26 @@ class SkillRenameTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
                 self.configure("--agent", agent, "--replace-skill")
         self.assertTrue(doc.is_file())
 
+    def test_incomplete_scan_reports_roots_and_preserves_legacy_setup(self):
+        _, state = self.transition()
+        root = self.home / ".codex/skills"
+        nested = root / "group/personal"
+        nested.mkdir(parents=True)
+        (nested / "SKILL.md").write_text("---\nname: richi\n---\nPersonal skill\n")
+        with patch("richi.skill_catalog.MAX_NESTED_ENTRIES", 1):
+            notice, = agent_setup.rename_conflicts()
+            self.assertIn(str(root), notice["incomplete_roots"])
+            self.assertEqual(notice["conflicting_paths"], [])
+            self.assertEqual(notice["managed_skill"], str(self.old_skill / "SKILL.md"))
+            self.assertNotIn("preview_command", notice)
+            with self.assertRaisesRegex(ConfigError, "Skill scan limit"):
+                installation._activate(self.ctx, state, "updated")
+            with self.assertRaisesRegex(ConfigError, "Skill scan limit"):
+                self.configure("--replace-skill")
+        self.assertTrue(self.old_skill.is_symlink())
+        self.assertFalse(self.new_skill.exists())
+        self.assertEqual(agent_setup.rename_conflicts()[0]["conflicting_paths"], [str(nested)])
+
     def test_fresh_cursor_setup_checks_skills_in_other_profiles(self):
         foreign = self.home / ".claude/skills/tools/user"
         foreign.mkdir(parents=True)

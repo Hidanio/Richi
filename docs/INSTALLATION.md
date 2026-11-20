@@ -139,15 +139,14 @@ of the database and its associated `artifacts/git/` directory.
 
 Dev switches two things: the **runtime** (`src/richi/` for every CLI call,
 agent call and the map) and the **managed Richi skill link of every
-agent connected with `richi setup`**. With dev on, each of these links points to
-`<development.source>/skills/richi`, so every agent reads the skill text
-that matches the code it runs. This works the same for any supported agent (for
-example `~/.agents/skills/richi` for Codex). An agent connected later
+agent connected with `richi setup`**. With dev on, links normally point to
+`<development.source>/skills/richi`. They use `skills/project-memory` while the
+rollback release needs that directory or a pinned checkout supplies only the
+legacy skill. When the directory changes, the launcher updates the name in
+the managed instructions. An agent connected later
 follows the agents already connected; the first one starts on the release skill
-until the next `config set dev true`. Dev does not switch the installed launcher (`launcher/`, including
-`setup`, `update` and `config`), agent-specific integration files such as
-managed instruction blocks and hooks, or PATH blocks: they always follow the
-installed release. In an agent chat, help pages (`richi help`, `--help`) and
+until the next `config set dev true`. The installed release supplies the launcher (`launcher/`, including
+`setup`, `update` and `config`), the instruction templates, hooks and PATH blocks. In an agent chat, help pages (`richi help`, `--help`) and
 `--version` also come from the installed release; check help edits with
 `python scripts/check_cli_docs.py`, the tests, or a terminal without a chat ID.
 
@@ -181,7 +180,7 @@ reports `"matches_config": false`, rerun `richi config set dev true` (or `false`
 in the workspace you work in.
 
 - Links follow a checkout only if it passes the same check as the dev runtime
-  (`pyproject.toml` and `src/richi/`) and has `skills/richi/SKILL.md`.
+  (`pyproject.toml` and `src/richi/`) and contains a valid `SKILL.md` in the directory selected above.
   Otherwise, and for dev without `development.source`, they point to the
   installed release; `reason` explains why. Restoring release links with
   `config set dev false` never depends on the checkout, even a missing or

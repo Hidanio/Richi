@@ -72,8 +72,9 @@ richi config set development.source /path/to/Richi
 richi config set dev true
 ```
 
-The CLI, agents and map now use this checkout's runtime code, and the agent
-skills connected by `richi setup` link to its `skills/richi`. The CLI picks up
+The CLI, agents and map use the checkout's runtime. Agents connected by
+`richi setup` read its skill from `skills/richi`, or from `skills/project-memory`
+when the rollback release or a pinned checkout requires the old name. The CLI picks up
 changes on its next invocation; the map reloads its server after source changes.
 Refresh the browser page to update the interface. Use `richi config set dev false`
 to return to the installed version. Both modes share settings and the knowledge

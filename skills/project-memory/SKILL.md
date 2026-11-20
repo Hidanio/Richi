@@ -20,7 +20,8 @@ standing rules, loaded with `rules show`.
    including the first. If the ID is missing, continue independent work and wait
    for the hook-provided identity before using Richi.
    At each new chat, run `richi chat current` and `richi workspace list`.
-   If `skill_conflicts` lists your agent, tell the user which paths collide.
+   If `skill_conflicts` lists your agent, report the conflicting paths and any
+   `incomplete_roots` where the scan reached its limit.
    Open the verified `managed_skill` path for Richi. If it is missing, report
    `managed_skill_error` and wait for the user to reconcile the skill paths.
    If unbound and the human has not explicitly selected a workspace here, ask

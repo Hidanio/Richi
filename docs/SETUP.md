@@ -131,7 +131,7 @@ richi update apply
 
 To return to the previous release later, use `richi update rollback`.
 
-Fresh installations register the skill as `richi`. An update delivers the
+Fresh installations of Richi 1.2.1 and later register the skill as `richi`. An update delivers the
 renamed skill to all connected agents. While the rollback release still expects
 `project-memory`, the managed directory and instruction block keep their old
 names. Codex already lists the skill as Richi in new chats. When both releases
@@ -146,6 +146,11 @@ skills that Cursor discovers under other agents' profiles. The `managed_skill`
 field identifies Richi's verified copy. Rename the personal skill or move it
 outside discovery. For paths managed by setup, the notice also offers a
 read-only preview of the backup.
+
+For nested skill directories, Richi checks up to 100,000 entries per root.
+If it reaches this limit, setup and renaming stop before changing the profile.
+During the transition, `chat current` lists the partially scanned directories in
+`skill_conflicts[].incomplete_roots`. Move unrelated files outside those roots and retry.
 
 During that transition, clients that derive a slash command from the directory
 may still use the old name. Cursor expects the directory to match the skill name,
@@ -165,13 +170,13 @@ a new chat after updating, since running agents may retain loaded skill content.
 
 Automatic installation stays off unless explicitly enabled with
 `richi update auto enable --interval 6h --install`; see [UPDATES.md](UPDATES.md).
-Workspace dev settings are preserved. Dev mode switches the runtime **and the
-managed skill links**: `richi config set dev true` points every managed skill to
-`<development.source>/skills/richi`, and `richi config set dev false`
-points it back to the installed release, each in one recoverable transaction
-reported as `agent_skills`. This applies to every connected agent. Instruction
-blocks, adapter files such as hooks, PATH blocks and the launcher stay on the
-installed release. Links are user-wide and follow
+Workspace dev settings are preserved. For every connected agent,
+`richi config set dev true` links the skill to the checkout's `skills/richi`
+or to `skills/project-memory` when the rollback release or a pinned checkout
+requires the old name. `richi config set dev false` restores the release skill.
+When the directory name changes, the launcher updates the skill name in the managed
+instructions in the same recoverable transaction. `agent_skills` reports the result.
+The installed release supplies the launcher, hooks and PATH blocks. Links are user-wide and follow
 the latest `config set dev` in any registered workspace; ad hoc `--config` or
 `RICHI_CONFIG` files do not move them. Updates and rollbacks keep checkout
 links; before rolling back to 1.1.0 or older, run `richi config set dev false`.
