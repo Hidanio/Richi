@@ -209,11 +209,11 @@ class SkillCatalogTests(unittest.TestCase):
             with mock.patch.object(skill_catalog, "_read_header", wraps=skill_catalog._read_header) as reads:
                 catalog = skill_catalog.catalog({}, home)
             self.assertEqual([(s["name"], s["agents"]) for s in catalog["skills"]],
-                             [("release", ["cursor"]), ("triage", ["cursor"])])
-            self.assertEqual(catalog["totals"], {"claude": 0, "codex": 0, "cursor": 2})
+                             [("manual", ["codex"]), ("release", ["codex", "cursor"]), ("triage", ["cursor"])])
+            self.assertEqual(catalog["totals"], {"claude": 0, "codex": 2, "cursor": 2})
             self.assertFalse(catalog["truncated"])
             skill_file = (leaf / "SKILL.md").resolve()
-            self.assertEqual(sum(call.args[0].resolve() == skill_file for call in reads.call_args_list), 1)
+            self.assertEqual(sum(call.args[0].resolve() == skill_file for call in reads.call_args_list), 2)
             # A wide source can also exceed the budget at its first level, even if it contains only files.
             wide = home / ".cursor" / "skills"
             wide.mkdir(parents=True)

@@ -123,6 +123,8 @@ class Agent(NamedTuple):
     detection_sources: tuple = ()
     # Optional native profile settings, returning disabled and enabled skill file paths.
     skill_path_settings: Optional[Callable] = None
+    # Some clients follow skill directory links but require a regular SKILL.md entry.
+    follows_skill_file_links: bool = True
 
 
 def _home_variable(environ, home, variable, default):
@@ -142,8 +144,8 @@ def _codex_profile(environ, home):
 
 def _codex_sources(environ, home):
     profile = _codex_profile(environ, home)
-    return [SkillSource("agents-skills", "skills", "skills", home / ".agents" / "skills"),
-            SkillSource("codex-skills", "skills", "skills", profile / "skills"),
+    return [SkillSource("agents-skills", "skills", "nested-skills", home / ".agents" / "skills"),
+            SkillSource("codex-skills", "skills", "nested-skills", profile / "skills"),
             # Codex's built-in skills; hidden, so the "skills" walk skips them.
             SkillSource("system", "system", "skills", profile / "skills" / ".system"),
             SkillSource("plugins", "plugins", "cache", profile / "plugins" / "cache")]
@@ -166,7 +168,7 @@ AGENTS = (
           invocation="front-matter", plugin_commands=True, sources=_claude_sources),
     Agent(id="codex", name="Codex", variables={"CODEX_THREAD_ID": None},
           invocation="openai-yaml", plugin_commands=False, sources=_codex_sources, chat_prefix=False,
-          skill_path_settings=_codex_skill_path_settings),
+          skill_path_settings=_codex_skill_path_settings, folder_layout="nested-skills", follows_skill_file_links=False),
     Agent(id="cursor", name="Cursor", variables={"CURSOR_AGENT": None},
           invocation="front-matter", plugin_commands=False, sources=_cursor_sources, folder_layout="nested-skills",
           detection_sources=("cursor-skills", "system")),

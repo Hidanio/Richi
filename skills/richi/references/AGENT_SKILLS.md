@@ -82,8 +82,10 @@ agent's own standing instructions.
 
 Cursor reads skills from `~/.cursor/skills`, `~/.agents/skills`, `~/.claude/skills`
 and `~/.codex/skills`. Its built-in skills are in `~/.cursor/skills-cursor`.
-Richi also finds skills nested in category directories
-under these roots and under folders you add for Cursor. It examines up to 100,000
+Codex reads personal skills in `~/.agents/skills` and the `skills` directory
+of its own profile. Both clients discover skills in nested directories. Codex
+follows linked directories and requires a regular `SKILL.md` entry.
+Richi also searches folders you add for these agents recursively. It examines up to 100,000
 directory entries per root. A source marked `truncated` may contain more skills
 than its count shows.
 

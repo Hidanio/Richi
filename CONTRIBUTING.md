@@ -122,6 +122,9 @@ directory is the canonical source of detailed command documentation. The
 `docs/CLI.md` index links there; keep command contracts in that one place so
 copying the whole skill directory remains sufficient for installation. Links inside
 `skills/project-memory/` keep development checkouts usable with earlier launchers.
+Codex follows a linked skill directory but skips a linked `SKILL.md` file.
+After editing `skills/richi/SKILL.md`, copy it to `skills/project-memory/SKILL.md`
+as a regular file. The rename tests check that their contents match.
 
 For retrieval changes, preserve a reproducer and compare relevant cases before
 and after. The [evaluation guidance](skills/richi/references/EVALUATION.md)

@@ -374,9 +374,10 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     # the others. A broken checkout plans the release link (repair).
     source = current.get("dev_source") if current else _shared_source(records)
     link, dev_source, _ = _desired_link(root, source, name)
-    _check_skill_change(agent, instructions, current, skill, link, replace_skill)
+    shared = _shared_destination(records, agent, skill, link)
+    _check_skill_change(agent, records, skill, link, replace_skill)
     skill_ops = _alternate_operations(alternate, replace_skill)
-    skill_ops.extend(_skill_operations(current, skill, link, replace_skill=replace_skill))
+    skill_ops.extend(_skill_operations(current, skill, link, replace_skill=replace_skill, shared=shared))
     command_op = files.change(command, {"kind": "link", "target": str(executable)})
     if command_op["before"]["kind"] != "absent" and command_op["before"] != command_op["after"]:
         raise ConfigError("Another command owns " + str(command) + "; it was not overwritten")
@@ -401,7 +402,23 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     return record, ops
 
 
-def _skill_operations(record, skill, link, *, replace_skill=False, before=None):
+def _shared_destination(records, agent, skill, link):
+    """A single-agent setup can share a verified link without moving another agent's skill."""
+    shared = None
+    for owner, record in records.items():
+        path = Path(record["skill"])
+        if owner == agent or path.parent != skill.parent:
+            continue
+        # Both names in this directory are setup destinations: one would be linked, the other removed.
+        before = _verify_skill(record)
+        if path != skill or before["target"] != link:
+            raise ConfigError("Setup cannot move the skill managed by " + owner + " at " + str(path)
+                              + "; reconcile the shared skill target before connecting " + agent)
+        shared = before
+    return shared
+
+
+def _skill_operations(record, skill, link, *, replace_skill=False, before=None, shared=None):
     """Move only the recorded link; a new location never inherits its ownership."""
     other = LEGACY_NAME if skill.name == SKILL_NAME else SKILL_NAME
     if record:
@@ -414,7 +431,9 @@ def _skill_operations(record, skill, link, *, replace_skill=False, before=None):
         ops = [files.change(previous, {"kind": "absent"}, before=before)]
     else:
         ops = files.duplicate_skill(skill.with_name(other), replace_skill)
-    op = files.change(skill, {"kind": "link", "target": link})
+    op = files.change(skill, {"kind": "link", "target": link}, before=shared)
+    if shared is not None:
+        return [op, *ops]  # begin() rechecks this snapshot before any profile changes.
     if op["before"]["kind"] != "absent" and (record or op["before"] != op["after"]):
         if not replace_skill:
             hint = ("Move it outside skill discovery before retrying the update." if record else
@@ -438,15 +457,19 @@ def _instruction_operation(adapter, agent, command, instructions, name, current)
     return block, instruction_op
 
 
-def _check_skill_change(agent, instructions, record, skill, link, replace_skill=False):
-    check = getattr(agent_adapters.get(agent), "check_skill_change", None)
-    if check:
-        check(instructions, record["skill"] if record else None, skill, link, replace_skill)
+def _check_skill_change(agent, records, skill, link, replace_skill=False):
+    current = records.get(agent)
+    for observer in agent_adapters.AGENTS:
+        check = getattr(agent_adapters.get(observer), "check_skill_change", None)
+        if check:
+            check(records.get(observer), current["skill"] if current else None, skill, link,
+                  check_alternates=observer == agent and (replace_skill or current is None))
 
 
-def _move_profile(agent, record, skill, link, before, foreign, alternate):
+def _move_profile(agent, records, skill, link, before, foreign, alternate):
     """Journal the discovery path and the rule naming it together."""
-    _check_skill_change(agent, record["instructions"], record, skill, link)
+    record = records[agent]
+    _check_skill_change(agent, records, skill, link)
     operations = _alternate_operations(alternate, False)
     operations.extend(_skill_operations(record, skill, link, before=before))
     if str(skill) == record["skill"]:
@@ -601,7 +624,7 @@ def activation_operations(ctx, state):
         skill = Path(record["skill"]).with_name(name)
         link, source, _ = _desired_link(target, record.get("dev_source") if dev_capable else None, name)
         alternate = _alternate_skill_paths(agent, record, registered)
-        profile, profile_ops = _move_profile(agent, record, skill, link, before, foreign, alternate)
+        profile, profile_ops = _move_profile(agent, records, skill, link, before, foreign, alternate)
         ops.extend(profile_ops)
         records[agent] = dict(record, skill_target=str(target), skill_hashes=hashes, generation=state["current"], **profile)
         records[agent].pop("dev_source", None)
@@ -630,7 +653,7 @@ def _switch_operations(ctx, state, source):
         try:
             if str(skill) != record["skill"]:
                 alternate = _alternate_skill_paths(agent, record, registered)
-                profile, profile_ops = _move_profile(agent, record, skill, link, _verify_skill(record), foreign, alternate)
+                profile, profile_ops = _move_profile(agent, records, skill, link, _verify_skill(record), foreign, alternate)
                 updated.update(profile)
                 ops.extend(profile_ops)
                 changed = True
@@ -641,7 +664,7 @@ def _switch_operations(ctx, state, source):
                 # moving the link away would let a later update discard it.
                 if changed:
                     operation["before"] = _verify_skill(record)
-                    _check_skill_change(agent, record["instructions"], record, skill, link)
+                    _check_skill_change(agent, records, skill, link)
                 ops.append(operation)
         except ConfigError as exc:
             raise ConfigError(agent + ": " + str(exc)) from exc
@@ -930,7 +953,14 @@ def _agents(ctx):
 def agents_command(argv):
     """Explicit discovery/menu; never runs on ordinary CLI calls."""
     from . import installation
+    from .runtime import LAUNCHER_ROOT, bootstrap_command
     args = agents_parser().parse_args(argv)
+    # A dev runtime calls this API from its own skill-sources list and map.
+    # Replanning each connection needs the registry and opt-out readers of the
+    # installed launcher, even when the checkout predates those interfaces.
+    loaded = sys.modules.get("richi")
+    if args.status and loaded is not None and Path(loaded.__file__).resolve().parent != LAUNCHER_ROOT / "richi":
+        return json.loads(installation._run(bootstrap_command(["agents", "--status"]), "Read installed agent status"))
     ctx = installation._context()
     while True:
         items = _preview(ctx, _agents)

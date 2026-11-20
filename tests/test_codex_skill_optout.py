@@ -33,10 +33,11 @@ class CodexSkillOptoutTests(test_agent_setup.AgentSetupFixture, unittest.TestCas
 
     def test_fresh_setup_skips_a_disabled_foreign_name_only_for_codex(self):
         doc = self.home / ".agents/skills/my-tool/SKILL.md"
-        doc.parent.mkdir(parents=True)
-        target = self.home / "personal.md"
+        doc.parent.parent.mkdir(parents=True)
+        target = self.home / "personal/SKILL.md"
+        target.parent.mkdir()
         target.write_text("---\nname: richi\n---\nPersonal skill.\n")
-        doc.symlink_to(target)
+        doc.parent.symlink_to(target.parent, target_is_directory=True)
         config = self.settings(("../.agents/skills/my-tool/SKILL.md", False), (target, True))
         with self.assertRaisesRegex(ConfigError, "Another skill named richi"):
             self.configure()
@@ -47,7 +48,7 @@ class CodexSkillOptoutTests(test_agent_setup.AgentSetupFixture, unittest.TestCas
         skill, = catalog["skills"]
         self.assertEqual((skill["name"], skill["agents"]), ("richi", ["cursor"]))
         self.assertEqual(self.configure()["status"], "configured")
-        self.assertTrue(doc.is_symlink())
+        self.assertTrue(doc.parent.is_symlink())
         self.assertEqual(config.read_bytes(), before)
         self.assertEqual(skill_catalog.catalog()["rule_aliases"], {"codex": {"project-memory": "richi"}})
 
@@ -87,6 +88,43 @@ class CodexSkillOptoutTests(test_agent_setup.AgentSetupFixture, unittest.TestCas
         self.settings((old_file, False), (skill / "SKILL.md", False))
         self.assertEqual(agent_setup.switch_skills(True, checkout)["status"], "changed")
         self.assertEqual(os.readlink(skill), target)
+
+    def test_claude_only_rename_in_codex_profile_preserves_codex_optout(self):
+        profile = self.home / ".codex"
+        old_file = profile / "skills/project-memory/SKILL.md"
+        new_file = profile / "skills/richi/SKILL.md"
+        checkout = self.home / "checkout"
+        branded = Path(test_dev_skill_links.DevSkillLinkTests.make_checkout(checkout, "pinned"))
+        legacy = branded.rename(branded.with_name("project-memory"))
+        (legacy / "SKILL.md").write_text("---\nname: project-memory\n---\nPinned checkout\n")
+        with patch.dict(os.environ, CLAUDE_CONFIG_DIR=str(profile)):
+            self.configure("--agent", "claude")
+            self.assertEqual(set(agent_setup._records(self.ctx)), {"claude"})
+            self.assertEqual(agent_setup.switch_skills(True, checkout)["status"], "changed")
+            config = self.settings((old_file, False))
+            original = config.read_bytes()
+            self.assertEqual(agent_setup.switch_skills(False, None)["status"], "conflict")
+            branded.mkdir()
+            (branded / "SKILL.md").write_text("---\nname: richi\n---\nUpdated checkout\n")
+            next_release = self.next_state()
+            with self.assertRaisesRegex(ConfigError, "disabled skill setting"):
+                self.activate(next_release)
+            self.assertEqual(config.read_bytes(), original)
+            self.assertEqual(os.readlink(old_file.parent), str(legacy))
+            self.assertFalse(new_file.parent.is_symlink())
+            self.settings((old_file, False), (new_file, False))
+            self.activate(next_release)
+            self.assertEqual(os.readlink(new_file.parent), str(branded))
+
+    def test_chat_current_with_cyclic_codex_skills_reports_other_discovery_conflicts(self):
+        self.transition()
+        cyclic = self.home / ".codex/skills"
+        cyclic.symlink_to(cyclic.name)
+        self.new_skill.write_text("Existing user skill")
+        result = test_dev_skill_links.DevSkillLinkTests.cli(self, "--chat", "test:cycle", "chat", "current")
+        notice, = result["skill_conflicts"]
+        self.assertEqual(notice["conflicting_paths"], [str(self.new_skill)])
+        self.assertEqual(os.readlink(cyclic), cyclic.name)
 
     def test_replace_skill_preserves_disabled_copy_in_alternate_discovery_root(self):
         old = self.home / ".codex/skills/project-memory/SKILL.md"

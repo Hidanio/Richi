@@ -12,6 +12,21 @@ from richi_launcher.config import ConfigError
 
 
 class SkillRenameTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
+    def test_codex_discovers_the_branded_skill_through_the_legacy_dev_directory(self):
+        from richi import skill_catalog
+        source = Path(__file__).resolve().parents[1] / "skills"
+        legacy = source / "project-memory"
+        self.assertFalse((legacy / "SKILL.md").is_symlink())
+        self.assertEqual((legacy / "SKILL.md").read_bytes(), (source / "richi/SKILL.md").read_bytes())
+        discovery = self.home / ".agents/skills"
+        discovery.mkdir(parents=True)
+        (discovery / "project-memory").symlink_to(legacy, target_is_directory=True)
+        ignored = discovery / "linked-file"
+        ignored.mkdir()
+        (ignored / "SKILL.md").symlink_to(legacy / "SKILL.md")
+        paths = skill_catalog.catalog(home=self.home, rule_aliases_only=True)["richi_paths"]["codex"]
+        self.assertEqual(paths, [str(discovery / "project-memory")])
+
     def package(self, site, version):
         super().package(site, version)
         (site / "richi_launcher/agent_setup.py").write_text(test_dev_skill_links.DEV_CAPABLE)
@@ -101,8 +116,8 @@ class SkillRenameTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         self.transition()
         self.configure("--agent", "cursor")
         self.assertEqual(agent_setup.rename_conflicts(), [])  # Cursor also sees Codex's owned link.
-        foreign = self.home / ".agents/skills/user-tools"
-        foreign.mkdir()
+        foreign = self.home / ".agents/skills/engineering/user-tools"
+        foreign.mkdir(parents=True)
         doc = foreign / "SKILL.md"
         doc.write_text("---\nname: richi\ndescription: Personal tool\n---\n")
         notices = {item["agent"]: item for item in agent_setup.rename_conflicts()}
@@ -144,6 +159,33 @@ class SkillRenameTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
                 installation._activate(self.ctx, state, "updated")
         self.assertTrue(self.old_skill.is_symlink())
         self.assertFalse(self.new_skill.exists())
+
+    def test_new_agent_shares_only_an_intact_registered_primary_skill(self):
+        with patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(self.home / ".agents")}):
+            skill = Path(self.configure("--agent", "claude")["skill"])
+            target = os.readlink(skill)
+            self.assertEqual(skill, self.home / ".agents/skills/richi")
+            manifest = self.root / agent_setup.MANIFEST
+            original = manifest.read_bytes()
+            skill.unlink()
+            skill.mkdir()
+            personal = skill / "SKILL.md"
+            personal.write_text("---\nname: richi\n---\nLocal changes\n")
+            for agent in ("claude", "codex"):
+                with self.assertRaisesRegex(ConfigError, "Managed skill link was changed"):
+                    self.configure("--agent", agent, "--replace-skill")
+            self.assertEqual(personal.read_text(), "---\nname: richi\n---\nLocal changes\n")
+            self.assertEqual(manifest.read_bytes(), original)
+            self.assertFalse((skill.parent.parent / "richi-skill-backups").exists())
+
+            personal.unlink()
+            skill.rmdir()
+            skill.symlink_to(target)
+            added = self.configure("--agent", "codex", "--replace-skill")
+            self.assertEqual((Path(added["skill"]), added["skill_backups"]), (skill, []))
+            self.assertEqual(os.readlink(skill), target)
+            for agent in ("claude", "codex"):
+                self.assertEqual(agent_setup.command(["--agent", agent, "--status"])["status"], "configured")
 
     def test_codex_alternate_skill_root_belongs_to_connected_claude(self):
         with patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": os.environ["CODEX_HOME"]}):

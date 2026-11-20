@@ -145,6 +145,12 @@ class InstallerLifecycleTests(unittest.TestCase):
             shutil.copytree(Path(lifecycle.richi.__file__).resolve().parent, checkout / "src/richi",
                             ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
             (checkout / "src/richi/__init__.py").write_text('__version__ = "dev-checkout"\n')
+            # The last release's public catalog signature, before the launcher
+            # could request a targeted scan for conflicts during a rename.
+            with (checkout / "src/richi/skill_catalog.py").open("a") as stream:
+                stream.write("\n_original_catalog = catalog\n"
+                             "def catalog(environ=None, home=None, registry=None):\n"
+                             "    return _original_catalog(environ, home, registry)\n")
             shutil.copyfile(repository / "pyproject.toml", checkout / "pyproject.toml")
             shutil.copytree(repository / "skills/richi", checkout / "skills/richi")
             dev_link = str(checkout / "skills/richi")
@@ -155,6 +161,10 @@ class InstallerLifecycleTests(unittest.TestCase):
             def status(agent):
                 return json.loads(self.run_process([console, "setup", "--agent", agent, "--status"]).stdout)
 
+            def connections():
+                result = json.loads(self.run_process([console, "skill-sources", "list"]).stdout)
+                return {item["id"]: item["connection"] for item in result["agents"]}
+
             release = os.readlink(skills[0])
             self.assertEqual(config("set", "development.source", checkout)["agent_skills"]["mode"], "release")
             enabled = config("set", "dev", "true")
@@ -162,6 +172,13 @@ class InstallerLifecycleTests(unittest.TestCase):
             self.assertCountEqual(enabled["agent_skills"]["changes"], [str(skill) for skill in skills])
             self.assertEqual({os.readlink(skill) for skill in skills}, {dev_link})
             self.assertEqual(self.run_process([console, "--version"]).stdout.strip(), "Richi dev-checkout")
+            self.assertEqual(connections(), {agent: "configured" for agent in ("codex", "claude", "cursor")})
+            foreign = home / ".agents/skills/personal/SKILL.md"
+            foreign.parent.mkdir()
+            foreign.write_text("---\nname: richi\ndescription: Personal skill\n---\n")
+            self.assertEqual(connections(), {"claude": "configured", "codex": "conflict", "cursor": "conflict"})
+            foreign.unlink()
+            self.assertFalse(list(self.root.rglob("*.sqlite3")))
             for agent in ("codex", "claude", "cursor"):
                 self.assertEqual((status(agent)["status"], status(agent)["skill_mode"]), ("configured", "dev"))
             offline = self.root / "offline.py"

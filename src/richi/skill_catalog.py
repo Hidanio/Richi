@@ -415,6 +415,8 @@ def catalog(environ=None, home=None, registry=None, *, rule_aliases_only=False):
             found = set()
             for prefix, path, fallback, enabled in _candidates(agent, source, entry):
                 try:
+                    if not prefix and not agent.follows_skill_file_links and path.is_symlink():
+                        continue
                     text, cut = _read_header(path, frontmatter_only=True)
                     fields = front_matter(text, cut)
                 except OSError:
