@@ -26,7 +26,7 @@ import os
 import sys
 from typing import NamedTuple, Optional
 
-from . import agents
+from . import agents, skill_catalog
 from .output import cut_name, shell_word
 from .revisions import recovery_version
 
@@ -676,6 +676,11 @@ def show(conn, api, workspace, project_id, agent=None, unmatched_path=None):
     applicable = [rule for rule in rules if rule["scope"] == "global" or rule["project_id"] == project_id]
     if agent is not None:
         applicable = [dict(rule, use_skill=skill_for(rule, agent)) for rule in applicable]
+        if any(rule["use_skill"] == skill_catalog.PREVIOUS_RICHI_SKILL for rule in applicable):
+            registry = [item for item in agents.registry(entries=settings.entries) if item.id == agent]
+            aliases = skill_catalog.catalog(registry=registry, rule_aliases_only=True)["rule_aliases"].get(agent, {})
+            for rule in applicable:
+                rule["use_skill"] = aliases.get(rule["use_skill"], rule["use_skill"])
     skill_note = SKILL_NOTE_AGENT if agent is not None else SKILL_NOTE_ANY.format(
         agents=", ".join(item["id"] + ": " + item["name"] for item in known))
     result = {"view": "rules", "workspace": workspace, "project": project_id, "agent": agent, "rules": applicable,

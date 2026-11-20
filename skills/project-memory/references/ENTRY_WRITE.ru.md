@@ -1,0 +1,1 @@
+../../richi/references/ENTRY_WRITE.ru.md

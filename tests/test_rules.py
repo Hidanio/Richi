@@ -16,7 +16,7 @@ import threading
 import unittest
 from unittest import mock
 
-from richi import agents, memory, rules
+from richi import agents, memory, rules, skill_catalog
 from richi.output import cut_name
 from richi_launcher import agent_setup, chats, config
 from richi_launcher.claude_setup import HOOK
@@ -290,6 +290,50 @@ class RulesTests(unittest.TestCase):
         listed = {item["id"]: item for item in self.command("alpha", "rules", "list")["rules"]}
         self.assertIsNone(listed["earlier"]["skill"])
         self.assertIsNone(listed["earlier"]["skills"])
+
+    def test_legacy_skill_in_shared_and_agent_rules_follows_the_installed_skill(self):
+        old = "project-memory"
+        skill = Path(__file__).resolve().parents[1] / "skills/richi/SKILL.md"
+        # The first upgraded release may still be discovered in the old folder.
+        directory = self.root / "home/.claude/skills/project-memory"
+        directory.mkdir(parents=True)
+        installed = directory / "SKILL.md"
+        legacy = "---\nname: project-memory\ndescription: Legacy skill\n---\n"
+        foreign = "---\nname: richi\ndescription: Another skill\n---\n"
+        installed.write_text(legacy)
+        self.add("alpha", "shared", "--global", skill=old)
+        self.add("alpha", "override", "--global", skill="claude=" + old)
+        stored = self.command("alpha", "rules", "list")["rules"]
+        log = self.command("alpha", "rules", "log")["entries"]
+
+        def used():
+            shown = self.command("alpha", "rules", "show", "--agent", "claude")["rules"]
+            return [rule["use_skill"] for rule in shown]
+
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(directory.parent.parent)}):
+            self.assertEqual(used(), [old, old])
+            installed.write_bytes(skill.read_bytes())
+            self.assertEqual(used(), ["richi", "richi"])
+            # A separately installed skill with the exact requested name wins.
+            other = directory.parent / "unrelated-folder"
+            other.mkdir()
+            (other / "SKILL.md").write_text(legacy)
+            self.assertEqual(used(), [old, old])
+            # Two different skills named richi make the target ambiguous.
+            (other / "SKILL.md").write_text(foreign)
+            self.assertEqual(used(), [old, old])
+            installed.write_text(foreign)
+            self.assertEqual(used(), [old, old])
+            installed.write_text(legacy)  # rollback
+            self.assertEqual(used(), [old, old])
+        self.assertEqual(self.command("alpha", "rules", "list")["rules"], stored)
+        self.assertEqual(self.command("alpha", "rules", "log")["entries"], log)
+        # No catalog scan at startup for a workspace without a legacy skill rule.
+        self.add("beta", "custom", "--global", skill="my-review")
+        with mock.patch.object(skill_catalog, "catalog") as scan:
+            shown = self.command("beta", "rules", "show", "--agent", "claude")["rules"]
+        scan.assert_not_called()
+        self.assertEqual(shown[0]["use_skill"], "my-review")
 
     def test_agents_share_a_skill_or_each_get_their_own(self):
         def add(identifier, *skills):

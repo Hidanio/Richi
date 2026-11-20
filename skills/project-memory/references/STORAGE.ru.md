@@ -1,0 +1,1 @@
+../../richi/references/STORAGE.ru.md

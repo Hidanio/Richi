@@ -56,7 +56,17 @@ def bundle(site):
     return root, hashes, name
 
 
-def _profile_name(state, name):
+def _installed_name(site, fallback):
+    skill = Path(site) / "richi_launcher/agent_skill/SKILL.md"
+    try:
+        if skill.is_file() and skill.stat().st_size <= files.MAX_FILE:
+            return _skill_name(skill.read_text(encoding="utf-8")) or fallback
+    except (OSError, UnicodeError):
+        pass
+    return fallback
+
+
+def _profile_name(state, name, fallback=LEGACY_NAME):
     """A frozen rollback manager expects its original discovery and dev paths.
 
     It runs from the previous generation without importing this code. Retain
@@ -65,11 +75,7 @@ def _profile_name(state, name):
     """
     previous = state.get("previous")
     if name == SKILL_NAME and previous:
-        site = Path(state["generations"][previous]["site"])
-        old_skill = site / "richi_launcher/agent_skill/SKILL.md"
-        if old_skill.is_file() and old_skill.stat().st_size <= files.MAX_FILE:
-            if _skill_name(old_skill.read_text(encoding="utf-8")) == LEGACY_NAME:
-                return LEGACY_NAME
+        return _installed_name(state["generations"][previous]["site"], fallback)
     return name
 
 
@@ -119,6 +125,21 @@ def _checkout(source, name):
         return None, str(exc) + "; using the installed release skill"
 
 
+def _dev_profile_name(name, sources):
+    """A pinned pre-rename checkout still supplies a working project-memory skill."""
+    if name == SKILL_NAME:
+        for source in sources:
+            if source is None:
+                continue
+            try:
+                if not os.path.lexists(_dev_link(source, name)):
+                    dev_skill(source, LEGACY_NAME)
+                    return LEGACY_NAME
+            except ConfigError:
+                pass  # An unusable checkout follows the usual release fallback.
+    return name
+
+
 def _desired_link(release, source, name):
     """Return (link target, dev source or None, fallback reason or None).
 
@@ -152,12 +173,8 @@ def _shared_source(records):
 
 
 def _managed_name(records):
-    # Dev switches follow the profile layout committed by activation, even if
-    # the previous package has since become unreadable.
     names = {Path(record["skill"]).name for record in records.values()}
-    if len(names) > 1:
-        raise ConfigError("Managed skill directories disagree; reconcile each agent with richi setup --agent NAME --yes")
-    return names.pop() if names else SKILL_NAME
+    return names.pop() if len(names) == 1 else None
 
 
 def _dev_capable(site):
@@ -192,6 +209,8 @@ def _parse_records(data, ctx):
                 raise ValueError("unsupported adapter version for " + agent)
             for key in ("skill", "command", "instructions"):
                 files.safe_path(item[key])
+            if Path(item["skill"]).name not in {SKILL_NAME, LEGACY_NAME}:
+                raise ValueError("unsupported managed skill directory for " + agent)
             if "dev_source" in item:
                 _source(item["dev_source"])
         # 1.0.1 wrote records without adapter_version, and its manager also
@@ -332,8 +351,10 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
         raise ConfigError("The active Richi release changed during setup; rerun the command")
     active = state["generations"][state["current"]]
     root, hashes, name = bundle(active["site"])
-    name = _profile_name(state, name)
     records = _records(ctx)
+    # Setup adds or repairs one agent. Only an installation-wide transition
+    # can change every existing profile's discovery path and instruction block.
+    name = _managed_name(records) or _profile_name(state, name)
     current = records.get(agent)
     home = Path.home().resolve()
     adapter = agent_adapters.get(agent)
@@ -412,6 +433,16 @@ def _instruction_operation(adapter, agent, command, instructions, name, current)
     return block, instruction_op
 
 
+def _move_profile(agent, record, skill, link, before):
+    """Journal the discovery path and the rule naming it together."""
+    operations = _skill_operations(record, skill, link, before=before)
+    if str(skill) == record["skill"]:
+        return {}, operations
+    block, rule = _instruction_operation(
+        agent_adapters.get(agent), agent, record["command"], record["instructions"], skill.name, record)
+    return {"skill": str(skill), "block_sha256": files.digest(block)}, [*operations, rule]
+
+
 def _verify_skill(record):
     """Return the link snapshot whose ownership and release contents were verified."""
     # skill_target and skill_hashes always describe the release bundle, so a
@@ -428,6 +459,41 @@ def _verify_skill(record):
     return before
 
 
+def _other_skill_roots(agent, record):
+    other = getattr(agent_adapters.get(agent), "other_skill_roots", None)
+    return other(Path(record["instructions"]).parent, Path(record["skill"]).parent) if other else []
+
+
+def rename_conflicts():
+    """Report occupied discovery paths left by a pre-rename updater at chat start."""
+    try:
+        records = _records(_context())
+    except (ValueError, OSError, RuntimeError):
+        return []
+    conflicts = []
+    for agent, record in records.items():
+        skill = Path(record["skill"])
+        if skill.name != LEGACY_NAME:
+            continue
+        roots = [skill.parent, *_other_skill_roots(agent, record)]
+        paths = [str(root / SKILL_NAME) for root in roots if os.path.lexists(root / SKILL_NAME)]
+        if not paths:
+            continue
+        notice = {"agent": agent, "conflicting_paths": paths,
+                  "message": "Another path is occupied during the Richi skill rename. "
+                             "Show these paths to the user before changing either skill.",
+                  "preview_command": "richi setup --agent " + agent + " --replace-skill --dry-run"}
+        try:
+            _verify_skill(record)
+            if record.get("dev_source"):
+                dev_skill(record["dev_source"], skill.name)
+            notice["managed_skill"] = str(skill / "SKILL.md")
+        except (ValueError, OSError, RuntimeError, KeyError, TypeError) as exc:
+            notice["managed_skill_error"] = str(exc)
+        conflicts.append(notice)
+    return conflicts
+
+
 def activation_operations(ctx, state):
     records = _records(ctx)
     if not records:
@@ -441,6 +507,8 @@ def activation_operations(ctx, state):
     # Keep links on the checkout only if the activated release maintains them;
     # a missing checkout falls back to the release skill instead of blocking.
     dev_capable = _dev_capable(site)
+    if dev_capable:
+        name = _dev_profile_name(name, {record.get("dev_source") for record in records.values()})
     ops = []
     for agent, record in records.items():
         before = _verify_skill(record)
@@ -449,13 +517,9 @@ def activation_operations(ctx, state):
         ops.extend(adapter_ops)
         skill = Path(record["skill"]).with_name(name)
         link, source, _ = _desired_link(target, record.get("dev_source") if dev_capable else None, name)
-        ops.extend(_skill_operations(record, skill, link, before=before))
-        if str(skill) != record["skill"]:
-            block, instruction_op = _instruction_operation(
-                adapter, agent, record["command"], record["instructions"], name, record)
-            ops.append(instruction_op)
-            extra["block_sha256"] = files.digest(block)
-        records[agent] = dict(record, skill=str(skill), skill_target=str(target), skill_hashes=hashes, generation=state["current"])
+        profile, profile_ops = _move_profile(agent, record, skill, link, before)
+        ops.extend(profile_ops)
+        records[agent] = dict(record, skill_target=str(target), skill_hashes=hashes, generation=state["current"], **profile)
         records[agent].pop("dev_source", None)
         if source:
             records[agent]["dev_source"] = source
@@ -466,31 +530,43 @@ def activation_operations(ctx, state):
 
 def _switch_operations(ctx, state, source):
     records = _records(ctx)
-    release, _, _ = bundle(Path(state["generations"][state["current"]]["site"]))
-    link, dev_source, reason = _desired_link(release, source, _managed_name(records))
+    site = Path(state["generations"][state["current"]]["site"])
+    release, _, name = bundle(site)
+    name = _dev_profile_name(_profile_name(state, name, _managed_name(records) or LEGACY_NAME), (source,))
+    link, dev_source, reason = _desired_link(release, source, name)
     ops, agents = [], {}
     for agent, record in records.items():
         if record["skill_target"] != str(release):
             raise ConfigError(agent + ": managed skill metadata does not match the active release; "
                               "run richi setup --agent " + agent + " --yes")
-        operation = files.change(record["skill"], {"kind": "link", "target": link})
-        if operation["before"] != operation["after"]:
-            try:
+        skill = Path(record["skill"]).with_name(name)
+        updated = dict(record)
+        try:
+            if str(skill) != record["skill"]:
+                for root in _other_skill_roots(agent, record):
+                    for directory in (SKILL_NAME, LEGACY_NAME):
+                        files.duplicate_skill(root / directory, False)
+                profile, profile_ops = _move_profile(agent, record, skill, link, _verify_skill(record))
+                updated.update(profile)
+                ops.extend(profile_ops)
+                changed = True
+            else:
+                operation = files.change(skill, {"kind": "link", "target": link})
+                changed = operation["before"] != operation["after"]
                 # A release skill edited through its link stays protected:
                 # moving the link away would let a later update discard it.
-                operation["before"] = _verify_skill(record)
-            except ConfigError as exc:
-                raise ConfigError(agent + ": " + str(exc)) from exc
+                if changed:
+                    operation["before"] = _verify_skill(record)
+                ops.append(operation)
+        except ConfigError as exc:
+            raise ConfigError(agent + ": " + str(exc)) from exc
         # Release hashes are kept as recorded, so later activation still
         # detects edits to the bundle.
-        updated = dict(record)
         updated.pop("dev_source", None)
         if dev_source:
             updated["dev_source"] = dev_source
         records[agent] = updated
-        ops.append(operation)
-        agents[agent] = {"skill": record["skill"], "target": link,
-                         "changed": operation["before"] != operation["after"]}
+        agents[agent] = {"skill": str(skill), "target": link, "changed": changed}
     ops.append(_manifest_op(ctx, records))
     report = {"mode": "dev" if dev_source else "release", "target": link, "agents": agents}
     if dev_source:
@@ -579,10 +655,18 @@ def skill_links(dev, source, registered=True):
         if not (Path(ctx["root"]) / MANIFEST).is_file():
             return {"status": "not_configured"}
         records = _records(ctx)
-        name = _managed_name(records)
         agents = {agent: {"skill": record["skill"], "target": _link_target(record),
                           "mode": _mode(record)}
                   for agent, record in records.items()}
+        name = _managed_name(records)
+        if registered and name != SKILL_NAME:
+            # A legacy layout can be required by rollback or by a pinned dev
+            # checkout. A new source or switching dev off may lift the latter.
+            from . import installation
+            state = installation._state(ctx)
+            fallback = name or LEGACY_NAME
+            active = _installed_name(state["generations"][state["current"]]["site"], fallback)
+            name = _profile_name(state, active, fallback)
     except (ValueError, OSError, RuntimeError, ImportError, KeyError, TypeError) as exc:
         return {"status": "unavailable", "reason": str(exc)}
     modes = {item["mode"] for item in agents.values()}
@@ -590,8 +674,10 @@ def skill_links(dev, source, registered=True):
     if not registered:
         return dict(result, reason=UNREGISTERED)
     # The expectation mirrors switch_skills: an unusable checkout means release.
-    expected, reason = _checkout(source, name)
-    matches = all(record.get("dev_source") == expected for record in records.values())
+    expected_name = _dev_profile_name(name, (source,))
+    expected, reason = _checkout(source, expected_name)
+    matches = all(Path(record["skill"]).name == expected_name and record.get("dev_source") == expected
+                  for record in records.values())
     result["matches_config"] = matches
     if reason or missing:
         result["reason"] = reason or missing

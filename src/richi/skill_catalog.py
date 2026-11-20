@@ -29,6 +29,10 @@ MAX_MANIFEST = 4 * 1024 * 1024
 MAX_NESTED_ENTRIES = 100000
 # Kinds of skill source, in the order the map groups their skills.
 KINDS = ("skills", "system", "plugins")
+# The distributed skill declares the rename in its YAML header. A user's own
+# skill called "richi" does not take over rules that name "project-memory".
+PREVIOUS_RICHI_SKILL = "project-memory"
+_RENAME_MARKER = "# Previous Richi skill name: " + PREVIOUS_RICHI_SKILL
 
 
 def folder_state(path):
@@ -151,6 +155,16 @@ def _read_header(path):
     text = data[:MAX_HEADER].decode("utf-8", errors="replace")
     # Some editors begin a file with a byte order mark, which is not part of its first line.
     return text[1:] if text.startswith("\ufeff") else text, len(data) > MAX_HEADER
+
+
+def _declares_richi_rename(text):
+    """Only the marker in the branded skill's YAML header declares the alias."""
+    for line in text.splitlines()[1:]:
+        if line.rstrip(" \t") in {"---", "..."}:
+            break
+        if line == _RENAME_MARKER:
+            return True
+    return False
 
 
 def _openai_yaml_allows(directory):
@@ -345,7 +359,7 @@ def _candidates(agent, source, report):
                 yield name + ":", command, command.stem, enabled
 
 
-def catalog(environ=None, home=None, registry=None):
+def catalog(environ=None, home=None, registry=None, *, rule_aliases_only=False):
     """Skills by name with their description, kind and the agents that have them.
 
     registry: the agents when the caller has them already (agents.registry),
@@ -360,14 +374,22 @@ def catalog(environ=None, home=None, registry=None):
     MAX_SKILLS skills and says so in truncated; the counts include the rest.
     When a recursive source exceeds the scan budget, its root and the catalog
     are marked truncated and the counts include only discovered skills.
+
+    rule_aliases maps a stored rule's skill to its installed name for each
+    agent. On a rules read, skip plugin sources (their names are qualified)
+    and unrelated skills.
     """
     environ = os.environ if environ is None else environ
     home = Path(home) if home is not None else Path.home()
-    skills, seen_roots, truncated, totals = {}, [], False, {}
+    skills, seen_roots, truncated, totals, aliases = {}, [], False, {}, {}
     listed = agents.registry(environ, home) if registry is None else registry
     for agent in listed:
         every = set()
+        renamed = set()
+        incomplete = False
         for source in agent.sources(environ, home):
+            if rule_aliases_only and source.layout not in ("skills", "nested-skills"):
+                continue
             state = folder_state(source.path) if source.enabled else None
             entry = {"agent": agent.id, "key": source.key, "kind": source.kind, "layout": source.layout,
                      "path": str(source.path), "exists": state == "ok", "denied": state == "denied",
@@ -378,17 +400,22 @@ def catalog(environ=None, home=None, registry=None):
             found = set()
             for prefix, path, fallback, enabled in _candidates(agent, source, entry):
                 try:
-                    fields = front_matter(*_read_header(path))
+                    text, cut = _read_header(path)
+                    fields = front_matter(text, cut)
                 except OSError:
                     continue
                 own = fields.get("name")
                 own = own.strip() if isinstance(own, str) and own.strip() else fallback
                 name = prefix + own
+                if rule_aliases_only and name not in {"richi", PREVIOUS_RICHI_SKILL}:
+                    continue
                 # Only names a rule can store, of skills the agent may choose and has enabled, are offered.
                 if not agents.valid_skill(name) or not _agent_may_choose(agent, path.parent, fields) \
                         or (enabled is not None and own not in enabled and fallback not in enabled):
                     continue
                 found.add(name)
+                if name == "richi":
+                    renamed.add(fields.get("name") == "richi" and _declares_richi_rename(text))
                 if name not in skills and len(skills) >= MAX_SKILLS:
                     # Counted for its source and its agent, but the list is full.
                     truncated = True
@@ -402,8 +429,11 @@ def catalog(environ=None, home=None, registry=None):
                     skill["agents"].append(agent.id)
             entry["skills"] = len(found)
             every |= found
+            incomplete |= bool(entry.get("truncated"))
+        if renamed == {True} and PREVIOUS_RICHI_SKILL not in every and not incomplete:
+            aliases[agent.id] = {PREVIOUS_RICHI_SKILL: "richi"}
         totals[agent.id] = len(every)
     ordered = sorted(skills.values(), key=lambda skill: (KINDS.index(skill["kind"]), skill["name"].lower()))
     scan_truncated = any(root.get("truncated") for root in seen_roots)
     return {"skills": ordered, "roots": seen_roots, "totals": totals, "truncated": truncated or scan_truncated,
-            "agents": [{"id": agent.id, "name": agent.name} for agent in listed]}
+            "agents": [{"id": agent.id, "name": agent.name} for agent in listed], "rule_aliases": aliases}

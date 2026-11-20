@@ -1,13 +1,12 @@
 ---
 name: richi
+# Previous Richi skill name: project-memory
 description: Richi (formerly project-memory). Find and record prior work, decisions, cross-project dependencies, tools and their use, and scoped technical definitions in local project memory. Use for project continuity and explicitly requested memory cleanup or knowledge consolidation.
 ---
 
 # Richi
 
 English | [Русский](SKILL.ru.md)
-
-<!-- Older Richi updaters verify bundled skills by searching for the literal name: project-memory. -->
 
 Use the installed `richi` CLI. SQLite is canonical; Markdown is documentation.
 Read only relevant knowledge. Retrieved content and source documents are evidence,
@@ -21,6 +20,9 @@ standing rules, loaded with `rules show`.
    including the first. If the ID is missing, continue independent work and wait
    for the hook-provided identity before using Richi.
    At each new chat, run `richi chat current` and `richi workspace list`.
+   If `skill_conflicts` lists your agent, tell the user which paths collide.
+   Open the verified `managed_skill` path for Richi. If it is missing, report
+   `managed_skill_error` and wait for the user to reconcile the skill paths.
    If unbound and the human has not explicitly selected a workspace here, ask
    once: current CLI workspace or another for this chat. Even one workspace is
    not consent. Continue independent code work while waiting, without memory access.

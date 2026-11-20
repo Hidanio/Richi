@@ -543,6 +543,26 @@ def automatic(source, candidate, home):
     home.stop_map()
 
 
+def legacy_skill_collision(candidate, home):
+    """An actual frozen updater can activate two skills named richi in Codex."""
+    discovery = Path(home.env["HOME"]) / ".agents/skills"
+    managed = discovery / "project-memory/SKILL.md"
+    foreign = discovery / "richi"
+    foreign.mkdir()
+    local_skill = b"---\nname: richi\ndescription: Independent user skill\n---\n"
+    (foreign / "SKILL.md").write_bytes(local_skill)
+    assert json.loads(home.update(candidate, "apply").stdout)["status"] == "updated"
+    notice, = home.json("--chat", CHAT, "chat", "current")["skill_conflicts"]
+    assert notice["agent"] == "codex" and notice["conflicting_paths"] == [str(foreign)], notice
+    assert notice["managed_skill"] == str(managed) and managed.read_bytes() == candidate.skill
+    assert (foreign / "SKILL.md").read_bytes() == local_skill
+    backup = json.loads(home.cli(*shlex.split(notice["preview_command"])[1:]).stdout)["skill_backups"]
+    assert len(backup) == 1 and not Path(backup[0]).exists() and foreign.is_dir()
+    home.cli("update", "rollback")
+    assert b"\nname: project-memory\n" in managed.read_bytes()
+    assert (foreign / "SKILL.md").read_bytes() == local_skill
+
+
 def chain(sources, candidate, home):
     prepare(home, sources[0])
     for release in sources[1:] + [candidate]:
@@ -582,6 +602,10 @@ def main(argv=None):
                 for tag in selected]
         runs += [("automatic " + tag, "auto-" + tag, sources[tag], partial(automatic, sources[tag], candidate))
                  for tag in selected]
+        legacy = [sources[tag] for tag in selected if b"\nname: project-memory\n" in sources[tag].skill]
+        if legacy and b"\nname: richi\n" in candidate.skill:
+            runs.append(("user skill collision from " + legacy[-1].tag, "skill-collision", legacy[-1],
+                         partial(legacy_skill_collision, candidate)))
         if not args.only and len(tags) > 1:
             runs.append(("chain " + " -> ".join(tags + ["v" + candidate.version]), "chain", sources[tags[0]],
                          partial(chain, [sources[tag] for tag in tags], candidate)))

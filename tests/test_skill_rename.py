@@ -1,4 +1,5 @@
 """The frozen updater retains its discovery path for one rollback generation."""
+import json
 import os
 from pathlib import Path
 import unittest
@@ -11,6 +12,10 @@ from richi_launcher.config import ConfigError
 
 
 class SkillRenameTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
+    def package(self, site, version):
+        super().package(site, version)
+        (site / "richi_launcher/agent_setup.py").write_text(test_dev_skill_links.DEV_CAPABLE)
+
     def transition(self):
         bundle = self.site / "richi_launcher/agent_skill/SKILL.md"
         bundle.write_text("---\nname: project-memory\ndescription: Old skill\n---\n# Project Memory\n")
@@ -74,6 +79,24 @@ class SkillRenameTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
                 backup, = (competing.parent.parent / "richi-skill-backups").glob("richi-*")
                 self.assertEqual(backup.read_text(), "User skill")
 
+    def test_chat_rename_notice_checks_both_codex_roots_and_verifies_managed_copy(self):
+        self.transition()
+        self.assertEqual(agent_setup.rename_conflicts(), [])
+        shadow = self.home / ".codex/skills/richi"
+        for path in (self.new_skill, shadow):
+            path.mkdir(parents=True)
+            (path / "SKILL.md").write_text("---\nname: richi\n---\nUser skill\n")
+        notice, = agent_setup.rename_conflicts()
+        self.assertEqual(notice["agent"], "codex")
+        self.assertEqual(notice["managed_skill"], str(self.old_skill / "SKILL.md"))
+        self.assertEqual(notice["conflicting_paths"], [str(self.new_skill), str(shadow)])
+        self.old_skill.unlink()
+        self.old_skill.symlink_to(shadow)
+        notice, = agent_setup.rename_conflicts()
+        self.assertNotIn("managed_skill", notice)
+        self.assertIn("changed", notice["managed_skill_error"])
+        self.assertEqual(self.old_skill.resolve(), shadow)
+
     def test_first_setup_of_copied_old_skills_requires_explicit_backup(self):
         for agent, root in (("codex", ".agents"), ("claude", ".claude"), ("cursor", ".cursor")):
             with self.subTest(agent=agent):
@@ -101,3 +124,83 @@ class SkillRenameTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         self.assertEqual(os.readlink(self.old_skill), str(legacy))
         self.assertTrue(agent_setup.skill_links(True, checkout)["matches_config"])
         self.assertEqual(agent_setup.switch_skills(False, checkout)["status"], "changed")
+
+    def test_pinned_legacy_checkout_remains_discoverable_across_branded_updates(self):
+        instructions, state = self.transition()
+        checkout = self.home / "pinned"
+        branded = Path(test_dev_skill_links.DevSkillLinkTests.make_checkout(checkout, "pinned"))
+        legacy = branded.rename(branded.with_name("project-memory"))
+        (legacy / "SKILL.md").write_text("---\nname: project-memory\n---\n# Pinned working copy\n")
+        self.assertEqual(agent_setup.switch_skills(True, checkout)["mode"], "dev")
+        self.configure("--agent", "claude")
+        with patch.object(installation, "_collect", return_value={}):
+            installation._activate(self.ctx, state, "updated")
+        for agent, skill in (("codex", self.old_skill), ("claude", self.home / ".claude/skills/project-memory")):
+            status = agent_setup.command(["--agent", agent, "--status"])
+            self.assertEqual((status["status"], status["skill_mode"], status["dev_source"]),
+                             ("configured", "dev", str(checkout)))
+            self.assertEqual(os.readlink(skill), str(legacy))
+            self.assertFalse(skill.with_name("richi").is_symlink())
+        self.assertTrue(agent_setup.skill_links(True, checkout)["matches_config"])
+        self.assertIn(b"`project-memory` skill", instructions.read_bytes())
+
+        # Switching to release moves both rules and links, and switching back
+        # to the pinned checkout restores the compatible name for every agent.
+        manifest = self.root / agent_setup.MANIFEST
+        previous = (manifest.read_bytes(), instructions.read_bytes())
+        operations, _ = agent_setup._switch_operations(self.ctx, state, None)
+        setup_files.begin(self.ctx, operations)
+        self.assertTrue(self.new_skill.is_symlink())
+        setup_files.recover(self.ctx)
+        self.assertEqual((manifest.read_bytes(), instructions.read_bytes()), previous)
+        self.assertEqual(os.readlink(self.old_skill), str(legacy))
+        self.assertEqual(agent_setup.switch_skills(False, checkout)["mode"], "release")
+        self.assertTrue(self.new_skill.is_symlink())
+        self.assertFalse(self.old_skill.is_symlink())
+        self.assertIn(b"`richi` skill", instructions.read_bytes())
+        self.assertFalse(agent_setup.skill_links(True, checkout)["matches_config"])
+        self.assertEqual(agent_setup.switch_skills(True, checkout)["mode"], "dev")
+        self.assertEqual(os.readlink(self.old_skill), str(legacy))
+        self.assertTrue(instructions.read_bytes().startswith(b"Keep this user text.\r\n"))
+        # Pulling the checkout in place keeps its configured source, but the
+        # desired skill and its discovery path are now branded.
+        legacy.rename(branded)
+        (branded / "SKILL.md").write_text("---\nname: richi\n---\n# Updated checkout\n")
+        self.assertFalse(agent_setup.skill_links(True, checkout)["matches_config"])
+        self.assertEqual(agent_setup.switch_skills(True, checkout)["status"], "changed")
+        self.assertEqual(os.readlink(self.new_skill), str(branded))
+        self.assertTrue(agent_setup.skill_links(True, checkout)["matches_config"])
+
+    def test_setup_uses_committed_layout_when_previous_bundle_is_damaged(self):
+        self.transition()
+        previous = self.site / "richi_launcher/agent_skill/SKILL.md"
+        for damage in ("missing", "invalid UTF-8"):
+            with self.subTest(damage=damage):
+                if damage == "missing":
+                    previous.unlink()
+                else:
+                    previous.write_bytes(b"\xff")
+                self.assertEqual(agent_setup.command(["--status"])["status"], "configured")
+                self.assertEqual(self.configure()["changes"], [])
+                claude = self.configure("--agent", "claude")
+                self.assertEqual(Path(claude["skill"]).name, "project-memory")
+                self.assertFalse(self.new_skill.is_symlink())
+                self.assertEqual(agent_setup.switch_skills(False, None)["status"], "unchanged")
+
+    def test_first_agent_after_update_with_unreadable_previous_preserves_rollback_layout(self):
+        first = self.next_state()
+        with patch.object(installation, "_collect", return_value={}):
+            installation._activate(self.ctx, first, "updated")
+        (self.site / "richi_launcher/agent_skill/SKILL.md").write_bytes(b"\xff")
+        self.assertEqual(Path(self.configure()["skill"]).name, "project-memory")
+        self.assertEqual(agent_setup.command(["--status"])["status"], "configured")
+
+    def test_setup_rejects_an_unrecognized_recorded_name_before_adding_an_agent(self):
+        self.configure()
+        manifest = self.root / agent_setup.MANIFEST
+        record = json.loads(manifest.read_text())
+        record["skill"] = str(Path(record["skill"]).with_name("other"))
+        manifest.write_text(json.dumps(record))
+        with self.assertRaisesRegex(ConfigError, "unsupported managed skill directory"):
+            self.configure("--agent", "claude")
+        self.assertFalse((self.home / ".claude").exists())

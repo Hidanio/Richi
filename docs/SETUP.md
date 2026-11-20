@@ -74,8 +74,10 @@ is fetched. Online first installation upgrades pip in the dedicated environment.
 Repeating the command reuses an installer-owned environment, checks for a newer
 stable release and reconciles setup without duplicate instruction blocks.
 Interrupted first environments are retained as `.interrupted-*` backups before
-retrying creation. Installer `--dry-run` previews paths and prerequisites only;
-the installed command checks for integration conflicts. The examples below use
+retrying creation. Installer `--dry-run` shows the agent's parent
+`skills_directory`. The selected release chooses the skill subdirectory,
+which can depend on its rollback target. The installed command shows the exact
+path and checks for integration conflicts. The examples below use
 Codex. For other clients, pass the same `--agent` as at first installation.
 
 ```sh
@@ -119,6 +121,14 @@ renamed skill to all connected agents. While the rollback release still expects
 `project-memory`, the managed directory and instruction block keep their old
 names. Codex already lists the skill as Richi in new chats. When both releases
 support the rename, the updater moves the managed link and updates the block.
+If a development checkout still supplies only `project-memory`, its agents
+keep using that checkout and its original skill name.
+
+If an older updater encounters your own `richi` skill, the next
+`richi chat current` lists the occupied paths in `skill_conflicts`.
+The `managed_skill` field identifies Richi's verified copy. You can use it
+directly, move your own skill outside discovery, or inspect the suggested
+setup preview to see where Richi would back it up.
 
 During that transition, clients that derive a slash command from the directory
 may still use the old name. Cursor expects the directory to match the skill name,

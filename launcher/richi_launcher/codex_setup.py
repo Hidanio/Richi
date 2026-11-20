@@ -32,11 +32,16 @@ def paths(current=None):
     return profile, instructions, Path.home().resolve() / ".agents/skills/richi"
 
 
+def other_skill_roots(profile, discovery):
+    root = profile / "skills"
+    return [root] if root != discovery else []
+
+
 def _profile_skills(profile, discovery, replace_skill):
     ops = []
-    if profile / "skills" != discovery:
+    for root in other_skill_roots(profile, discovery):
         for name in ("richi", "project-memory"):
-            ops.extend(files.duplicate_skill(profile / "skills" / name, replace_skill))
+            ops.extend(files.duplicate_skill(root / name, replace_skill))
     return {}, ops
 
 

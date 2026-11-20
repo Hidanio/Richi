@@ -65,6 +65,11 @@ for that agent. An ID that neither Richi nor any rule knows is still answered,
 with each rule's skill for every agent, and `agent_problem` lists the known
 agents: check the ID, because a misspelt one misses the agent's own skills.
 
+For a saved rule that names `project-memory`, `use_skill` returns `richi` when
+the agent has the renamed Richi skill and no skill named `project-memory`. The
+map shows the same installed name. The saved rule and its history keep the
+original spelling, so a rollback also uses the name available to that agent.
+
 ## Add a rule the user asked to keep
 
 ```sh

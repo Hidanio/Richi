@@ -19,6 +19,7 @@ import sys
 API = 1
 REPOSITORY = "https://github.com/Hidanio/Richi/"
 REFERENCES = "skills/richi/references/"
+_LEGACY_REFERENCES = "skills/project-memory/references/"
 TEXT_WIDTH = 78
 
 HelpPage = namedtuple("HelpPage", "summary about examples see guide")
@@ -147,10 +148,17 @@ def local_guide(guide):
     runtime = _active_runtime() or {}
     here = Path(__file__).resolve()
     candidates = []
+    reference = next((path[len(prefix):] for prefix in (REFERENCES, _LEGACY_REFERENCES)
+                      if path.startswith(prefix)), None)
     if runtime.get("mode") == "dev" and runtime.get("source"):
-        candidates.append(Path(runtime["source"]) / path)
-    if path.startswith(REFERENCES):
-        candidates.append(here.parent / "agent_skill" / "references" / path[len(REFERENCES):])
+        source = Path(runtime["source"])
+        if reference is None:
+            candidates.append(source / path)
+        else:
+            # A dev checkout may predate the skill rename, as may a saved URL.
+            candidates.extend(source / prefix / reference for prefix in (REFERENCES, _LEGACY_REFERENCES))
+    if reference is not None:
+        candidates.append(here.parent / "agent_skill" / "references" / reference)
     if not runtime:
         # The launcher's own pages, or sources run from a checkout.
         candidates.append(here.parents[2] / path)

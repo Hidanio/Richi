@@ -656,7 +656,46 @@ class GuideTests(IsolatedCase):
             with self.subTest(runtime=environment), mock.patch.dict(os.environ, environment), \
                     mock.patch.object(help_format, "__file__", str(package / "help_format.py")):
                 self.assertEqual(help_format.local_guide(guide), bundled)
+                old_url = help_format.REPOSITORY + "blob/main/skills/project-memory/references/RECALL.md"
+                self.assertEqual(help_format.local_guide(old_url), bundled)
                 self.assertIn("\nlocal copy: %s\n" % bundled, self.help(["help", "recall"])[1])
+
+    def test_new_launcher_uses_guides_from_pre_rename_dev_checkout(self):
+        checkout = self.root / "checkout"
+        old = checkout / "skills/project-memory/references/RECALL.md"
+        package = self.root / "site-packages/richi_launcher"
+        bundled = package / "agent_skill/references/RECALL.md"
+        for guide in (old, bundled):
+            guide.parent.mkdir(parents=True)
+            guide.write_text(str(guide), encoding="utf-8")
+        runtime = json.dumps({"mode": "dev", "source": str(checkout)})
+        with mock.patch.dict(os.environ, {"RICHI_ACTIVE_RUNTIME": runtime}), \
+                mock.patch.object(help_format, "__file__", str(package / "help_format.py")):
+            self.assertEqual(help_format.local_guide("RECALL.md#recall"), old)
+            self.assertIn("\nlocal copy: %s\n" % old, self.help(["help", "recall"])[1])
+            canonical = checkout / "skills/richi/references/RECALL.md"
+            canonical.parent.mkdir(parents=True)
+            old.rename(canonical)
+            old_url = help_format.REPOSITORY + "blob/main/skills/project-memory/references/RECALL.md"
+            self.assertEqual(help_format.local_guide(old_url), canonical)
+
+    def test_pre_rename_dev_help_urls_name_files_in_the_repository(self):
+        skills = Path(__file__).resolve().parents[1] / "skills"
+        legacy = skills / "project-memory/references"
+        # GitHub's blob viewer requires each intermediate component to be a tree.
+        self.assertFalse(legacy.parent.is_symlink())
+        self.assertFalse(legacy.is_symlink())
+        canonical = skills / "richi/references"
+        # These guides shipped in 1.2.0. New guides only need the current path.
+        stems = ("AGENT_SKILLS", "BRIEF", "CLI", "DIAGNOSTICS", "ENCYCLOPEDIA", "ENTRY_WRITE",
+                 "EVALUATION", "FILTERS", "GIT", "GIT_CAPTURE", "GRAPH", "IMPACT", "MAINTENANCE",
+                 "MEMORY_AUDIT", "NEIGHBORS", "QUERY_TOOLS", "RECALL", "RECALL_DEBUG",
+                 "RETRIEVAL_TOOLS", "RULES", "STORAGE", "TOOLS", "WORKSPACES")
+        for stem in stems:
+            for suffix in (".md", ".ru.md"):
+                name = stem + suffix
+                with self.subTest(guide=name):
+                    self.assertEqual((legacy / name).resolve(strict=True), canonical / name)
 
     def test_links_point_to_the_documentation_of_the_running_code(self):
         help_format.documentation.cache_clear()

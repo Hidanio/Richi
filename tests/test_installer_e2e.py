@@ -47,7 +47,9 @@ class InstallerLifecycleTests(unittest.TestCase):
                        "--manifest", self.root / "0.1.0-manifest.json", "--no-path"]
             # Preview is read-only, even with a pre-existing skill.
             before = set(home.rglob("*"))
-            self.run_process([*command, "--dry-run"])
+            plan = json.loads(self.run_process([*command, "--dry-run"]).stdout)
+            self.assertEqual(plan["skills_directory"], str(skill.parent))
+            self.assertNotIn("skill", plan)
             self.assertEqual(before, set(home.rglob("*")))
             result = self.run_process([*command, "--yes"], ok=False)
             self.assertIn("replace-skill", result.stderr)

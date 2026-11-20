@@ -1,0 +1,1 @@
+../../richi/references/MAINTENANCE.ru.md
