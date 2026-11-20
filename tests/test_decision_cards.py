@@ -432,6 +432,67 @@ class DecisionCardTests(unittest.TestCase):
                     card, = task_brief.brief(self.conn, args, memory, self.db)["results"]
                     self.assertEqual(card["measurements"][0]["source"]["reference"], "test://trial/" + identity)
 
+    def test_spaced_quantity_is_atomic_inside_a_question_and_keeps_its_citation(self):
+        def source(label, number, unit):
+            row = {"metric": "Output", "value": number, "unit": unit, "sample": "trial"}
+            return {"reference": "test://power/" + label, "measurements": [row]}
+
+        wrong_scale = source("milli", "5", "mW")
+        wrong_number = source("seven", "7", "MW")
+        target = source("mega", "5", "MW")
+
+        def save(identity, sources):
+            self.put(dict(self.task, id=identity, jira_key=None, title="Trial", summary="Result", sources=sources,
+                          expected_updated_at=(memory.entry_record(self.conn, identity) or {}).get("updated_at")))
+
+        save("other-number", [wrong_number])
+        for indexed in (False, True):
+            for present in (False, True):
+                save("trial", [wrong_scale] * 8 + ([target] if present else []))
+                if indexed:
+                    with memory.transaction(self.conn):
+                        search_index.build(self.conn, memory)
+                for query in ("5 MW?", "Was it 5 MW?", "(5 MW)", "Was it 5MW?"):
+                    with self.subTest(query=query, indexed=indexed, present=present):
+                        args = SimpleNamespace(query=query, limit=5, max_chars=16000)
+                        cards = task_brief.brief(self.conn, args, memory, self.db)["results"]
+                        self.assertEqual([card["id"] for card in cards], ["trial"] if present else [])
+                        if present:
+                            row = cards[0]["measurements"][0]
+                            self.assertEqual((row["value"], row["unit"], row["source_index"], row["source"]),
+                                             ("5", "MW", 9, {"reference": "test://power/mega"}))
+
+    def test_words_following_numbers_keep_lexical_case_prefixes_and_citations(self):
+        def source(label, field, text):
+            row = {"metric": "Count", "value": "14", "unit": "ms", "sample": "Baseline"}
+            row[field] = text
+            return {"reference": "test://samples/" + label, "measurements": [row]}
+
+        cases = (("canary", "sample", "50 canary requests", ("Canary", "cana")),
+                 ("replays", "sample", "5 replays", ("replay", "REPLAYS")),
+                 ("success", "metric", "5 successful replays", ("success", "SUCCESSFUL")),
+                 ("running", "value", "12 consecutive runs", ("Consecutive", "12ms")),
+                 ("russian", "sample", "50 новых запросов", ("НОВЫХ", "нов")))
+        for index, (name, field, text, _) in enumerate(cases):
+            self.put(dict(self.task, id="trial-" + str(index), jira_key=None, title="Trial", summary="Result",
+                          sources=[source("base", "sample", "50 baseline requests")] * 8 +
+                                  [source(name, field, text)]))
+        for indexed in (False, True):
+            if indexed:
+                with memory.transaction(self.conn):
+                    search_index.build(self.conn, memory)
+            for index, (name, _, _, queries) in enumerate(cases):
+                for query in queries:
+                    with self.subTest(query=query, indexed=indexed):
+                        args = SimpleNamespace(query=query, limit=5, max_chars=16000)
+                        found = {card["id"]: card for card in task_brief.brief(self.conn, args, memory, self.db)["results"]}
+                        card = found["trial-" + str(index)]
+                        self.assertIn("measurement", card["query_match_reasons"])
+                        row = card["measurements"][0]
+                        self.assertEqual((row["source_index"], row["source"]), (9, {"reference": "test://samples/" + name}))
+        self.assertEqual(measurements.query_terms("Was it 5 MW for 50 canary requests?"),
+                         ["5MW", "50", "canary", "requests"])
+
     def test_structured_match_applies_the_entity_project_boost(self):
         memory.project_put(self.conn, {"id": "service", "name": "Service"})
         evidence = {"reference": "synthetic://trial", "measurements": [

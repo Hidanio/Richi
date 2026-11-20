@@ -205,19 +205,33 @@ _RANGE_WORDS = frozenset("to through versus vs and or before after then compared
                          "до против и или от после затем".split())
 
 
-def _tokens_with_unit(text):
-    """Keep the following word beside the number so the caller can distinguish a written unit."""
-    for token in _TOKEN.finditer(text):
-        spaced = _SPACED_UNIT.match(text, token.end()) if token["number"] and not token["unit"] else None
-        yield token, spaced
+def _spaced_symbol(word):
+    """Recognize symbol notation without treating a following descriptive word as a unit."""
+    from . import recall
+    folded = word.casefold()
+    if folded in _RANGE_WORDS or (folded in recall.STOPWORDS and not (len(word) == 1 and word.isupper())):
+        return False
+    if not word.isalpha() or len(word) <= 2:
+        return True
+    # Compact abbreviations such as mWh, Mbps and rpm can accompany a number
+    # in prose. Longer words and ordinary capitalized words remain searchable.
+    return len(word) <= 5 and (any(c.isupper() for c in word[1:])
+                               or (word.isascii() and not re.search("[aeiouy]", folded)))
 
 
 def _tokens(text):
-    """Keep a separate unit eligible for both lexical and exact quantity matches."""
-    for token, spaced in _tokens_with_unit(text):
-        yield token[0], token["number"], token["unit"] or ""
-        if spaced:
-            yield token["number"] + spaced[1], token["number"], spaced[1]
+    """Yield each lexical token or complete quantity with its unit and source end."""
+    consumed = 0
+    for token in _TOKEN.finditer(text):
+        if token.start() < consumed:
+            continue
+        unit, end = token["unit"] or "", token.end()
+        if token["number"] and not unit:
+            spaced = _SPACED_UNIT.match(text, end)
+            if spaced and _spaced_symbol(spaced[1]):
+                unit, end = spaced[1], spaced.end()
+        consumed = end
+        yield token, unit, end
 
 
 def lexical_text(text):
@@ -225,29 +239,21 @@ def lexical_text(text):
     if not re.search("[0-9]", text):
         return text
     parts, start = [], 0
-    for token, spaced in _tokens_with_unit(text):
-        if token["unit"]:
-            begin, end = token.span("unit")
-        elif spaced and spaced[1].casefold() not in _RANGE_WORDS:
-            begin, end = spaced.span(1)
-        else:
-            continue
-        parts.append(text[start:begin])
-        start = end
+    for _, unit, end in _tokens(text):
+        if unit:
+            parts.append(text[start:end - len(unit)])
+            start = end
     return " ".join([*parts, text[start:]]) if parts else text
 
 
 def query_terms(text):
     from . import recall
-    stripped = text.strip()
-    first = _TOKEN.match(stripped)
-    if first and first["number"] and not first["unit"]:
-        unit = _SPACED_UNIT.fullmatch(stripped, first.end())
-        if unit and (unit[1] not in recall.STOPWORDS or unit[1].isupper()):
-            return [first["number"] + unit[1]]
     terms = {}
-    for word, number, _ in _tokens(text):
-        if number is None:
+    for token, unit, _ in _tokens(text):
+        if token["number"]:
+            word = token["number"] + unit
+        else:
+            word = token[0]
             folded = recall.normalize(word)
             # A standalone symbol such as W or A can identify the declared unit.
             single_symbol = len(word) == 1 and (word.isupper() or word == text.strip())
@@ -320,12 +326,10 @@ class MeasurementQuery:
             text = row[field]
             if not self.numbers and not (any(unit in text for unit in self.unit_words) and re.search("[0-9]", text)):
                 continue
-            for token, following in _tokens_with_unit(text):
+            for token, unit, _ in _tokens(text):
                 literal = token["number"]
                 if literal is None:
                     continue
-                spaced = following[1] if following else None
-                unit = token["unit"] or spaced or ""
                 if unit in self.unit_words:
                     unit_hits.add(unit)
                 if self.numbers:
@@ -335,7 +339,7 @@ class MeasurementQuery:
                         numbers.update(self.numbers.get((number, ""), ()))
                     # The declaration fills a missing unit only. In "5 ms → 1 s"
                     # a declaration of "s" cannot turn the first value into 5 s.
-                    if field == "value" and not token["unit"] and (not spaced or spaced.casefold() in _RANGE_WORDS):
+                    if field == "value" and not unit:
                         numbers.update(self.numbers.get((number, declared_unit), ()))
         return numbers | {self.unit_words[unit] for unit in unit_hits}, unit_hits
 

@@ -62,7 +62,7 @@ def _annotation_terms(key, payload):
         for word in _WORD_START.finditer(recall.normalize(text)):
             yield word.group(1)
         if not decision and re.search("[0-9]", text):
-            for _, _, unit in measurements._tokens(text):
+            for _, unit, _ in measurements._tokens(text):
                 if unit:
                     yield recall.normalize(unit)
 
