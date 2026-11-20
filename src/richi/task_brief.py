@@ -4,9 +4,12 @@ from types import SimpleNamespace
 
 from . import compact
 from . import brief_checks
+from . import decision_cards
 from . import git_impact
 from . import graph
+from . import measurements
 from . import recall
+from . import search_index
 
 
 NOTICE = ("Selection is evidence to read, not a verified answer or causal impact analysis. "
@@ -21,6 +24,79 @@ def _record(conn, ref, states, api):
         record.update(title=record["kind"], summary=record["description"], work_state=None)
         return record if record["knowledge_state"] in states else None
     return recall.load_node(conn, ref, states, api)
+
+
+def _annotation_payloads(conn, states, terms):
+    # Modern annotations use metadata key ranges. Earlier development writers
+    # embedded observations in the source JSON. The partial index for that
+    # format can also be built explicitly on an existing read-only store.
+    marks = ",".join("?" for _ in states)
+    gate, patterns = search_index.annotation_gate(conn, terms)
+    owners = [("entry", "entries")]
+    if recall.table_exists(conn, "entities"):
+        owners.extend([("entity", "entities"), ("edge", "graph_edges")])
+    for family, table in owners:
+        prefixes = [measurements.KEY_PREFIX + family + ":"]
+        if family == "entry":
+            prefixes.append(decision_cards.KEY_PREFIX)
+        for prefix in prefixes:
+            sql = ("SELECT r.id, m.value FROM metadata m JOIN " + table + " r ON r.id = substr(m.key, ?) "
+                   "WHERE m.key GLOB ? AND r.knowledge_state IN (" + marks + ")" + gate)
+            for identity, raw in conn.execute(sql, [len(prefix) + 1, prefix + "*", *states, *patterns]):
+                yield family + ":" + identity, raw
+        sql = ("SELECT id, sources FROM " + table + " WHERE " + measurements.INLINE_PREDICATE
+               + " AND knowledge_state IN (" + marks + ")")
+        for identity, raw in conn.execute(sql, states):
+            yield family + ":" + identity, raw
+
+
+def _annotation_matches(conn, query, terms, keys, states, project, api):
+    """Search the current structured evidence before ranking and graph expansion."""
+    if not terms:
+        return
+    subjects, symbols = recall.technical_subjects(query), recall.short_subjects(query)
+    checked = set()
+    for ref, raw in _annotation_payloads(conn, states, terms):
+        if ref in checked:
+            continue
+        # A cheap negative test on compact UTF-8 JSON. Only matches in
+        # current human-facing fields count, never metadata keys or URLs.
+        folded = recall.normalize(raw)
+        if not any(term in folded for term in terms):
+            continue
+        checked.add(ref)
+        record = _record(conn, ref, states, api)
+        if record is None or not recall.matches_key(record, keys):
+            continue
+        decision = record.get("decision_card")
+        card_text = recall.normalize(" ".join(decision_cards.search_fields(decision))) if decision else ""
+        rows = (row for source in record["sources"] for row in source.get("measurements", ()))
+        claims = recall.normalize(" ".join(row[field] for row in rows for field in measurements.FIELDS))
+        reasons, matched = [], set()
+        for reason, field_text in (("decision_card", card_text), ("measurement", claims)):
+            hits = [term for term in terms if recall.matches_term(term, field_text)]
+            if hits:
+                matched.update(hits)
+                reasons.append(reason)
+        if not matched:
+            continue
+        annotated = dict(record, summary=" ".join((record["summary"], card_text, claims)))
+        if not keys and (not recall.matches_subject(annotated, subjects)
+                         or not recall.matches_short_subjects(annotated, symbols)):
+            continue
+        score = 2 * len(matched) + 30 * len(matched) / len(terms)
+        reason = recall.project_match_reason(conn, ref, record, states, project)
+        if reason:
+            score += 18
+            reasons.append(reason)
+        # Recall only needs compact witnesses during ranking. Brief rereads the
+        # selected records from this transaction for their complete decisions and rows.
+        record.pop("decision_card", None)
+        for source in record["sources"]:
+            observations = source.pop("measurements", None)
+            if observations:
+                source["measurements_omitted"] = len(observations)
+        yield {"ref": ref, "record": record, "score": score, "reasons": reasons}
 
 
 def _connections(ref, edges):
@@ -50,8 +126,8 @@ def _bound(response, maximum):
         value["truncated"] |= bool(value["budget"]["omitted_results"] or any(
             card.get("is_excerpt") or card.get("sources_omitted") or card.get("matches_omitted") or
             card.get("connections_omitted") or card.get("selection_origins_omitted") or card.get("title_truncated") or
-            card.get("project_ids_omitted") or
-            any(e.get("description_is_excerpt") or e.get("sources_omitted")
+            card.get("project_ids_omitted") or card.get("measurements_omitted") or
+            any(e.get("description_is_excerpt") or compact.partial_sources(e)
                 for e in card.get("connections", [])) or
             any(m.get("changed_paths_omitted") for m in card.get("matches", []))
             for card in value["results"]))
@@ -72,6 +148,16 @@ def _bound(response, maximum):
         originals = {c["ref"]: c for c in response["results"]}
         for card in sorted(value["results"], key=lambda c: "explicit_relation" not in c["selected_by"]):
             original = originals[card["ref"]]
+            # Budget reduction keeps a prefix of ranked measurements. Restore
+            # every additional complete claim/citation that fits, including
+            # smaller items after an unusually large source.
+            rows = card.get("measurements", [])
+            for row in original.get("measurements", [])[len(rows):]:
+                rows.append(row)
+                card["measurements_omitted"] -= 1
+                if measure() > maximum:
+                    rows.pop()
+                    card["measurements_omitted"] += 1
             if len(original["summary_excerpt"]) <= len(card["summary_excerpt"]):
                 continue
             prior = {key: card.get(key) for key in ("summary_excerpt", "is_excerpt", "excerpt_note")}
@@ -127,6 +213,17 @@ def _bound(response, maximum):
             card["connections"] = []
     if measure() <= maximum:
         return finish()
+    # Preserve the best matching complete observation on each card before
+    # sacrificing a card. Generic source headers are available via read_more.
+    for card in reversed(value["results"]):
+        if card.get("measurements"):
+            card["sources_omitted"] += len(card["sources"])
+            card["sources"] = []
+            while len(card["measurements"]) > 1 and measure() > maximum:
+                card["measurements"].pop()
+                card["measurements_omitted"] += 1
+            if measure() <= maximum:
+                return finish()
     # Removing a seed also removes neighbors for which no retained seed provides
     # a witnessed path. Direct query/code matches do not depend on a graph seed.
     def prune_connections():
@@ -155,7 +252,28 @@ def _bound(response, maximum):
                    for origin in card["selected_by"] if origin != "explicit_relation"):
                 continue
             removable.append(index)
-        value["results"].pop(removable[-1] if removable else -1)
+        drop_index = removable[-1] if removable else -1
+        card = value["results"][drop_index]
+        if len(value["results"]) == 1 and ("decision_card" in card or card.get("measurements")):
+            # Both forms carry their own evidence. Prioritize a pending decision.
+            # finish() can still fit smaller claims after an oversized citation.
+            card["sources_omitted"] += len(card["sources"])
+            card["sources"] = []
+            if card["summary_excerpt"]:
+                card.update(summary_excerpt="", is_excerpt=True, excerpt_note=compact.EXCERPT_NOTE)
+            if measure() <= maximum:
+                return finish()
+            if card.get("measurements"):
+                card["measurements_omitted"] += len(card["measurements"])
+                card["measurements"].clear()
+                if measure() <= maximum:
+                    return finish()
+            if "decision_card" in card:
+                del card["decision_card"]
+                card["decision_card_omitted"] = True
+                if measure() <= maximum:
+                    return finish()
+        value["results"].pop(drop_index)
         prune_connections()
     if not value["results"] and response["results"]:
         value["read_more"] = response["results"][0]["read_more"]
@@ -196,12 +314,12 @@ def brief(conn, args, api, database):
         states.append("hypothesis")
     if getattr(args, "include_superseded", False):
         states.append("superseded")
-    # With no code input preserve standalone recall's selection, including its
-    # exact-key guards and ambiguity handling. Diff mode uses a bounded shortlist.
+    # Structured matches share recall's ranking, exact-key guards and graph pass.
     stage_limit = min(100, max(12, args.limit * 2)) if base else args.limit
     stage_args = SimpleNamespace(**vars(args))
     stage_args.limit, stage_args.max_chars = stage_limit, 100000
-    query = recall.recall(conn, stage_args, api, bounded=False)
+    query, claim_terms = recall.recall_with_terms(conn, stage_args, api, bounded=False,
+                                                 additional_matches=_annotation_matches)
     diff = git_impact.impact(conn, stage_args, api, database, bounded=False, states=states) if base else None
     cards, query_order, code_order, related_order = {}, [], [], []
 
@@ -211,7 +329,13 @@ def brief(conn, args, api, database):
             if record is None:
                 return None
             cards[ref] = compact.card(record, ref, summary_chars=900)
+            if ref.startswith("edge:"):
+                cards[ref].update(from_ref=record["from_ref"], to_ref=record["to_ref"])
+            cards[ref]["sources_scope"] = "record"
+            measurements.attach(cards[ref], record.get("sources", []), claim_terms)
             cards[ref].update(selected_by=[], connections=[], connections_omitted=0)
+            if "decision_card" in record:
+                cards[ref]["decision_card"] = record["decision_card"]
             rechecks = []
             if recall.CURRENT.search(args.query):
                 rechecks.append("Question asks about current status; recorded evidence must be checked against its authoritative source.")
@@ -238,8 +362,6 @@ def brief(conn, args, api, database):
                 card["selected_by"].append("code_change")
             card.update(matches=item["matches"], matches_omitted=item["matches_omitted"],
                         code_match_reasons=item["match_reasons"])
-            if item["ref"].startswith("edge:"):
-                card.update(from_ref=item["from_ref"], to_ref=item["to_ref"])
             code_order.append(item["ref"])
     seeds = []
     for ref in code_order:

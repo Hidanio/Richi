@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from richi import graph, memory, recall, search_index
+from richi import graph, measurements, memory, recall, search_index, task_brief
 
 
 class SearchIndexTests(unittest.TestCase):
@@ -55,6 +55,43 @@ class SearchIndexTests(unittest.TestCase):
             tables.append(search_index.RECORDS)
         return {table: [tuple(row) for row in self.conn.execute("SELECT * FROM " + table + " ORDER BY 1")]
                 for table in tables}
+
+    def test_brief_skips_unmatched_annotation_values_and_falls_back_after_writes(self):
+        with memory.transaction(self.conn):
+            for identity, metric in (("first", "Route/Ёлка"), ("second", "Batch-size")):
+                source = {"reference": "synthetic://ignored", "measurements": [
+                    {"metric": metric, "value": "12", "unit": "ms", "sample": "x" * 600000}]}
+                memory.entry_put(self.conn, {"id": identity, "kind": "task", "title": "Trial", "summary": "Result",
+                                             "knowledge_state": "confirmed", "sources": [source]})
+
+        def copied(conn, *terms):
+            return [identity for identity, raw in task_brief._annotation_payloads(conn, ["confirmed"], terms)]
+
+        self.assertEqual(copied(self.conn, "missing"), ["entry:first", "entry:second"])
+        self.build()
+        with closing(memory.connect(self.path, readonly=True)) as reader:
+            self.assertEqual(copied(reader, "missing"), [])
+            self.assertEqual(copied(reader, "ел", "wrong"), ["entry:first"])
+            self.assertEqual(copied(reader, "size"), ["entry:second"])
+            candidates = list(task_brief._annotation_matches(reader, "size", ["size"], [], ["confirmed"], None, memory))
+            self.assertEqual(candidates[0]["record"]["sources"],
+                             [{"reference": "synthetic://ignored", "measurements_omitted": 1}])
+            gate, params = search_index.annotation_gate(reader, ["missing"])
+            plan = reader.execute("EXPLAIN QUERY PLAN SELECT m.value FROM metadata m WHERE m.key GLOB ?" + gate,
+                                  [measurements.KEY_PREFIX + "*", *params])
+            self.assertTrue(any("PRIMARY KEY" in row[3] and "sidecar=?" in row[3] for row in plan))
+
+        key = measurements.KEY_PREFIX + "entry:first"
+        raw = self.conn.execute("SELECT value FROM metadata WHERE key = ?", (key,)).fetchone()[0]
+        self.conn.execute("UPDATE metadata SET value = ? WHERE key = ?", (raw.replace("Route/", "Newest/"), key))
+        self.assertEqual(copied(self.conn, "newest"), ["entry:first"])
+        self.build()
+        self.assertEqual(copied(self.conn, "newest"), ["entry:first"])
+        self.assertEqual(copied(self.conn, "route"), [])
+        self.conn.execute("INSERT OR REPLACE INTO metadata VALUES (?, ?)", (key, raw))
+        self.assertEqual(copied(self.conn, "route"), ["entry:first"])
+        self.conn.execute("DROP TRIGGER " + search_index.ANNOTATION_TRIGGERS[0])
+        self.assertEqual(copied(self.conn, "missing"), ["entry:first", "entry:second"])
 
     def test_absent_index_reads_and_refresh_do_not_create_schema(self):
         self.insert("entry", "one")

@@ -84,6 +84,38 @@ class ProjectWorkspaceGuardTests(unittest.TestCase):
                      "--json", self.write_payload(self.payload()), ok=False)
         self.command(config, "entry", "get", "task:example", ok=False)
 
+    def test_branch_check_uses_global_rules_only_for_a_known_unregistered_path(self):
+        config, repo = self.configs[0], self.repos[0]
+        self.command(config, "rules", "add", "common", "--global", "--text", "No agent prefix.",
+                     "--forbid-branch-prefix", "agent/")
+        self.command(config, "rules", "add", "local", "--project", "shared", "--text", "No temp prefix.",
+                     "--forbid-branch-prefix", "temp/")
+
+        def check(path, branch, *options, ok=True):
+            return self.command(config, "--project-path", path, "rules", "check", "branch-name", branch, *options, ok=ok)
+
+        unknown = self.repos[1]
+        for branch, ok in (("temp/ok", True), ("agent/x", False)):
+            answer = check(unknown, branch, ok=ok)
+            self.assertIsNone(answer["project"])
+            self.assertEqual(answer["checked_rules"], ["common"])
+            self.assertIn("unregistered", answer["project_path_problem"]["error"])
+            self.assertEqual(answer["status"] if ok else answer["code"], "passed" if ok else "rule_violation")
+        self.assertEqual(check(repo, "valid")["checked_rules"], ["common", "local"])
+        self.assertEqual(check(repo, "temp/x", ok=False)["violations"][0]["id"], "local")
+        for path, args in ((self.root / "missing", ()), (repo, ("--project", "another")),
+                           (unknown, ("--project", "shared"))):
+            self.assertNotIn("checked_rules", check(path, "valid", *args, ok=False))
+
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        subprocess.run(["git", "-C", str(repo), "-c", "user.name=Example", "-c", "user.email=test@example.invalid",
+                        "commit", "-q", "--allow-empty", "-m", "Seed"], check=True)
+        linked = self.root / "linked"
+        subprocess.run(["git", "-C", str(repo), "worktree", "add", "-q", "--detach", str(linked)], check=True)
+        self.assertEqual(check(linked, "valid")["checked_rules"], ["common", "local"])
+        self.command(config, "project", "add", linked, "--id", "also-shared")
+        self.assertIn("ambiguous", check(repo, "valid", ok=False)["error"])
+
     def test_backup_cannot_silently_ignore_project_guard(self):
         output = self.root / "guarded-backup.sqlite3"
         self.command(self.configs[0], "--project-path", self.root / "missing",

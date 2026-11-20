@@ -71,7 +71,7 @@ def annotate(conn, response, args, api, database):
 
     # Enumerate full source arrays, never the first two compact.card excerpts.
     for card in response["results"]:
-        _, record = git_sources._record(conn, card["ref"], api)
+        _, record = git_sources._record(conn, card["ref"], api, citations_only=True)
         checks = card["source_checks"] = {
             "record_updated_at": record["updated_at"], "source_count": len(record["sources"]),
             "git_source_count": 0, "non_git_source_count": 0,

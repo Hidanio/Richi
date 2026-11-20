@@ -15,6 +15,7 @@ from richi import git_impact
 from richi import graph
 from richi import memory
 from richi import recall
+from richi import search_index
 from richi import task_brief
 
 from cli_environment import cli_environment
@@ -126,6 +127,52 @@ class TaskBriefTests(unittest.TestCase):
         self.assertTrue(unknown["no_match"])
         self.assertEqual(unknown["results"], [])
 
+    def test_measurements_keep_calculation_unit_and_sample_at_minimum_budget(self):
+        early = {"reference": "https://example.invalid/study", "observed_at": "2026-04-03"}
+        citation = {"reference": "https://example.invalid/final.csv", "observed_at": "2026-04-18",
+                    "locator": "table 4, paired trial"}
+        row = {"metric": "Requests before deadline", "value": "87 → 92",
+               "unit": "completed RPCs", "sample": "100 per mode, OFF then ON"}
+        other = dict(row, metric="Other samples", sample="remaining group", value="37")
+        sources = [early] + [{"reference": "test://notes/%d" % i} for i in range(94)]
+        sources.append(dict(citation, measurements=[other] * 10 + [row]))
+        self.entry("experiment", sources=sources, jira_key="DEMO-73",
+                   summary="Paired production trial. " * 300)
+        for maximum in (4000, 16000):
+            actual = self.brief(query="DEMO-73 deadline", max_chars=maximum)
+            self.assert_budget(actual, maximum)
+            card = actual["results"][0]
+            self.assertEqual(card["sources_scope"], "record")
+            self.assertEqual(card["measurements"][0], dict(row, source_index=96, source=citation))
+            self.assertGreater(card["measurements_omitted"], 0)
+            self.assertEqual(len(card["measurements"]) + card["measurements_omitted"], 11)
+            for measurement in card["measurements"]:
+                self.assertIn(measurement["sample"], [row["sample"], other["sample"]])
+                self.assertEqual(measurement["source"], citation)
+        legacy = self.entry("legacy", sources=[early], jira_key="DEMO-74")
+        self.assertEqual(legacy["status"], "created")
+        self.assertNotIn("measurements", self.brief(query="DEMO-74")["results"][0])
+
+    def test_oversized_calculation_reference_keeps_the_next_complete_measurement(self):
+        row = {"metric": "Median latency", "value": "12.40", "unit": "ms", "sample": "50 paired trials"}
+        large = {"reference": "https://example.invalid/" + "segment/" * 600, "measurements": [row]}
+        small = {"reference": "https://example.invalid/table", "measurements": [dict(row, value="15.70")]}
+        self.entry("trial", sources=[large, small], jira_key="DEMO-77")
+        actual = self.brief(query="DEMO-77", max_chars=4000)
+        self.assert_budget(actual, 4000)
+        card = actual["results"][0]
+        self.assertEqual(card["measurements_omitted"], 1)
+        self.assertEqual(card["measurements"], [dict(small["measurements"][0], source_index=2,
+                                                     source={"reference": small["reference"]})])
+
+    def test_incomplete_measurement_fails_before_replacing_original(self):
+        self.entry("trial", sources=[{"reference": "test://prior"}])
+        for sample in ("", 100, None):
+            row = {"metric": "latency", "value": "12.40", "unit": "ms", "sample": sample}
+            with self.assertRaisesRegex(memory.MemoryError, "measurement.sample"):
+                self.entry("trial", sources=[{"reference": "test://calculation", "measurements": [row]}])
+        self.assertEqual(memory.entry_get(self.conn, "trial")["sources"], [{"reference": "test://prior"}])
+
     def test_combined_deduplicates_and_preserves_exact_endpoint_source_index(self):
         source = self.anchor()
         self.entry("seed", sources=[{"reference": "https://example.invalid/report"}, source],
@@ -193,6 +240,30 @@ class TaskBriefTests(unittest.TestCase):
         expanded = self.brief(query="absentneedle", project="repo", base=self.base, include_hypotheses=True)
         self.assertEqual(set(self.by_ref(expanded)), {"entry:seed", "entry:hyp-node", "entry:hyp-edge"})
         self.assert_connection_integrity(expanded)
+
+    def test_measurement_ranking_boosts_either_project_endpoint(self):
+        memory.project_put(self.conn, {"id": "other", "name": "Other"})
+        self.entry("trial", sources=[], projects=[])
+        for identity, source, target, value in (
+                ("a-other", "project:other", "entry:trial", "17"),
+                ("z-local", "entry:trial", "project:repo", "43")):
+            row = {"metric": "Bandwidth", "value": value, "unit": "Mbps", "sample": "10 trials"}
+            self.edge(identity, source, target, sources=[{"reference": "test://" + identity, "measurements": [row]}])
+
+        for indexed in (False, True):
+            if indexed:
+                with memory.transaction(self.conn):
+                    search_index.build(self.conn, memory)
+            for project, local, other, value in (("repo", "z-local", "a-other", "43"),
+                                                 ("other", "a-other", "z-local", "17")):
+                with self.subTest(indexed=indexed, project=project):
+                    first, = self.brief(query="Bandwidth", project=project, limit=1)["results"]
+                    self.assertEqual(first["ref"], "edge:" + local)
+                    self.assertEqual(first["measurements"][0]["value"], value)
+                    self.assertIn("explicit_project_link", first["query_match_reasons"])
+                    cards = self.brief(query="Bandwidth", project=project, limit=2)["results"]
+                    self.assertEqual([card["id"] for card in cards], [local, other])
+                    self.assertNotIn("explicit_project_link", cards[1]["query_match_reasons"])
 
     def test_ambiguous_concepts_keep_unreturned_scopes_under_limit(self):
         memory.project_put(self.conn, {"id": "other", "name": "Other"})

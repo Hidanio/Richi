@@ -56,7 +56,7 @@ inherited environment ID or a different agent's hook to identify a Cursor chat.
 
 # Cursor guarantees env for subsequent hooks. The agent's shell gets its
 # explicit chat selector via additional_context, independently of shell env.
-HOOK = '''import json, re, sys
+HOOK = '''import json, os, re, subprocess, sys
 payload = json.load(sys.stdin)
 if not isinstance(payload, dict) or payload.get("hook_event_name") != "sessionStart":
     raise SystemExit("Richi: expected Cursor sessionStart")
@@ -78,6 +78,16 @@ context = (
     "Once bound, load the user's standing rules with " + command + " rules show --agent cursor "
     "(for repository work: " + command + " --project-path PATH rules show --agent cursor)."
 )
+args = [sys.executable, "-I", "-m", "richi", "--chat", chat, "--compact-json"]
+roots = payload.get("workspace_roots")
+if isinstance(roots, list) and len(roots) == 1 and isinstance(roots[0], str) and os.path.isabs(roots[0]):
+    args += ["--project-path", roots[0]]
+try:
+    result = subprocess.run(args + ["rules", "show", "--agent", "cursor"], capture_output=True, text=True, timeout=8)
+    if result.returncode == 0:
+        context += "\\nCurrent rules for this session. Follow the rules array. Show preference_review to the user for confirmation.\\n" + result.stdout.strip()
+except (OSError, ValueError, subprocess.TimeoutExpired):
+    pass  # The instructions above give the CLI fallback.
 print(json.dumps({"env": {"RICHI_CHAT_ID": chat}, "additional_context": context}))
 '''
 

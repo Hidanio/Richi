@@ -27,6 +27,45 @@ def all_agent_skill_options(skill):
 
 
 class RulesTests(unittest.TestCase):
+    def test_branch_preflight_uses_explicit_scoped_checks_and_versions(self):
+        path = self.repos["alpha", "service"]
+        both = self.command("alpha", "rules", "add", "ambiguous", "--global", "--text", "Use ticket branches.",
+                            "--forbid-branch-prefix", "codex/", "--branch-format", "EX-{number}", ok=False)
+        self.assertEqual(both["code"], "usage_error")
+        self.add("alpha", "plain", "--global", text="See the issue before branching.")
+        self.add("alpha", "prefix", "--global", "--forbid-branch-prefix", "codex/")
+        naming = self.add("alpha", "ticket", "--project", "service", "--branch-format", "EX-{number}_{description}")
+        self.add("alpha", "other", "--project", "tools", "--forbid-branch-prefix", "EX")
+        self.add("beta", "beta", "--global", "--forbid-branch-prefix", "EX")
+        def check(name, ok=True):
+            return self.command("alpha", "--project-path", path, "rules", "check", "branch-name", name, ok=ok)
+        bad = check("codex/EX-42", ok=False)
+        self.assertEqual(bad["code"], "rule_violation")
+        self.assertEqual([rule["id"] for rule in bad["violations"]], ["prefix", "ticket"])
+        self.assertIn("EX-{number}_{description}", bad["violations"][1]["message"])
+        self.assertEqual(check("EX-42_topic")["checked_rules"], ["prefix", "ticket"])
+        self.assertEqual(check("EX-42_topic")["manual_rules"], ["plain"])
+        self.assertEqual(check("EX-X_topic", ok=False)["violations"][0]["id"], "ticket")
+        self.command("alpha", "rules", "update", "ticket", "--expected-updated-at", naming["updated_at"], "--clear-check")
+        self.assertEqual(check("EX-X_topic")["manual_rules"], ["plain", "ticket"])
+        self.command("alpha", "rules", "update", "ticket", "--expected-updated-at", naming["updated_at"],
+                     "--branch-format", "ABC-{number}", ok=False)
+        self.command("alpha", "rules", "add", "bad", "--global", "--text", "Bad template",
+                     "--branch-format", "EX-{number}-{number}", ok=False)
+
+    def test_branch_preflight_rejects_explicit_empty_project(self):
+        self.add("alpha", "global-prefix", "--global", "--forbid-branch-prefix", "global/")
+        self.add("alpha", "project-prefix", "--project", "service", "--forbid-branch-prefix", "local/")
+        check = ("rules", "check", "branch-name", "local/topic")
+        global_only = self.command("alpha", *check)
+        self.assertIsNone(global_only["project"])
+        self.assertEqual(global_only["checked_rules"], ["global-prefix"])
+        scoped = self.command("alpha", *check, "--project", "service", ok=False)
+        self.assertEqual(scoped["code"], "rule_violation")
+        self.assertEqual(scoped["checked_rules"], ["global-prefix", "project-prefix"])
+        empty = self.command("alpha", *check, "--project", "", ok=False)
+        self.assertEqual(empty["code"], "not_found")
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="richi-rules-")
         self.addCleanup(temporary.cleanup)
@@ -114,6 +153,144 @@ class RulesTests(unittest.TestCase):
         foreign = self.command("beta", "--project-path", self.repos["alpha", "service"], "rules", "show")
         self.assertEqual(([rule["text"] for rule in foreign["rules"]], foreign["project"]), (["Beta rule."], None))
         self.assertIn("project_path_problem", foreign)
+
+    def test_legacy_preference_preview_confirmation_and_retry(self):
+        identifier = "preference:no-agent-prefix"
+        entry = {"id": identifier, "kind": "note", "title": "Naming", "summary": "Avoid the agent/ prefix.",
+                 "project_ids": ["service", "tools"], "sources": [{"reference": "example:human-request"}]}
+        self.command("alpha", "entry", "put", "--json", "-", stdin=json.dumps(entry))
+        original = self.command("alpha", "entry", "get", identifier)
+        scoped = ("--project-path", self.repos["alpha", "service"])
+        self.assertEqual(self.command("beta", "rules", "review-preferences")["candidates"], [])
+        first = self.command("alpha", *scoped, "rules", "show", "--agent", "codex")
+        self.assertEqual(first["rules"], [])
+        self.assertEqual(first["preference_review"]["candidates"],
+                         self.command("alpha", *scoped, "rules", "review-preferences")["candidates"])
+        candidate, = first["preference_review"]["candidates"]
+        self.assertEqual((candidate["text"], candidate["scope"], candidate["project_id"]),
+                         (entry["summary"], "project", "service"))
+        promote = ("rules", "promote", identifier, "--expected-updated-at", original["updated_at"])
+        self.command("alpha", *promote, "--global", ok=False)
+        self.command("alpha", *scoped, *promote, "--project", "tools", ok=False)
+        created = self.command("alpha", *scoped, *promote, "--project", "service", "--forbid-branch-prefix", "agent/")
+        self.assertEqual(created["rule"]["source"], "entry:" + identifier)
+        self.assertEqual(created["rule"]["check"]["forbid_prefix"], "agent/")
+        self.assertEqual(self.command("alpha", *promote, "--project", "service")["status"], "already_promoted")
+        self.assertEqual(len(self.command("alpha", "rules", "log")["entries"]), 1)
+        after = self.command("alpha", *scoped, "rules", "show", "--agent", "codex")
+        self.assertEqual(after["rules"][0]["text"], entry["summary"])
+        self.assertNotIn("preference_review", after)
+        remaining, = self.command("alpha", "rules", "review-preferences")["candidates"]
+        self.assertEqual(remaining["project_id"], "tools")
+        self.assertEqual(self.command("alpha", *promote, "--project", "tools", "--dismiss")["status"], "dismissed")
+        self.assertEqual(self.command("alpha", "rules", "review-preferences")["candidates"], [])
+        self.assertEqual(self.command("alpha", "entry", "get", identifier), original)
+
+    def test_legacy_review_guards_stale_wording_collision_and_preview_size(self):
+        entry = {"id": "preference:style", "kind": "note", "title": "Style", "summary": "Use short names."}
+        put = ("entry", "put", "--json", "-")
+        self.command("alpha", *put, stdin=json.dumps(entry))
+        old, = self.command("alpha", "rules", "review-preferences")["candidates"]
+        entry["summary"] = "x" * (rules.MAX_TEXT + 1)
+        self.command("alpha", *put, stdin=json.dumps(dict(entry, expected_updated_at=old["updated_at"])))
+        promote = ("rules", "promote", entry["id"], "--global", "--expected-updated-at")
+        self.assertEqual(self.command("alpha", *promote, old["updated_at"], ok=False)["code"], "conflict")
+        preview = self.command("alpha", "rules", "show")["preference_review"]["candidates"][0]
+        full, = self.command("alpha", "rules", "review-preferences")["candidates"]
+        self.assertTrue(preview["text_truncated"])
+        self.assertEqual(full["text"], entry["summary"])
+        self.command("alpha", *promote, full["updated_at"], ok=False)
+        self.add("alpha", "style", "--global")
+        self.assertEqual(self.command("alpha", *promote, full["updated_at"], "--text", "Short names.", ok=False)["code"],
+                         "exists")
+        self.assertEqual(self.command("alpha", "rules", "review-preferences")["candidates"], [full])
+        changed = self.command("alpha", *promote, full["updated_at"], "--text", "Short names.", "--rule-id", "short")
+        self.assertEqual(changed["rule"]["text"], "Short names.")
+        again = self.command("alpha", *promote, full["updated_at"], "--text", "Short names.", "--rule-id", "short")
+        self.assertEqual(again["status"], "already_promoted")
+        self.command("alpha", *promote, full["updated_at"], ok=False)
+
+    def test_unreadable_preference_does_not_hide_standing_rules(self):
+        self.add("alpha", "naming", "--global")
+        entry = {"id": "preference:broken", "kind": "note", "summary": "Old preference.", "title": "Naming"}
+        self.command("alpha", "entry", "put", "--json", "-", stdin=json.dumps(entry))
+        with closing(sqlite3.connect(self.configs["alpha"].parent / "memory.sqlite3")) as conn, conn:
+            conn.execute("UPDATE entries SET title = cast(x'80' as text) WHERE id = ?", (entry["id"],))
+        answer = self.command("alpha", "rules", "show")
+        self.assertEqual([rule["id"] for rule in answer["rules"]], ["naming"])
+        self.assertIn("error", answer["preference_review"])
+
+    def test_dismissal_and_removal_are_not_overwritten_by_stale_confirmations(self):
+        entry_id = "preference:style"
+        self.command("alpha", "entry", "put", "--json", "-", stdin=json.dumps(
+            {"id": entry_id, "kind": "note", "title": "Style", "summary": "Short names."}))
+        candidate, = self.command("alpha", "rules", "review-preferences")["candidates"]
+        promote = ("rules", "promote", entry_id, "--expected-updated-at", candidate["updated_at"], "--global")
+        for _ in range(2):
+            self.assertEqual(self.command("alpha", *promote, "--dismiss")["status"], "dismissed")
+        self.assertEqual(self.command("alpha", *promote, ok=False)["code"], "conflict")
+        self.assertEqual(self.command("alpha", "rules", "show")["rules"], [])
+        rule = self.command("alpha", *promote, "--reconsider-dismissed")["rule"]
+        self.assertEqual(self.command("alpha", *promote, "--reconsider-dismissed")["status"], "already_promoted")
+        self.assertEqual(self.command("alpha", *promote, "--dismiss", ok=False)["code"], "conflict")
+        self.assertEqual(self.command("alpha", *promote, "--rule-id", "different", ok=False)["code"], "conflict")
+        self.command("alpha", "rules", "remove", rule["id"], "--expected-updated-at", rule["updated_at"])
+        removed = self.command("alpha", *promote, ok=False)
+        self.assertEqual(removed["code"], "conflict")
+        self.assertIn("removed", removed["error"])
+        # Reuse even the same source and wording under the same ID: creation identity differs.
+        self.add("alpha", rule["id"], "--global", "--source", rule["source"], text=rule["text"])
+        replaced = self.command("alpha", *promote, ok=False)
+        self.assertEqual(replaced["code"], "conflict")
+        self.assertIn(rule["id"], replaced["error"])
+        self.assertEqual(self.command("alpha", "rules", "review-preferences")["candidates"], [])
+
+    def test_review_groups_scopes_and_continues_after_a_decided_entry(self):
+        projects = ["project-" + str(i) for i in range(100)]
+        with closing(sqlite3.connect(self.configs["alpha"].parent / "memory.sqlite3")) as conn, conn:
+            conn.executemany("INSERT INTO projects(id, name) VALUES (?, ?)", ((p, p) for p in projects))
+        wording = "w" * 16384
+        entry = {"id": "preference:a", "kind": "note", "title": "Style", "summary": wording, "project_ids": projects}
+        self.command("alpha", "entry", "put", "--json", "-", stdin=json.dumps(
+            [entry, dict(entry, id="preference:b", summary=wording + "!", project_ids=[])]))
+        review = ("rules", "review-preferences", "--limit", "1")
+        first = self.command("alpha", *review)
+        a, = first["candidates"]
+        self.assertEqual((a["text"], len(a["scopes"]), first["next_after"]), (wording, 100, entry["id"]))
+        self.assertNotIn("text_truncated", a)
+        self.assertEqual({s["project_id"] for s in a["scopes"]}, set(projects))
+        self.assertLess(len(json.dumps(first)), 30000)
+        self.command("alpha", "rules", "promote", entry["id"], "--expected-updated-at", a["updated_at"],
+                     "--project", projects[0], "--dismiss")
+        second = self.command("alpha", *review, "--after", first["next_after"])
+        b, = second["candidates"]
+        self.assertEqual((b["scope"], b["read_more"], b["text_truncated"], second["next_after"]),
+                         ("global", {"command": "entry get", "id": "preference:b"}, True, None))
+        scoped = self.command("alpha", "--project-path", self.repos["alpha", "service"], *review)
+        self.assertEqual(scoped["candidates"], [b])
+        self.assertFalse(scoped["more"])
+
+    def test_retry_matches_the_reviewed_entry_and_resulting_rule_versions(self):
+        initial = {"id": "preference:style", "kind": "note", "title": "Style", "summary": "Use A."}
+        put = ("entry", "put", "--json", "-")
+        for changed in ("entry", "rule"):
+            with self.subTest(changed=changed):
+                entry = dict(initial, id=initial["id"] + "-" + changed)
+                self.command("alpha", *put, stdin=json.dumps(entry))
+                version = self.command("alpha", "entry", "get", entry["id"])["updated_at"]
+                promote = ("rules", "promote", entry["id"], "--global", "--expected-updated-at")
+                original = self.command("alpha", *promote, version)["rule"]
+                self.assertEqual(self.command("alpha", *promote, version)["status"], "already_promoted")
+                if changed == "entry":
+                    self.command("alpha", *put, stdin=json.dumps(dict(entry, expected_updated_at=version, summary="Use B.")))
+                    self.assertEqual(self.command("alpha", *promote, version, ok=False)["code"], "conflict")
+                    version = self.command("alpha", "entry", "get", entry["id"])["updated_at"]
+                else:
+                    self.command("alpha", "rules", "update", original["id"], "--expected-updated-at",
+                                 original["updated_at"], "--text", "Use B.")
+                self.assertEqual(self.command("alpha", *promote, version, ok=False)["code"], "conflict")
+                current = next(r for r in self.command("alpha", "rules", "list")["rules"] if r["id"] == original["id"])
+                self.assertEqual(current["text"], "Use A." if changed == "entry" else "Use B.")
 
     def test_invalid_rules_are_rejected_without_writes(self):
         for argv in (["rules", "add", "a", "--project", "missing", "--text", "x"],
@@ -1321,10 +1498,12 @@ class RulesIntegrationTests(unittest.TestCase):
             self.assertEqual(current["next_commands"], expected)
 
     def test_claude_hook_reloads_rules_after_compaction(self):
+        home = tempfile.TemporaryDirectory(prefix="richi-synthetic-hook-")
+        self.addCleanup(home.cleanup)
         def context(**payload):
             result = subprocess.run([sys.executable, "-I", "-c", HOOK], text=True, capture_output=True, check=True,
                                     input=json.dumps(dict(session_id="abc", hook_event_name="SessionStart", **payload)),
-                                    env={key: value for key, value in os.environ.items() if key != "CLAUDE_ENV_FILE"})
+                                    env={"HOME": home.name})
             return json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
         startup = context(source="startup")
         self.assertIn("richi rules show", startup)

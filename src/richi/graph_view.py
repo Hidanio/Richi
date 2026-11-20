@@ -32,11 +32,11 @@ def _edge(conn, link, api):
                      description_is_excerpt=False,
                      read_more={"command": "entry get", "id": native})
         return value
-    record = graph.edge(conn, link, api)
+    record = graph.edge(conn, link, api, counts_only=True)
     description, partial = compact.excerpt(record.pop("description", ""), 500)
     sources = record["sources"]
     record.update(description_excerpt=description, description_is_excerpt=partial,
-                  sources=sources[:2], source_count=len(sources), sources_omitted=max(0, len(sources) - 2))
+                  sources=compact.source_headers(sources), source_count=len(sources), sources_omitted=max(0, len(sources) - 2))
     if partial:
         record["excerpt_note"] = compact.EXCERPT_NOTE
     if link["origin"] == "explicit":
@@ -89,7 +89,7 @@ def _connected(root, selected, edges):
 
 
 def _partial(value):
-    return (value.get("is_excerpt") or value.get("description_is_excerpt") or value.get("sources_omitted")
+    return (value.get("is_excerpt") or value.get("description_is_excerpt") or compact.partial_sources(value)
             or value.get("title_truncated") or value.get("project_ids_omitted") or value.get("payload_omitted"))
 
 
@@ -205,7 +205,7 @@ def neighbors(conn, args, api):
     retained = set(connected)
     retained_links = [link for link in links if link["from_ref"] in retained and link["to_ref"] in retained]
     response = {"schema_version": 2, "view": "compact", "view_schema_version": 1,
-                "generated_at": api.now(), "nodes": [_node(graph.node(conn, item, api)) for item in connected],
+                "generated_at": api.now(), "nodes": [_node(graph.node(conn, item, api, counts_only=True)) for item in connected],
                 "edges": [_edge(conn, link, api) for link in retained_links],
                 "truncated": nodes_truncated or edges_truncated or len(connected) < len(selected),
                 "limits": {"max_nodes": args.limit, "max_edges": graph.MAX_EDGES,

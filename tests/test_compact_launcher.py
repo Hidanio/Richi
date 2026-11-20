@@ -99,7 +99,7 @@ class CompactLauncherTests(unittest.TestCase):
         self.assert_compact(stdout, value)
         self.assertEqual(rejected, "")
         self.assertIn("not a workspace", json.loads(error)["error"])
-        update.assert_called_once_with(["check"])
+        update.assert_called_once_with(["check"], chat_id=None)
 
     def test_emergency_rollback_accepts_non_storage_global_options(self):
         for prefix in ([], ["--compact-json"], ["--chat", "synthetic"],

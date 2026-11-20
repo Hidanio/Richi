@@ -3,7 +3,7 @@
 from collections import deque
 import json
 
-from . import compact
+from . import compact, measurements
 
 
 ENTITY_KINDS = {"pull_request", "metric", "component", "concept", "document", "jira", "tool"}
@@ -112,12 +112,13 @@ def decode(row, arrays):
     return record
 
 
-def get(conn, kind, identity, api, history=True):
+def get(conn, kind, identity, api, history=True, *, counts_only=False):
     table, history_table = ("entities", "entity_history") if kind == "entity" else ("graph_edges", "edge_history")
     row = conn.execute("SELECT * FROM " + table + " WHERE 1=1 AND id = ?", (identity,)).fetchone()
     if row is None:
         raise api.MemoryError("Unknown {}: {}".format(kind, identity))
     record = decode(row, ("sources", "tags", "aliases") if kind == "entity" else ("sources",))
+    measurements.restore(conn, kind, record, counts_only=counts_only)
     if history:
         record["history"] = []
         for row in conn.execute("SELECT * FROM " + history_table + " WHERE 1=1 AND object_id = ? ORDER BY id", (identity,)):
@@ -164,17 +165,20 @@ def put(conn, obj, kind, api):
     comparable = {key: value for key, value in old.items() if key not in {"created_at", "updated_at"}} if old else None
     status = "created" if old is None else "unchanged" if comparable == record else "updated"
     if status == "unchanged":
+        measurements.separate_inline(conn, kind, old, api.dumps)
         return {"id": record["id"], "status": status}
     if "expected_updated_at" in obj and expected != (old["updated_at"] if old else None):
         raise api.MemoryError("{} update conflict: expected_updated_at does not match; read the current record".format(kind))
     record["updated_at"] = api.next_updated_at(old["updated_at"] if old else None)
     record["created_at"] = old["created_at"] if old else record["updated_at"]
     stored = dict(record)
-    for key in ("sources", "tags", "aliases") if kind == "entity" else ("sources",):
+    stored["sources"] = api.dumps(measurements.headers(record["sources"]))
+    for key in ("tags", "aliases") if kind == "entity" else ():
         stored[key] = api.dumps(record[key])
     api.upsert(conn, table, columns, stored)
-    conn.execute("INSERT INTO " + history_table + "(object_id, changed_at, before_json, after_json) VALUES (?, ?, ?, ?)",
-                 (record["id"], record["updated_at"], api.dumps(old) if old else None, api.dumps(record)))
+    history = conn.execute("INSERT INTO " + history_table + "(object_id, changed_at, before_json, after_json) VALUES (?, ?, ?, ?)",
+                           (record["id"], record["updated_at"], api.dumps(old) if old else None, api.dumps(record)))
+    measurements.store(conn, kind, record, history.lastrowid)
     return {"id": record["id"], "status": status}
 
 
@@ -198,7 +202,7 @@ def node_state(conn, node_ref):
     return row[0] if row else None
 
 
-def node(conn, node_ref, api):
+def node(conn, node_ref, api, *, counts_only=False):
     registry = require_node(conn, node_ref, api)
     if registry["project_id"] is not None:
         project = api.require_project(conn, registry["project_id"])
@@ -207,17 +211,17 @@ def node(conn, node_ref, api):
                 "project_ids": [project["id"]], "sources": [{"reference": project["source"]}] if project["source"] else [],
                 "tags": [], "aliases": [], "verified_at": project["verified_at"], "repo_path": project["repo_path"]}
     if registry["entry_id"] is not None:
-        record = api.entry_record(conn, registry["entry_id"])
+        record = api.entry_record(conn, registry["entry_id"], counts_only=counts_only)
         return dict(record, id=node_ref, native_id=record["id"], node_type="entry")
-    record = get(conn, "entity", registry["entity_id"], api, history=False)
+    record = get(conn, "entity", registry["entity_id"], api, history=False, counts_only=counts_only)
     return dict(record, id=node_ref, native_id=record["id"], node_type="entity", project_ids=[], work_state=None)
 
 
-def edge(conn, link, api):
+def edge(conn, link, api, *, counts_only=False):
     result = dict(link)
     native_id = result.pop("native_id")
     if result["origin"] == "explicit":
-        record = get(conn, "edge", native_id, api, history=False)
+        record = get(conn, "edge", native_id, api, history=False, counts_only=counts_only)
         for key in ("description", "sources", "verified_at", "created_at", "updated_at"):
             result[key] = record[key]
     elif result["origin"] == "project_relation":
@@ -225,7 +229,7 @@ def edge(conn, link, api):
         result.update(description=record["description"], sources=[{"reference": record["source"]}] if record["source"] else [],
                       verified_at=record["verified_at"])
     else:
-        record = api.entry_record(conn, native_id)
+        record = api.entry_record(conn, native_id, counts_only=counts_only)
         result.update(description="Record is linked to this project; this does not imply a specific impact.",
                       sources=record["sources"], verified_at=record["verified_at"])
     result["provenance"] = {"table": {"explicit": "graph_edges", "project_relation": "relations", "entry_project": "entry_projects"}[result["origin"]],

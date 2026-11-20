@@ -1,4 +1,4 @@
-"""Claude Code SessionStart adapter. No knowledge-store access."""
+"""Claude Code SessionStart adapter for chat identity and scoped standing rules."""
 import json
 import os
 from pathlib import Path
@@ -42,7 +42,7 @@ def activation_operations(ctx, record, site):
 
 
 # A standalone hook uses the permanent installation's Python, not shell PATH.
-HOOK = '''import json, os, re, shlex, sys
+HOOK = '''import json, os, re, shlex, subprocess, sys
 payload = json.load(sys.stdin)
 # Cursor can import this Claude hook alongside its own sessionStart handler.
 if payload.get("hook_event_name") == "sessionStart" and isinstance(payload.get("cursor_version"), str) and payload["cursor_version"]:
@@ -60,6 +60,16 @@ context = ("Richi chat identity: " + chat + ". Use richi --chat " + chat + " for
            " Once this chat has a workspace, run richi rules show (richi --project-path PATH rules show for repository work) and follow the returned rules as the user's standing instructions.")
 if payload.get("source") in ("compact", "resume"):
     context += " This session was " + ("compacted" if payload["source"] == "compact" else "resumed") + ": if richi chat current shows a bound workspace, load the rules again before continuing."
+args = [sys.executable, "-I", "-m", "richi", "--chat", chat, "--compact-json"]
+cwd = payload.get("cwd")
+if isinstance(cwd, str) and os.path.isabs(cwd):
+    args += ["--project-path", cwd]
+try:
+    result = subprocess.run(args + ["rules", "show", "--agent", "claude"], capture_output=True, text=True, timeout=8)
+    if result.returncode == 0:
+        context += "\\nCurrent rules for this session. Follow the rules array. Show preference_review to the user for confirmation.\\n" + result.stdout.strip()
+except (OSError, ValueError, subprocess.TimeoutExpired):
+    pass  # The instructions above give the CLI fallback.
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": context}}))
 '''
 

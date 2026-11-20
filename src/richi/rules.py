@@ -23,6 +23,7 @@ made the change, as far as Richi can tell.
 """
 import json
 import os
+import re
 import sys
 from typing import NamedTuple, Optional
 
@@ -53,7 +54,7 @@ MAX_NAMED = 200
 MAX_VERSION = 64
 # What `rules show` gives an agent: what it needs to follow a rule and to change it. The stored
 # record has more (where the rule came from, who changed it, fields of a newer Richi); rules list has it all.
-SHOWN = ("id", "scope", "project_id", "text", "skill", "skills", "updated_at")
+SHOWN = ("id", "scope", "project_id", "text", "skill", "skills", "check", "updated_at")
 # The rule format this version reads. Raise it, and write it as a rule's `requires`, for a rule
 # that holds anything this version would misread or refuse: a field that changes when or whether
 # the rule applies, or a value outside what it accepts. Older versions then skip that rule; they
@@ -61,13 +62,13 @@ SHOWN = ("id", "scope", "project_id", "text", "skill", "skills", "updated_at")
 FORMAT = 1
 # Fields this version understands, in the order commands print them. A stored
 # rule must have the REQUIRED ones; any other field it has is kept as it is.
-KNOWN = ("id", "scope", "project_id", "text", "skill", "skills", "source", "changed_by", "changed_by_agent",
+KNOWN = ("id", "scope", "project_id", "text", "skill", "skills", "check", "source", "changed_by", "changed_by_agent",
          "created_at", "updated_at")
 REQUIRED = ("id", "scope", "project_id", "text", "created_at", "updated_at")
 # What one change may carry. The command options and `rules apply` both become
 # such an object, so a rule field is validated and stored in one place: change().
-CHANGE_FIELDS = {"add": {"action", "id", "scope", "project", "text", "skill", "skills", "source"},
-                 "update": {"action", "id", "expected_updated_at", "text", "skill", "skills", "source"},
+CHANGE_FIELDS = {"add": {"action", "id", "scope", "project", "text", "skill", "skills", "source", "check"},
+                 "update": {"action", "id", "expected_updated_at", "text", "skill", "skills", "source", "check"},
                  "remove": {"action", "id", "expected_updated_at"}}
 NOTE = ("Standing rules the user set for this workspace{project}. Follow them as the user's "
         "instructions in this chat; a newer explicit request from the user takes precedence. "
@@ -127,6 +128,51 @@ def _argument_entries(value):
     return int(value)
 
 
+def add_check_options(parser, *, update=False):
+    options = parser.add_argument_group("branch check (choose one)")
+    options.add_argument("--forbid-branch-prefix", metavar="PREFIX", help="Reject branch names starting with this literal prefix")
+    options.add_argument("--branch-format", metavar="FORMAT", help="Match the whole branch name to a template, e.g. REC-{number}_{description}")
+    if update:
+        options.add_argument("--clear-check", action="store_true", help="Remove the rule's automated check")
+
+
+def check_options(args, api):
+    clear = getattr(args, "clear_check", False)
+    if sum((args.branch_format is not None, args.forbid_branch_prefix is not None, clear)) > 1:
+        raise api.usage("Choose only one branch check option", "richi help rules " + args.action)
+    if args.branch_format is not None:
+        return {"check": {"action": "branch-name", "format": args.branch_format}}
+    if args.forbid_branch_prefix is not None:
+        return {"check": {"action": "branch-name", "forbid_prefix": args.forbid_branch_prefix}}
+    return {"check": None} if clear else {}
+
+
+_BRANCH_FIELDS = {"{number}": r"[0-9]+", "{description}": r"[\w.-]+"}
+
+
+def _branch_pattern(template):
+    # At most two placeholders, each once. Other characters are matched literally.
+    parts = re.split(r"(\{number\}|\{description\})", template)
+    if (len(parts) == 1 or any(parts.count(field) > 1 for field in _BRANCH_FIELDS)
+            or any(not re.fullmatch(r"[\w./-]*", part) for part in parts[::2])):
+        raise ValueError("A branch format uses literal letters, digits, /, ., _ or - and {number} or {description}, each at most once")
+    return "".join(_BRANCH_FIELDS[part] if part in _BRANCH_FIELDS else re.escape(part) for part in parts)
+
+
+def _check_spec(check):
+    if check is None:
+        return None
+    if not isinstance(check, dict) or check.get("action") != "branch-name" or set(check) not in (
+            {"action", "format"}, {"action", "forbid_prefix"}):
+        raise ValueError("A rule check needs action branch-name and either format or forbid_prefix")
+    value = check.get("format", check.get("forbid_prefix"))
+    if not isinstance(value, str) or not 1 <= len(value) <= 128 or not value.isprintable() or not _storable(value):
+        raise ValueError("A branch format or prefix needs 1–128 printable characters")
+    if "format" in check:
+        _branch_pattern(value)
+    return check
+
+
 def add_commands(commands, api):
     # Help names the built-in agents only, so that it does not depend on this computer's settings.
     known = ", ".join(agents.builtin_ids()) + " or one from skill-sources list"
@@ -143,6 +189,10 @@ def add_commands(commands, api):
                       help="Agent whose skill each rule gives as use_skill, such as " + known
                       + " (default: detected from the agent's shell)")
     listing = actions.add_parser("list", help="List every stored rule of this workspace, optionally of one scope")
+    check = actions.add_parser("check", help="Check a proposed action against applicable rules before performing it")
+    check.add_argument("kind", choices=("branch-name",), metavar="branch-name", help="Action to check")
+    check.add_argument("value", help="Proposed branch name")
+    check.add_argument("--project", metavar="ID", help="Project whose rules to check (default: the --project-path project)")
     scope = listing.add_mutually_exclusive_group()
     scope.add_argument("--global", dest="global_scope", action="store_true", help="Only global rules")
     scope.add_argument("--project", metavar="ID", help="Only the rules of this project")
@@ -155,9 +205,11 @@ def add_commands(commands, api):
     add.add_argument("--text", required=True,
                      help="The rule as the user stated it, at most %d characters; - reads it from stdin" % MAX_TEXT)
     add.add_argument("--skill", metavar="[AGENT=]NAME", action="append", help=skill_help)
+    add_check_options(add)
     add.add_argument("--source", help="Where the user stated the rule, such as the chat identity (at most %d characters)" % MAX_SOURCE)
     update = actions.add_parser("update", help="Change a rule's text, skills or source; requires the version from show or list")
     update.add_argument("id", type=_argument_id, help="ID of the rule to change")
+    add_check_options(update, update=True)
     update.add_argument("--expected-updated-at", required=True, metavar="TIMESTAMP",
                         help="The rule's updated_at as last read; a newer version is a conflict")
     update.add_argument("--text", help="New rule text, at most %d characters; - reads it from stdin" % MAX_TEXT)
@@ -180,10 +232,12 @@ def add_commands(commands, api):
                      help="How many of the latest changes to show, 1-%d (default: %%(default)s)" % MAX_LOG)
     clear = actions.add_parser("clear-log", help="Delete the recorded rule changes, all or those of one rule")
     clear.add_argument("--id", help="Only the changes of this rule")
+    from . import preference_review
+    preference_review.add_commands(actions)
 
 
 def writes(args):
-    return args.command == "rules" and args.action in {"add", "update", "remove", "apply", "clear-log"}
+    return args.command == "rules" and args.action in {"add", "update", "remove", "apply", "clear-log", "promote"}
 
 
 def _storable(value):
@@ -363,6 +417,7 @@ def _decode(key, value):
     if not set(REQUIRED) <= set(record) or not isinstance(record["id"], str) or PREFIX + record["id"] != key:
         raise ValueError("a required field is missing or the ID does not match")
     rule_id(record["id"])
+    _check_spec(record.get("check"))
     text = record["text"]
     if not isinstance(text, str) or not text.strip() or "\x00" in text or len(text) > MAX_TEXT:
         raise ValueError("invalid rule text")
@@ -685,6 +740,10 @@ def show(conn, api, workspace, project_id, agent=None, unmatched_path=None):
         agents=", ".join(item["id"] + ": " + item["name"] for item in known))
     result = {"view": "rules", "workspace": workspace, "project": project_id, "agent": agent, "rules": applicable,
               "note": NOTE.format(project=" and project " + project_id if project_id else "", skills=skill_note)}
+    from . import preference_review
+    review = preference_review.notice(conn, project_id)
+    if review:
+        result["preference_review"] = review
     if project_id is None:
         others = sorted({rule["project_id"] for rule in rules if rule["scope"] == "project"})
         if others:
@@ -712,6 +771,40 @@ def _stdin_text():
     """Text piped to the command; the newline that ends the pipe is not part of the rule."""
     text = sys.stdin.read(MAX_CHANGE + 1)
     return text[:-2] if text.endswith("\r\n") else text[:-1] if text.endswith("\n") else text
+
+
+def check_action(conn, api, workspace, project_id, action, value, unmatched_path=None):
+    if not value or len(value) > 1024 or not value.isprintable() or not _storable(value):
+        raise api.MemoryError("Give a proposed name of 1–1024 printable characters")
+    context = show(conn, api, workspace, project_id, unmatched_path=unmatched_path)
+    checked, violations, manual = [], [], []
+    for rule in context["rules"]:
+        spec = rule["check"]
+        if spec is None:
+            manual.append(rule["id"])
+            continue
+        if spec["action"] != action:
+            continue
+        checked.append(rule["id"])
+        if "format" in spec:
+            matches = re.fullmatch(_branch_pattern(spec["format"]), value)
+            expected = "Expected branch format: " + spec["format"]
+        else:
+            matches = not value.startswith(spec["forbid_prefix"])
+            expected = "Remove the forbidden branch prefix: " + spec["forbid_prefix"]
+        if not matches:
+            violations.append({"id": rule["id"], "text": rule["text"], "check": spec, "message": expected})
+    result = {"view": "rules-check", "workspace": workspace, "project": project_id, "action": action,
+              "value": value, "checked_rules": checked, "manual_rules": manual, "violations": violations}
+    for field in ("invalid_rules", "unsupported_rules", "project_rules_not_shown", "project_path_problem"):
+        if field in context:
+            result[field] = context[field]
+    if violations or "invalid_rules" in result or "unsupported_rules" in result:
+        error = _failure(api, violations[0]["message"] if violations else "Some stored rules could not be checked",
+                         "rule_violation" if violations else "incomplete_rule_check")
+        error.details = result
+        raise error
+    return dict(result, status="passed" if checked else "no_automated_checks")
 
 
 def read_request(args, api):
@@ -749,6 +842,7 @@ def read_request(args, api):
             request["skill"], request["skills"] = _skill_options(args.skill, api)
         if args.source is not None:
             request["source"] = args.source
+        request.update(check_options(args, api))
     return request
 
 
@@ -792,7 +886,7 @@ def change(conn, request, api, checked_project=None, author=Author(), settings=N
                 "project_id": _project(conn, project, api) if scope == "project" else None,
                 "text": text, "skill": skill, "skills": skills, "source": _source(request.get("source"), api),
                 "changed_by": author.by, "changed_by_agent": author.agent, "created_at": timestamp,
-                "updated_at": timestamp}
+                "updated_at": timestamp, "check": _check_spec(request.get("check"))}
         _check_total(conn, api, added=text)
         _store(conn, rule, api)
         _record(conn, timestamp, "created", identifier, None, rule, author)
@@ -827,9 +921,11 @@ def change(conn, request, api, checked_project=None, author=Author(), settings=N
         conn.execute("DELETE FROM metadata WHERE 1=1 AND rowid = ?", (rowid,))
         _record(conn, _change_time(conn, api, rule["updated_at"]), "removed", identifier, rule, None, author)
         return {"results": [{"id": identifier, "status": "removed"}], "rule": rule}
-    if not {"text", "skill", "skills", "source"} & set(request):
-        raise api.MemoryError("Nothing to change; give the text, the skills, the source or several")
+    if not {"text", "skill", "skills", "source", "check"} & set(request):
+        raise api.MemoryError("Nothing to change; give the text, the skills, the source or a check")
     changed = dict(rule)
+    if "check" in request:
+        changed["check"] = _check_spec(request["check"])
     if "text" in request:
         changed["text"] = _text(request["text"], api)
     if {"skill", "skills"} & set(request):
@@ -874,14 +970,27 @@ def run(conn, args, api, workspace=None, checked_project=None, unmatched_path=No
     with read_request: the caller locks the store for it, and no input may be
     awaited under the lock. A change that is JSON null stays None and is refused.
     """
-    if args.action == "show":
+    if args.action in {"show", "check"}:
         project_id = checked_project if args.project is None else args.project
-        return show(conn, api, workspace, project_id, args.agent, unmatched_path)
+        if args.action == "show":
+            return show(conn, api, workspace, project_id, args.agent, unmatched_path)
+        return check_action(conn, api, workspace, project_id, args.kind, args.value, unmatched_path)
     if args.action == "log":
         return log(conn, args.id, args.entries)
     if args.action == "clear-log":
         return clear_log(conn, api, args.id)
     if args.action == "list":
         return listing(conn, api, workspace, global_scope=args.global_scope, project=args.project)
+    if args.action == "review-preferences":
+        from . import preference_review
+        if not 1 <= args.limit <= 10:
+            raise api.MemoryError("Review limit must be between 1 and 10 entries")
+        after = api.identifier(args.after, "--after") if args.after is not None else ""
+        page = preference_review.pending(conn, checked_project, all_projects=checked_project is None,
+                                         limit=args.limit, after=after)
+        return {"workspace": workspace, **page}
     settings = agents.read_settings()
+    if args.action == "promote":
+        from . import preference_review
+        return preference_review.decide(conn, args, api, checked_project, current_author(entries=settings.entries), settings)
     return change(conn, request, api, checked_project, current_author(entries=settings.entries), settings)

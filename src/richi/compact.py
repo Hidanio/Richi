@@ -58,6 +58,21 @@ def excerpt(text, limit):
     return join(chosen) if chosen else "", True
 
 
+def source_headers(sources):
+    """A compact witness retains its complete citation, with a count of omitted observations."""
+    result = []
+    for source in sources[:2]:
+        header = copy.deepcopy({key: value for key, value in source.items() if key != "measurements"})
+        if source.get("measurements"):
+            header["measurements_omitted"] = len(source["measurements"])
+        result.append(header)
+    return result
+
+
+def partial_sources(card):
+    return card.get("sources_omitted") or any(source.get("measurements_omitted") for source in card.get("sources", []))
+
+
 def card(record, ref, summary_chars=1100):
     summary, partial = excerpt(record.get("summary", ""), summary_chars)
     title = record.get("title", record.get("name", ""))
@@ -69,7 +84,7 @@ def card(record, ref, summary_chars=1100):
               "summary_chars": len(record.get("summary", "")),
               "knowledge_state": record.get("knowledge_state"), "work_state": record.get("work_state"),
               "verified_at": record.get("verified_at"), "updated_at": record.get("updated_at"),
-              "project_ids": projects[:8], "sources": copy.deepcopy(sources[:2]), "source_count": len(sources),
+              "project_ids": projects[:8], "sources": source_headers(sources), "source_count": len(sources),
               "sources_omitted": max(0, len(sources) - 2),
               "read_more": {"command": ref.split(":", 1)[0] + " get", "id": record["id"]}}
     if partial:
@@ -128,8 +143,8 @@ def fit_response(response, maximum):
         value["budget"]["omitted_edges"] = original_edges - len(value.get("edges", []))
         value["truncated"] = bool(value["truncated"] or value.get("query_is_excerpt") or
                                   value["budget"]["omitted_results"] or value["budget"]["omitted_edges"] or
-                                  any(c.get("is_excerpt") or c.get("sources_omitted") or c.get("title_truncated") or c.get("project_ids_omitted") for c in cards()) or
-                                  any(edge.get("description_is_excerpt") or edge.get("sources_omitted")
+                                  any(c.get("is_excerpt") or partial_sources(c) or c.get("title_truncated") or c.get("project_ids_omitted") for c in cards()) or
+                                  any(edge.get("description_is_excerpt") or partial_sources(edge)
                                       for edge in value.get("edges", [])))
         if value.get("ambiguity"):
             ambiguity = value["ambiguity"]

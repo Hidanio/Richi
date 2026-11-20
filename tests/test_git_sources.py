@@ -121,6 +121,18 @@ class GitSourceWorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(memory.MemoryError, "conflict"):
             self.attach(source, expected_updated_at=before["updated_at"])
 
+    def test_capture_keeps_its_source_index_when_annotated(self):
+        source = self.capture(rev="HEAD")
+        self.attach(source)
+        row = {"metric": "payload", "value": "10", "unit": "bytes", "sample": "one fixture"}
+        enriched = dict(source, measurements=[row])
+        self.assertEqual(self.attach(enriched)["source_index"], 2)
+        version = memory.entry_get(self.conn, "task:one")["updated_at"]
+        for capture in (source, enriched):
+            again = self.attach(capture)
+            self.assertEqual((again["status"], again["source_index"], again["updated_at"]), ("unchanged", 2, version))
+        self.assertEqual(memory.entry_get(self.conn, "task:one")["sources"][-1], enriched)
+
     def test_attach_verifies_observed_hash_before_writing(self):
         source = self.capture(rev="HEAD")
         source["sha256"] = "0" * 64

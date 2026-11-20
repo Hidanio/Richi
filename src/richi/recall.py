@@ -2,10 +2,11 @@
 
 import bisect
 import functools
+import itertools
 import json
 import re
 
-from . import compact
+from . import compact, measurements
 
 
 STOPWORDS = set("""
@@ -200,11 +201,16 @@ def terms_for(conn, query):
     keys, spans = issue_keys(conn, text)
     for start, end in spans:
         text = text[:start] + " " * (end - start) + text[end:]
+    return significant_terms(text), keys
+
+
+def significant_terms(text):
+    """Meaningful words used for lexical matching, in query order."""
     terms = []
-    for term in WORDS.findall(text):
+    for term in WORDS.findall(normalize(text)):
         if term not in STOPWORDS and len(term) > 1 and term not in terms:
             terms.append(term)
-    return terms[:64], keys
+    return terms[:64]
 
 
 def issue_keys(conn, text):
@@ -404,6 +410,25 @@ def concept_projects(conn, node_ref):
         ORDER BY p.id
     """, (node_ref,))
     return sorted({row[0] for row in rows if json.loads(row[1])})
+
+
+def project_match_reason(conn, ref, record, states, project):
+    if not project:
+        return None
+    if project in record.get("project_ids", ()):
+        if ref.startswith("entity:"):
+            return {"concept": "confirmed_concept_scope", "tool": "confirmed_tool_usage"}.get(record["kind"])
+        return "project_match"
+    target = "project:" + project
+    if ref.startswith("edge:") and target in (record["from_ref"], record["to_ref"]):
+        return "explicit_project_link"
+    if ref.startswith("entity:") and record["kind"] not in {"concept", "tool"}:
+        marks = ",".join("?" for _ in states)
+        linked = conn.execute("SELECT 1 FROM graph_edges WHERE knowledge_state IN (" + marks + ") "
+                              "AND ((from_ref = ? AND to_ref = ?) OR (to_ref = ? AND from_ref = ?)) LIMIT 1",
+                              [*states, ref, target, ref, target]).fetchone()
+        if linked:
+            return "explicit_project_link"
 
 
 def lexical(record, query, terms, keys, family):
@@ -680,22 +705,13 @@ def candidates(conn, query, terms, keys, states, project, api, trace=None, selec
             record.update(project_ids=[], work_state=None)
             if record["kind"] == "concept":
                 record["project_ids"] = concept_projects(conn, node_ref)
-                if project and project in record["project_ids"]:
-                    score += 18
-                    reasons.append("confirmed_concept_scope")
             elif record["kind"] == "tool":
                 from . import tool_catalog
                 record["project_ids"] = tool_catalog.project_ids(conn, node_ref, states)
-                if project and project in record["project_ids"]:
-                    score += 18
-                    reasons.append("confirmed_tool_usage")
-            elif project and table_exists(conn, "graph_edges"):
-                # Only an explicitly recorded entity/project link grants this boost.
-                linked = conn.execute("SELECT 1 FROM graph_edges WHERE 1=1 AND knowledge_state IN (" + states_sql + ") AND ((from_ref = ? AND to_ref = ?) OR (to_ref = ? AND from_ref = ?)) LIMIT 1",
-                                      states + [node_ref, "project:" + project, node_ref, "project:" + project]).fetchone()
-                if linked:
-                    score += 18
-                    reasons.append("explicit_project_link")
+            reason = project_match_reason(conn, node_ref, record, states, project)
+            if reason:
+                score += 18
+                reasons.append(reason)
             reasons.append("entity_lexical")
             candidates_by_ref[node_ref] = {"record": record, "ref": node_ref, "score": score, "reasons": reasons,
                                            "concept_aliases": concept_alias_matches(record, query)}
@@ -704,14 +720,15 @@ def candidates(conn, query, terms, keys, states, project, api, trace=None, selec
     return candidates_by_ref, fts_truncated, "fts5" if has_fts else "scan", discarded_weak
 
 
-def load_node(conn, node_ref, states, api):
+def load_node(conn, node_ref, states, api, *, counts_only=False):
     family, _, identity = node_ref.partition(":")
     if family == "entry":
-        record = api.entry_record(conn, identity)
+        record = api.entry_record(conn, identity, counts_only=counts_only)
     elif family == "entity" and table_exists(conn, "entities"):
         row = conn.execute("SELECT * FROM entities WHERE 1=1 AND id = ?", (identity,)).fetchone()
         record = decode(row) if row else None
         if record:
+            measurements.restore(conn, family, record, counts_only=counts_only)
             record.update(project_ids=[], work_state=None)
             if record["kind"] == "concept":
                 record["project_ids"] = concept_projects(conn, node_ref)
@@ -728,7 +745,7 @@ def graph_candidates(conn, direct, states, api, keys=(), trace=None, selection_f
     if not table_exists(conn, "graph_edges"):
         return result, edges, truncated
     states_sql = ",".join("?" for _ in states)
-    for anchor in direct[:3]:
+    for anchor in itertools.islice((item for item in direct if not item["ref"].startswith("edge:")), 3):
         if trace:
             trace.counts["graph_seeds"] += 1
         links = conn.execute("SELECT * FROM graph_edges WHERE 1=1 AND (from_ref = ? OR to_ref = ?) AND knowledge_state IN (" + states_sql + ") AND kind <> 'belongs_to_project' ORDER BY id LIMIT 101",
@@ -752,7 +769,7 @@ def graph_candidates(conn, direct, states, api, keys=(), trace=None, selection_f
                 if trace:
                     trace.graph(neighbor, "filtered_where")
                 continue
-            record = load_node(conn, neighbor, states, api)
+            record = load_node(conn, neighbor, states, api, counts_only=True)
             if record is None or not matches_key(record, keys):
                 if trace:
                     trace.graph(neighbor, "node_unavailable" if record is None else "jira_guard")
@@ -767,11 +784,13 @@ def graph_candidates(conn, direct, states, api, keys=(), trace=None, selection_f
             else:
                 candidate["score"] = max(score, candidate["score"])
                 candidate["reasons"].append(reason)
-            evidence = json.loads(row["sources"])
+            witness = {"id": row["id"], "updated_at": row["updated_at"], "sources": json.loads(row["sources"])}
+            measurements.restore(conn, "edge", witness, counts_only=True)
+            evidence = witness["sources"]
             edge_record = {key: row[key] for key in ("from_ref", "to_ref", "kind", "knowledge_state", "verified_at")}
             edge_record.update(id="edge:" + row["id"], origin="explicit", description=row["description"][:500],
                                description_is_excerpt=len(row["description"]) > 500,
-                               sources=evidence[:2], source_count=len(evidence), sources_omitted=max(0, len(evidence) - 2))
+                               sources=compact.source_headers(evidence), source_count=len(evidence), sources_omitted=max(0, len(evidence) - 2))
             edges[edge_record["id"]] = edge_record
     return result, edges, truncated
 
@@ -810,17 +829,23 @@ def concept_ambiguity(direct):
             "note": "Several recorded concepts share the queried alias. Project context ranks scopes; it does not establish a single meaning."}
 
 
-def recall(conn, args, api, *, bounded=True):
+def recall(conn, args, api, *, bounded=True, additional_matches=None):
+    response, _ = recall_with_terms(conn, args, api, bounded=bounded, additional_matches=additional_matches)
+    return response
+
+
+def recall_with_terms(conn, args, api, *, bounded=True, additional_matches=None):
+    """Return the response and its full lexical terms, excluding issue routing keys."""
     # CLI callers already own a read transaction. Direct API callers need the
     # same snapshot across routing, payload lookup, and graph expansion. Never
     # commit or roll back a transaction owned by the caller.
     if conn.in_transaction:
-        return _recall(conn, args, api, bounded=bounded)
+        return _recall(conn, args, api, bounded=bounded, additional_matches=additional_matches)
     with api.transaction(conn, write=False):
-        return _recall(conn, args, api, bounded=bounded)
+        return _recall(conn, args, api, bounded=bounded, additional_matches=additional_matches)
 
 
-def _recall(conn, args, api, *, bounded=True):
+def _recall(conn, args, api, *, bounded=True, additional_matches=None):
     query = api.string(args.query, "query").strip()
     if len(query) > 2000:
         raise api.MemoryError("Recall query must be at most 2000 characters")
@@ -848,6 +873,14 @@ def _recall(conn, args, api, *, bounded=True):
     terms, keys = terms_for(conn, query)
     options = {"selection_filter": selection_filter} if selection_filter else {}
     direct_by_ref, fts_truncated, backend, discarded_weak = candidates(conn, query, terms, keys, states, project, api, trace, **options)
+    if additional_matches is not None:
+        for item in additional_matches(conn, query, terms, keys, states, project, api):
+            existing = direct_by_ref.get(item["ref"])
+            if existing is None:
+                direct_by_ref[item["ref"]] = item
+            else:
+                existing["score"] = max(existing["score"], item["score"])
+                existing["reasons"].extend(reason for reason in item["reasons"] if reason not in existing["reasons"])
     direct = rank(direct_by_ref.values())
     graph_by_ref, edges_by_id, graph_truncated = graph_candidates(conn, direct, states, api, keys, trace, **options)
     # Reserve at most two places for connected evidence; keep exact/lexical hits first.
@@ -873,6 +906,8 @@ def _recall(conn, args, api, *, bounded=True):
     asks_current = bool(CURRENT.search(query))
     for item in chosen:
         record = item["record"]
+        if item["ref"] in direct_by_ref:
+            measurements.restore(conn, item["ref"].partition(":")[0], record, counts_only=True)
         output = compact.card(record, item["ref"], summary_chars=1100)
         reasons = list(item["reasons"])
         if item["ref"] in graph_by_ref:
@@ -917,5 +952,6 @@ def _recall(conn, args, api, *, bounded=True):
     if not bounded:
         # In-process composition applies its own single output budget. Selection,
         # guards and excerpts are exactly the same as for standalone recall.
-        return response
-    return fit_explained_response(response, args.max_chars, trace) if trace else compact.fit_response(response, args.max_chars)
+        return response, terms
+    response = fit_explained_response(response, args.max_chars, trace) if trace else compact.fit_response(response, args.max_chars)
+    return response, terms

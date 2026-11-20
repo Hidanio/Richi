@@ -7,7 +7,7 @@ application to a task. No title, Jira-key or arbitrary graph-path inference.
 
 from collections import deque
 
-from . import graph
+from . import graph, measurements
 
 
 MAX_RECORDS = 200
@@ -130,6 +130,8 @@ def _task_ancestors(conn, record, states):
 
 def _tool(conn, row, states, api, detailed):
     tool = graph.decode(row, ("sources", "tags", "aliases"))
+    if detailed:
+        measurements.restore(conn, "entity", tool)
     tool["ref"] = "entity:" + tool["id"]
     records, truncated = _applications(conn, tool, states, api, detailed)
     # Projects are established either by explicit tool scope or by an actual

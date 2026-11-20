@@ -16,6 +16,14 @@ Launcher changes require reinstalling the fixed package even with `dev=true`; so
 
 ## Chat selection and repository membership
 
+`richi chat current --with-rules /work/example` includes `rules_context` when
+the chat already has a binding. `richi chat bind work --with-rules /work/example`
+returns it with the first binding. The path selects a registered project within
+that workspace. Omit the path after `--with-rules` for workspace-wide rules.
+If loading fails, inspect `rules_problem` and retry with `rules show` after recovery.
+Claude Code and Cursor session hooks also supply current rules on resume.
+For multiple Cursor roots, load the active project's rules with its path.
+
 
 - In a Cursor Agent shell, put the exact `--chat cursor:<id>` from this conversation’s `sessionStart` hook after `richi` in each example below. The launcher requires the explicit ID even when `RICHI_CHAT_ID` or `CODEX_THREAD_ID` is set. Wait for the hook if the ID is missing.
 - At the start of each new chat, run `richi chat current` and `richi workspace list` before searching or writing knowledge. If the chat is unbound and the user has not explicitly named a workspace in this chat, ask once: use the current CLI workspace, or choose another for this chat. Even one available workspace is not implicit consent. Continue independent repository work while awaiting the answer; do not read or write memory before the choice.

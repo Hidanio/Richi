@@ -1,6 +1,11 @@
 """Explicit installation maintenance, independent of workspace and dev code."""
 import argparse
+import json
+import os
 import re
+import subprocess
+import sys
+import tempfile
 
 from . import installation, maps, releases
 from .config import ConfigError
@@ -36,6 +41,8 @@ def parser():
                           ("apply", "Download, verify and switch to a stable release")):
         pages[name] = action = actions.add_parser(name, help=summary)
         action.add_argument("--version", type=_version, metavar="X.Y.Z", help="Stable X.Y.Z release (default: the latest)")
+    pages["apply"].add_argument("--review-preferences", action="store_true",
+                                help="After activation, show historical preference entries from the selected workspace")
     rollback = actions.add_parser("rollback", help="Switch back to the previous installed version without downloading")
     cleanup = actions.add_parser("cleanup", help="Remove retired versions once no running process uses them")
     auto = actions.add_parser("auto", help="Manage background release checks and optional automatic installation")
@@ -62,8 +69,13 @@ def parser():
              examples=(("", "richi update check"), ("A specific release", "richi update check --version 1.1.0")))
     document(pages["apply"], about="""
         The current version stays available for richi update rollback. Requires a
-        managed installation in a dedicated virtual environment.""",
-             examples=(("", "richi update apply"), ("A specific release", "richi update apply --version 1.1.0")))
+        managed installation in a dedicated virtual environment. To review historical
+        preferences immediately, add --review-preferences or accept the terminal prompt.
+        When upgrading from a launcher without this option, run update apply and then
+        rules review-preferences as a separate command in the new version.
+        The read uses the chat binding or terminal workspace selection.""",
+             examples=(("", "richi update apply"), ("A specific release", "richi update apply --version 1.1.0"),
+                       ("Show preferences awaiting confirmation", "richi update apply --review-preferences")))
     document(rollback, about="""
         Works even if the current version's files are damaged. Package rollback
         does not roll back databases, so a release that would drop support for the
@@ -85,7 +97,56 @@ def parser():
     return complete(parser)
 
 
-def command(argv):
+def _offer_review(chat_id):
+    from .cli import _interactive
+    if (not _interactive(chat_id) or not sys.stderr.isatty()
+            or any(os.environ.get(key) for key in ("RICHI_CHAT_ID", "CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT"))):
+        return False
+    print("Richi has been updated. Show historical preferences from the selected workspace now? [y/N] ",
+          file=sys.stderr, end="", flush=True)
+    try:
+        return sys.stdin.readline().strip().casefold() in {"y", "yes", "д", "да"}
+    except (KeyboardInterrupt, OSError, ValueError):
+        return False
+
+
+def _preference_review(chat_id):
+    # Re-enter the public bootstrap: it selects and leases the newly activated
+    # launcher, which checks the chat binding and resolves the workspace runtime.
+    command = [sys.executable, "-I", "-B", "-c", "from richi_bootstrap import main; raise SystemExit(main())"]
+    if chat_id is not None:
+        command += ["--chat", chat_id]
+    command += ["--compact-json", "rules", "review-preferences", "--limit", "3"]
+    try:
+        # A development runtime can differ from this launcher. Bound its output even
+        # if it ignores the requested page size or produces a large diagnostic.
+        with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors:
+            review = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=output, stderr=errors, timeout=30)
+            stream = errors if review.returncode else output
+            stream.seek(0)
+            maximum = 16384 if review.returncode else 1024 * 1024
+            data = stream.read(maximum + 1)
+        if len(data) > maximum:
+            return {"error": "Preference review exceeded the output limit; use rules review-preferences --limit 1"}
+        if review.returncode:
+            try:
+                problem = json.loads(data)
+            except ValueError:
+                problem = None
+            if isinstance(problem, dict) and isinstance(problem.get("error"), str):
+                return problem
+            return {"error": data.decode("utf-8", errors="replace").strip()[:2000] or "Cannot read the selected workspace"}
+        payload = json.loads(data)
+        if isinstance(payload, dict) and isinstance(payload.get("candidates"), list):
+            return payload
+        return {"error": "The selected runtime did not return preference candidates"}
+    except KeyboardInterrupt:
+        return {"error": "Preference review cancelled"}
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        return {"error": str(exc)}
+
+
+def command(argv, *, chat_id=None):
     args = parser().parse_args(argv)
     if args.action == "auto":
         from . import auto_update
@@ -106,7 +167,15 @@ def command(argv):
                 "message": "No stable release has been published yet"}
     if args.action == "apply":
         # Running maps move to the activated release once no update lock is held.
-        return maps.after_activation(installation.apply_release(release))
+        result = maps.after_activation(installation.apply_release(release))
+        if result["status"] in {"updated", "already_current"}:
+            if args.review_preferences or (result["status"] == "updated" and _offer_review(chat_id)):
+                result["preference_review"] = _preference_review(chat_id)
+                result["preference_review"]["command"] = "richi rules review-preferences"
+            elif result["status"] == "updated":
+                result["preference_review"] = {"command": "richi rules review-preferences",
+                                               "message": "The next rules load shows candidates for its scope."}
+        return result
     current = local.get("current") or {}
     candidate = release["version"]
     assessment = installation.assess_release(release["manifest"], current)

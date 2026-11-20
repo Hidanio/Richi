@@ -1,4 +1,5 @@
 """Progressive read tools: small discovery routes, then whole bounded records."""
+from . import decision_cards, measurements
 
 
 def add_commands(commands, api):
@@ -166,15 +167,24 @@ def _probe(conn, family, identity, maximum, api):
     arrays = {"sources", "tags", "aliases"} if family != "project" else set()
     text_fields = [name for name in fields if name not in arrays]
     expression = lambda names: " + ".join("coalesce(length(" + name + "),0)" for name in names) or "0"
-    row = conn.execute("SELECT " + expression(fields) + ", " + expression(text_fields) +
+    version = "NULL" if family == "project" else "updated_at"
+    row = conn.execute("SELECT " + expression(fields) + ", " + expression(text_fields) + ", " + version +
                        " FROM " + table + " WHERE id = ?", (identity,)).fetchone()
     if row is None:
         return "missing", None
     if row[1] > maximum:
         return "oversize", {"minimum_record_chars": row[1]}
     read_limit = max(131072, maximum * 8)
-    if row[0] > read_limit:
-        return "read_limit", {"stored_chars": row[0], "read_limit_chars": read_limit}
+    stored_chars = row[0]
+    if family == "entry":
+        decision = conn.execute("SELECT length(value) FROM metadata WHERE key = ?",
+                                (decision_cards.KEY_PREFIX + identity,)).fetchone()
+        if decision:
+            stored_chars += decision[0]
+    if family != "project" and stored_chars <= read_limit:
+        stored_chars += measurements.read_cost(conn, family, identity, row[2], read_limit - stored_chars)
+    if stored_chars > read_limit:
+        return "read_limit", {"stored_chars": stored_chars, "read_limit_chars": read_limit}
     if family == "entry":
         record = api.entry_get(conn, identity, history=False)
     elif family == "project":

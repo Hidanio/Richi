@@ -361,8 +361,25 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             feed = self.feed_fixture(latest, "0.2.0")
             self.assertEqual(json.loads(self.run_process([self.python, "-I", "-B", runner, feed, "update", "check"]).stdout)["status"],
                              "update_available")
-            updated = json.loads(self.run_process([self.python, "-I", "-B", runner, feed, "update", "apply"]).stdout)
+            self.console("workspace", "create", "example")
+            self.console("--chat", "example:review", "chat", "bind", "example")
+            self.console("--chat", "example:review", "init")
+            preference = self.root / "preference.json"
+            preference.write_text(json.dumps({"id": "preference:branch", "kind": "note", "title": "Branch names",
+                                              "summary": "Keep branch names short."}), encoding="utf-8")
+            self.console("--chat", "example:review", "entry", "put", "--json", preference)
+            updated = json.loads(self.run_process([self.python, "-I", "-B", runner, feed, "--chat", "example:review",
+                                                   "update", "apply", "--review-preferences"]).stdout)
             self.assertEqual((updated["current"]["version"], updated["current"]["database_schemas"]), ("0.2.0", [1, 2, 3]))
+            review = updated["preference_review"]
+            self.assertEqual(review["workspace"], "example")
+            candidate, = review["candidates"]
+            self.assertEqual((candidate["text"], candidate["scope"]), ("Keep branch names short.", "global"))
+            self.assertEqual(self.console_json("--chat", "example:review", "rules", "show")["rules"], [])
+            unbound = json.loads(self.run_process([self.python, "-I", "-B", runner, feed, "--chat", "example:unbound",
+                                                   "update", "apply", "--review-preferences"]).stdout)
+            self.assertEqual(unbound["status"], "already_current")
+            self.assertEqual(unbound["preference_review"]["code"], "chat_workspace_required")
             self.assert_public_version("0.2.0")
             refused = self.run_process([self.python, "-I", "-B", runner, feed, "update", "rollback"], ok=False)
             self.assertIn("drops database schema support for 3", refused.stdout + refused.stderr)

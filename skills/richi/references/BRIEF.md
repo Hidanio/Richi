@@ -44,13 +44,20 @@ the Git working copy remains mutable during the read.
 
 1. The query uses existing `recall`: the same lexical rules, exact Jira ID
    protection, handling of ambiguous concepts and one hop along an explicit relationship.
-   The project raises relevance rather than isolating knowledge from other services.
+   `brief` also matches words in the current decision question, observations, recommendation,
+   outcome and reconsideration criteria, and in a measurement’s metric, value, unit and sample.
+   These matches enter the same ranking and carry `decision_card` or `measurement`
+   in `query_match_reasons`. Supplying a project raises the relevance of its records.
 2. The specified diff uses `sources impact`. Matches are determined by sources
    for changed files, including supported legacy `git:FULL_SHA[:path]` links.
 3. The first three direct entry/entity matches from the diff are checked for one hop
    along explicit sourced relationships. Relationship cards with `edge:` refs do not become
    traversal nodes. Project membership does not expand into all its records. Neighbors
    found only through the graph do not initiate another hop.
+
+Run `richi search-index build` to index word prefixes in existing decision cards and measurements.
+`brief` searches new or edited annotations directly until the next build. It also searches them
+directly when the workspace has no index or uses one built by an older release.
 
 The query and diff channels are independent: for example, an experiment without a Jira ID
 may enter through a stored relationship with a task found by diff files. This does not weaken
@@ -66,6 +73,18 @@ passed through without promotion: merged does not mean released.
 
 ## Reading the result
 
+`sources_scope: "record"` identifies general references for the record.
+For a number, cite the `source` inside its `measurements` row. Each row keeps
+the metric, value, unit and sample together with that calculation, even if it
+comes from the last source on a long task. Up to eight observations are
+selected by overlap with the question, with ties in recorded order.
+`measurements_omitted` counts whole observations omitted by selection or
+budget. Use `read_more` for the complete record. On older records without
+these annotations, verify numbers against the original calculation.
+Compact source headers in recall, record reads and graph connections keep the
+citation and a per-source `measurements_omitted` count. The full record includes
+every observation for that citation.
+
 - `results` are deduplicated by stable `ref`. `selected_by` shows `query`,
   `code_change` or `explicit_relation`; additional reasons appear in
   `query_match_reasons` and `code_match_reasons`.
@@ -80,6 +99,13 @@ passed through without promotion: merged does not mean released.
   Selection itself does not compare each source's bytes with the target. For that check,
   add `--check-sources` or use
   `sources git-check --ref REF --source N` for a specific piece of evidence.
+- A task's `decision_card` shows its question, sourced observations, attributed
+  recommendation, recorded decision and review condition. `pending` means the
+  question is open. An accepted or rejected decision includes the decision
+  maker and evidence. Follow the references for context. Cards are maintained
+  explicitly, and older tasks may have none. If the complete card exceeds the
+  brief budget, `decision_card_omitted` and `read_more` point to the full task.
+  See [ENTRY_WRITE.md](ENTRY_WRITE.md).
 - `coverage` separates search completeness, diff-source inspection and the limit
   on related candidates. `coverage_complete` refers to these bounded
   mechanisms, not completeness of all system knowledge or dependencies.

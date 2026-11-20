@@ -272,7 +272,10 @@ def ensure_project_context(conn, path, expected_id=None):
     result = project_check(conn, path, expected_id)
     if result["status"] != "matched" or result["errors"]:
         detail = result["errors"][0]["error"] if result["errors"] else result["status"]
-        raise _error("Project path does not identify one matching project in this workspace: " + detail)
+        error = _error("Project path does not identify one matching project in this workspace: " + detail)
+        if result["status"] == "unregistered" and not result["errors"]:
+            error.code = "project_unregistered"
+        raise error
     return result["project"]
 
 

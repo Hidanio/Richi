@@ -13,6 +13,7 @@ import re
 import stat
 import tempfile
 
+from . import measurements
 from .output import rendered
 
 
@@ -111,6 +112,8 @@ WHERE 1=1
     if not rows:
         return None
     record = _decode(rows[0])
+    if family in ("entry", "entity"):
+        measurements.restore(conn, family, record)
     if family == "entry":
         record["project_ids"] = [row[0] for row in conn.execute("""
 SELECT
@@ -234,6 +237,7 @@ LIMIT ?
             raise ValueError("Incident edge set exceeds source-watch limit; select narrower refs")
         for row in rows:
             edge = _decode(row)
+            measurements.restore(conn, "edge", edge)
             edges.append({"id": edge["id"], "from_ref": edge["from_ref"],
                           "to_ref": edge["to_ref"], "sha256": _hash(edge)})
             _register_sources(owners, edge, "edge:" + edge["id"], evidence_bytes)
@@ -479,10 +483,14 @@ def _validate_manifest(value):
             if declaration["owner"] not in owners or not isinstance(declaration["source"], dict):
                 raise ValueError("Invalid source declaration")
             declared = declaration["source"]
-            _keys(declared, ("reference",), ("label", "type", "observed_at", "revision", "locator", "sha256", "git"))
+            _keys(declared, ("reference",), ("label", "type", "observed_at", "revision", "locator", "sha256", "git",
+                                             "measurements"))
             if declared["reference"] != reference:
                 raise ValueError("Inconsistent source declaration")
             for key, item in declared.items():
+                if key == "measurements":
+                    measurements.validate(item)
+                    continue
                 if key == "git":
                     from . import git_evidence
                     git_evidence.validate_anchor(declared)
