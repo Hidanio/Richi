@@ -131,7 +131,7 @@ richi update apply
 
 To return to the previous release later, use `richi update rollback`.
 
-Fresh installations register the skill as `richi`. An update delivers the
+Fresh installations of Richi 1.2.1 and later register the skill as `richi`. An update delivers the
 renamed skill to all connected agents. While the rollback release still expects
 `project-memory`, the managed directory and instruction block keep their old
 names. Codex already lists the skill as Richi in new chats. When both releases
