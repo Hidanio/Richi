@@ -2,12 +2,11 @@
 
 English | [Русский](CONTRIBUTING.ru.md)
 
-Contributions are welcome. Open a pull request directly with a bug fix, a new
-feature, or a documentation change. For ideas and bug reports, open an issue.
-When reporting a bug, include the Richi version and a small example with
-synthetic data so others can reproduce it.
+We welcome bug fixes, new features, and documentation improvements.
+You can open a pull request directly. We accept contributions under the
+[project license](LICENSE.md).
 
-We accept contributions under the [project license](LICENSE.md).
+If you would like feedback on a larger idea before you start, feel free to open an issue.
 
 ## Development
 

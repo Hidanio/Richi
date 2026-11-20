@@ -22,15 +22,16 @@ a noncommercial fork and submit changes to Richi.
 
 Get the Licensor's written permission before either of the following uses:
 
-1. **Commercial use of Richi itself.** This includes selling or licensing copies
-   for a fee, offering access to Richi as a commercial service, or incorporating
-   Richi or its functionality into a commercial product or service offered to
-   others. This includes bundling Richi at no separate charge.
-2. **Company-wide deployment.** A company needs permission to deploy Richi for
-   all its employees, whether it provides a shared installation or rolls it
-   out to everyone in stages. Individual adoption and
-   deployments for a particular team or department are permitted under the
-   preceding section.
+1. **Commercial use of Richi itself.** Get permission before selling Richi,
+   licensing copies for a fee, or offering customers access to Richi or its
+   functionality as part of a commercial product or service. This includes
+   shipping Richi with a product at no separate charge. You may use Richi to
+   prepare and sell your own work, such as a report for a client.
+2. **Company-wide deployment.** When a company decides to provide Richi to all
+   its employees, it must obtain permission before starting the rollout, even
+   if it starts with a single team. Employees may each choose to use Richi
+   independently, even when everyone at the company does so. Teams and
+   departments may also deploy Richi for their own work.
 
 To request permission, email **hidanjkezor@gmail.com** and describe the intended
 use. An explicit grant by email is sufficient. A separate written authorization

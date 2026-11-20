@@ -175,8 +175,10 @@ Richi is source-available. You can use it for free at home, at work, on a team,
 or in a nonprofit. Employees and contractors can use Richi as an internal tool,
 including when developing a commercial product.
 
-Get written permission before selling Richi, including it in a commercial product
-or service for others, or rolling it out to all employees of a company.
+Get written permission before selling Richi or offering it or its features to
+customers as part of a commercial product or service. A company also needs
+permission before it starts a rollout intended for all employees. Employees
+can adopt Richi independently, even if everyone ends up using it.
 See the [license](LICENSE.md) and [examples](LICENSING.md).
 
 <a id="участие"></a>

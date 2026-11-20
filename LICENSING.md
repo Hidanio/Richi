@@ -12,14 +12,15 @@ company-wide deployment require written permission.
 | How you use Richi | Terms |
 | --- | --- |
 | Use Richi for a personal project, including while employed by a company | Free |
-| Use Richi as an employee or contractor to do paid work for a company or client | Free |
+| Use Richi as a consultant to prepare a report that a client pays for | Free |
 | Run an internal pilot, share an installation within a team, or deploy it to a department | Free |
 | Use Richi in a nonprofit, school, or public institution for noncommercial work | Free |
 | Publish a noncommercial fork or open a pull request | Free |
 | Use Richi to develop software that you sell | Free |
-| Ship Richi with that software or offer its functionality to customers as part of a commercial service | Prior written permission |
+| Ship Richi with that software or offer Richi search in a paid customer portal | Prior written permission |
 | Sell Richi or provide paid access to a hosted copy | Prior written permission |
-| Roll out Richi to all employees of a company, even for internal use | Prior written permission |
+| All five employees of a studio independently choose to use Richi | Free |
+| The studio decides to provide Richi to all five employees, starting with two | Written permission before the first rollout stage |
 
 <a id="как-получить-разрешение"></a>
 ## Requesting permission
