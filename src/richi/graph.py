@@ -232,7 +232,9 @@ def edge(conn, link, api, *, counts_only=False, owner=None):
         record = owner if owner is not None else api.entry_record(conn, native_id, counts_only=True)
         result.update(description="Record is linked to this project; this does not imply a specific impact.",
                       sources=compact.source_headers(record["sources"], limit=None),
-                      sources_ref=link["from_ref"], verified_at=record["verified_at"])
+                      verified_at=record["verified_at"])
+        if compact.partial_sources(result):
+            result["sources_ref"] = link["from_ref"]
     result["provenance"] = {"table": {"explicit": "graph_edges", "project_relation": "relations", "entry_project": "entry_projects"}[result["origin"]],
                             "record_id": native_id}
     return result

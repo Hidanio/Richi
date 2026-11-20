@@ -138,6 +138,18 @@ class MeasurementTests(unittest.TestCase):
                     self.assertEqual(edge["sources_ref"], "entry:shared")
                     self.assertEqual(edge["sources"], sources[:2] + [dict(self.citation, measurements_omitted=100)])
 
+    def test_full_graph_preserves_plain_membership_payload_across_upgrade(self):
+        memory.project_put(self.conn, {"id": "local", "name": "Local"})
+        entry = {"id": "plain", "kind": "task", "title": "Trial", "summary": "No measurements",
+                 "knowledge_state": "confirmed", "sources": [self.citation], "project_ids": ["local"]}
+        self.put("entry", entry)
+        for args in (SimpleNamespace(action="export"),
+                     SimpleNamespace(action="neighbors", ref="entry:plain", depth=1, limit=8)):
+            with self.subTest(action=args.action):
+                edge, = graph.export(self.conn, args, memory)["edges"]
+                self.assertEqual(edge["sources"], [self.citation])
+                self.assertNotIn("sources_ref", edge)
+
     def test_fetch_measures_detached_observations_before_decoding_any_owner(self):
         self.rows[0]["sample"] = "x" * 900000
         self.create()
