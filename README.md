@@ -171,28 +171,21 @@ original English license is authoritative; its explanatory guide is bilingual.
 <a id="лицензия"></a>
 ## License
 
-Published Richi material uses a custom **source-available license**. The project
-is not licensed as OSI open source.
+Richi is source-available. You can use it for free at home, at work, on a team,
+or in a nonprofit. Employees and contractors can use Richi as an internal tool,
+including when developing a commercial product.
 
-- Personal noncommercial use by individuals is free.
-- Organizational use, use on behalf of an organization and commercial use require
-  a prior written agreement. This includes internal tools, employee and contractor
-  work, evaluations and pilots.
-- Anyone may read the public source code and documentation.
-- Distributing copies or providing Richi as a service requires separate permission,
-  except for rights independently granted by law, platform terms or other
-  applicable licenses.
-- Using Richi does not by itself change ownership of your data and knowledge.
-
-Full terms: [LICENSE.md](LICENSE.md).
-Examples and permission requests: [LICENSING.md](LICENSING.md).
+Get written permission before selling Richi or offering it or its features to
+customers as part of a commercial product or service. A company also needs
+permission before it starts a rollout intended for all employees. Employees
+can adopt Richi independently, even if everyone ends up using it.
+See the [license](LICENSE.md) and [examples](LICENSING.md).
 
 <a id="участие"></a>
 ## Contributing
 
-Suggestions and bug reports are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md)
-before preparing code changes: rights to third-party contributions must be agreed
-before incorporation into the product.
+Pull requests are welcome for code and documentation. Open one directly, or open
+an issue to suggest an idea or report a bug. See the [contributor guide](CONTRIBUTING.md).
 
 <a id="автор-и-контакт"></a>
 ## Author and contact
