@@ -306,6 +306,38 @@ class DecisionCardTests(unittest.TestCase):
                         self.assertEqual(card["measurements"][0]["value"], wanted)
                         self.assertEqual(card["measurements_omitted"], 1)
 
+    def test_quantity_units_retain_case_in_discovery_and_measurement_selection(self):
+        def source(unit):
+            row = {"metric": "Power", "value": "5", "unit": unit, "sample": "trial"}
+            return {"reference": "synthetic://trial/" + unit, "measurements": [row]}
+
+        for identity, units in (("a", ["mW"]), ("z", ["mW", "MW"]),
+                                ("bits", ["Mb/s"]), ("bytes", ["Mb/s", "MB/s"])):
+            self.put(dict(self.task, id=identity, jira_key=None, title="Trial", summary="Observed results.",
+                          sources=[source(unit) for unit in units]))
+        for indexed in (False, True):
+            if indexed:
+                with memory.transaction(self.conn):
+                    search_index.build(self.conn, memory)
+            for query, identity, unit in (("5MW", "z", "MW"), ("5 MW", "z", "MW"),
+                                          ("5mW", "a", "mW"), ("5 mW", "a", "mW"),
+                                          ("5MB/s", "bytes", "MB/s"), ("5 MB/s", "bytes", "MB/s"),
+                                          ("5Mb/s", "bits", "Mb/s")):
+                with self.subTest(indexed=indexed, query=query):
+                    args = SimpleNamespace(query=query, limit=1, max_chars=16000)
+                    card, = task_brief.brief(self.conn, args, memory, self.db)["results"]
+                    winner = card["measurements"][0]
+                    self.assertEqual((card["id"], winner["unit"], winner["source"]["reference"]),
+                                     (identity, unit, source(unit)["reference"]))
+            args = SimpleNamespace(query="5MW", limit=2, max_chars=16000)
+            result = task_brief.brief(self.conn, args, memory, self.db)
+            self.assertEqual([card["id"] for card in result["results"]], ["z"])
+
+        self.put(dict(self.task, sources=[source("mW"), source("MW")]))
+        terms, question, keys = recall._routed_terms(self.conn, "Straße DEMO-72 5MW")
+        self.assertEqual((terms, keys), (["strasse", "5mw"], ["demo-72"]))
+        self.assertEqual(measurements.query_terms(question), ["strasse", "5MW"])
+
     def test_structured_match_applies_the_entity_project_boost(self):
         memory.project_put(self.conn, {"id": "service", "name": "Service"})
         evidence = {"reference": "synthetic://trial", "measurements": [

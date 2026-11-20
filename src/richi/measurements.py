@@ -192,20 +192,34 @@ _MANTISSA = (r"[0-9]{1,3}(?:,[0-9]{3})+\.[0-9]+|"
              rf"[0-9]{{1,3}}(?:[{_SPACES}][0-9]{{3}})+(?:[.,][0-9]+)?|"
              r"[0-9]+(?:[.,][0-9]+)?|[.,][0-9]+")
 _NUMBER = r"[+\-−]?(?:" + _MANTISSA + r")(?:e[+\-−]?[0-9]+)?"
-_QUANTITY = re.compile("(?P<number>" + _NUMBER + r")(?P<unit>[^\W\d_]+(?:/[^\W\d_]+)?|[%‰]|°[cf]?)?", re.IGNORECASE)
+_UNIT = r"[^\W\d_]+(?:/[^\W\d_]+)?|[%‰]|°[cf]?"
+_QUANTITY = re.compile("(?P<number>" + _NUMBER + ")(?P<unit>" + _UNIT + ")?", re.IGNORECASE)
+_SPACED_UNIT = re.compile(r"\s+(" + _UNIT + r")(?!\w|[-.:/]\w)", re.IGNORECASE)
 # Consume identifiers as a whole, including v0.5, p95, EX-5 and 1.2.3.
 _TOKEN = re.compile(_QUANTITY.pattern + r"(?!\w|[-.:/]\w)|[^\W_]+(?:[-_.:/][^\W_]+)*", re.IGNORECASE)
 
 
 def query_terms(text):
     from . import recall
-    words = (token[0] for token in _TOKEN.finditer(text)
-             if token["number"] is not None or len(token[0]) > 1 and token[0] not in recall.STOPWORDS)
-    return list(dict.fromkeys(words))[:64]
+    terms = {}
+    for token in _TOKEN.finditer(text):
+        if token["number"] is not None:
+            terms[token[0]] = None
+            if not token["unit"]:
+                # A separate word can be an ordinary search term or a unit.
+                # Give an exact quantity/unit pair its own hit when both match.
+                unit = _SPACED_UNIT.match(text, token.end())
+                if unit and recall.normalize(unit[1]) not in recall.STOPWORDS:
+                    terms[token[0] + unit[1]] = None
+        else:
+            word = recall.normalize(token[0])
+            if len(word) > 1 and word not in recall.STOPWORDS:
+                terms[word] = None
+    return list(terms)[:64]
 
 
 def _number(value):
-    value = value.translate(_NUMBER_TRANSLATION).lstrip("+").replace("e+", "e")
+    value = value.lower().translate(_NUMBER_TRANSLATION).lstrip("+").replace("e+", "e")
     if "," in value and "." in value:
         grouping = "," if value.rfind(",") < value.rfind(".") else "."
         value = value.replace(grouping, "")
@@ -246,12 +260,11 @@ class MeasurementQuery:
         return {term for term in self.words if recall.matches_term(term, text)}
 
     def number_hits(self, row, fields=FIELDS):
-        from . import recall
         found = set()
         if self.numbers:
-            declared_unit = recall.normalize(row["unit"]).strip()
+            declared_unit = row["unit"].strip()
             for field in fields:
-                for token in _TOKEN.finditer(recall.normalize(row[field])):
+                for token in _TOKEN.finditer(row[field]):
                     if token["number"] is None:
                         continue
                     number = _number(token["number"])

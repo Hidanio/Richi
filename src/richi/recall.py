@@ -199,10 +199,17 @@ def _routed_terms(conn, query):
     # Only the store can say which tokens are keys; the rest are words.
     text = normalize(query)
     keys, spans = issue_keys(conn, text)
-    for start, end in spans:
-        text = text[:start] + " " * (end - start) + text[end:]
+    if spans:
+        # Routing offsets are case-folded (ß -> ss), whereas measurement unit
+        # symbols must retain their original spelling after the keys are removed.
+        offsets = [0, *itertools.accumulate(len(char.casefold()) for char in query)]
+        for start, end in reversed(spans):
+            first = bisect.bisect_right(offsets, start) - 1
+            last = bisect.bisect_left(offsets, end)
+            query = query[:first] + " " + query[last:]
+        text = normalize(query)
     words = dict.fromkeys(term for term in WORDS.findall(text) if len(term) > 1 and term not in STOPWORDS)
-    return list(words)[:64], text, keys
+    return list(words)[:64], query, keys
 
 
 def terms_for(conn, query):
