@@ -2,7 +2,6 @@
 import os
 from pathlib import Path
 import shutil
-import stat
 
 from . import setup_files as files
 from .config import ConfigError
@@ -39,46 +38,6 @@ def other_skill_roots(profile, discovery):
     return [root] if root.resolve() != discovery.resolve() else []
 
 
-def _toml_reader():
-    try:
-        import tomllib
-        return tomllib
-    except ImportError:  # Python 3.9 and 3.10
-        try:
-            from pip._vendor import tomli
-            return tomli
-        except ImportError:
-            return None
-
-
-def _skill_settings(config):
-    try:
-        if not stat.S_ISREG(config.stat().st_mode):
-            raise ConfigError("Cannot inspect Codex skill settings in " + str(config))
-        with config.open("rb") as stream:
-            data = stream.read(files.MAX_FILE + 1)
-    except FileNotFoundError:
-        return []
-    except OSError as exc:
-        raise ConfigError("Cannot inspect Codex skill settings in " + str(config)) from exc
-    if len(data) > files.MAX_FILE:
-        raise ConfigError("Codex config exceeds 1 MiB; cannot verify disabled skills in " + str(config))
-    if b"false" not in data:
-        return []
-    # A quoted TOML key can encode the word skills using Unicode escapes.
-    if b"skills" not in data and b"\\u" not in data and b"\\U" not in data:
-        return []
-    reader = _toml_reader()
-    if reader is None:
-        raise ConfigError("Cannot verify possible disabled Codex skills in " + str(config)
-                          + " on this Python version; use a Richi installation on Python 3.11+"
-                          " to verify the same settings before moving the skill")
-    try:
-        return reader.loads(data.decode("utf-8")).get("skills", {}).get("config", [])
-    except (AttributeError, ValueError) as exc:
-        raise ConfigError("Cannot parse Codex skill settings in " + str(config)) from exc
-
-
 def check_skill_change(instructions, previous, skill, target, replace_skill=False):
     """Preserve Codex's path-based opt-out when discovery or its target moves."""
     profile = Path(instructions).parent
@@ -91,9 +50,11 @@ def check_skill_change(instructions, previous, skill, target, replace_skill=Fals
     if old == {skill} and skill.is_symlink() and os.readlink(skill) == str(target):
         return
     config = profile / "config.toml"
-    settings = _skill_settings(config)
-    if not isinstance(settings, list):
-        raise ConfigError("Cannot verify Codex skills.config in " + str(config))
+    from richi import codex_skill_settings
+    try:
+        settings = codex_skill_settings.entries(profile, Path.home())
+    except codex_skill_settings.SettingsError as exc:
+        raise ConfigError(str(exc)) from exc
     if not settings:
         return
     new_file = skill / "SKILL.md"
@@ -105,16 +66,8 @@ def check_skill_change(instructions, previous, skill, target, replace_skill=Fals
     was_disabled = False
     remains_disabled = False
     could_enable = False
-    for entry in settings:
-        if not isinstance(entry, dict):
-            continue
-        path = entry.get("path")
-        if not isinstance(path, str):
-            continue
-        path = Path(path).expanduser()
-        if not path.is_absolute():
-            path = profile / path
-        if entry.get("enabled") is not False:
+    for path, enabled in settings:
+        if enabled:
             if path == new_file or os.path.realpath(path) == new_target:
                 could_enable = True
             continue
@@ -130,17 +83,9 @@ def check_skill_change(instructions, previous, skill, target, replace_skill=Fals
                           + " for " + str(new_file) + "; reconcile conflicting enabled entries, then retry")
 
 
-def _profile_skills(profile, discovery, replace_skill):
-    ops = []
-    for root in other_skill_roots(profile, discovery):
-        for name in ("richi", "project-memory"):
-            ops.extend(files.duplicate_skill(root / name, replace_skill))
-    return {}, ops
-
-
 def setup_operations(ctx, profile, current, replace_skill):
-    return _profile_skills(profile, Path.home().resolve() / ".agents/skills", replace_skill)
+    return {}, []
 
 
 def activation_operations(ctx, record, site):
-    return _profile_skills(Path(record["instructions"]).parent, Path(record["skill"]).parent, False)
+    return {}, []

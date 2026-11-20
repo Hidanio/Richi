@@ -362,8 +362,9 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     skill = skill.with_name(name)
     if current and Path(current["skill"]) not in {skill.with_name(SKILL_NAME), skill.with_name(LEGACY_NAME)}:
         raise ConfigError("Setup belongs to another skill directory; use its original profile")
-    _check_foreign_paths(agent, {"skill": str(skill), "instructions": str(instructions)},
-                         _foreign_skills(records, [agent]))
+    profile_record = {"skill": str(skill), "instructions": str(instructions)}
+    alternate = _alternate_skill_paths(agent, profile_record, _registered_paths(records))
+    _check_foreign_paths(agent, profile_record, _foreign_skills(records, [agent]), alternate)
     extra, adapter_ops = adapter.setup_operations(ctx, profile, current, replace_skill)
     command = home / ".local" / "bin" / "richi"
     executable = Path(ctx["original_prefix"]) / "bin" / "richi"
@@ -374,7 +375,8 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     source = current.get("dev_source") if current else _shared_source(records)
     link, dev_source, _ = _desired_link(root, source, name)
     _check_skill_change(agent, instructions, current, skill, link, replace_skill)
-    skill_ops = _skill_operations(current, skill, link, replace_skill=replace_skill)
+    skill_ops = _alternate_operations(alternate, replace_skill)
+    skill_ops.extend(_skill_operations(current, skill, link, replace_skill=replace_skill))
     command_op = files.change(command, {"kind": "link", "target": str(executable)})
     if command_op["before"]["kind"] != "absent" and command_op["before"] != command_op["after"]:
         raise ConfigError("Another command owns " + str(command) + "; it was not overwritten")
@@ -442,14 +444,15 @@ def _check_skill_change(agent, instructions, record, skill, link, replace_skill=
         check(instructions, record["skill"] if record else None, skill, link, replace_skill)
 
 
-def _move_profile(agent, record, skill, link, before, foreign):
+def _move_profile(agent, record, skill, link, before, foreign, alternate):
     """Journal the discovery path and the rule naming it together."""
     _check_skill_change(agent, record["instructions"], record, skill, link)
-    operations = _skill_operations(record, skill, link, before=before)
+    operations = _alternate_operations(alternate, False)
+    operations.extend(_skill_operations(record, skill, link, before=before))
     if str(skill) == record["skill"]:
         return {}, operations
     if skill.name == SKILL_NAME:
-        _check_foreign_paths(agent, record, foreign)
+        _check_foreign_paths(agent, record, foreign, alternate)
     block, rule = _instruction_operation(
         agent_adapters.get(agent), agent, record["command"], record["instructions"], skill.name, record)
     return {"skill": str(skill), "block_sha256": files.digest(block)}, [*operations, rule]
@@ -471,9 +474,24 @@ def _verify_skill(record):
     return before
 
 
-def _other_skill_roots(agent, record):
+def _registered_paths(records):
+    # A transaction may rename several agents. Keep their original claims until it commits.
+    return {Path(record["skill"]) for record in records.values()}
+
+
+def _alternate_skill_paths(agent, record, registered):
     other = getattr(agent_adapters.get(agent), "other_skill_roots", None)
-    return other(Path(record["instructions"]).parent, Path(record["skill"]).parent) if other else []
+    if not other:
+        return []
+    roots = other(Path(record["instructions"]).parent, Path(record["skill"]).parent)
+    # Another agent may own a skill in this discovery root, including through a directory alias.
+    # Only that agent may move its recorded link. A changed or missing link stays its concern.
+    return [root / name for root in roots for name in (SKILL_NAME, LEGACY_NAME)
+            if root.resolve() / name not in registered]
+
+
+def _alternate_operations(paths, replace_skill):
+    return [op for path in paths for op in files.duplicate_skill(path, replace_skill)]
 
 
 def _foreign_skills(records, names):
@@ -506,15 +524,15 @@ def _rename_candidates(records, name):
     return [agent for agent, item in records.items() if name == SKILL_NAME and Path(item["skill"]).name != name]
 
 
-def _reserved_paths(agent, record, names=(SKILL_NAME,)):
-    skill = Path(record["skill"])
-    return {str(root / name) for root in [skill.parent, *_other_skill_roots(agent, record)] for name in names}
+def _reserved_paths(record, alternate):
+    root = Path(record["skill"]).parent
+    return {str(path) for path in (root / SKILL_NAME, root / LEGACY_NAME, *alternate)}
 
 
-def _check_foreign_paths(agent, record, conflicts):
+def _check_foreign_paths(agent, record, conflicts, alternate):
     # Setup may back up an occupied reserved path with consent. A matching
     # name elsewhere (possibly in another client's profile) remains user-owned.
-    elsewhere = conflicts.get(agent, set()) - _reserved_paths(agent, record, (SKILL_NAME, LEGACY_NAME))
+    elsewhere = conflicts.get(agent, set()) - _reserved_paths(record, alternate)
     if elsewhere:
         raise ConfigError("Another skill named richi is visible to " + agent + " at " + ", ".join(sorted(elsewhere))
                           + ". Move or rename it outside this agent's skill discovery, then retry.")
@@ -531,11 +549,13 @@ def rename_conflicts():
     except (ValueError, OSError, RuntimeError, KeyError, TypeError):
         return []
     conflicts = []
+    registered = _registered_paths(records)
     for agent, record in records.items():
         skill = Path(record["skill"])
         if agent not in transition:
             continue
-        reserved = _reserved_paths(agent, record)
+        alternate = _alternate_skill_paths(agent, record, registered)
+        reserved = {path for path in _reserved_paths(record, alternate) if Path(path).name == SKILL_NAME}
         paths = sorted({path for path in reserved if os.path.lexists(path)} | foreign.get(agent, set()))
         if not paths:
             continue
@@ -571,6 +591,7 @@ def activation_operations(ctx, state):
     if dev_capable:
         name = _dev_profile_name(name, {record.get("dev_source") for record in records.values()})
     foreign = _foreign_skills(records, _rename_candidates(records, name))
+    registered = _registered_paths(records)
     ops = []
     for agent, record in records.items():
         before = _verify_skill(record)
@@ -579,7 +600,8 @@ def activation_operations(ctx, state):
         ops.extend(adapter_ops)
         skill = Path(record["skill"]).with_name(name)
         link, source, _ = _desired_link(target, record.get("dev_source") if dev_capable else None, name)
-        profile, profile_ops = _move_profile(agent, record, skill, link, before, foreign)
+        alternate = _alternate_skill_paths(agent, record, registered)
+        profile, profile_ops = _move_profile(agent, record, skill, link, before, foreign, alternate)
         ops.extend(profile_ops)
         records[agent] = dict(record, skill_target=str(target), skill_hashes=hashes, generation=state["current"], **profile)
         records[agent].pop("dev_source", None)
@@ -597,6 +619,7 @@ def _switch_operations(ctx, state, source):
     name = _dev_profile_name(_profile_name(state, name, _managed_name(records) or LEGACY_NAME), (source,))
     link, dev_source, reason = _desired_link(release, source, name)
     foreign = _foreign_skills(records, _rename_candidates(records, name))
+    registered = _registered_paths(records)
     ops, agents = [], {}
     for agent, record in records.items():
         if record["skill_target"] != str(release):
@@ -606,10 +629,8 @@ def _switch_operations(ctx, state, source):
         updated = dict(record)
         try:
             if str(skill) != record["skill"]:
-                for root in _other_skill_roots(agent, record):
-                    for directory in (SKILL_NAME, LEGACY_NAME):
-                        files.duplicate_skill(root / directory, False)
-                profile, profile_ops = _move_profile(agent, record, skill, link, _verify_skill(record), foreign)
+                alternate = _alternate_skill_paths(agent, record, registered)
+                profile, profile_ops = _move_profile(agent, record, skill, link, _verify_skill(record), foreign, alternate)
                 updated.update(profile)
                 ops.extend(profile_ops)
                 changed = True

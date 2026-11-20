@@ -335,6 +335,29 @@ class RulesTests(unittest.TestCase):
         scan.assert_not_called()
         self.assertEqual(shown[0]["use_skill"], "my-review")
 
+    def test_disabled_codex_skill_does_not_resolve_a_legacy_rule(self):
+        home = Path.home()
+        profile = home / "custom-codex"
+        profile.mkdir(parents=True)
+        skill = home / ".agents/skills/richi"
+        skill.parent.mkdir(parents=True)
+        skill.symlink_to(Path(__file__).resolve().parents[1] / "skills/richi")
+        self.add("alpha", "legacy", "--global", skill="project-memory")
+        with mock.patch.dict(os.environ, {"CODEX_HOME": str(profile)}):
+            def used(agent):
+                return self.command("alpha", "rules", "show", "--agent", agent)["rules"][0]["use_skill"]
+
+            self.assertEqual(used("codex"), "richi")
+            config = profile / "config.toml"
+            for path in ("~/.agents/skills/richi/SKILL.md", str((skill / "SKILL.md").resolve())):
+                with self.subTest(path=path):
+                    config.write_text("[[skills.config]]\npath = " + json.dumps(path) + "\nenabled = false\n")
+                    self.assertEqual(used("codex"), "project-memory")
+                    self.assertEqual(used("cursor"), "richi")
+            with config.open("a") as stream:
+                stream.write('[[skills.config]]\npath = "../.agents/skills/richi/SKILL.md"\nenabled = true\n')
+            self.assertEqual(used("codex"), "project-memory")  # ambiguous opt-out
+
     def test_agents_share_a_skill_or_each_get_their_own(self):
         def add(identifier, *skills):
             argv = ["rules", "add", identifier, "--global", "--text", "Review code."]

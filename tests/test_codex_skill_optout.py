@@ -8,7 +8,8 @@ from unittest.mock import patch
 import test_agent_setup
 import test_dev_skill_links
 import test_skill_rename
-from richi_launcher import agent_setup, codex_setup, installation, setup_files
+from richi import codex_skill_settings, skill_catalog
+from richi_launcher import agent_setup, installation, setup_files
 from richi_launcher.config import ConfigError
 
 
@@ -29,6 +30,26 @@ class CodexSkillOptoutTests(test_agent_setup.AgentSetupFixture, unittest.TestCas
     def activate(self, state, action="updated"):
         with patch.object(installation, "_collect", return_value={}):
             return installation._activate(self.ctx, state, action)
+
+    def test_fresh_setup_skips_a_disabled_foreign_name_only_for_codex(self):
+        doc = self.home / ".agents/skills/my-tool/SKILL.md"
+        doc.parent.mkdir(parents=True)
+        target = self.home / "personal.md"
+        target.write_text("---\nname: richi\n---\nPersonal skill.\n")
+        doc.symlink_to(target)
+        config = self.settings(("../.agents/skills/my-tool/SKILL.md", False), (target, True))
+        with self.assertRaisesRegex(ConfigError, "Another skill named richi"):
+            self.configure()
+        # The resolved file is disabled even though discovery uses a symlink.
+        self.settings((target, False))
+        before = config.read_bytes()
+        catalog = skill_catalog.catalog()
+        skill, = catalog["skills"]
+        self.assertEqual((skill["name"], skill["agents"]), ("richi", ["cursor"]))
+        self.assertEqual(self.configure()["status"], "configured")
+        self.assertTrue(doc.is_symlink())
+        self.assertEqual(config.read_bytes(), before)
+        self.assertEqual(skill_catalog.catalog()["rule_aliases"], {"codex": {"project-memory": "richi"}})
 
     def test_rename_waits_for_disabled_destination_and_keeps_user_config(self):
         instructions, state = self.transition()
@@ -93,10 +114,12 @@ class CodexSkillOptoutTests(test_agent_setup.AgentSetupFixture, unittest.TestCas
     def test_without_toml_reader_unrelated_config_allows_rename_and_possible_optout_defers_it(self):
         _, state = self.transition()
         config = self.settings((self.old_skill / "SKILL.md", False))
-        with patch.object(codex_setup, "_toml_reader", return_value=None):
+        with patch.object(codex_skill_settings, "_toml_reader", return_value=None):
+            self.assertNotIn("codex", skill_catalog.catalog()["rule_aliases"])
             with self.assertRaisesRegex(ConfigError, "Cannot verify possible disabled"):
                 self.activate(state)
             config.write_text('[features]\nexample = false\n[projects."/example"]\ntrust_level = "trusted"\n')
+            self.assertEqual(skill_catalog.catalog()["rule_aliases"]["codex"], {"project-memory": "richi"})
             self.activate(state)
         self.assertTrue(self.new_skill.is_symlink())
 

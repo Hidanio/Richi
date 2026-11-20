@@ -147,7 +147,7 @@ def _read_regular(path, limit, *, frontmatter_only=False):
         raise
     with handle:
         if frontmatter_only:
-            prefix = handle.read(1024)
+            prefix = handle.read(min(1024, limit))
             first, newline, rest = prefix.partition(b"\n")
             if (len(prefix) < 1024 or newline and
                     (first.lstrip(b"\xef\xbb\xbf").strip() != b"---" or
@@ -396,6 +396,12 @@ def catalog(environ=None, home=None, registry=None, *, rule_aliases_only=False):
         every = set()
         renamed = set()
         incomplete = False
+        try:
+            disabled, enabled_paths = agent.skill_path_settings(environ, home) if agent.skill_path_settings else ((), ())
+        except (ValueError, OSError, RuntimeError):
+            # An unreadable profile cannot prove that a conflicting skill is
+            # disabled, or that a renamed skill is enabled for a standing rule.
+            disabled, enabled_paths, incomplete = (), (), True
         for source in agent.sources(environ, home):
             if rule_aliases_only and source.layout not in ("skills", "nested-skills"):
                 continue
@@ -422,9 +428,13 @@ def catalog(environ=None, home=None, registry=None, *, rule_aliases_only=False):
                 if not agents.valid_skill(name) or not _agent_may_choose(agent, path.parent, fields) \
                         or (enabled is not None and own not in enabled and fallback not in enabled):
                     continue
+                canonical = os.path.realpath(path) if disabled else None
+                possibly_disabled = canonical in disabled
+                if possibly_disabled and canonical not in enabled_paths:
+                    continue
                 found.add(name)
                 if name == "richi":
-                    renamed.add(fields.get("name") == "richi" and _declares_richi_rename(text))
+                    renamed.add(not possibly_disabled and fields.get("name") == "richi" and _declares_richi_rename(text))
                     if rule_aliases_only:
                         richi_paths.setdefault(agent.id, set()).add(str(path.parent))
                 if name not in skills and len(skills) >= MAX_SKILLS:

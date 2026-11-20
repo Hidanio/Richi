@@ -46,8 +46,13 @@ See official [skills](https://learn.chatgpt.com/docs/build-skills) and
 [instruction discovery](https://learn.chatgpt.com/docs/agent-configuration/agents-md).
 
 Codex can disable an individual skill by its `SKILL.md` path in
-`[[skills.config]]` in `$CODEX_HOME/config.toml`. If setup, an update or a dev
-switch would enable a previously disabled skill, Richi stops before changing
+`[[skills.config]]` in `$CODEX_HOME/config.toml`. If you are upgrading from
+v1.2.0 or earlier and disabled the skill by its resolved package path, first
+add `enabled = false` for the absolute path to
+`~/.agents/skills/project-memory/SKILL.md`, using your home directory in place
+of `~`. The old updater changes the package target on the first upgrade.
+Once the installed launcher supports the rename, if setup, an update or a dev
+switch would enable a previously disabled skill, it stops before changing
 the links. To keep it disabled, retain the existing entry and add an entry
 with `enabled = false` for the exact destination `SKILL.md` printed in the
 message, then retry. Keeping both paths also protects rollback. On Python

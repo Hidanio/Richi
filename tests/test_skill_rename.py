@@ -145,6 +145,45 @@ class SkillRenameTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         self.assertTrue(self.old_skill.is_symlink())
         self.assertFalse(self.new_skill.exists())
 
+    def test_codex_alternate_skill_root_belongs_to_connected_claude(self):
+        with patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": os.environ["CODEX_HOME"]}):
+            _, state = self.transition()
+            claude = self.configure("--agent", "claude")
+            claude_skill = Path(claude["skill"])
+            self.assertEqual(claude_skill, self.home / ".codex/skills/project-memory")
+            manifest = self.root / agent_setup.MANIFEST
+            original = manifest.read_bytes()
+            for flag in ("--dry-run", "--yes"):
+                plan = agent_setup.command(["--agent", "codex", "--replace-skill", flag])
+                self.assertEqual((plan["changes"], plan["skill_backups"]), ([], []))
+            self.assertEqual(manifest.read_bytes(), original)
+            self.assertTrue(claude_skill.is_symlink())
+            self.assertEqual(agent_setup.rename_conflicts(), [])
+
+            with patch.object(installation, "_collect", return_value={}):
+                installation._activate(self.ctx, state, "updated")
+            checkout = self.home / "pinned"
+            branded = Path(test_dev_skill_links.DevSkillLinkTests.make_checkout(checkout, "pinned"))
+            pinned = branded.rename(branded.with_name("project-memory"))
+            (pinned / "SKILL.md").write_text("---\nname: project-memory\n---\n")
+            for dev, name in ((True, "project-memory"), (False, "richi")):
+                self.assertEqual(agent_setup.switch_skills(dev, checkout)["status"], "changed")
+                for agent, root in (("claude", claude_skill.parent), ("codex", self.old_skill.parent)):
+                    status = agent_setup.command(["--agent", agent, "--status"])
+                    self.assertEqual((status["status"], Path(status["skill"])), ("configured", root / name))
+                    self.assertTrue((root / name).is_symlink())
+            self.assertEqual(self.configure("--agent", "codex", "--replace-skill")["skill_backups"], [])
+
+            # Even after drift, Codex cannot adopt Claude's registered path as its own backup.
+            changed = claude_skill.with_name("richi")
+            changed.unlink()
+            changed.mkdir()
+            (changed / "SKILL.md").write_text("---\nname: richi\n---\nLocal edits\n")
+            with self.assertRaisesRegex(ConfigError, "Another skill named richi"):
+                self.configure("--agent", "codex", "--replace-skill")
+            self.assertTrue(changed.is_dir())
+            self.assertEqual(agent_setup._records(self.ctx)["claude"]["skill"], str(changed))
+
     def test_empty_symlinked_codex_skill_root_allows_managed_rename(self):
         _, state = self.transition()
         external = self.home / "dotfiles/skills"
