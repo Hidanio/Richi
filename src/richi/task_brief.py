@@ -41,19 +41,22 @@ def _annotation_payloads(conn, states, terms):
             yield family + ":" + identity, raw
 
 
-def _annotation_matches(conn, query, terms, keys, states, project, api):
+def _annotation_matches(conn, query, terms, keys, states, project, api, *, decision_terms=None):
     """Search the current structured evidence before ranking and graph expansion."""
-    if not terms:
+    decision_terms = [term for term in terms if len(term) > 1] if decision_terms is None else decision_terms
+    measured = measurements.MeasurementQuery(terms)
+    probes = measured.lookup_terms().union(decision_terms)
+    if not probes:
         return
     subjects, symbols = recall.technical_subjects(query), recall.short_subjects(query)
     checked = set()
-    for ref, raw in _annotation_payloads(conn, states, terms):
+    for ref, raw in _annotation_payloads(conn, states, probes):
         if ref in checked:
             continue
         # A cheap negative test on compact UTF-8 JSON. Only matches in
         # current human-facing fields count, never metadata keys or URLs.
         folded = recall.normalize(raw)
-        if not any(term in folded for term in terms):
+        if not any(term in folded for term in probes):
             continue
         checked.add(ref)
         record = recall.load_record(conn, ref, states, api)
@@ -61,22 +64,23 @@ def _annotation_matches(conn, query, terms, keys, states, project, api):
             continue
         decision = record.get("decision_card")
         card_text = recall.normalize(" ".join(decision_cards.search_fields(decision))) if decision else ""
-        rows = (row for source in record["sources"] for row in source.get("measurements", ()))
+        rows = [row for source in record["sources"] for row in source.get("measurements", ())]
         claims = recall.normalize(" ".join(row[field] for row in rows for field in measurements.FIELDS))
-        reasons, matched = [], set()
-        for reason, field_text in (("decision_card", card_text), ("measurement", claims)):
-            hits = [term for term in terms if (reason == "measurement" or len(term) > 1)
-                    and recall.matches_term(term, field_text)]
-            if hits:
-                matched.update(hits)
-                reasons.append(reason)
+        decision_hits = {term for term in decision_terms if recall.matches_term(term, card_text)}
+        measurement_hits = measured.word_hits(claims)
+        if measured.numbers:
+            for row in rows:
+                measurement_hits.update(measured.number_hits(row))
+        reasons = [reason for reason, hits in (("decision_card", decision_hits), ("measurement", measurement_hits)) if hits]
+        matched = decision_hits | measurement_hits
         if not matched:
             continue
-        annotated = dict(record, summary=" ".join((record["summary"], card_text, claims)))
+        # A compact quantity like "5ms" may match a value and unit in separate fields.
+        annotated = dict(record, summary=" ".join((record["summary"], card_text, claims, *measurement_hits)))
         if not keys and (not recall.matches_subject(annotated, subjects)
                          or not recall.matches_short_subjects(annotated, symbols)):
             continue
-        score = 2 * len(matched) + 30 * len(matched) / len(terms)
+        score = 2 * len(matched) + 30 * len(matched) / max(len(terms), len(decision_terms), len(matched))
         reason = recall.project_match_reason(conn, ref, record, states, project)
         if reason:
             score += 18

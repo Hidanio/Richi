@@ -253,6 +253,49 @@ class DecisionCardTests(unittest.TestCase):
                     self.assertFalse(result["no_match"])
                     self.assertEqual(result["results"][0]["measurements"][0]["metric"], "Throughput")
 
+    def test_brief_matches_whole_numeric_observations_in_lookup_and_row_selection(self):
+        def row(value, sample):
+            return {"metric": "Latency", "value": value, "unit": "ms", "sample": sample}
+
+        def cards(question):
+            args = SimpleNamespace(query=question, limit=3, max_chars=16000)
+            return task_brief.brief(self.conn, args, memory, self.db)["results"]
+
+        cases = (
+            ("5", "0.5", ("5", "5 ms", "+5ms")),
+            ("0.5", "5", ("0.5", "0,5", ".5ms")),
+            (",5", "-0.5", ("0.5", "0,5 ms")),
+            ("−5", "5", ("-5", "−5ms")),
+            ("5e+3", "5", ("5e3", "5e+3ms")),
+            ("3.2e−5", "5", ("3,2e-5", "3.2e−5ms")),
+            ("5", "3.2e-5", ("5", "5ms")),
+            ("5", "v0.5", ("5", "5ms")),
+            ("5", "EX-5", ("5", "5ms")),
+            ("5", "5abc", ("5", "5ms")),
+            ("5ms", "0.5ms", ("5", "5ms")),
+        )
+        for indexed in (False, True):
+            for wanted, other, queries in cases:
+                distractors = [row(other, "cohort " + chr(97 + i)) for i in range(8)]
+                target = row(wanted, "canary")
+                for identity, rows in (("DEMO-72", distractors + [target]), ("DEMO-73", distractors)):
+                    previous = memory.entry_record(self.conn, "task:" + identity)
+                    self.put(dict(self.task, id="task:" + identity, jira_key=identity,
+                                  summary="Observed results.", sources=[{"reference": "test://trial", "measurements": rows}],
+                                  expected_updated_at=previous["updated_at"] if previous else None))
+                if indexed:
+                    with memory.transaction(self.conn):
+                        search_index.build(self.conn, memory)
+                for query in queries:
+                    with self.subTest(wanted=wanted, other=other, query=query, indexed=indexed):
+                        # A unit alone may find both records. A bare or attached
+                        # quantity can only discover the one with the requested value.
+                        if " " not in query:
+                            self.assertEqual([card["id"] for card in cards(query)], ["task:DEMO-72"])
+                        card, = cards("DEMO-72 " + query)
+                        self.assertEqual(card["measurements"][0]["value"], wanted)
+                        self.assertEqual(card["measurements_omitted"], 1)
+
     def test_structured_match_applies_the_entity_project_boost(self):
         memory.project_put(self.conn, {"id": "service", "name": "Service"})
         evidence = {"reference": "synthetic://trial", "measurements": [

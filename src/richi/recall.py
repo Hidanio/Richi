@@ -201,12 +201,8 @@ def _routed_terms(conn, query):
     keys, spans = issue_keys(conn, text)
     for start, end in spans:
         text = text[:start] + " " * (end - start) + text[end:]
-    words = dict.fromkeys(term for term in WORDS.findall(text)
-                          if term not in STOPWORDS and (len(term) > 1 or term.isdigit()))
-    # A single digit can identify a measurement, but cannot route ordinary
-    # lexical recall. Give each channel its original 64-term budget.
-    lexical = [term for term in words if len(term) > 1][:64]
-    return lexical, list(words)[:64], keys
+    words = dict.fromkeys(term for term in WORDS.findall(text) if len(term) > 1 and term not in STOPWORDS)
+    return list(words)[:64], text, keys
 
 
 def terms_for(conn, query):
@@ -879,11 +875,12 @@ def _recall(conn, args, api, *, bounded=True, additional_matches=None):
         if trace and trace.expected and trace.expected["direct_stage"] == "not_evaluated":
             if not selection_filter.matches_ref(conn, trace.expected["ref"]):
                 trace.expected["direct_stage"] = "filtered_where"
-    terms, observation_terms, keys = _routed_terms(conn, query)
+    terms, question_text, keys = _routed_terms(conn, query)
+    observation_terms = measurements.query_terms(question_text)
     options = {"selection_filter": selection_filter} if selection_filter else {}
     direct_by_ref, fts_truncated, backend, discarded_weak = candidates(conn, query, terms, keys, states, project, api, trace, **options)
     if additional_matches is not None:
-        for item in additional_matches(conn, query, observation_terms, keys, states, project, api):
+        for item in additional_matches(conn, query, observation_terms, keys, states, project, api, decision_terms=terms):
             existing = direct_by_ref.get(item["ref"])
             if existing is None:
                 direct_by_ref[item["ref"]] = item

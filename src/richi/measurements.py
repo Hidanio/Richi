@@ -2,6 +2,7 @@
 import hashlib
 import heapq
 import json
+import re
 import sqlite3
 
 
@@ -181,19 +182,84 @@ def restore(conn, family, record, *, counts_only=False):
             record["sources"][int(index)]["measurements"] = rows
 
 
+_NUMBER = r"[+\-−]?(?:[0-9]+(?:[.,][0-9]+)?|[.,][0-9]+)(?:e[+\-−]?[0-9]+)?"
+_QUANTITY = re.compile("(?P<number>" + _NUMBER + r")(?P<unit>[^\W\d_]+(?:/[^\W\d_]+)?|[%‰]|°[cf]?)?", re.IGNORECASE)
+# Consume identifiers as a whole, including v0.5, p95, EX-5 and 1.2.3.
+_TOKEN = re.compile(_QUANTITY.pattern + r"(?!\w|[-.:/]\w)|[^\W_]+(?:[-_.:/][^\W_]+)*", re.IGNORECASE)
+
+
+def query_terms(text):
+    from . import recall
+    words = (token[0] for token in _TOKEN.finditer(text)
+             if token["number"] is not None or len(token[0]) > 1 and token[0] not in recall.STOPWORDS)
+    return list(dict.fromkeys(words))[:64]
+
+
+def _number(value):
+    value = value.replace(",", ".").replace("−", "-").lstrip("+").replace("e+", "e")
+    return re.sub(r"^(-?)\.", r"\g<1>0.", value)
+
+
+class MeasurementQuery:
+    def __init__(self, terms):
+        self.words, self.numbers = [], {}
+        for term in terms:
+            quantity = _QUANTITY.fullmatch(term)
+            if quantity:
+                key = (_number(quantity["number"]), quantity["unit"] or "")
+                self.numbers.setdefault(key, set()).add(term)
+            else:
+                self.words.append(term)
+
+    def lookup_terms(self):
+        # All published prefix indexes have the unsigned leading digits. A
+        # leading decimal point (".5") can also stand for a zero integer part.
+        result = set(self.words)
+        for number, _ in self.numbers:
+            digits = re.findall("[0-9]+", number)
+            result.add(digits[0])
+            if number.lstrip("-").startswith("0."):
+                result.add(digits[1])
+        return result
+
+    def word_hits(self, text):
+        from . import recall
+        return {term for term in self.words if recall.matches_term(term, text)}
+
+    def number_hits(self, row, fields=FIELDS):
+        from . import recall
+        found = set()
+        if self.numbers:
+            declared_unit = recall.normalize(row["unit"]).strip()
+            for field in fields:
+                for token in _TOKEN.finditer(recall.normalize(row[field])):
+                    if token["number"] is None:
+                        continue
+                    number = _number(token["number"])
+                    unit = token["unit"] or ""
+                    found.update(self.numbers.get((number, unit), ()))
+                    if unit == declared_unit:
+                        found.update(self.numbers.get((number, ""), ()))
+                    elif field == "value" and not unit:
+                        found.update(self.numbers.get((number, declared_unit), ()))
+        return found
+
+
 def attach(card, sources, terms):
     """Choose observations across *all* sources, including ones outside the source excerpt."""
     from . import recall
     count = sum(len(source.get("measurements", ())) for source in sources)
     if not count:
         return
+    query = MeasurementQuery(terms)
     def matches():
         for index, source in enumerate(sources, 1):
             for row in source.get("measurements", ()):
                 words = recall.normalize(" ".join(row[field] for field in FIELDS))
-                hits = [term for term in terms if recall.matches_term(term, words)]
+                hits = query.word_hits(words) | query.number_hits(row)
                 metric = recall.normalize(row["metric"])
-                yield (len(hits), sum(recall.matches_term(term, metric) for term in hits)), index, row
+                metric_hits = query.word_hits(metric) | query.number_hits(row, ("metric",))
+                yield (len(hits), len(metric_hits)), index, row
 
     card["measurements"] = []
     for _, index, row in heapq.nlargest(BRIEF_LIMIT, matches(), key=lambda item: item[0]):
