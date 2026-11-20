@@ -70,6 +70,10 @@ def backup_skill(op):
 
 def duplicate_skill(path, replace_skill):
     """An unmanaged discovery path can only be moved to an explicit backup."""
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return []
     op = change(path, {"kind": "absent"})
     if op["before"]["kind"] == "absent":
         return []

@@ -362,6 +362,8 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     skill = skill.with_name(name)
     if current and Path(current["skill"]) not in {skill.with_name(SKILL_NAME), skill.with_name(LEGACY_NAME)}:
         raise ConfigError("Setup belongs to another skill directory; use its original profile")
+    _check_foreign_paths(agent, {"skill": str(skill), "instructions": str(instructions)},
+                         _foreign_skills(records, [agent]))
     extra, adapter_ops = adapter.setup_operations(ctx, profile, current, replace_skill)
     command = home / ".local" / "bin" / "richi"
     executable = Path(ctx["original_prefix"]) / "bin" / "richi"
@@ -371,6 +373,7 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     # the others. A broken checkout plans the release link (repair).
     source = current.get("dev_source") if current else _shared_source(records)
     link, dev_source, _ = _desired_link(root, source, name)
+    _check_skill_change(agent, instructions, current, skill, link, replace_skill)
     skill_ops = _skill_operations(current, skill, link, replace_skill=replace_skill)
     command_op = files.change(command, {"kind": "link", "target": str(executable)})
     if command_op["before"]["kind"] != "absent" and command_op["before"] != command_op["after"]:
@@ -410,7 +413,7 @@ def _skill_operations(record, skill, link, *, replace_skill=False, before=None):
     else:
         ops = files.duplicate_skill(skill.with_name(other), replace_skill)
     op = files.change(skill, {"kind": "link", "target": link})
-    if op["before"]["kind"] != "absent" and op["before"] != op["after"]:
+    if op["before"]["kind"] != "absent" and (record or op["before"] != op["after"]):
         if not replace_skill:
             hint = ("Move it outside skill discovery before retrying the update." if record else
                     "Use --replace-skill in setup to back it up outside skill discovery.")
@@ -433,11 +436,20 @@ def _instruction_operation(adapter, agent, command, instructions, name, current)
     return block, instruction_op
 
 
-def _move_profile(agent, record, skill, link, before):
+def _check_skill_change(agent, instructions, record, skill, link, replace_skill=False):
+    check = getattr(agent_adapters.get(agent), "check_skill_change", None)
+    if check:
+        check(instructions, record["skill"] if record else None, skill, link, replace_skill)
+
+
+def _move_profile(agent, record, skill, link, before, foreign):
     """Journal the discovery path and the rule naming it together."""
+    _check_skill_change(agent, record["instructions"], record, skill, link)
     operations = _skill_operations(record, skill, link, before=before)
     if str(skill) == record["skill"]:
         return {}, operations
+    if skill.name == SKILL_NAME:
+        _check_foreign_paths(agent, record, foreign)
     block, rule = _instruction_operation(
         agent_adapters.get(agent), agent, record["command"], record["instructions"], skill.name, record)
     return {"skill": str(skill), "block_sha256": files.digest(block)}, [*operations, rule]
@@ -453,8 +465,8 @@ def _verify_skill(record):
     if record.get("dev_source"):
         return before  # Checkout edits are development work, not drift.
     root = Path(record["skill_target"])
-    _, hashes, _ = bundle(root.parent.parent)
-    if hashes != record["skill_hashes"]:
+    bundled_root, hashes, _ = bundle(root.parent.parent)
+    if root != bundled_root or hashes != record["skill_hashes"]:
         raise ConfigError("Managed skill contents were edited; back up and reconcile them before updating Richi")
     return before
 
@@ -464,25 +476,67 @@ def _other_skill_roots(agent, record):
     return other(Path(record["instructions"]).parent, Path(record["skill"]).parent) if other else []
 
 
+def _foreign_skills(records, names):
+    """Use the installed registry's discovery and opt-out rules, including shared roots."""
+    if not names:
+        return {}
+    from richi import agents, skill_catalog
+    registry = [agent for agent in agents.registry() if agent.id in names]
+    discovered = skill_catalog.catalog(registry=registry, rule_aliases_only=True)["richi_paths"]
+    owned = set()
+    for record in records.values():
+        path = Path(record["skill"])
+        try:
+            if os.readlink(path) == _link_target(record):
+                owned.add(path.parent.resolve() / path.name)
+        except OSError:
+            continue  # Missing, replaced or no longer a symlink.
+    return {agent: {str(path) for path in map(Path, paths) if path.parent.resolve() / path.name not in owned}
+            for agent, paths in discovered.items()}
+
+
+def _rename_candidates(records, name):
+    return [agent for agent, item in records.items() if name == SKILL_NAME and Path(item["skill"]).name != name]
+
+
+def _reserved_paths(agent, record, names=(SKILL_NAME,)):
+    skill = Path(record["skill"])
+    return {str(root / name) for root in [skill.parent, *_other_skill_roots(agent, record)] for name in names}
+
+
+def _check_foreign_paths(agent, record, conflicts):
+    # Setup may back up an occupied reserved path with consent. A matching
+    # name elsewhere (possibly in another client's profile) remains user-owned.
+    elsewhere = conflicts.get(agent, set()) - _reserved_paths(agent, record, (SKILL_NAME, LEGACY_NAME))
+    if elsewhere:
+        raise ConfigError("Another skill named richi is visible to " + agent + " at " + ", ".join(sorted(elsewhere))
+                          + ". Move or rename it outside this agent's skill discovery, then retry.")
+
+
 def rename_conflicts():
     """Report occupied discovery paths left by a pre-rename updater at chat start."""
     try:
         records = _records(_context())
-    except (ValueError, OSError, RuntimeError):
+        transition = {agent for agent, record in records.items() if Path(record["skill"]).name == LEGACY_NAME}
+        if not transition:
+            return []
+        foreign = _foreign_skills(records, transition)
+    except (ValueError, OSError, RuntimeError, KeyError, TypeError):
         return []
     conflicts = []
     for agent, record in records.items():
         skill = Path(record["skill"])
-        if skill.name != LEGACY_NAME:
+        if agent not in transition:
             continue
-        roots = [skill.parent, *_other_skill_roots(agent, record)]
-        paths = [str(root / SKILL_NAME) for root in roots if os.path.lexists(root / SKILL_NAME)]
+        reserved = _reserved_paths(agent, record)
+        paths = sorted({path for path in reserved if os.path.lexists(path)} | foreign.get(agent, set()))
         if not paths:
             continue
         notice = {"agent": agent, "conflicting_paths": paths,
-                  "message": "Another path is occupied during the Richi skill rename. "
-                             "Show these paths to the user before changing either skill.",
-                  "preview_command": "richi setup --agent " + agent + " --replace-skill --dry-run"}
+                  "message": "Show the conflicting skill paths to the user. The owner can move or rename "
+                             "the competing skill before retrying the update."}
+        if all(path in reserved for path in paths):
+            notice["preview_command"] = "richi setup --agent " + agent + " --replace-skill --dry-run"
         try:
             _verify_skill(record)
             if record.get("dev_source"):
@@ -503,12 +557,13 @@ def activation_operations(ctx, state):
         raise ConfigError("The selected release cannot maintain agent setup; activation was cancelled")
     agent_adapters.require_supported(site, records)
     target, hashes, name = bundle(site)
-    name = _profile_name(state, name)
+    name = _profile_name(state, name, _managed_name(records) or LEGACY_NAME)
     # Keep links on the checkout only if the activated release maintains them;
     # a missing checkout falls back to the release skill instead of blocking.
     dev_capable = _dev_capable(site)
     if dev_capable:
         name = _dev_profile_name(name, {record.get("dev_source") for record in records.values()})
+    foreign = _foreign_skills(records, _rename_candidates(records, name))
     ops = []
     for agent, record in records.items():
         before = _verify_skill(record)
@@ -517,7 +572,7 @@ def activation_operations(ctx, state):
         ops.extend(adapter_ops)
         skill = Path(record["skill"]).with_name(name)
         link, source, _ = _desired_link(target, record.get("dev_source") if dev_capable else None, name)
-        profile, profile_ops = _move_profile(agent, record, skill, link, before)
+        profile, profile_ops = _move_profile(agent, record, skill, link, before, foreign)
         ops.extend(profile_ops)
         records[agent] = dict(record, skill_target=str(target), skill_hashes=hashes, generation=state["current"], **profile)
         records[agent].pop("dev_source", None)
@@ -534,6 +589,7 @@ def _switch_operations(ctx, state, source):
     release, _, name = bundle(site)
     name = _dev_profile_name(_profile_name(state, name, _managed_name(records) or LEGACY_NAME), (source,))
     link, dev_source, reason = _desired_link(release, source, name)
+    foreign = _foreign_skills(records, _rename_candidates(records, name))
     ops, agents = [], {}
     for agent, record in records.items():
         if record["skill_target"] != str(release):
@@ -546,7 +602,7 @@ def _switch_operations(ctx, state, source):
                 for root in _other_skill_roots(agent, record):
                     for directory in (SKILL_NAME, LEGACY_NAME):
                         files.duplicate_skill(root / directory, False)
-                profile, profile_ops = _move_profile(agent, record, skill, link, _verify_skill(record))
+                profile, profile_ops = _move_profile(agent, record, skill, link, _verify_skill(record), foreign)
                 updated.update(profile)
                 ops.extend(profile_ops)
                 changed = True
@@ -557,6 +613,7 @@ def _switch_operations(ctx, state, source):
                 # moving the link away would let a later update discard it.
                 if changed:
                     operation["before"] = _verify_skill(record)
+                    _check_skill_change(agent, record["instructions"], record, skill, link)
                 ops.append(operation)
         except ConfigError as exc:
             raise ConfigError(agent + ": " + str(exc)) from exc

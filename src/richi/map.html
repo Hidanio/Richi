@@ -1417,7 +1417,10 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     dialog.showModal();cancel.focus();
   }
   function ruleMatches(rule){
-    const query=normalized(rulesState.query);if(!query)return true;const fields=[rule.id,rule.text,rule.skill,...Object.values(rule.skills||{}),rule.source,rule.project_id&&ruleProjectName(rule.project_id)].map(normalized);
+    const query=normalized(rulesState.query);if(!query)return true;
+    const shown=ruleSkillSetting(rule,true);
+    const fields=[rule.id,rule.text,rule.skill,...Object.values(rule.skills||{}),shown.skill,...Object.values(shown.skills||{}),
+      rule.source,rule.project_id&&ruleProjectName(rule.project_id)].map(normalized);
     return query.split(/\s+/).filter(Boolean).every(word=>fields.some(field=>field.includes(word)));
   }
   function ruleSkillChip(label,name,agents){

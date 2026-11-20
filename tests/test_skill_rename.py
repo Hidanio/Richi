@@ -97,6 +97,61 @@ class SkillRenameTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         self.assertIn("changed", notice["managed_skill_error"])
         self.assertEqual(self.old_skill.resolve(), shadow)
 
+    def test_foreign_frontmatter_in_cursor_compatibility_root_stays_user_owned(self):
+        self.transition()
+        self.configure("--agent", "cursor")
+        self.assertEqual(agent_setup.rename_conflicts(), [])  # Cursor also sees Codex's owned link.
+        foreign = self.home / ".agents/skills/user-tools"
+        foreign.mkdir()
+        doc = foreign / "SKILL.md"
+        doc.write_text("---\nname: richi\ndescription: Personal tool\n---\n")
+        notices = {item["agent"]: item for item in agent_setup.rename_conflicts()}
+        self.assertEqual(set(notices), {"codex", "cursor"})
+        for agent, notice in notices.items():
+            self.assertEqual(notice["conflicting_paths"], [str(foreign)])
+            self.assertNotIn("preview_command", notice)
+            self.assertTrue(Path(notice["managed_skill"]).is_file())
+            with self.assertRaisesRegex(ConfigError, str(foreign)):
+                self.configure("--agent", agent, "--replace-skill")
+        self.assertTrue(doc.is_file())
+
+    def test_fresh_cursor_setup_checks_skills_in_other_profiles(self):
+        foreign = self.home / ".claude/skills/tools/user"
+        foreign.mkdir(parents=True)
+        doc = foreign / "SKILL.md"
+        doc.write_text("---\nname: richi\n---\nPersonal skill\n")
+        with self.assertRaisesRegex(ConfigError, str(foreign)):
+            self.configure("--agent", "cursor", "--replace-skill")
+        self.assertTrue(doc.is_file())
+        self.assertFalse((self.home / ".cursor/skills/richi").exists())
+
+    def test_empty_symlinked_codex_skill_root_allows_managed_rename(self):
+        _, state = self.transition()
+        external = self.home / "dotfiles/skills"
+        external.mkdir(parents=True)
+        (self.home / ".codex/skills").symlink_to(external)
+        with patch.object(installation, "_collect", return_value={}):
+            installation._activate(self.ctx, state, "updated")
+        self.assertTrue(self.new_skill.is_symlink())
+        self.assertEqual(list(external.iterdir()), [])
+
+    def test_rename_does_not_adopt_an_unrecorded_link_to_the_same_bundle(self):
+        _, state = self.transition()
+        target = Path(state["generations"][state["current"]]["site"]) / "richi_launcher/agent_skill"
+        self.new_skill.symlink_to(target)
+        with self.assertRaisesRegex(ConfigError, "already exists"):
+            installation._activate(self.ctx, state, "updated")
+        self.assertEqual(os.readlink(self.new_skill), str(target))
+        self.assertTrue(self.old_skill.is_symlink())
+
+    def test_second_codex_root_pointing_to_its_managed_directory_is_the_same_skill(self):
+        _, state = self.transition()
+        (self.home / ".codex/skills").symlink_to(self.old_skill.parent)
+        self.assertEqual(agent_setup.rename_conflicts(), [])
+        with patch.object(installation, "_collect", return_value={}):
+            installation._activate(self.ctx, state, "updated")
+        self.assertEqual(agent_setup.command(["--status"])["status"], "configured")
+
     def test_first_setup_of_copied_old_skills_requires_explicit_backup(self):
         for agent, root in (("codex", ".agents"), ("claude", ".claude"), ("cursor", ".cursor")):
             with self.subTest(agent=agent):

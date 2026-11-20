@@ -45,6 +45,16 @@ custom lower budgets and disabled skills must be reconciled in Codex settings.
 See official [skills](https://learn.chatgpt.com/docs/build-skills) and
 [instruction discovery](https://learn.chatgpt.com/docs/agent-configuration/agents-md).
 
+Codex can disable an individual skill by its `SKILL.md` path in
+`[[skills.config]]` in `$CODEX_HOME/config.toml`. If setup, an update or a dev
+switch would enable a previously disabled skill, Richi stops before changing
+the links. To keep it disabled, retain the existing entry and add an entry
+with `enabled = false` for the exact destination `SKILL.md` printed in the
+message, then retry. Keeping both paths also protects rollback. On Python
+3.9–3.10 Richi uses pip's TOML reader when available. Without a reader a
+possible disabled-skill setting defers the change until the configuration
+can be checked with a TOML-capable installation.
+
 PATH setup supports zsh (`$ZDOTDIR/.zshrc` or `~/.zshrc`), bash (`~/.bashrc` plus
 its first existing login profile, defaulting to `~/.bash_profile` on macOS or
 `~/.profile` on Linux), and sh/dash (`~/.profile`).
@@ -125,10 +135,12 @@ If a development checkout still supplies only `project-memory`, its agents
 keep using that checkout and its original skill name.
 
 If an older updater encounters your own `richi` skill, the next
-`richi chat current` lists the occupied paths in `skill_conflicts`.
-The `managed_skill` field identifies Richi's verified copy. You can use it
-directly, move your own skill outside discovery, or inspect the suggested
-setup preview to see where Richi would back it up.
+`richi chat current` lists the conflicting paths in `skill_conflicts`.
+This includes a skill in another folder that declares `name: richi` and
+skills that Cursor discovers under other agents' profiles. The `managed_skill`
+field identifies Richi's verified copy. Rename the personal skill or move it
+outside discovery. For paths managed by setup, the notice also offers a
+read-only preview of the backup.
 
 During that transition, clients that derive a slash command from the directory
 may still use the old name. Cursor expects the directory to match the skill name,

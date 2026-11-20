@@ -1,0 +1,102 @@
+"""Renaming or retargeting a Codex skill preserves path-based opt-outs."""
+import json
+import os
+from pathlib import Path
+import unittest
+from unittest.mock import patch
+
+import test_agent_setup
+import test_dev_skill_links
+import test_skill_rename
+from richi_launcher import agent_setup, codex_setup, installation, setup_files
+from richi_launcher.config import ConfigError
+
+
+class CodexSkillOptoutTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
+    transition = test_skill_rename.SkillRenameTests.transition
+
+    def package(self, site, version):
+        super().package(site, version)
+        (site / "richi_launcher/agent_setup.py").write_text(test_dev_skill_links.DEV_CAPABLE)
+
+    def settings(self, *entries):
+        config = self.home / ".codex/config.toml"
+        config.parent.mkdir(exist_ok=True)
+        config.write_text("".join("[[skills.config]]\npath = " + json.dumps(str(path))
+                                  + "\nenabled = " + json.dumps(enabled) + "\n" for path, enabled in entries))
+        return config
+
+    def activate(self, state, action="updated"):
+        with patch.object(installation, "_collect", return_value={}):
+            return installation._activate(self.ctx, state, action)
+
+    def test_rename_waits_for_disabled_destination_and_keeps_user_config(self):
+        instructions, state = self.transition()
+        old = self.old_skill / "SKILL.md"
+        new = self.new_skill / "SKILL.md"
+        previous = instructions.read_bytes()
+        for entries in ([(old, False)], [(self.old_skill, False)], [(old.resolve(), False)],
+                        [(old, False), (new.parent, False)], [(old, False), (new, False), (new, True)]):
+            with self.subTest(entries=entries):
+                config = self.settings(*entries)
+                data = config.read_bytes()
+                with self.assertRaisesRegex(ConfigError, "disabled.*setting"):
+                    self.activate(state)
+                self.assertTrue(self.old_skill.is_symlink())
+                self.assertFalse(self.new_skill.is_symlink())
+                self.assertEqual(instructions.read_bytes(), previous)
+                self.assertEqual(config.read_bytes(), data)
+                self.assertFalse((self.root / setup_files.JOURNAL).exists())
+        config = self.settings((old, False), (new, False))
+        data = config.read_bytes()
+        self.activate(state)
+        self.assertFalse(self.old_skill.is_symlink())
+        self.assertTrue(self.new_skill.is_symlink())
+        self.assertEqual(config.read_bytes(), data)
+
+    def test_dev_switch_preserves_a_disabled_resolved_skill_target(self):
+        self.configure()
+        skill = self.home / ".agents/skills/richi"
+        checkout = self.home / "checkout"
+        target = test_dev_skill_links.DevSkillLinkTests.make_checkout(checkout, "branded")
+        old_file = (skill / "SKILL.md").resolve()
+        self.settings((old_file, False))
+        self.assertEqual(agent_setup.switch_skills(True, checkout)["status"], "conflict")
+        self.assertEqual((skill / "SKILL.md").resolve(), old_file)
+        self.settings((old_file, False), (skill / "SKILL.md", False))
+        self.assertEqual(agent_setup.switch_skills(True, checkout)["status"], "changed")
+        self.assertEqual(os.readlink(skill), target)
+
+    def test_replace_skill_preserves_disabled_copy_in_alternate_discovery_root(self):
+        old = self.home / ".codex/skills/project-memory/SKILL.md"
+        old.parent.mkdir(parents=True)
+        old.write_text("Local copy")
+        self.settings((old, False))
+        with self.assertRaisesRegex(ConfigError, "disabled.*setting"):
+            self.configure("--replace-skill")
+        self.assertEqual(old.read_text(), "Local copy")
+        self.assertFalse((self.root / agent_setup.MANIFEST).exists())
+
+    def test_without_toml_reader_unrelated_config_allows_rename_and_possible_optout_defers_it(self):
+        _, state = self.transition()
+        config = self.settings((self.old_skill / "SKILL.md", False))
+        with patch.object(codex_setup, "_toml_reader", return_value=None):
+            with self.assertRaisesRegex(ConfigError, "Cannot verify possible disabled"):
+                self.activate(state)
+            config.write_text('[features]\nexample = false\n[projects."/example"]\ntrust_level = "trusted"\n')
+            self.activate(state)
+        self.assertTrue(self.new_skill.is_symlink())
+
+    def test_rollback_with_damaged_outgoing_bundle_keeps_the_pinned_branded_checkout(self):
+        self.configure()
+        checkout = self.home / "checkout"
+        target = test_dev_skill_links.DevSkillLinkTests.make_checkout(checkout, "branded")
+        agent_setup.switch_skills(True, checkout)
+        state = self.next_state()
+        self.activate(state)
+        site = Path(state["generations"][state["current"]]["site"])
+        (site / "richi_launcher/agent_skill/SKILL.md").write_bytes(b"\xff")
+        state["current"], state["previous"] = state["previous"], state["current"]
+        result = self.activate(state, "rolled_back")
+        self.assertEqual(result["agent_skills"]["codex"], {"mode": "dev", "target": target})
+        self.assertEqual(agent_setup.command(["--status"])["dev_source"], str(checkout))

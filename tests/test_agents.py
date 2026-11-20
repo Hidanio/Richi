@@ -974,6 +974,16 @@ class UnreadableFolderTests(IsolatedHome):
 class ListingTests(IsolatedHome):
     """What the map reads: the agents, their connection and the skill catalog behind the counts."""
 
+    def test_discovery_reads_a_short_header_and_finds_names_beyond_the_first_chunk(self):
+        path = self.home / "SKILL.md"
+        path.write_text("---\nname: richi\n---\n" + "body" * 10000)
+        text, cut = skill_catalog._read_header(path, frontmatter_only=True)
+        self.assertLessEqual(len(text), 1024)
+        self.assertEqual(skill_catalog.front_matter(text, cut)["name"], "richi")
+        path.write_text("---\n#" + "x" * 1200 + "\nname: project-memory\n---\n")
+        self.assertEqual(skill_catalog.front_matter(*skill_catalog._read_header(
+            path, frontmatter_only=True))["name"], "project-memory")
+
     def test_a_nested_yaml_separator_does_not_end_the_skill_header(self):
         root = self.home / ".claude" / "skills"
         metadata = "---\nmetadata:\n  readme: |\n    Intro\n    ---\n    More\n"

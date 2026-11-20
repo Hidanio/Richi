@@ -478,6 +478,19 @@ for(const agent of knownAgentIds()){
 }
 """, sections=(("  function agentRules(", "  function agentMatches("),))
 
+    def test_rules_search_matches_the_displayed_and_saved_skill_names(self):
+        self.evaluate(r"""
+const rule={id:'review',text:'Review code',skill:'project-memory'};
+setSkills({agents:[{id:'codex'}],skills:[{name:'richi',agents:['codex']}],
+  rule_aliases:{codex:{'project-memory':'richi'}}},++agentSequence);
+assert.equal(ruleSkillSetting(rule,true).skill,'richi');
+for(const query of ['richi','project-memory','review RICHI']){
+  rulesState.query=query;assert.ok(ruleMatches(rule),query);
+}
+rulesState.query='richi';assert.equal(ruleMatches({...rule,skills:{codex:'another-skill'}}),false);
+""", sections=(("  const normalized =", "  const nameSet ="),
+               ("  function ruleMatches(", "  function ruleSkillChip(")))
+
     def test_overlapping_reads_cannot_replace_a_newer_skill_catalog_or_agent_list(self):
         self.evaluate(r"""
 const state={mode:'agents'},agentsState={request:0},RULE_HEADER='X-Richi-Map-Secret';

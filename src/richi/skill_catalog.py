@@ -130,7 +130,7 @@ def front_matter(text, cut=False):
     return fields if cut and not prose else {}
 
 
-def _read_regular(path, limit):
+def _read_regular(path, limit, *, frontmatter_only=False):
     """Up to limit bytes of a regular file.
 
     A skill folder holds what a plugin's author put there. Anything that is
@@ -141,17 +141,25 @@ def _read_regular(path, limit):
     try:
         if not stat.S_ISREG(os.fstat(descriptor).st_mode):
             raise OSError("not a regular file: " + str(path))
-        handle = os.fdopen(descriptor, "rb")
+        handle = os.fdopen(descriptor, "rb", buffering=0)
     except BaseException:
         os.close(descriptor)
         raise
     with handle:
+        if frontmatter_only:
+            prefix = handle.read(1024)
+            first, newline, rest = prefix.partition(b"\n")
+            if (len(prefix) < 1024 or newline and
+                    (first.lstrip(b"\xef\xbb\xbf").strip() != b"---" or
+                     re.search(rb"(?m)^(?:---|\.\.\.)[ \t]*\r?\n", rest))):
+                return prefix
+            return prefix + handle.read(limit - len(prefix))
         return handle.read(limit)
 
 
-def _read_header(path):
+def _read_header(path, *, frontmatter_only=False):
     """(the beginning of a text file, whether the file goes on past it)."""
-    data = _read_regular(path, MAX_HEADER + 1)
+    data = _read_regular(path, MAX_HEADER + 1, frontmatter_only=frontmatter_only)
     text = data[:MAX_HEADER].decode("utf-8", errors="replace")
     # Some editors begin a file with a byte order mark, which is not part of its first line.
     return text[1:] if text.startswith("\ufeff") else text, len(data) > MAX_HEADER
@@ -382,6 +390,7 @@ def catalog(environ=None, home=None, registry=None, *, rule_aliases_only=False):
     environ = os.environ if environ is None else environ
     home = Path(home) if home is not None else Path.home()
     skills, seen_roots, truncated, totals, aliases = {}, [], False, {}, {}
+    richi_paths = {}
     listed = agents.registry(environ, home) if registry is None else registry
     for agent in listed:
         every = set()
@@ -400,7 +409,7 @@ def catalog(environ=None, home=None, registry=None, *, rule_aliases_only=False):
             found = set()
             for prefix, path, fallback, enabled in _candidates(agent, source, entry):
                 try:
-                    text, cut = _read_header(path)
+                    text, cut = _read_header(path, frontmatter_only=True)
                     fields = front_matter(text, cut)
                 except OSError:
                     continue
@@ -416,6 +425,8 @@ def catalog(environ=None, home=None, registry=None, *, rule_aliases_only=False):
                 found.add(name)
                 if name == "richi":
                     renamed.add(fields.get("name") == "richi" and _declares_richi_rename(text))
+                    if rule_aliases_only:
+                        richi_paths.setdefault(agent.id, set()).add(str(path.parent))
                 if name not in skills and len(skills) >= MAX_SKILLS:
                     # Counted for its source and its agent, but the list is full.
                     truncated = True
@@ -435,5 +446,8 @@ def catalog(environ=None, home=None, registry=None, *, rule_aliases_only=False):
         totals[agent.id] = len(every)
     ordered = sorted(skills.values(), key=lambda skill: (KINDS.index(skill["kind"]), skill["name"].lower()))
     scan_truncated = any(root.get("truncated") for root in seen_roots)
-    return {"skills": ordered, "roots": seen_roots, "totals": totals, "truncated": truncated or scan_truncated,
-            "agents": [{"id": agent.id, "name": agent.name} for agent in listed], "rule_aliases": aliases}
+    result = {"skills": ordered, "roots": seen_roots, "totals": totals, "truncated": truncated or scan_truncated,
+              "agents": [{"id": agent.id, "name": agent.name} for agent in listed], "rule_aliases": aliases}
+    if rule_aliases_only:
+        result["richi_paths"] = {agent: sorted(paths) for agent, paths in richi_paths.items()}
+    return result
