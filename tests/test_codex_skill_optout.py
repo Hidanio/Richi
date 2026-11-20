@@ -77,6 +77,19 @@ class CodexSkillOptoutTests(test_agent_setup.AgentSetupFixture, unittest.TestCas
         self.assertEqual(old.read_text(), "Local copy")
         self.assertFalse((self.root / agent_setup.MANIFEST).exists())
 
+    def test_replace_skill_backs_up_a_cyclic_link_with_an_unrelated_disabled_skill(self):
+        old = self.home / ".agents/skills/project-memory"
+        old.parent.mkdir(parents=True)
+        old.symlink_to(old.name)
+        config = self.settings((self.home / ".agents/skills/other/SKILL.md", False))
+        data = config.read_bytes()
+        result = self.configure("--replace-skill")
+        backup, = result["skill_backups"]
+        self.assertEqual(os.readlink(backup), old.name)
+        self.assertFalse(old.is_symlink())
+        self.assertTrue(old.with_name("richi").is_symlink())
+        self.assertEqual(config.read_bytes(), data)
+
     def test_without_toml_reader_unrelated_config_allows_rename_and_possible_optout_defers_it(self):
         _, state = self.transition()
         config = self.settings((self.old_skill / "SKILL.md", False))

@@ -86,17 +86,21 @@ def check_skill_change(instructions, previous, skill, target, replace_skill=Fals
     if replace_skill or previous is None:
         for root in [skill.parent, *other_skill_roots(profile, skill.parent)]:
             old.update(root / name for name in names if os.path.lexists(root / name))
-    new_file = skill / "SKILL.md"
-    new_target = (Path(target) / "SKILL.md").resolve()
     # An unchanged link keeps every setting applicable to its current target.
-    if old == {skill} and new_file.resolve() == new_target:
+    if old == {skill} and skill.is_symlink() and os.readlink(skill) == str(target):
         return
     config = profile / "config.toml"
     settings = _skill_settings(config)
     if not isinstance(settings, list):
         raise ConfigError("Cannot verify Codex skills.config in " + str(config))
+    if not settings:
+        return
+    new_file = skill / "SKILL.md"
+    # A user-owned link can be dangling or cyclic. It can still be backed up
+    # by setup even if it has no discoverable SKILL.md to compare.
+    new_target = os.path.realpath(Path(target) / "SKILL.md")
     previous_files = {directory / "SKILL.md" for directory in old}
-    previous_targets = {path.resolve() for path in previous_files}
+    previous_targets = {os.path.realpath(path) for path in previous_files}
     was_disabled = False
     remains_disabled = False
     could_enable = False
@@ -110,14 +114,14 @@ def check_skill_change(instructions, previous, skill, target, replace_skill=Fals
         if not path.is_absolute():
             path = profile / path
         if entry.get("enabled") is not False:
-            if path in (new_file, new_target) or path.resolve() == new_target:
+            if path == new_file or os.path.realpath(path) == new_target:
                 could_enable = True
             continue
-        if path in (old - {skill}) or path in previous_files or path.resolve() in previous_targets:
+        if path in (old - {skill}) or path in previous_files or os.path.realpath(path) in previous_targets:
             was_disabled = True
         # Codex matches SKILL.md. A directory-only entry cannot establish that
         # the destination stays disabled. An old symlink might disappear.
-        if path == new_file or path == new_target:
+        if path == new_file or str(path) == new_target:
             remains_disabled = True
     if was_disabled and (not remains_disabled or could_enable):
         raise ConfigError("Moving the Codex skill would bypass a disabled skill setting in " + str(config)
