@@ -6,7 +6,6 @@ from . import compact
 from . import brief_checks
 from . import decision_cards
 from . import git_impact
-from . import graph
 from . import measurements
 from . import recall
 from . import search_index
@@ -16,14 +15,6 @@ NOTICE = ("Selection is evidence to read, not a verified answer or causal impact
           "Excerpts may omit qualifications. Code freshness and release state have not been checked. "
           "Read full cards and authoritative sources before applying a procedure.")
 EXACT = {"exact_id", "exact_jira_key", "exact_alias", "exact_concept_alias"}
-
-
-def _record(conn, ref, states, api):
-    if ref.startswith("edge:"):
-        record = graph.get(conn, "edge", ref[5:], api, history=False)
-        record.update(title=record["kind"], summary=record["description"], work_state=None)
-        return record if record["knowledge_state"] in states else None
-    return recall.load_node(conn, ref, states, api)
 
 
 def _annotation_payloads(conn, states, terms):
@@ -65,7 +56,7 @@ def _annotation_matches(conn, query, terms, keys, states, project, api):
         if not any(term in folded for term in terms):
             continue
         checked.add(ref)
-        record = _record(conn, ref, states, api)
+        record = recall.load_record(conn, ref, states, api)
         if record is None or not recall.matches_key(record, keys):
             continue
         decision = record.get("decision_card")
@@ -74,7 +65,8 @@ def _annotation_matches(conn, query, terms, keys, states, project, api):
         claims = recall.normalize(" ".join(row[field] for row in rows for field in measurements.FIELDS))
         reasons, matched = [], set()
         for reason, field_text in (("decision_card", card_text), ("measurement", claims)):
-            hits = [term for term in terms if recall.matches_term(term, field_text)]
+            hits = [term for term in terms if (reason == "measurement" or len(term) > 1)
+                    and recall.matches_term(term, field_text)]
             if hits:
                 matched.update(hits)
                 reasons.append(reason)
@@ -89,14 +81,9 @@ def _annotation_matches(conn, query, terms, keys, states, project, api):
         if reason:
             score += 18
             reasons.append(reason)
-        # Recall only needs compact witnesses during ranking. Brief rereads the
-        # selected records from this transaction for their complete decisions and rows.
-        record.pop("decision_card", None)
-        for source in record["sources"]:
-            observations = source.pop("measurements", None)
-            if observations:
-                source["measurements_omitted"] = len(observations)
-        yield {"ref": ref, "record": record, "score": score, "reasons": reasons}
+        # A common metric can match the whole store. Only selected records
+        # are needed again, and the read transaction pins their revisions.
+        yield {"ref": ref, "score": score, "reasons": reasons}
 
 
 def _connections(ref, edges):
@@ -325,7 +312,7 @@ def brief(conn, args, api, database):
 
     def ensure(ref):
         if ref not in cards:
-            record = _record(conn, ref, states, api)
+            record = recall.load_record(conn, ref, states, api)
             if record is None:
                 return None
             cards[ref] = compact.card(record, ref, summary_chars=900)
@@ -366,7 +353,7 @@ def brief(conn, args, api, database):
     seeds = []
     for ref in code_order:
         if ref.startswith(("entry:", "entity:")):
-            seeds.append({"ref": ref, "score": 100, "record": _record(conn, ref, states, api)})
+            seeds.append({"ref": ref, "score": 100})
         if len(seeds) == 3:
             break
     neighbors, edges, graph_truncated = recall.graph_candidates(conn, seeds, states, api)

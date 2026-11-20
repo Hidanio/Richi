@@ -280,8 +280,9 @@ messages, deployment, or unrelated changes.
         text += b"""With --with-rules, pass the repository path for project work and omit PATH for workspace-wide work.
 Follow rules_context.rules. After a load error or on older versions, load them
 with `richi --project-path PATH rules show` or `richi rules show` before acting.
-Check proposed branch names with `rules check branch-name NAME` when a rule
-has a branch check. Present preference_review to the user for confirmation.
+Before creating a branch, use `richi --project-path PATH rules check branch-name NAME`
+with the repository path when an applicable rule has a branch check.
+Present preference_review to the user for confirmation.
 """
     return START + b"\n" + text + END
 

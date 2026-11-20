@@ -214,11 +214,14 @@ class RulesTests(unittest.TestCase):
         self.add("alpha", "naming", "--global")
         entry = {"id": "preference:broken", "kind": "note", "summary": "Old preference.", "title": "Naming"}
         self.command("alpha", "entry", "put", "--json", "-", stdin=json.dumps(entry))
-        with closing(sqlite3.connect(self.configs["alpha"].parent / "memory.sqlite3")) as conn, conn:
-            conn.execute("UPDATE entries SET title = cast(x'80' as text) WHERE id = ?", (entry["id"],))
-        answer = self.command("alpha", "rules", "show")
-        self.assertEqual([rule["id"] for rule in answer["rules"]], ["naming"])
-        self.assertIn("error", answer["preference_review"])
+        for damaged_title in ("cast(x'80' as text)", "x'80'"):
+            with self.subTest(damaged_title=damaged_title):
+                with closing(sqlite3.connect(self.configs["alpha"].parent / "memory.sqlite3")) as conn, conn:
+                    conn.execute("UPDATE entries SET title = " + damaged_title + " WHERE id = ?", (entry["id"],))
+                answer = self.command("alpha", "rules", "show")
+                self.assertEqual([rule["id"] for rule in answer["rules"]], ["naming"])
+                self.assertIn("error", answer["preference_review"])
+                self.assertIn("error", self.command("alpha", "rules", "review-preferences", ok=False))
 
     def test_dismissal_and_removal_are_not_overwritten_by_stale_confirmations(self):
         entry_id = "preference:style"

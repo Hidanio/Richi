@@ -217,7 +217,7 @@ def node(conn, node_ref, api, *, counts_only=False):
     return dict(record, id=node_ref, native_id=record["id"], node_type="entity", project_ids=[], work_state=None)
 
 
-def edge(conn, link, api, *, counts_only=False):
+def edge(conn, link, api, *, counts_only=False, owner=None):
     result = dict(link)
     native_id = result.pop("native_id")
     if result["origin"] == "explicit":
@@ -229,9 +229,10 @@ def edge(conn, link, api, *, counts_only=False):
         result.update(description=record["description"], sources=[{"reference": record["source"]}] if record["source"] else [],
                       verified_at=record["verified_at"])
     else:
-        record = api.entry_record(conn, native_id, counts_only=counts_only)
+        record = owner if owner is not None else api.entry_record(conn, native_id, counts_only=True)
         result.update(description="Record is linked to this project; this does not imply a specific impact.",
-                      sources=record["sources"], verified_at=record["verified_at"])
+                      sources=compact.source_headers(record["sources"], limit=None),
+                      sources_ref=link["from_ref"], verified_at=record["verified_at"])
     result["provenance"] = {"table": {"explicit": "graph_edges", "project_relation": "relations", "entry_project": "entry_projects"}[result["origin"]],
                             "record_id": native_id}
     return result
@@ -293,25 +294,26 @@ def export(conn, args, api):
         """, states + [cap + 1]).fetchall()
         selected = [row[0] for row in rows[:cap]]
         truncated = len(rows) > cap
-    selected_set, result_edges, seen_ids = set(selected), [], set()
+    nodes = {item: node(conn, item, api) for item in selected}
+    result_edges, seen_ids = [], set()
     edges_truncated = False
     # Walk outgoing links of selected nodes only; cap output, never emit dangling edges.
     for origin in ("entry_project", "project_relation", "explicit"):
         for start in selected:
             links = conn.execute("SELECT * FROM graph_links WHERE 1=1 AND from_ref = ? AND origin = ? ORDER BY id", (start, origin))
             for link in links:
-                if link["to_ref"] not in selected_set or link["knowledge_state"] not in states or link["id"] in seen_ids:
+                if link["to_ref"] not in nodes or link["knowledge_state"] not in states or link["id"] in seen_ids:
                     continue
                 if len(result_edges) >= MAX_EDGES:
                     edges_truncated = True
                     break
                 seen_ids.add(link["id"])
-                result_edges.append(edge(conn, link, api))
+                result_edges.append(edge(conn, link, api, owner=nodes[start]))
             if edges_truncated:
                 break
         if edges_truncated:
             break
-    return {"schema_version": MAP_SCHEMA_VERSION, "generated_at": api.now(), "nodes": [node(conn, item, api) for item in selected],
+    return {"schema_version": MAP_SCHEMA_VERSION, "generated_at": api.now(), "nodes": list(nodes.values()),
             "edges": result_edges, "truncated": truncated or edges_truncated,
             "limits": {"max_nodes": cap, "max_edges": MAX_EDGES, "nodes_truncated": truncated, "edges_truncated": edges_truncated},
             "scope": {"root": root, "depth": args.depth if is_neighbors else None,

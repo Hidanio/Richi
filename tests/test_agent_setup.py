@@ -93,6 +93,7 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
         self.configure()
         self.assertIn(b"chat current --with-rules PATH", path.read_bytes())
         self.assertIn(b"chat bind NAME --with-rules PATH", path.read_bytes())
+        self.assertIn(b"richi --project-path PATH rules check branch-name NAME", path.read_bytes())
         self.assertEqual(agent_setup.rules_setup_notices(), [])
 
     def test_preserves_exact_user_bytes_and_repeated_setup_is_idempotent(self):

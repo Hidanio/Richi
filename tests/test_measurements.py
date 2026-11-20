@@ -109,6 +109,35 @@ class MeasurementTests(unittest.TestCase):
         self.legacy_edit("entry", title="Edited after rollback")
         self.assertEqual(self.get("entry")["sources"], [self.source])
 
+    def test_full_graph_keeps_measurements_once_per_owner_for_both_storage_formats(self):
+        self.create()
+        projects = ["first", "second"]
+        entry = {key: value for key, value in self.get("entry").items() if key not in {"created_at", "updated_at"}}
+        sources = [{"reference": "test://background"}, {"reference": "test://notes"}, self.source]
+        with memory.transaction(self.conn):
+            for project in projects:
+                memory.project_put(self.conn, {"id": project, "name": project})
+            memory.entry_put(self.conn, dict(entry, sources=sources, project_ids=projects))
+        for inline in (False, True):
+            if inline:
+                with memory.transaction(self.conn):
+                    self.conn.execute("DELETE FROM metadata WHERE key IN (?, ?)",
+                                      (measurements.KEY_PREFIX + "entry:shared", measurements.INFO_PREFIX + "entry:shared"))
+                    self.conn.execute("UPDATE entries SET sources = ? WHERE id = 'shared'", (memory.dumps(sources),))
+            with self.subTest(inline=inline), patch.object(memory, "entry_record", wraps=memory.entry_record) as read:
+                exported = graph.export(self.conn, SimpleNamespace(action="export"), memory)
+                self.assertEqual(read.call_count, 1)
+                nodes = {node["id"]: node for node in exported["nodes"]}
+                self.assertEqual(nodes["entry:shared"]["sources"], sources)
+                self.assertEqual(nodes["entity:shared"]["sources"], [self.source])
+                explicit, = [edge for edge in exported["edges"] if edge["origin"] == "explicit"]
+                self.assertEqual(explicit["sources"], [self.source])
+                memberships = [edge for edge in exported["edges"] if edge["origin"] == "entry_project"]
+                self.assertEqual(len(memberships), len(projects))
+                for edge in memberships:
+                    self.assertEqual(edge["sources_ref"], "entry:shared")
+                    self.assertEqual(edge["sources"], sources[:2] + [dict(self.citation, measurements_omitted=100)])
+
     def test_fetch_measures_detached_observations_before_decoding_any_owner(self):
         self.rows[0]["sample"] = "x" * 900000
         self.create()

@@ -105,8 +105,11 @@ def annotation_gate(conn, terms):
     # metacharacter here is the final '*'. Numeric boundaries are checked on the record.
     patterns = sorted({term[:ANNOTATION_PREFIX_CHARS] + "*" for term in terms})
     lookup = f"SELECT 1 FROM {ANNOTATIONS} a WHERE a.sidecar = m.key AND "
-    matches = " OR ".join("a.prefix GLOB ?" for _ in patterns)
-    return f" AND (NOT EXISTS ({lookup}a.prefix = '') OR EXISTS ({lookup}({matches})))", patterns
+    # Use one range seek per term. Multiple GLOBs on the same row can make
+    # SQLite scan every prefix of each sidecar, even for terms with no matches.
+    probes = [f"NOT EXISTS ({lookup}a.prefix = '')"]
+    probes.extend(f"EXISTS ({lookup}a.prefix GLOB ?)" for _ in patterns)
+    return " AND (" + " OR ".join(probes) + ")", patterns
 
 
 def _trigger_names(table):

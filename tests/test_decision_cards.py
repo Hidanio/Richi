@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
 
-from richi import compact, graph, measurements, memory, search_index, task_brief
+from richi import compact, graph, measurements, memory, recall, search_index, task_brief
 
 
 class DecisionCardTests(unittest.TestCase):
@@ -210,6 +210,30 @@ class DecisionCardTests(unittest.TestCase):
                             self.assertEqual(len(card["measurements"]), 8)
                             self.assertEqual(card["measurements_omitted"], 1)
                             self.assertEqual(card["measurements"][0], dict(target, source_index=1, source=source))
+
+    def test_one_digit_measurement_is_searchable_without_weakening_issue_routing(self):
+        rows = [{"metric": "Latency", "value": str(n), "unit": "ms", "sample": "cohort"}
+                for n in (*range(11, 19), 7)]
+        self.put(dict(self.task, summary="Trial results", sources=[{"reference": "trial", "measurements": rows}]))
+        other = dict(self.task, id="task:DEMO-7", jira_key="DEMO-7", summary="Other trial", sources=[],
+                     decision_card=dict(self.card, question="Which of the 7 options?"))
+        self.put(other)
+
+        def args(query):
+            return SimpleNamespace(query=query, limit=2, max_chars=16000)
+
+        for indexed in (False, True):
+            if indexed:
+                with memory.transaction(self.conn):
+                    search_index.build(self.conn, memory)
+            for query in ("7", "DEMO-72 7 ms"):
+                with self.subTest(indexed=indexed, query=query):
+                    card, = task_brief.brief(self.conn, args(query), memory, self.db)["results"]
+                    self.assertEqual(card["id"], self.task["id"])
+                    self.assertEqual(card["measurements"][0]["value"], "7")
+            routed, = task_brief.brief(self.conn, args("DEMO-7"), memory, self.db)["results"]
+            self.assertEqual(routed["id"], other["id"])
+            self.assertTrue(recall.recall(self.conn, args("7"), memory)["no_match"])
 
     def test_measurement_match_keeps_relevant_row_with_legacy_inline_sources(self):
         rows = [{"metric": "queue depth", "value": str(n), "unit": "items", "sample": "The trial is complete"}

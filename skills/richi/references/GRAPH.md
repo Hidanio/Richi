@@ -245,6 +245,11 @@ source table and ID. Export identifiers use the `edge:`, `relation:`,
 `membership:` prefixes to avoid collisions. Pass the original ID to `edge get`,
 without the export-added `edge:` prefix.
 
+A membership edge keeps every source citation from its entry. For a citation
+with measurements, `measurements_omitted` gives the count and `sources_ref`
+identifies the entry node containing the full observations. An explicit edge
+includes its own observations in full.
+
 The interactive map is a separate view of this data: it draws nodes/edges and
 shows sources when an element is selected. Export itself neither opens a server
 nor changes knowledge. Visual proximity and a path between nodes do not establish

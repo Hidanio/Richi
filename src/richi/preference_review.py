@@ -64,10 +64,18 @@ def pending(conn, project=None, *, all_projects=False, preview=False, limit=3, a
             """SELECT substr(title, 1, ?), substr(summary, 1, ?), updated_at, knowledge_state,
                       length(title), length(summary), (SELECT count(*) FROM entry_projects WHERE entry_id = e.id) > 1
                  FROM entries e WHERE id = ?""", (title_limit, text_limit, entry_id)).fetchone()
+        # SQLite permits BLOBs in TEXT columns. Reject them while the rules
+        # preview can still report the error and return the standing rules.
+        if not all(isinstance(value, str) for value in (entry_id, title, wording, version, state)):
+            raise ValueError("Historical preference has a non-text field: " + str(entry_id)[:200])
         item = {"entry_id": entry_id, "title": title, "text": wording, "updated_at": version,
                 "knowledge_state": state}
-        scopes = [{"scope": "project" if project_id else "global", "project_id": project_id,
-                   "rule_id": _rule_id(entry_id, project_id, several)} for _, project_id in group]
+        scopes = []
+        for _, project_id in group:
+            if project_id is not None and not isinstance(project_id, str):
+                raise ValueError("Historical preference has a non-text project ID: " + entry_id[:200])
+            scopes.append({"scope": "project" if project_id else "global", "project_id": project_id,
+                           "rule_id": _rule_id(entry_id, project_id, several)})
         if len(scopes) == 1:
             item.update(scopes[0])
         else:

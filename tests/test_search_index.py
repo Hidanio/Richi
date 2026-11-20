@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import sqlite3
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -74,8 +75,8 @@ class SearchIndexTests(unittest.TestCase):
             self.assertEqual(copied(reader, "ел", "wrong"), ["entry:first"])
             self.assertEqual(copied(reader, "size"), ["entry:second"])
             candidates = list(task_brief._annotation_matches(reader, "size", ["size"], [], ["confirmed"], None, memory))
-            self.assertEqual(candidates[0]["record"]["sources"],
-                             [{"reference": "synthetic://ignored", "measurements_omitted": 1}])
+            self.assertEqual(candidates[0]["ref"], "entry:second")
+            self.assertEqual(candidates[0]["reasons"], ["measurement"])
             gate, params = search_index.annotation_gate(reader, ["missing"])
             plan = reader.execute("EXPLAIN QUERY PLAN SELECT m.value FROM metadata m WHERE m.key GLOB ?" + gate,
                                   [measurements.KEY_PREFIX + "*", *params])
@@ -92,6 +93,59 @@ class SearchIndexTests(unittest.TestCase):
         self.assertEqual(copied(self.conn, "route"), ["entry:first"])
         self.conn.execute("DROP TRIGGER " + search_index.ANNOTATION_TRIGGERS[0])
         self.assertEqual(copied(self.conn, "missing"), ["entry:first", "entry:second"])
+
+    def test_common_measurement_ranks_without_retaining_owners_or_source_headers(self):
+        long_text = "x" * 65536
+        measurement = {"metric": "canary", "value": "19", "unit": "ms", "sample": "40 requests"}
+        with memory.transaction(self.conn):
+            for index in range(12):
+                memory.entry_put(self.conn, {
+                    "id": "trial-%02d" % index, "kind": "task", "knowledge_state": "confirmed",
+                    "title": long_text, "summary": long_text, "sources": [
+                        {"reference": "test://report", "measurements": [measurement]},
+                        {"reference": "test://appendix", "label": long_text}]})
+        self.build()
+        with memory.transaction(self.conn, write=False):
+            matches = list(task_brief._annotation_matches(self.conn, "canary", ["canary"], [],
+                                                          ["confirmed"], None, memory))
+            self.assertEqual(len(matches), 12)
+            self.assertLess(len(json.dumps(matches)), 3000)
+            result = task_brief.brief(self.conn, SimpleNamespace(query="canary", limit=1, max_chars=4000),
+                                      memory, self.path)
+        self.assertEqual(result["coverage"]["query"]["candidate_count"], 12)
+        card, = result["results"]
+        self.assertEqual(card["ref"], "entry:trial-00")
+        self.assertEqual(card["measurements"], [dict(measurement, source_index=1, source={"reference": "test://report"})])
+
+    def test_multiword_annotation_lookup_cost_is_independent_of_unmatched_prefixes(self):
+        def lookup(word_count):
+            sample = " ".join("token%04d" % i for i in range(word_count))
+            with memory.transaction(self.conn):
+                for identity in ("first", "second", "third", "last"):
+                    metric = "canary" if identity == "last" else "ordinary"
+                    source = {"reference": "fixture", "measurements": [
+                        {"metric": metric, "value": "20", "unit": "ms", "sample": sample}]}
+                    memory.entry_put(self.conn, {"id": identity, "kind": "task", "title": "Trial",
+                                                 "summary": "Result", "knowledge_state": "confirmed", "sources": [source]})
+            self.build()
+            ticks = 0
+            def progress():
+                nonlocal ticks
+                ticks += 1
+                return 0
+            self.conn.set_progress_handler(progress, 20)
+            try:
+                found = [ref for ref, _ in task_brief._annotation_payloads(
+                    self.conn, ["confirmed"], ["unrelated", "nohit", "canary"])]
+            finally:
+                self.conn.set_progress_handler(None, 0)
+            self.assertEqual(found, ["entry:last"])
+            return ticks
+
+        # Compare growth on this SQLite build. A range seek tolerates B-tree
+        # depth changes; scanning every prefix scales with its 128-fold growth.
+        small = lookup(16)
+        self.assertLess(lookup(2048), (small + 1) * 5)
 
     def test_absent_index_reads_and_refresh_do_not_create_schema(self):
         self.insert("entry", "one")

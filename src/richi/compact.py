@@ -58,10 +58,10 @@ def excerpt(text, limit):
     return join(chosen) if chosen else "", True
 
 
-def source_headers(sources):
+def source_headers(sources, limit=2):
     """A compact witness retains its complete citation, with a count of omitted observations."""
     result = []
-    for source in sources[:2]:
+    for source in sources[:limit]:
         header = copy.deepcopy({key: value for key, value in source.items() if key != "measurements"})
         if source.get("measurements"):
             header["measurements_omitted"] = len(source["measurements"])

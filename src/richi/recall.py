@@ -194,23 +194,24 @@ def phrase(value):
     return " ".join(WORDS.findall(normalize(value)))
 
 
-def terms_for(conn, query):
+def _routed_terms(conn, query):
     # An issue key is one routing key, never an OR search for a generic prefix.
     # Only the store can say which tokens are keys; the rest are words.
     text = normalize(query)
     keys, spans = issue_keys(conn, text)
     for start, end in spans:
         text = text[:start] + " " * (end - start) + text[end:]
-    return significant_terms(text), keys
+    words = dict.fromkeys(term for term in WORDS.findall(text)
+                          if term not in STOPWORDS and (len(term) > 1 or term.isdigit()))
+    # A single digit can identify a measurement, but cannot route ordinary
+    # lexical recall. Give each channel its original 64-term budget.
+    lexical = [term for term in words if len(term) > 1][:64]
+    return lexical, list(words)[:64], keys
 
 
-def significant_terms(text):
-    """Meaningful words used for lexical matching, in query order."""
-    terms = []
-    for term in WORDS.findall(normalize(text)):
-        if term not in STOPWORDS and len(term) > 1 and term not in terms:
-            terms.append(term)
-    return terms[:64]
+def terms_for(conn, query):
+    lexical, _, keys = _routed_terms(conn, query)
+    return lexical, keys
 
 
 def issue_keys(conn, text):
@@ -740,6 +741,14 @@ def load_node(conn, node_ref, states, api, *, counts_only=False):
     return record if record and record["knowledge_state"] in states else None
 
 
+def load_record(conn, ref, states, api, *, counts_only=False):
+    if ref.startswith("edge:"):
+        record = api.graph.get(conn, "edge", ref[5:], api, history=False, counts_only=counts_only)
+        record.update(title=record["kind"], summary=record["description"], work_state=None)
+        return record if record["knowledge_state"] in states else None
+    return load_node(conn, ref, states, api, counts_only=counts_only)
+
+
 def graph_candidates(conn, direct, states, api, keys=(), trace=None, selection_filter=None):
     result, edges, truncated = {}, {}, False
     if not table_exists(conn, "graph_edges"):
@@ -835,7 +844,7 @@ def recall(conn, args, api, *, bounded=True, additional_matches=None):
 
 
 def recall_with_terms(conn, args, api, *, bounded=True, additional_matches=None):
-    """Return the response and its full lexical terms, excluding issue routing keys."""
+    """Return the response and terms for selecting observations, excluding issue routing keys."""
     # CLI callers already own a read transaction. Direct API callers need the
     # same snapshot across routing, payload lookup, and graph expansion. Never
     # commit or roll back a transaction owned by the caller.
@@ -870,11 +879,11 @@ def _recall(conn, args, api, *, bounded=True, additional_matches=None):
         if trace and trace.expected and trace.expected["direct_stage"] == "not_evaluated":
             if not selection_filter.matches_ref(conn, trace.expected["ref"]):
                 trace.expected["direct_stage"] = "filtered_where"
-    terms, keys = terms_for(conn, query)
+    terms, observation_terms, keys = _routed_terms(conn, query)
     options = {"selection_filter": selection_filter} if selection_filter else {}
     direct_by_ref, fts_truncated, backend, discarded_weak = candidates(conn, query, terms, keys, states, project, api, trace, **options)
     if additional_matches is not None:
-        for item in additional_matches(conn, query, terms, keys, states, project, api):
+        for item in additional_matches(conn, query, observation_terms, keys, states, project, api):
             existing = direct_by_ref.get(item["ref"])
             if existing is None:
                 direct_by_ref[item["ref"]] = item
@@ -905,8 +914,10 @@ def _recall(conn, args, api, *, bounded=True, additional_matches=None):
     results = []
     asks_current = bool(CURRENT.search(query))
     for item in chosen:
-        record = item["record"]
-        if item["ref"] in direct_by_ref:
+        record = item.get("record")
+        if record is None:
+            record = load_record(conn, item["ref"], states, api, counts_only=True)
+        elif item["ref"] in direct_by_ref:
             measurements.restore(conn, item["ref"].partition(":")[0], record, counts_only=True)
         output = compact.card(record, item["ref"], summary_chars=1100)
         reasons = list(item["reasons"])
@@ -952,6 +963,6 @@ def _recall(conn, args, api, *, bounded=True, additional_matches=None):
     if not bounded:
         # In-process composition applies its own single output budget. Selection,
         # guards and excerpts are exactly the same as for standalone recall.
-        return response, terms
+        return response, observation_terms
     response = fit_explained_response(response, args.max_chars, trace) if trace else compact.fit_response(response, args.max_chars)
-    return response, terms
+    return response, observation_terms
