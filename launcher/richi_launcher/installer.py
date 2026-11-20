@@ -82,7 +82,9 @@ def install(args):
     _, instructions, skill = adapter.paths()
     setup_plan = {"prefix": str(prefix), "agent": agent, "scope": "user",
                   "runtime": "Fixed release; existing development settings are preserved",
-                  "skill": str(skill), "instructions": str(instructions),
+                  "skills_directory": str(skill.parent),
+                  "skill_name_selection": "Setup chooses the subdirectory for the selected release and its rollback target",
+                  "instructions": str(instructions),
                   "shell_path": not args.no_path, "replace_existing_skill": args.replace_skill,
                   "database": "Existing stores and chat bindings are preserved; choose a workspace in your first chat"}
     if args.dry_run:

@@ -207,7 +207,9 @@ def analyze(raw, value, case, catalog, oracle, tokenizers):
 
 
 def skill_measurements(source, tokenizers):
-    directory = source / 'skills/project-memory'
+    directory = source / 'skills/richi'
+    if not directory.is_dir():
+        directory = source / 'skills/project-memory'
     measurements = {}
     for path in [directory / 'SKILL.md'] + sorted((directory / 'references').glob('*.md')):
         text = path.read_text(encoding='utf-8')

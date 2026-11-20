@@ -67,7 +67,7 @@ metadata scan remains separate work.
 6. Use a separate profile to verify removal of target imports from the normal
    path, retaining original `.prof` files. Run launcher/config/workspaces tests,
    the full unittest suite and recall acceptance under
-   [EVALUATION.md](../skills/project-memory/references/EVALUATION.md).
+   [EVALUATION.md](../skills/richi/references/EVALUATION.md).
    Pay particular attention to write/preflight paths that now import locally
    and to dev code freshness.
 

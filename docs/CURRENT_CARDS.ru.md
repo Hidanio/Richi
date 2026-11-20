@@ -15,8 +15,8 @@ task-запись описывает решение, область, причи�
 проверки, неизвестное и следующий шаг. Самостоятельные исследования, решения
 и эксперименты доступны как обычные текущие entries с источниками и связями
 `part_of` от подробной записи к задаче. Правила — в
-[skill](../skills/project-memory/SKILL.ru.md) и
-[порядке обслуживания](../skills/project-memory/references/MAINTENANCE.ru.md).
+[skill](../skills/richi/SKILL.ru.md) и
+[порядке обслуживания](../skills/richi/references/MAINTENANCE.ru.md).
 
 Новый флаг `punisher --summary-warn-chars N` принимает целое `1..1000000`,
 по умолчанию `6000`; Python API также отклоняет `bool`. Длина — точный
@@ -47,7 +47,7 @@ entity: `review` для confirmed, `info` для hypothesis/superseded.
 Бюджет может исключить весь finding, но не обрезать его обязательные details
 или ID. `candidate_count`, `finding_counts`, `omitted_findings` и coverage
 сохраняют свой смысл; scan caps и integrity `health` не меняются.
-Подробный контракт — в [DIAGNOSTICS](../skills/project-memory/references/DIAGNOSTICS.ru.md).
+Подробный контракт — в [DIAGNOSTICS](../skills/richi/references/DIAGNOSTICS.ru.md).
 
 ## Воспроизводимый пример
 

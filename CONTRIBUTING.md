@@ -108,7 +108,7 @@ the launcher requires a fixed package for release mode and recovery.
 For everyday CLI development, configure `development.source` and `dev true` as
 described in the [installation guide](docs/INSTALLATION.md). This selects
 `src/richi/` for CLI, agents and the map, and links the managed agent skills to
-`skills/project-memory/`. It does not redirect direct Python
+`skills/richi/`. It does not redirect direct Python
 imports or load launcher changes from the checkout; changes under `launcher/`
 require reinstalling the package.
 
@@ -117,13 +117,17 @@ do not point a test suite at a live knowledge store. Runtime configuration and
 data live outside the package. See [installation](docs/INSTALLATION.md) and
 [migration](docs/MIGRATION.md) for the CLI and compatibility workflow.
 
-The complete agent skill is in `skills/project-memory/`. Its `references/`
+The complete agent skill is in `skills/richi/`. Its `references/`
 directory is the canonical source of detailed command documentation. The
 `docs/CLI.md` index links there; keep command contracts in that one place so
-copying the whole skill directory remains sufficient for installation.
+copying the whole skill directory remains sufficient for installation. Links inside
+`skills/project-memory/` keep development checkouts usable with earlier launchers.
+Codex follows a linked skill directory but skips a linked `SKILL.md` file.
+After editing `skills/richi/SKILL.md`, copy it to `skills/project-memory/SKILL.md`
+as a regular file. The rename tests check that their contents match.
 
 For retrieval changes, preserve a reproducer and compare relevant cases before
-and after. The [evaluation guidance](skills/project-memory/references/EVALUATION.md)
+and after. The [evaluation guidance](skills/richi/references/EVALUATION.md)
 distinguishes synthetic regression checks from private task-based evaluations.
 Do not publish a private snapshot or rewrite old expectations to improve a score.
 

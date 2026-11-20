@@ -9,11 +9,12 @@ from . import setup_files as files
 from .config import ConfigError
 
 LABEL = "Claude Code"
+PROFILE_ENV = "CLAUDE_CONFIG_DIR"
 INSTRUCTION_LIMIT = None
 
 
 def profile_dir():
-    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home().resolve() / ".claude").expanduser()
+    return Path(os.environ.get(PROFILE_ENV) or Path.home().resolve() / ".claude").expanduser()
 
 
 def detected():
@@ -25,7 +26,7 @@ def paths(current=None):
     instructions = profile / "CLAUDE.md"
     if current and Path(current["instructions"]) != instructions:
         raise ConfigError("Setup belongs to another CLAUDE_CONFIG_DIR; use its original profile")
-    return profile, instructions, profile / "skills/project-memory"
+    return profile, instructions, profile / "skills/richi"
 
 
 def setup_operations(ctx, profile, current, replace_skill):

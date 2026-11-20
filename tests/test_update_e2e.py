@@ -285,6 +285,61 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
         self.assertEqual(self.run_process([self.python, "-I", "-B", "-m", "richi", *arguments]).stdout.strip(),
                          "Richi " + version)
 
+    def test_project_memory_update_rollback_and_directory_migration(self):
+        with tempfile.TemporaryDirectory(prefix="richi-skill-update-") as temporary:
+            self.root = Path(temporary).resolve()
+            self.environment = cli_environment(self.root, SHELL="/bin/zsh", RICHI_PORT=synthetic_port())
+            legacy_skill = b"---\nname: project-memory\ndescription: Synthetic old skill\n---\n"
+            older = self.make_wheel("0.1.0", extra={"richi_launcher/agent_skill/SKILL.md": legacy_skill})
+            seed = self.root / "seed"
+            venv.EnvBuilder(with_pip=True, symlinks=True).create(str(seed))
+            self.python, self.console_path = seed / "bin/python", seed / "bin/richi"
+            self.run_process([self.python, "-I", "-m", "pip", "--isolated", "--disable-pip-version-check",
+                              "install", "--no-index", "--no-deps", "--no-compile", older])
+            home = self.root / "cli-home"
+            instructions = home / ".codex/AGENTS.md"
+            instructions.parent.mkdir(parents=True)
+            personal = b"# My instructions\r\nKeep the original line endings.\r\n"
+            instructions.write_bytes(personal)
+            agents = {"codex": ".agents", "claude": ".claude", "cursor": ".cursor"}
+            for agent in agents:
+                self.console("setup", "--agent", agent, "--yes", "--no-path")
+            offline = self.root / "offline.py"
+            offline.write_text(_OFFLINE_COMMAND)
+
+            def update(version):
+                feed = self.feed_fixture(self.make_wheel(version), version)
+                self.run_process([self.python, "-I", offline, feed, "update", "apply"])
+
+            def check(directory, skill_name):
+                self.assertTrue(instructions.read_bytes().startswith(personal))
+                for agent, profile in agents.items():
+                    status = self.console_json("setup", "--status", "--agent", agent)
+                    parent = home / profile / "skills"
+                    self.assertEqual((status["status"], status["changes"], status["skill"]),
+                                     ("configured", [], str(parent / directory)))
+                    self.assertEqual([p.name for p in parent.iterdir()], [directory])
+                    skill = (parent / directory / "SKILL.md").read_text()
+                    frontmatter = skill.split("---", 2)[1].splitlines()
+                    self.assertIn("name: " + skill_name, frontmatter)
+                    # Up to 1.2.0 the frozen manager checks this literal anywhere
+                    # in the bundle before it will activate or roll back a release.
+                    self.assertIn("name: project-memory", skill)
+
+            legacy_instructions = instructions.read_bytes()
+            check("project-memory", "project-memory")
+            update("0.2.0")
+            check("project-memory", "richi")
+            self.console("update", "rollback")
+            check("project-memory", "project-memory")
+            self.assertEqual(instructions.read_bytes(), legacy_instructions)
+            self.console("update", "rollback")  # Return to 0.2.0.
+            update("0.3.0")
+            check("richi", "richi")
+            self.assertIn(b"`richi` skill", instructions.read_bytes())
+            self.console("update", "rollback")
+            check("richi", "richi")
+
     def test_schema_three_release_installs_in_place_and_blocks_rollback(self):
         # The manifest keeps the [1, 2] declaration that 1.0.1 updaters require;
         # the manager learns real support from the release's self-check.

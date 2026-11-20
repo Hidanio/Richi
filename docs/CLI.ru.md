@@ -153,7 +153,7 @@ richi --project-path /path/to/service-example recall 'локальный кеш'
 Для регистрации нескольких репозиториев сначала посмотрите результат
 `richi project scan /path/to/repositories`, затем примените его с `--apply`.
 Меняйте правила только по просьбе пользователя. Примеры создания и журнал
-изменений `rules log` описаны в [руководстве по правилам](../skills/project-memory/references/RULES.ru.md).
+изменений `rules log` описаны в [руководстве по правилам](../skills/richi/references/RULES.ru.md).
 
 Вкладка **«Правила»** карты показывает их, а на странице, открытой командой
 `richi map`, добавляет и меняет их по шаблонам и со списком установленных скиллов: один скилл для
@@ -169,7 +169,7 @@ richi skill-sources add gemini-cli --name "Gemini CLI" --skills ~/.gemini/skills
 richi skill-sources update claude --disable claude-app
 ```
 
-Подробнее: [агенты и их скиллы](../skills/project-memory/references/AGENT_SKILLS.ru.md);
+Подробнее: [агенты и их скиллы](../skills/richi/references/AGENT_SKILLS.ru.md);
 вкладка карты **«Агенты»** показывает и меняет те же настройки.
 
 В привязанном чате `-w` может только повторять сохранённую область. Прямые
@@ -190,30 +190,30 @@ richi status --projects --limit 50
 возвращается `unavailable` с доступными настройками и причиной. Подробности и
 границы проверки — в [руководстве workspaces](WORKSPACES.ru.md#состояние-workspace-и-путей-проектов).
 
-Полные справочники находятся в `skills/project-memory/references`. Это единый
+Полные справочники находятся в `skills/richi/references`. Это единый
 источник документации CLI и установленного skill: папка skill переносится целиком,
 без ссылок на файлы вне неё.
 
 | Задача | Справочник |
 |---|---|
-| Создать базу, зарегистрировать проект, сделать backup | [CLI](../skills/project-memory/references/CLI.ru.md) |
-| Загрузить или изменить постоянные правила пользователя | [Правила](../skills/project-memory/references/RULES.ru.md) |
-| Создать или полностью обновить запись, сохранить task-карточку | [Запись и защита от конфликтов](../skills/project-memory/references/ENTRY_WRITE.ru.md) |
-| Найти прошлую работу и разобрать ограничения выдачи | [Recall](../skills/project-memory/references/RECALL.ru.md) |
-| Выбрать кандидатов и пакетно прочитать полные записи | [Discover и fetch](../skills/project-memory/references/RETRIEVAL_TOOLS.ru.md) |
-| Собрать контекст вопроса и изменения кода | [Brief](../skills/project-memory/references/BRIEF.ru.md) |
-| Связать знания с версиями кода, открыть историю и diff | [Git-источники](../skills/project-memory/references/GIT.ru.md) |
-| Захватить проверенные байты из checkout/worktree и прикрепить источник | [Capture и attach](../skills/project-memory/references/GIT_CAPTURE.ru.md) |
-| Найти знания по изменённым файлам | [Impact](../skills/project-memory/references/IMPACT.ru.md) |
-| Создать сущности и связи | [Граф](../skills/project-memory/references/GRAPH.ru.md) |
-| Прочитать соседей известной записи | [Соседи и границы выдачи](../skills/project-memory/references/NEIGHBORS.ru.md) |
-| Описать термины с разными значениями и версиями | [Энциклопедия](../skills/project-memory/references/ENCYCLOPEDIA.ru.md) |
-| Найти инструменты, настройки и задачи с их применением | [Инструменты](../skills/project-memory/references/TOOLS.ru.md) |
-| Разобрать пропущенный известный результат | [Диагностика recall](../skills/project-memory/references/RECALL_DEBUG.ru.md) |
-| Проверить состояние workspace, кандидатов или группу источников | [Диагностика](../skills/project-memory/references/DIAGNOSTICS.ru.md) |
-| Оценить дубли и необходимость объединения без изменений | [Ограниченный аудит](../skills/project-memory/references/MEMORY_AUDIT.ru.md) |
-| Вручную объединить знания и разобрать кандидатов punisher | [Обслуживание](../skills/project-memory/references/MAINTENANCE.ru.md) |
-| Проверить изменение поиска по воспроизводимым примерам | [Оценка качества](../skills/project-memory/references/EVALUATION.ru.md) |
+| Создать базу, зарегистрировать проект, сделать backup | [CLI](../skills/richi/references/CLI.ru.md) |
+| Загрузить или изменить постоянные правила пользователя | [Правила](../skills/richi/references/RULES.ru.md) |
+| Создать или полностью обновить запись, сохранить task-карточку | [Запись и защита от конфликтов](../skills/richi/references/ENTRY_WRITE.ru.md) |
+| Найти прошлую работу и разобрать ограничения выдачи | [Recall](../skills/richi/references/RECALL.ru.md) |
+| Выбрать кандидатов и пакетно прочитать полные записи | [Discover и fetch](../skills/richi/references/RETRIEVAL_TOOLS.ru.md) |
+| Собрать контекст вопроса и изменения кода | [Brief](../skills/richi/references/BRIEF.ru.md) |
+| Связать знания с версиями кода, открыть историю и diff | [Git-источники](../skills/richi/references/GIT.ru.md) |
+| Захватить проверенные байты из checkout/worktree и прикрепить источник | [Capture и attach](../skills/richi/references/GIT_CAPTURE.ru.md) |
+| Найти знания по изменённым файлам | [Impact](../skills/richi/references/IMPACT.ru.md) |
+| Создать сущности и связи | [Граф](../skills/richi/references/GRAPH.ru.md) |
+| Прочитать соседей известной записи | [Соседи и границы выдачи](../skills/richi/references/NEIGHBORS.ru.md) |
+| Описать термины с разными значениями и версиями | [Энциклопедия](../skills/richi/references/ENCYCLOPEDIA.ru.md) |
+| Найти инструменты, настройки и задачи с их применением | [Инструменты](../skills/richi/references/TOOLS.ru.md) |
+| Разобрать пропущенный известный результат | [Диагностика recall](../skills/richi/references/RECALL_DEBUG.ru.md) |
+| Проверить состояние workspace, кандидатов или группу источников | [Диагностика](../skills/richi/references/DIAGNOSTICS.ru.md) |
+| Оценить дубли и необходимость объединения без изменений | [Ограниченный аудит](../skills/richi/references/MEMORY_AUDIT.ru.md) |
+| Вручную объединить знания и разобрать кандидатов punisher | [Обслуживание](../skills/richi/references/MAINTENANCE.ru.md) |
+| Проверить изменение поиска по воспроизводимым примерам | [Оценка качества](../skills/richi/references/EVALUATION.ru.md) |
 | Измерить рост хранения и обслужить поисковый индекс | [Storage](STORAGE.ru.md) |
 
 Примеры содержат вымышленные проекты `service-example`, `service-consumer`,

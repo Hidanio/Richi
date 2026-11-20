@@ -1,4 +1,4 @@
-graft skills/project-memory
+graft skills/richi
 global-exclude __pycache__ *.py[cod]
 include install.sh
 include scripts/build_installer.py

@@ -121,6 +121,10 @@ class Agent(NamedTuple):
     # Sources that indicate installation when the launcher has no adapter.
     # By default any configured source is evidence for that agent.
     detection_sources: tuple = ()
+    # Optional native profile settings, returning disabled and enabled skill file paths.
+    skill_path_settings: Optional[Callable] = None
+    # Some clients follow skill directory links but require a regular SKILL.md entry.
+    follows_skill_file_links: bool = True
 
 
 def _home_variable(environ, home, variable, default):
@@ -134,13 +138,22 @@ def _claude_sources(environ, home):
             SkillSource("claude-app", "plugins", "claude-app", home / CLAUDE_APP)]
 
 
+def _codex_profile(environ, home):
+    return folder_path(environ.get("CODEX_HOME") or "~/.codex", home).expanduser()
+
+
 def _codex_sources(environ, home):
-    profile = _home_variable(environ, home, "CODEX_HOME", ".codex")
-    return [SkillSource("agents-skills", "skills", "skills", home / ".agents" / "skills"),
-            SkillSource("codex-skills", "skills", "skills", profile / "skills"),
+    profile = _codex_profile(environ, home)
+    return [SkillSource("agents-skills", "skills", "nested-skills", home / ".agents" / "skills"),
+            SkillSource("codex-skills", "skills", "nested-skills", profile / "skills"),
             # Codex's built-in skills; hidden, so the "skills" walk skips them.
             SkillSource("system", "system", "skills", profile / "skills" / ".system"),
             SkillSource("plugins", "plugins", "cache", profile / "plugins" / "cache")]
+
+
+def _codex_skill_path_settings(environ, home):
+    from . import codex_skill_settings
+    return codex_skill_settings.path_settings(_codex_profile(environ, home), home)
 
 
 def _cursor_sources(environ, home):
@@ -154,7 +167,8 @@ AGENTS = (
     Agent(id="claude", name="Claude Code", variables={"CLAUDECODE": "1"},
           invocation="front-matter", plugin_commands=True, sources=_claude_sources),
     Agent(id="codex", name="Codex", variables={"CODEX_THREAD_ID": None},
-          invocation="openai-yaml", plugin_commands=False, sources=_codex_sources, chat_prefix=False),
+          invocation="openai-yaml", plugin_commands=False, sources=_codex_sources, chat_prefix=False,
+          skill_path_settings=_codex_skill_path_settings, folder_layout="nested-skills", follows_skill_file_links=False),
     Agent(id="cursor", name="Cursor", variables={"CURSOR_AGENT": None},
           invocation="front-matter", plugin_commands=False, sources=_cursor_sources, folder_layout="nested-skills",
           detection_sources=("cursor-skills", "system")),

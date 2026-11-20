@@ -39,6 +39,16 @@ class FirstInstallFailureTests(unittest.TestCase):
         self.assertFalse(self.prefix.exists())
         self.assertFalse((self.home / ".claude").exists())
 
+    def test_pinned_release_preview_does_not_guess_the_target_skill_name(self):
+        self.args.version = "1.2.0"
+        self.args.dry_run = True
+        with patch.object(installer.releases, "fetch_release") as fetch:
+            plan = self.run_install()
+        fetch.assert_not_called()
+        self.assertEqual(plan["skills_directory"], str(self.home / ".agents/skills"))
+        self.assertNotIn("skill", plan)
+        self.assertFalse(self.prefix.exists())
+
     def test_unowned_environment_is_preserved(self):
         self.prefix.mkdir()
         (self.prefix / "important.txt").write_text("mine")

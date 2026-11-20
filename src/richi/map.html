@@ -846,10 +846,14 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   const ruleAgentIds=(...rules)=>[...new Set([...knownAgentIds(),...rules.flatMap(rule=>Object.keys(rule?.skills||{}))])];
   // A rule names a skill for every agent (skill) and, where agents differ, one per agent (skills).
   const ruleSkillFor=(rule,agent)=>rule?.skills&&Object.prototype.hasOwnProperty.call(rule.skills,agent)?rule.skills[agent]||null:rule?.skill||null;
+  function installedRuleSkill(name,agent){
+    const aliases=rulesState.skills?.rule_aliases?.[agent];
+    return aliases&&Object.prototype.hasOwnProperty.call(aliases,name)?aliases[name]:name;
+  }
   // How a rule's skills read to a person: one for all listed agents, or one per agent.
-  function ruleSkillSetting(rule){
+  function ruleSkillSetting(rule,installed=false){
     const ids=ruleAgentIds(rule);if(!ids.length)return {skill:rule?.skill||null,skills:null};
-    const own=Object.fromEntries(ids.map(agent=>[agent,ruleSkillFor(rule,agent)]));
+    const own=Object.fromEntries(ids.map(agent=>{const name=ruleSkillFor(rule,agent);return [agent,installed?installedRuleSkill(name,agent):name];}));
     if(new Set(Object.values(own)).size===1)return {skill:own[ids[0]],skills:null};
     return {skill:null,skills:Object.fromEntries(Object.entries(own).filter(([,name])=>name))};
   }
@@ -1268,11 +1272,12 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     agentsPanel.append(othersRow,make('div','rule-field-hint','Агенты, которых нет в этом списке, например добавленные позже.'),merged,notice);modes.hidden=!ids.length;box.append(modes,sharedPanel,agentsPanel);
     let mode=ruleSharesSkill(rule||{})?'shared':'agents';
     const changed=()=>box.dispatchEvent(new CustomEvent('skillchange',{bubbles:true,detail:{typing:false}}));
-    const lacking=name=>{const info=rulesState.skillMap.get(name);return info?known.filter(agent=>!list(info.agents).includes(agent)):[];};
+    const listed=name=>rulesState.skillMap.has(name)||known.some(agent=>installedRuleSkill(name,agent)!==name);
+    const lacking=name=>listed(name)?known.filter(agent=>!list(rulesState.skillMap.get(installedRuleSkill(name,agent))?.agents).includes(agent)):[];
     const similar=(name,agent)=>{const base=name.split(':').pop().toLowerCase(),found=list(rulesState.skills?.skills).find(skill=>list(skill.agents).includes(agent)&&skill.name.split(':').pop().toLowerCase()===base);return found?found.name:'';};
     function showStatus(){
       const name=shared.value(),missing=name?lacking(name):[];status.className='rule-skill-sync';status.replaceChildren();
-      if(!name||!rulesState.skillMap.has(name))return;
+      if(!name||!listed(name))return;
       if(!missing.length){status.classList.add('ok');status.textContent='✓ Один и тот же скилл у всех агентов: '+agentList(known.length?known:ids);return;}
       status.classList.add('warn');status.append(document.createTextNode(agentList(missing)+(missing.length>1?' не видят':' не видит')+' этот скилл.'),toolButton('Выбрать для каждого агента',()=>split(name),'small'));
     }
@@ -1412,7 +1417,10 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     dialog.showModal();cancel.focus();
   }
   function ruleMatches(rule){
-    const query=normalized(rulesState.query);if(!query)return true;const fields=[rule.id,rule.text,rule.skill,...Object.values(rule.skills||{}),rule.source,rule.project_id&&ruleProjectName(rule.project_id)].map(normalized);
+    const query=normalized(rulesState.query);if(!query)return true;
+    const shown=ruleSkillSetting(rule,true);
+    const fields=[rule.id,rule.text,rule.skill,...Object.values(rule.skills||{}),shown.skill,...Object.values(shown.skills||{}),
+      rule.source,rule.project_id&&ruleProjectName(rule.project_id)].map(normalized);
     return query.split(/\s+/).filter(Boolean).every(word=>fields.some(field=>field.includes(word)));
   }
   function ruleSkillChip(label,name,agents){
@@ -1428,7 +1436,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     if(info?.description)chip.title=info.description;return chip;
   }
   function ruleSkillChips(rule){
-    const setting=ruleSkillSetting(rule),hidden=ruleOtherSkill(rule),other=hidden&&(setting.skills||hidden!==setting.skill)?hidden:null;
+    const setting=ruleSkillSetting(rule,true),hidden=ruleOtherSkill(rule),other=hidden&&(setting.skills||hidden!==setting.skill)?hidden:null;
     if(!setting.skills&&!other)return ruleSkillChip('Скилл',setting.skill,knownAgentIds());
     const box=make('div','rule-skills');
     if(!setting.skills)box.append(ruleSkillChip('Скилл',setting.skill,knownAgentIds()));
@@ -1521,7 +1529,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   // Rules that give this agent a skill, and whether the agent really has it.
   function agentRules(agent){
     const known=skillsKnown();
-    return ruleList().map(rule=>({rule,skill:ruleSkillFor(rule,agent.id)})).filter(item=>item.skill).map(item=>{const info=rulesState.skillMap.get(item.skill);return {...item,missing:known&&(!info||!list(info.agents).includes(agent.id))};});
+    return ruleList().map(rule=>({rule,skill:installedRuleSkill(ruleSkillFor(rule,agent.id),agent.id)})).filter(item=>item.skill).map(item=>{const info=rulesState.skillMap.get(item.skill);return {...item,missing:known&&(!info||!list(info.agents).includes(agent.id))};});
   }
   function agentMatches(agent){
     const query=normalized(agentsState.query);if(!query)return true;const fields=[agent.id,agent.name,...list(agent.sources).map(source=>source.path)].map(normalized);

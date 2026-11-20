@@ -127,7 +127,9 @@ python tests/installer_release_smoke.py "$release_dir"
   до публикации. Локально нужны полный клон с тегами, пакет `build` и установленный
   кандидат; `--from vX.Y.Z` запускает один источник.
 
-Wheel включает весь канонический каталог `skills/project-memory/`.
+Wheel включает весь канонический каталог `skills/richi/`. При изменении
+frontmatter в `SKILL.md` сохраните комментарий о совместимости. Перед активацией
+wheel прежние версии обновлятора ищут в файле строку `name: project-memory`.
 `build_installer.py` создаёт из этого wheel детерминированный
 `richi-installer.pyz`, использующий только стандартную библиотеку, и отдельный
 файл SHA256. Workflow публикует эти файлы и `install.sh` вместе с wheel и manifest.

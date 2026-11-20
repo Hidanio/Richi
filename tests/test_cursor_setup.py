@@ -20,7 +20,7 @@ class CursorSetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         self.settings = self.profile / "hooks.json"
         self.rule = self.profile / "rules/richi-project-memory.mdc"
         self.script = self.profile / "richi/session_start.py"
-        self.skill = self.profile / "skills/project-memory"
+        self.skill = self.profile / "skills/richi"
 
     def connect(self):
         return self.configure("--agent", "cursor")

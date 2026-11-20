@@ -29,6 +29,10 @@ MAX_MANIFEST = 4 * 1024 * 1024
 MAX_NESTED_ENTRIES = 100000
 # Kinds of skill source, in the order the map groups their skills.
 KINDS = ("skills", "system", "plugins")
+# The distributed skill declares the rename in its YAML header. A user's own
+# skill called "richi" does not take over rules that name "project-memory".
+PREVIOUS_RICHI_SKILL = "project-memory"
+_RENAME_MARKER = "# Previous Richi skill name: " + PREVIOUS_RICHI_SKILL
 
 
 def folder_state(path):
@@ -126,7 +130,7 @@ def front_matter(text, cut=False):
     return fields if cut and not prose else {}
 
 
-def _read_regular(path, limit):
+def _read_regular(path, limit, *, frontmatter_only=False):
     """Up to limit bytes of a regular file.
 
     A skill folder holds what a plugin's author put there. Anything that is
@@ -137,20 +141,38 @@ def _read_regular(path, limit):
     try:
         if not stat.S_ISREG(os.fstat(descriptor).st_mode):
             raise OSError("not a regular file: " + str(path))
-        handle = os.fdopen(descriptor, "rb")
+        handle = os.fdopen(descriptor, "rb", buffering=0)
     except BaseException:
         os.close(descriptor)
         raise
     with handle:
+        if frontmatter_only:
+            prefix = handle.read(min(1024, limit))
+            first, newline, rest = prefix.partition(b"\n")
+            if (len(prefix) < 1024 or newline and
+                    (first.lstrip(b"\xef\xbb\xbf").strip() != b"---" or
+                     re.search(rb"(?m)^(?:---|\.\.\.)[ \t]*\r?\n", rest))):
+                return prefix
+            return prefix + handle.read(limit - len(prefix))
         return handle.read(limit)
 
 
-def _read_header(path):
+def _read_header(path, *, frontmatter_only=False):
     """(the beginning of a text file, whether the file goes on past it)."""
-    data = _read_regular(path, MAX_HEADER + 1)
+    data = _read_regular(path, MAX_HEADER + 1, frontmatter_only=frontmatter_only)
     text = data[:MAX_HEADER].decode("utf-8", errors="replace")
     # Some editors begin a file with a byte order mark, which is not part of its first line.
     return text[1:] if text.startswith("\ufeff") else text, len(data) > MAX_HEADER
+
+
+def _declares_richi_rename(text):
+    """Only the marker in the branded skill's YAML header declares the alias."""
+    for line in text.splitlines()[1:]:
+        if line.rstrip(" \t") in {"---", "..."}:
+            break
+        if line == _RENAME_MARKER:
+            return True
+    return False
 
 
 def _openai_yaml_allows(directory):
@@ -345,7 +367,7 @@ def _candidates(agent, source, report):
                 yield name + ":", command, command.stem, enabled
 
 
-def catalog(environ=None, home=None, registry=None):
+def catalog(environ=None, home=None, registry=None, *, rule_aliases_only=False):
     """Skills by name with their description, kind and the agents that have them.
 
     registry: the agents when the caller has them already (agents.registry),
@@ -360,14 +382,29 @@ def catalog(environ=None, home=None, registry=None):
     MAX_SKILLS skills and says so in truncated; the counts include the rest.
     When a recursive source exceeds the scan budget, its root and the catalog
     are marked truncated and the counts include only discovered skills.
+
+    rule_aliases maps a stored rule's skill to its installed name for each
+    agent. On a rules read, skip plugin sources (their names are qualified)
+    and unrelated skills.
     """
     environ = os.environ if environ is None else environ
     home = Path(home) if home is not None else Path.home()
-    skills, seen_roots, truncated, totals = {}, [], False, {}
+    skills, seen_roots, truncated, totals, aliases = {}, [], False, {}, {}
+    richi_paths = {}
     listed = agents.registry(environ, home) if registry is None else registry
     for agent in listed:
         every = set()
+        renamed = set()
+        incomplete = False
+        try:
+            disabled, enabled_paths = agent.skill_path_settings(environ, home) if agent.skill_path_settings else ((), ())
+        except (ValueError, OSError, RuntimeError):
+            # An unreadable profile cannot prove that a conflicting skill is
+            # disabled, or that a renamed skill is enabled for a standing rule.
+            disabled, enabled_paths, incomplete = (), (), True
         for source in agent.sources(environ, home):
+            if rule_aliases_only and source.layout not in ("skills", "nested-skills"):
+                continue
             state = folder_state(source.path) if source.enabled else None
             entry = {"agent": agent.id, "key": source.key, "kind": source.kind, "layout": source.layout,
                      "path": str(source.path), "exists": state == "ok", "denied": state == "denied",
@@ -378,17 +415,30 @@ def catalog(environ=None, home=None, registry=None):
             found = set()
             for prefix, path, fallback, enabled in _candidates(agent, source, entry):
                 try:
-                    fields = front_matter(*_read_header(path))
+                    if not prefix and not agent.follows_skill_file_links and path.is_symlink():
+                        continue
+                    text, cut = _read_header(path, frontmatter_only=True)
+                    fields = front_matter(text, cut)
                 except OSError:
                     continue
                 own = fields.get("name")
                 own = own.strip() if isinstance(own, str) and own.strip() else fallback
                 name = prefix + own
+                if rule_aliases_only and name not in {"richi", PREVIOUS_RICHI_SKILL}:
+                    continue
                 # Only names a rule can store, of skills the agent may choose and has enabled, are offered.
                 if not agents.valid_skill(name) or not _agent_may_choose(agent, path.parent, fields) \
                         or (enabled is not None and own not in enabled and fallback not in enabled):
                     continue
+                canonical = os.path.realpath(path) if disabled else None
+                possibly_disabled = canonical in disabled
+                if possibly_disabled and canonical not in enabled_paths:
+                    continue
                 found.add(name)
+                if name == "richi":
+                    renamed.add(not possibly_disabled and fields.get("name") == "richi" and _declares_richi_rename(text))
+                    if rule_aliases_only:
+                        richi_paths.setdefault(agent.id, set()).add(str(path.parent))
                 if name not in skills and len(skills) >= MAX_SKILLS:
                     # Counted for its source and its agent, but the list is full.
                     truncated = True
@@ -402,8 +452,14 @@ def catalog(environ=None, home=None, registry=None):
                     skill["agents"].append(agent.id)
             entry["skills"] = len(found)
             every |= found
+            incomplete |= bool(entry.get("truncated"))
+        if renamed == {True} and PREVIOUS_RICHI_SKILL not in every and not incomplete:
+            aliases[agent.id] = {PREVIOUS_RICHI_SKILL: "richi"}
         totals[agent.id] = len(every)
     ordered = sorted(skills.values(), key=lambda skill: (KINDS.index(skill["kind"]), skill["name"].lower()))
     scan_truncated = any(root.get("truncated") for root in seen_roots)
-    return {"skills": ordered, "roots": seen_roots, "totals": totals, "truncated": truncated or scan_truncated,
-            "agents": [{"id": agent.id, "name": agent.name} for agent in listed]}
+    result = {"skills": ordered, "roots": seen_roots, "totals": totals, "truncated": truncated or scan_truncated,
+              "agents": [{"id": agent.id, "name": agent.name} for agent in listed], "rule_aliases": aliases}
+    if rule_aliases_only:
+        result["richi_paths"] = {agent: sorted(paths) for agent, paths in richi_paths.items()}
+    return result

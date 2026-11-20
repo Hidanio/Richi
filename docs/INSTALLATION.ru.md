@@ -140,11 +140,11 @@ richi config show
 ### Что переключает dev
 
 Dev переключает две вещи: **runtime** (`src/richi/` для каждого вызова CLI,
-вызова агента и карты) и **управляемую ссылку skill Project Memory каждого агента,
+вызова агента и карты) и **управляемую ссылку на скилл Richi для каждого агента,
 подключённого через `richi setup`**. При включённом dev каждая такая ссылка
-указывает на `<development.source>/skills/project-memory`, поэтому любой агент
+указывает на `<development.source>/skills/richi`, поэтому любой агент
 читает текст skill, соответствующий выполняемому коду. Это одинаково работает для
-любого поддерживаемого агента (например, `~/.agents/skills/project-memory` у
+любого поддерживаемого агента (например, `~/.agents/skills/richi` у
 Codex). Агент, подключённый позже, следует уже подключённым агентам; первый
 подключённый агент начинает со skill релиза до следующей команды
 `config set dev true`. Dev не переключает установленный запускатель
@@ -162,9 +162,9 @@ ID чата.
 ```json
 "agent_skills": {"status": "changed", "mode": "dev",
                  "source": "/path/to/Richi",
-                 "target": "/path/to/Richi/skills/project-memory",
-                 "changes": ["/home/me/.agents/skills/project-memory",
-                             "/home/me/.claude/skills/project-memory"]}
+                 "target": "/path/to/Richi/skills/richi",
+                 "changes": ["/home/me/.agents/skills/richi",
+                             "/home/me/.claude/skills/richi"]}
 ```
 
 `status` принимает значения `changed`, `unchanged`, `not_configured` (`richi setup`
@@ -187,7 +187,7 @@ workspace. Файл конфигурации вне реестра workspace, в
 
 - Ссылки следуют checkout, только если он проходит ту же проверку, что и
   dev-runtime (`pyproject.toml` и `src/richi/`), и содержит
-  `skills/project-memory/SKILL.md`. Иначе, а также при dev без
+  `skills/richi/SKILL.md`. Иначе, а также при dev без
   `development.source`, они указывают на установленный релиз; причина указана
   в `reason`. Возврат ссылок на релиз через `config set dev false` не зависит
   от checkout, даже удалённого или сломанного.
@@ -333,7 +333,7 @@ Checkout и установленный launcher сверяют версию пр
 После установки пакета посмотрите поддерживаемые клиенты командой `richi agents --status`.
 Подключите нужный клиент по [инструкции для Codex, Claude Code и Cursor](SETUP.ru.md).
 
-Для других агентов скопируйте весь каталог `skills/project-memory`, включая
+Для других агентов скопируйте весь каталог `skills/richi`, включая
 файлы `references/`, в каталог skills агента.
 
 Убедитесь, что процесс агента видит исполняемый файл `richi` и выбранную
@@ -360,7 +360,7 @@ Checkout и установленный launcher сверяют версию пр
 Для репозитория выполни `richi project check PATH --id PROJECT_ID`, затем добавляй
 `--project-path PATH` к запросу правил и операциям со знаниями. В Cursor
 запрашивай правила через `rules show --agent cursor`. Выбор workspace определяет пользователь.
-С помощью project-memory находи прежние решения и сохраняй выводы, неудачные
+С помощью скилла `richi` находи прежние решения и сохраняй выводы, неудачные
 эксперименты и результаты работы. Для проверки пути хранилища используй `richi config show`.
 Для этого проекта разрешены локальные обновления памяти. Ищи прежние записи до
 создания новой, сохраняй источники и область применимости, используй expected_updated_at.

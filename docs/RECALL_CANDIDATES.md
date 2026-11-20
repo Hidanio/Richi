@@ -65,7 +65,7 @@ entry selected by `--expect` may receive one separate full probe:
 `expected_entry_probes <= 1`. It clarifies the previous lexical guard against
 the executed shortlist but neither adds a candidate nor counts as scored;
 the record remains prefiltered. The full counter contract is in
-[DIAGNOSTICS.md](../skills/project-memory/references/DIAGNOSTICS.md).
+[DIAGNOSTICS.md](../skills/richi/references/DIAGNOSTICS.md).
 Extra diagnostic fields consume budget and can change diagnostic truncation;
 normal-output parity is checked separately from diagnostic JSON.
 

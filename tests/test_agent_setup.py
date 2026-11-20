@@ -159,13 +159,13 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
         self.assertEqual(command.read_text(), "not Richi")
 
     def test_existing_skill_requires_explicit_backup_and_preserves_edits(self):
-        skill = self.home / ".agents/skills/project-memory"
+        skill = self.home / ".agents/skills/richi"
         skill.mkdir(parents=True)
         (skill / "SKILL.md").write_text("personal skill")
         with self.assertRaisesRegex(ConfigError, "--replace-skill"):
             self.configure()
         self.configure("--replace-skill")
-        backup, = (self.home / ".agents/richi-skill-backups").glob("project-memory-*")
+        backup, = (self.home / ".agents/richi-skill-backups").glob("richi-*")
         self.assertEqual((backup / "SKILL.md").read_text(), "personal skill")
         self.assertTrue(skill.is_symlink())
 
@@ -173,12 +173,12 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
         external = self.home / "source-skill"
         external.mkdir()
         (external / "SKILL.md").write_text("source")
-        skill = self.home / ".agents/skills/project-memory"
+        skill = self.home / ".agents/skills/richi"
         skill.parent.mkdir(parents=True)
         skill.symlink_to(external)
         self.configure("--replace-skill")
         self.assertEqual((external / "SKILL.md").read_text(), "source")
-        backup, = (self.home / ".agents/richi-skill-backups").glob("project-memory-*")
+        backup, = (self.home / ".agents/richi-skill-backups").glob("richi-*")
         self.assertEqual(backup.resolve(), external)
 
     def test_symlinked_instructions_are_not_overwritten(self):
@@ -221,7 +221,7 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
         legacy.mkdir(parents=True)
         with self.assertRaisesRegex(ConfigError, "legacy"):
             self.configure()
-        self.assertFalse((self.home / ".agents/skills/project-memory").exists())
+        self.assertFalse((self.home / ".agents/skills/richi").exists())
         (legacy / "SKILL.md").write_text("legacy customization")
         self.configure("--replace-skill")
         self.assertFalse(legacy.exists())
@@ -280,7 +280,7 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
     def test_edited_skill_blocks_runtime_activation(self):
         self.configure()
         state = self.next_state()
-        skill = self.home / ".agents/skills/project-memory/SKILL.md"
+        skill = self.home / ".agents/skills/richi/SKILL.md"
         skill.write_text("edited locally")
         with self.assertRaises(ConfigError):
             installation._activate(self.ctx, state, "updated")
@@ -294,7 +294,7 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
         instruction = (self.home / ".codex/AGENTS.md").read_bytes()
         with patch.object(installation, "_collect", return_value={}):
             installation._activate(self.ctx, new, "updated")
-            skill = self.home / ".agents/skills/project-memory/SKILL.md"
+            skill = self.home / ".agents/skills/richi/SKILL.md"
             self.assertIn("Synthetic release 0.2.0", skill.read_text())
             old["generations"].update(new["generations"])
             old["previous"] = new["current"]
@@ -349,7 +349,7 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
         with patch.object(installation, "_atomic_json", side_effect=fail_state):
             with self.assertRaisesRegex(OSError, "disk full"):
                 installation._activate(self.ctx, state, "updated")
-        self.assertIn("Synthetic release 0.1.0", (self.home / ".agents/skills/project-memory/SKILL.md").read_text())
+        self.assertIn("Synthetic release 0.1.0", (self.home / ".agents/skills/richi/SKILL.md").read_text())
         self.assertFalse((self.root / setup_files.JOURNAL).exists())
 
     def test_crash_before_and_after_runtime_commit_recovers_from_authority(self):
@@ -397,7 +397,7 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
         self.assertEqual(path.read_bytes(), b"saved by user\n")
 
     def test_interrupted_initial_skill_adoption_restores_original_directory(self):
-        skill = self.home / ".agents/skills/project-memory"
+        skill = self.home / ".agents/skills/richi"
         skill.mkdir(parents=True)
         (skill / "SKILL.md").write_text("original")
         _, ops = agent_setup.plan(self.ctx, replace_skill=True)

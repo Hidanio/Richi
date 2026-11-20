@@ -11,7 +11,7 @@ manager perform it.
 
 Every source gets two homes with realistic state: workspaces with projects,
 entries and graph records, a bound chat, a running map, Codex and, where the
-source supports it, Claude Code. One updates manually, rolls back with either
+source supports them, Claude Code and Cursor. One updates manually, rolls back with either
 manager, updates again and covers the rollback edges; the other updates with
 `update auto enable --install` and `update auto run`. Without --from, one more
 home updates the oldest source through every intermediate release to the
@@ -111,6 +111,7 @@ class Release:
         with zipfile.ZipFile(self.wheel) as archive:
             archive.extractall(unpacked)
             self.hands_off_maps = MAP_HANDOFF_MODULE in archive.namelist()
+            self.skill = archive.read("richi_launcher/agent_skill/SKILL.md")
         self.schemas = json.loads(run([sys.executable, "-I", "-B", "-c", SCHEMAS, unpacked]).stdout)
         self.feed = self._feed(work)
 
@@ -284,15 +285,17 @@ class Home:
         return [name.strip() for name in match.group(1).split(",")] if match else ["codex"]
 
     def connect_agents(self):
-        """Connect Claude Code once the active release supports it; report whether it did."""
-        if "claude" in self.agents or "claude" not in self.offered_agents():
-            return False
-        self.cli("setup", "--agent", "claude", "--yes", "--no-path")
-        self.agents.append("claude")
-        return True
+        """Connect additional agents once the active release supports them."""
+        new = [agent for agent in self.offered_agents() if agent not in self.agents]
+        for agent in new:
+            self.cli("setup", "--agent", agent, "--yes", "--no-path")
+            self.agents.append(agent)
+        return bool(new)
 
-    def setup_status(self, agent):
+    def setup_status(self, agent, release):
         data = self.json("setup", *(["--agent", agent] if agent != "codex" else []), "--status")
+        skill = Path(data["skill"]) / "SKILL.md"
+        assert skill.read_bytes() == release.skill, (self.name, agent, release.version, skill)
         return data["status"], data.get("changes", [])
 
     def create_state(self):
@@ -320,7 +323,8 @@ class Home:
         active = self.version()
         assert active == "Richi " + release.version, (self.name, active, release.version)
         for agent in self.agents:
-            assert self.setup_status(agent) == ("configured", []), (self.name, agent, self.setup_status(agent))
+            status = self.setup_status(agent, release)
+            assert status == ("configured", []), (self.name, agent, status)
         if "claude" in self.agents:
             self.verify_claude_hook()
         current = self.json("--chat", CHAT, "chat", "current")
@@ -519,7 +523,7 @@ def claude_blocks_rollback(candidate, home):
     assert home.version() == "Richi " + candidate.version
     assert (home.profile / "settings.json").read_bytes() == settings
     for agent in home.agents:
-        assert home.setup_status(agent) == ("configured", []), agent
+        assert home.setup_status(agent, candidate) == ("configured", []), agent
     home.verify_claude_hook()
     home.assert_map(home.map)
 
@@ -537,6 +541,36 @@ def automatic(source, candidate, home):
     status = json.loads(home.update(candidate, "auto", "status").stdout)
     assert status["enabled"] and status["auto_install"] and status["status"] == "enabled", status
     home.stop_map()
+
+
+def legacy_skill_collision(candidate, home):
+    """An actual frozen updater can activate two skills named richi in Codex."""
+    cursor = "cursor" in home.offered_agents()
+    if cursor:
+        home.cli("setup", "--agent", "cursor", "--yes", "--no-path")
+    discovery = Path(home.env["HOME"]) / ".agents/skills"
+    managed = discovery / "project-memory/SKILL.md"
+    foreign = discovery / "richi"
+    foreign.mkdir()
+    local_skill = b"---\nname: richi\ndescription: Independent user skill\n---\n"
+    (foreign / "SKILL.md").write_bytes(local_skill)
+    assert json.loads(home.update(candidate, "apply").stdout)["status"] == "updated"
+    notices = {item["agent"]: item for item in home.json("--chat", CHAT, "chat", "current")["skill_conflicts"]}
+    notice = notices["codex"]
+    assert notice["agent"] == "codex" and notice["conflicting_paths"] == [str(foreign)], notice
+    assert notice["managed_skill"] == str(managed) and managed.read_bytes() == candidate.skill
+    assert (foreign / "SKILL.md").read_bytes() == local_skill
+    backup = json.loads(home.cli(*shlex.split(notice["preview_command"])[1:]).stdout)["skill_backups"]
+    assert len(backup) == 1 and not Path(backup[0]).exists() and foreign.is_dir()
+    if cursor:
+        assert notices["cursor"]["conflicting_paths"] == [str(foreign)] and "preview_command" not in notices["cursor"]
+    foreign = foreign.rename(discovery / "user-tools")
+    notices = home.json("--chat", CHAT, "chat", "current")["skill_conflicts"]
+    assert {item["agent"] for item in notices} == ({"codex", "cursor"} if cursor else {"codex"}), notices
+    assert all(item["conflicting_paths"] == [str(foreign)] and "preview_command" not in item for item in notices)
+    home.cli("update", "rollback")
+    assert b"\nname: project-memory\n" in managed.read_bytes()
+    assert (foreign / "SKILL.md").read_bytes() == local_skill
 
 
 def chain(sources, candidate, home):
@@ -578,6 +612,10 @@ def main(argv=None):
                 for tag in selected]
         runs += [("automatic " + tag, "auto-" + tag, sources[tag], partial(automatic, sources[tag], candidate))
                  for tag in selected]
+        legacy = [sources[tag] for tag in selected if b"\nname: project-memory\n" in sources[tag].skill]
+        if legacy and b"\nname: richi\n" in candidate.skill:
+            runs.append(("user skill collision from " + legacy[-1].tag, "skill-collision", legacy[-1],
+                         partial(legacy_skill_collision, candidate)))
         if not args.only and len(tags) > 1:
             runs.append(("chain " + " -> ".join(tags + ["v" + candidate.version]), "chain", sources[tags[0]],
                          partial(chain, [sources[tag] for tag in tags], candidate)))

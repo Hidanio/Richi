@@ -13,11 +13,10 @@ import tempfile
 from evaluate_indexed_filters import cli, clone, digest, logical, physical, worker
 
 BASELINE_REVISION = 'b8a2a9aa889a7d65d433e985ca3f6a9d4cec4c60'
-CORE = 'skills/project-memory/SKILL.md'
-SEARCH_DOC = 'skills/project-memory/references/CLI.md'
-RETRIEVAL_DOC = 'skills/project-memory/references/RETRIEVAL_TOOLS.md'
-QUERY_DOC = 'skills/project-memory/references/QUERY_TOOLS.md'
-FILTERS_DOC = 'skills/project-memory/references/FILTERS.md'
+SEARCH_DOC = 'references/CLI.md'
+RETRIEVAL_DOC = 'references/RETRIEVAL_TOOLS.md'
+QUERY_DOC = 'references/QUERY_TOOLS.md'
+FILTERS_DOC = 'references/FILTERS.md'
 EVIDENCE_WHERE = "project = 'atlas' AND kind = 'decision' AND work_state = 'done'"
 POSITIVE_WHERE = "kind = 'decision' AND work_state = 'done'"
 NEGATIVE_WHERE = "tags HAS 'not-observed-in-fixture'"
@@ -78,9 +77,10 @@ PROMPTS = {
 def docs_section(root, path):
     content = (root / path).read_text(encoding='utf-8')
     if path == SEARCH_DOC:
-        start = content.index('## Поиск и контекст')
+        heading = 'Search and context' if '## Search and context' in content else 'Поиск и контекст'
+        start = content.index('## ' + heading)
         end = content.index('\n## ', start + 4)
-        return content[start:end] + '\n', 'section: Поиск и контекст'
+        return content[start:end] + '\n', 'section: ' + heading
     if path == FILTERS_DOC:
         return content[:content.index('Date equality,')], 'prefix: strict scope, grammar and string predicates'
     return content, 'whole focused document'
@@ -89,8 +89,11 @@ def docs_section(root, path):
 class Transcript:
     def __init__(self, name, arm, python, database, source, prompt):
         self.name, self.arm, self.python, self.database = name, arm, python, database
-        self.source, self.prompt = source, prompt
-        self.core = (source / CORE).read_text(encoding='utf-8')
+        self.prompt = prompt
+        self.skill = source / 'skills/richi'
+        if not self.skill.is_dir():
+            self.skill = source / 'skills/project-memory'
+        self.core = (self.skill / 'SKILL.md').read_text(encoding='utf-8')
         self.steps = []
         self.round = 0
 
@@ -117,8 +120,9 @@ class Transcript:
         return self.append(command, proc.stdout, code=code, intermediate_bytes=len(raw.encode()))
 
     def document(self, path, round_id=None):
-        content, selection = docs_section(self.source, path)
-        self.append('read_document ' + shlex.quote('/installed/' + path) + ' ' + shlex.quote(selection), content, 'documentation', round_id=round_id)
+        content, selection = docs_section(self.skill, path)
+        installed = '/installed/skills/' + self.skill.name + '/' + path
+        self.append('read_document ' + shlex.quote(installed) + ' ' + shlex.quote(selection), content, 'documentation', round_id=round_id)
 
     def semantic_docs(self, paths):
         self.round += 1

@@ -22,8 +22,8 @@ class DevSkillLinkTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         (self.site / "richi_launcher/agent_setup.py").write_text(DEV_CAPABLE)
         self.checkout = self.home / "checkout"
         self.make_checkout(self.checkout, "alpha")
-        self.codex = self.home / ".agents/skills/project-memory"
-        self.claude = self.home / ".claude/skills/project-memory"
+        self.codex = self.home / ".agents/skills/richi"
+        self.claude = self.home / ".claude/skills/richi"
         self.release = str(self.site / "richi_launcher/agent_skill")
 
     @staticmethod
@@ -33,14 +33,14 @@ class DevSkillLinkTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         (root / "pyproject.toml").write_text('[project]\nname = "richi"\n')
         for name in ("__init__.py", "memory.py", "serve.py"):
             (root / "src/richi" / name).write_text('__version__ = "dev"\n' if name == "__init__.py" else "")
-        skill = root / "skills/project-memory"
+        skill = root / "skills/richi"
         shutil.copytree(Path(richi_launcher.__file__).parent / "agent_skill", skill)
         with (skill / "SKILL.md").open("a") as stream:
             stream.write("\nSynthetic checkout " + label + "\n")
         return str(skill)
 
     def dev_link(self, checkout=None):
-        return str((checkout or self.checkout) / "skills/project-memory")
+        return str((checkout or self.checkout) / "skills/richi")
 
     def links(self):
         return os.readlink(self.codex), os.readlink(self.claude)
@@ -89,7 +89,7 @@ class DevSkillLinkTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
             self.assertEqual(status["skill_target"], self.release)  # Older managers compare this.
         self.assertEqual(agent_setup.switch_skills(True, self.checkout)["status"], "unchanged")
         # Developer edits in the checkout are expected, not drift.
-        with (self.checkout / "skills/project-memory/SKILL.md").open("a") as stream:
+        with (self.checkout / "skills/richi/SKILL.md").open("a") as stream:
             stream.write("Work in progress\n")
         self.assertEqual(self.status("codex")["changes"], [])
         released = agent_setup.switch_skills(False, self.checkout)
@@ -128,10 +128,10 @@ class DevSkillLinkTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         self.assertIn("development.source is not configured", unset["reason"])
         invalid = self.home / "invalid"
         self.make_checkout(invalid, "invalid")
-        (invalid / "skills/project-memory/SKILL.md").write_text("name: something-else\n")
+        (invalid / "skills/richi/SKILL.md").write_text("name: something-else\n")
         rejected = agent_setup.switch_skills(True, invalid)
         self.assertEqual(rejected["mode"], "release")
-        self.assertIn("no Project Memory skill", rejected["reason"])
+        self.assertIn("no Richi skill", rejected["reason"])
         self.assertEqual(self.links(), (self.release, self.release))
 
     def test_edited_or_replaced_skills_block_switching_and_are_preserved(self):
@@ -270,7 +270,7 @@ class DevSkillLinkTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         status = self.status("codex")
         self.assertEqual(status["status"], "repair_required")
         self.assertIn(str(self.codex), status["changes"])
-        self.assertIn("no Project Memory skill", status["dev_skill_error"])
+        self.assertIn("no Richi skill", status["dev_skill_error"])
         self.configure()
         self.assertEqual(os.readlink(self.codex), self.release)
         self.assertEqual(self.status("codex")["status"], "configured")

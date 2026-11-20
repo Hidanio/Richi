@@ -16,7 +16,7 @@ import threading
 import unittest
 from unittest import mock
 
-from richi import agents, memory, rules
+from richi import agents, memory, rules, skill_catalog
 from richi.output import cut_name
 from richi_launcher import agent_setup, chats, config
 from richi_launcher.claude_setup import HOOK
@@ -290,6 +290,73 @@ class RulesTests(unittest.TestCase):
         listed = {item["id"]: item for item in self.command("alpha", "rules", "list")["rules"]}
         self.assertIsNone(listed["earlier"]["skill"])
         self.assertIsNone(listed["earlier"]["skills"])
+
+    def test_legacy_skill_in_shared_and_agent_rules_follows_the_installed_skill(self):
+        old = "project-memory"
+        skill = Path(__file__).resolve().parents[1] / "skills/richi/SKILL.md"
+        # The first upgraded release may still be discovered in the old folder.
+        directory = self.root / "home/.claude/skills/project-memory"
+        directory.mkdir(parents=True)
+        installed = directory / "SKILL.md"
+        legacy = "---\nname: project-memory\ndescription: Legacy skill\n---\n"
+        foreign = "---\nname: richi\ndescription: Another skill\n---\n"
+        installed.write_text(legacy)
+        self.add("alpha", "shared", "--global", skill=old)
+        self.add("alpha", "override", "--global", skill="claude=" + old)
+        stored = self.command("alpha", "rules", "list")["rules"]
+        log = self.command("alpha", "rules", "log")["entries"]
+
+        def used():
+            shown = self.command("alpha", "rules", "show", "--agent", "claude")["rules"]
+            return [rule["use_skill"] for rule in shown]
+
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(directory.parent.parent)}):
+            self.assertEqual(used(), [old, old])
+            installed.write_bytes(skill.read_bytes())
+            self.assertEqual(used(), ["richi", "richi"])
+            # A separately installed skill with the exact requested name wins.
+            other = directory.parent / "unrelated-folder"
+            other.mkdir()
+            (other / "SKILL.md").write_text(legacy)
+            self.assertEqual(used(), [old, old])
+            # Two different skills named richi make the target ambiguous.
+            (other / "SKILL.md").write_text(foreign)
+            self.assertEqual(used(), [old, old])
+            installed.write_text(foreign)
+            self.assertEqual(used(), [old, old])
+            installed.write_text(legacy)  # rollback
+            self.assertEqual(used(), [old, old])
+        self.assertEqual(self.command("alpha", "rules", "list")["rules"], stored)
+        self.assertEqual(self.command("alpha", "rules", "log")["entries"], log)
+        # No catalog scan at startup for a workspace without a legacy skill rule.
+        self.add("beta", "custom", "--global", skill="my-review")
+        with mock.patch.object(skill_catalog, "catalog") as scan:
+            shown = self.command("beta", "rules", "show", "--agent", "claude")["rules"]
+        scan.assert_not_called()
+        self.assertEqual(shown[0]["use_skill"], "my-review")
+
+    def test_disabled_codex_skill_does_not_resolve_a_legacy_rule(self):
+        home = Path.home()
+        profile = home / "custom-codex"
+        profile.mkdir(parents=True)
+        skill = home / ".agents/skills/richi"
+        skill.parent.mkdir(parents=True)
+        skill.symlink_to(Path(__file__).resolve().parents[1] / "skills/richi")
+        self.add("alpha", "legacy", "--global", skill="project-memory")
+        with mock.patch.dict(os.environ, {"CODEX_HOME": str(profile)}):
+            def used(agent):
+                return self.command("alpha", "rules", "show", "--agent", agent)["rules"][0]["use_skill"]
+
+            self.assertEqual(used("codex"), "richi")
+            config = profile / "config.toml"
+            for path in ("~/.agents/skills/richi/SKILL.md", str((skill / "SKILL.md").resolve())):
+                with self.subTest(path=path):
+                    config.write_text("[[skills.config]]\npath = " + json.dumps(path) + "\nenabled = false\n")
+                    self.assertEqual(used("codex"), "project-memory")
+                    self.assertEqual(used("cursor"), "richi")
+            with config.open("a") as stream:
+                stream.write('[[skills.config]]\npath = "../.agents/skills/richi/SKILL.md"\nenabled = true\n')
+            self.assertEqual(used("codex"), "project-memory")  # ambiguous opt-out
 
     def test_agents_share_a_skill_or_each_get_their_own(self):
         def add(identifier, *skills):
@@ -1266,15 +1333,14 @@ class RulesIntegrationTests(unittest.TestCase):
         self.assertIn("resumed", context(source="resume"))
         self.assertEqual(context(), startup)
 
-    def test_managed_instructions_stay_as_released(self):
-        # An update is activated by the launcher it replaces, which rewrites the skill link and the
-        # Claude hook but not this block. A changed text would leave every updated installation
-        # needing repair, so the rules step lives in the chat binding and the hook instead. Change
-        # these only together with a way for an updated installation to get the new text.
+    def test_legacy_managed_instructions_stay_as_released(self):
+        # The previous launcher keeps these bytes during update and expects them
+        # when rolling back. The modern block is installed after that window.
         for agent, digest in (("codex", "a908ceb314de9bdbd7c5c22366957d76862553701baccec9a5c6ae86cca8153c"),
                               ("claude", "6ef11912428f7f4356b598d7a9cd74dad3e30fdd02ac6d2888030f0903a7bc79")):
             with self.subTest(agent=agent):
-                self.assertEqual(hashlib.sha256(agent_setup._block("/opt/richi/bin/richi", agent)).hexdigest(), digest)
+                block = agent_setup._block("/opt/richi/bin/richi", agent, agent_setup.LEGACY_NAME)
+                self.assertEqual(hashlib.sha256(block).hexdigest(), digest)
 
 
 if __name__ == "__main__":

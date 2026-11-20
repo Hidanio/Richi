@@ -21,9 +21,9 @@ Definitions remain in the Encyclopedia when independently useful.
 The catalog uses the same SQLite store, sources and history. `tool` entities
 require schema 3. Existing stores need an explicit backup and migration; reading
 the catalog or switching runtime never migrates them automatically. See
-[graph and migration](../skills/project-memory/references/GRAPH.md).
+[graph and migration](../skills/richi/references/GRAPH.md).
 
 The complete CLI and agent authoring procedure is
-[Tools and their use](../skills/project-memory/references/TOOLS.md). It covers
+[Tools and their use](../skills/richi/references/TOOLS.md). It covers
 canonical link directions, scope, historical outcomes and conflict protection.
 There is no automatic import from repositories, tasks or another workspace.

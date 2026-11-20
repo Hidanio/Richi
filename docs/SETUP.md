@@ -18,7 +18,7 @@ You need macOS or Linux, curl and Python 3.9+ with sqlite3, venv and ensurepip.
 On Debian/Ubuntu you may also need `python3-venv`. Git is required for repository history.
 
 The installer puts a fixed release in `~/.local/share/richi/venv`, creates the
-`~/.local/bin/richi` command and connects Project Memory to the agent you chose.
+`~/.local/bin/richi` command and connects the Richi skill to the agent you chose.
 Omitting `--agent` selects Codex. Omitting `--yes` lets you inspect the plan
 and confirm it in a terminal.
 
@@ -30,7 +30,7 @@ workspace settings, chat bindings and data in place.
 <a id="область-действия-и-существующие-настройки"></a>
 ## Scope and existing settings
 
-For Codex, setup links `~/.agents/skills/project-memory` and covers local chats
+For Codex, setup links `~/.agents/skills/richi` and covers local chats
 in the selected profile, including projectless chats. It uses `${CODEX_HOME:-$HOME/.codex}/AGENTS.md`, unless a nonempty
 `AGENTS.override.md` takes precedence. Other profiles, remote hosts, cloud agents
 and other agent products need their own setup. Open chats may retain old instructions.
@@ -44,6 +44,21 @@ Setup refuses instructions exceeding Codex's default 32 KiB discovery budget;
 custom lower budgets and disabled skills must be reconciled in Codex settings.
 See official [skills](https://learn.chatgpt.com/docs/build-skills) and
 [instruction discovery](https://learn.chatgpt.com/docs/agent-configuration/agents-md).
+
+Codex can disable an individual skill by its `SKILL.md` path in
+`[[skills.config]]` in `$CODEX_HOME/config.toml`. If you are upgrading from
+v1.2.0 or earlier and disabled the skill by its resolved package path, first
+add `enabled = false` for the absolute path to
+`~/.agents/skills/project-memory/SKILL.md`, using your home directory in place
+of `~`. The old updater changes the package target on the first upgrade.
+Once the installed launcher supports the rename, if setup, an update or a dev
+switch would enable a previously disabled skill, it stops before changing
+the links. To keep it disabled, retain the existing entry and add an entry
+with `enabled = false` for the exact destination `SKILL.md` printed in the
+message, then retry. Keeping both paths also protects rollback. On Python
+3.9–3.10 Richi uses pip's TOML reader when available. Without a reader a
+possible disabled-skill setting defers the change until the configuration
+can be checked with a TOML-capable installation.
 
 PATH setup supports zsh (`$ZDOTDIR/.zshrc` or `~/.zshrc`), bash (`~/.bashrc` plus
 its first existing login profile, defaulting to `~/.bash_profile` on macOS or
@@ -74,8 +89,10 @@ is fetched. Online first installation upgrades pip in the dedicated environment.
 Repeating the command reuses an installer-owned environment, checks for a newer
 stable release and reconciles setup without duplicate instruction blocks.
 Interrupted first environments are retained as `.interrupted-*` backups before
-retrying creation. Installer `--dry-run` previews paths and prerequisites only;
-the installed command checks for integration conflicts. The examples below use
+retrying creation. Installer `--dry-run` shows the agent's parent
+`skills_directory`. The selected release chooses the skill subdirectory,
+which can depend on its rollback target. The installed command shows the exact
+path and checks for integration conflicts. The examples below use
 Codex. For other clients, pass the same `--agent` as at first installation.
 
 ```sh
@@ -114,7 +131,29 @@ richi update apply
 
 To return to the previous release later, use `richi update rollback`.
 
-The complete skill and references are bundled from `skills/project-memory/` into
+Fresh installations register the skill as `richi`. An update delivers the
+renamed skill to all connected agents. While the rollback release still expects
+`project-memory`, the managed directory and instruction block keep their old
+names. Codex already lists the skill as Richi in new chats. When both releases
+support the rename, the updater moves the managed link and updates the block.
+If a development checkout still supplies only `project-memory`, its agents
+keep using that checkout and its original skill name.
+
+If an older updater encounters your own `richi` skill, the next
+`richi chat current` lists the conflicting paths in `skill_conflicts`.
+This includes a skill in another folder that declares `name: richi` and
+skills that Cursor discovers under other agents' profiles. The `managed_skill`
+field identifies Richi's verified copy. Rename the personal skill or move it
+outside discovery. For paths managed by setup, the notice also offers a
+read-only preview of the backup.
+
+During that transition, clients that derive a slash command from the directory
+may still use the old name. Cursor expects the directory to match the skill name,
+so `/richi` may only appear after the directory moves. Until then, the Cursor
+session hook gives the agent the path to the installed `SKILL.md`.
+[Cursor skill format](https://cursor.com/docs/skills#frontmatter-fields).
+
+The complete skill and references are bundled from `skills/richi/` into
 the wheel. Update and rollback switch its managed link to the matching package.
 A recoverable file journal coordinates the skill link, ownership metadata and
 runtime pointer. Interrupted activation is completed or undone on the next CLI
@@ -128,7 +167,7 @@ Automatic installation stays off unless explicitly enabled with
 `richi update auto enable --interval 6h --install`; see [UPDATES.md](UPDATES.md).
 Workspace dev settings are preserved. Dev mode switches the runtime **and the
 managed skill links**: `richi config set dev true` points every managed skill to
-`<development.source>/skills/project-memory`, and `richi config set dev false`
+`<development.source>/skills/richi`, and `richi config set dev false`
 points it back to the installed release, each in one recoverable transaction
 reported as `agent_skills`. This applies to every connected agent. Instruction
 blocks, adapter files such as hooks, PATH blocks and the launcher stay on the
@@ -212,7 +251,7 @@ richi setup --agent cursor --yes
 richi setup --agent cursor --status
 ```
 
-Setup links `~/.cursor/skills/project-memory`, installs the user rule
+Setup links `~/.cursor/skills/richi`, installs the user rule
 `~/.cursor/rules/richi-project-memory.mdc` and adds a `sessionStart` hook to
 `~/.cursor/hooks.json` alongside your existing hooks. The hook runs
 `~/.cursor/richi/session_start.py`. [Cursor skills](https://cursor.com/docs/skills)
@@ -235,7 +274,7 @@ richi setup --agent claude --status
 ```
 
 Claude setup installs the bundled skill under
-`~/.claude/skills/project-memory`, a managed block in `~/.claude/CLAUDE.md`, and a
+`~/.claude/skills/richi`, a managed block in `~/.claude/CLAUDE.md`, and a
 SessionStart hook in `settings.json`, preserving unrelated settings and hooks.
 `CLAUDE_CONFIG_DIR` selects an alternate profile. Existing copied skills require
 `--replace-skill`, which backs them up outside skill discovery.

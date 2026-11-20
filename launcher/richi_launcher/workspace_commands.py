@@ -263,7 +263,8 @@ def chat_parser():
     document(current, about="""
         Reads only metadata and never opens a knowledge database. When a release
         check has recorded an available update, the result also carries an update
-        notice; nothing is downloaded or installed.""",
+        notice. During the skill rename it also lists occupied discovery paths
+        in skill_conflicts, with the managed SKILL.md when ownership can be verified.""",
              examples=(("", "richi chat current"), ("Another client passes its chat ID", "richi --chat my-client:42 chat current")))
     document(bind, about="""
         Pass either NAME or --current. An existing different binding is kept unless
@@ -283,6 +284,10 @@ def chat_command(argv, selectors, chat_id, *, compact_json=False):
         pending = auto_update.notice()
         if pending is not None:
             result["update"] = pending
+        from .agent_setup import rename_conflicts
+        conflicts = rename_conflicts()
+        if conflicts:
+            result["skill_conflicts"] = conflicts
         return _emit(result, compact_json=compact_json)
     reject_storage_overrides(selectors)
     return _emit(bind_chat(chat_id, workspace=args.name, current=args.current, replace=args.replace),
