@@ -182,7 +182,16 @@ def restore(conn, family, record, *, counts_only=False):
             record["sources"][int(index)]["measurements"] = rows
 
 
-_NUMBER = r"[+\-−]?(?:[0-9]+(?:[.,][0-9]+)?|[.,][0-9]+)(?:e[+\-−]?[0-9]+)?"
+# A single comma or period retains its decimal meaning. Mixed punctuation
+# identifies the decimal separator, and repeated dots alone may be a version.
+_SPACES = " \u00a0\u202f"
+_NUMBER_TRANSLATION = str.maketrans("−", "-", _SPACES)
+_MANTISSA = (r"[0-9]{1,3}(?:,[0-9]{3})+\.[0-9]+|"
+             r"[0-9]{1,3}(?:\.[0-9]{3})+,[0-9]+|"
+             r"[0-9]{1,3}(?:,[0-9]{3}){2,}|"
+             rf"[0-9]{{1,3}}(?:[{_SPACES}][0-9]{{3}})+(?:[.,][0-9]+)?|"
+             r"[0-9]+(?:[.,][0-9]+)?|[.,][0-9]+")
+_NUMBER = r"[+\-−]?(?:" + _MANTISSA + r")(?:e[+\-−]?[0-9]+)?"
 _QUANTITY = re.compile("(?P<number>" + _NUMBER + r")(?P<unit>[^\W\d_]+(?:/[^\W\d_]+)?|[%‰]|°[cf]?)?", re.IGNORECASE)
 # Consume identifiers as a whole, including v0.5, p95, EX-5 and 1.2.3.
 _TOKEN = re.compile(_QUANTITY.pattern + r"(?!\w|[-.:/]\w)|[^\W_]+(?:[-_.:/][^\W_]+)*", re.IGNORECASE)
@@ -196,7 +205,13 @@ def query_terms(text):
 
 
 def _number(value):
-    value = value.replace(",", ".").replace("−", "-").lstrip("+").replace("e+", "e")
+    value = value.translate(_NUMBER_TRANSLATION).lstrip("+").replace("e+", "e")
+    if "," in value and "." in value:
+        grouping = "," if value.rfind(",") < value.rfind(".") else "."
+        value = value.replace(grouping, "")
+    elif value.count(",") > 1:
+        value = value.replace(",", "")
+    value = value.replace(",", ".")
     return re.sub(r"^(-?)\.", r"\g<1>0.", value)
 
 
@@ -218,6 +233,10 @@ class MeasurementQuery:
         for number, _ in self.numbers:
             digits = re.findall("[0-9]+", number)
             result.add(digits[0])
+            if len(digits[0]) > 3:
+                # Published indexes also have a prefix at the last group of a
+                # written thousands group, e.g. "234" in both 1,234 and 1.234.
+                result.add(digits[0][-3:])
             if number.lstrip("-").startswith("0."):
                 result.add(digits[1])
         return result
