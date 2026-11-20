@@ -481,8 +481,15 @@ def _foreign_skills(records, names):
     if not names:
         return {}
     from richi import agents, skill_catalog
-    registry = [agent for agent in agents.registry() if agent.id in names]
-    discovered = skill_catalog.catalog(registry=registry, rule_aliases_only=True)["richi_paths"]
+    # A background updater or another terminal may have a different profile.
+    # For connected agents, setup recorded the profile whose discovery we are changing.
+    environ = dict(os.environ)
+    for agent, record in records.items():
+        variable = getattr(agent_adapters.get(agent), "PROFILE_ENV", None)
+        if variable:
+            environ[variable] = str(Path(record["instructions"]).parent)
+    registry = [agent for agent in agents.registry(environ=environ) if agent.id in names]
+    discovered = skill_catalog.catalog(environ=environ, registry=registry, rule_aliases_only=True)["richi_paths"]
     owned = set()
     for record in records.values():
         path = Path(record["skill"])

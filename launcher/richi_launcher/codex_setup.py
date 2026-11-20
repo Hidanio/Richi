@@ -8,11 +8,12 @@ from . import setup_files as files
 from .config import ConfigError
 
 LABEL = "Codex"
+PROFILE_ENV = "CODEX_HOME"
 INSTRUCTION_LIMIT = 32768
 
 
 def profile_dir():
-    return Path(os.environ.get("CODEX_HOME") or Path.home().resolve() / ".codex").expanduser()
+    return Path(os.environ.get(PROFILE_ENV) or Path.home().resolve() / ".codex").expanduser()
 
 
 def detected():

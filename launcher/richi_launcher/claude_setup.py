@@ -9,11 +9,12 @@ from . import setup_files as files
 from .config import ConfigError
 
 LABEL = "Claude Code"
+PROFILE_ENV = "CLAUDE_CONFIG_DIR"
 INSTRUCTION_LIMIT = None
 
 
 def profile_dir():
-    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home().resolve() / ".claude").expanduser()
+    return Path(os.environ.get(PROFILE_ENV) or Path.home().resolve() / ".claude").expanduser()
 
 
 def detected():

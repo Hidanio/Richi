@@ -125,6 +125,26 @@ class SkillRenameTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         self.assertTrue(doc.is_file())
         self.assertFalse((self.home / ".cursor/skills/richi").exists())
 
+    def test_background_update_checks_the_configured_codex_and_claude_profiles(self):
+        profiles = {"CODEX_HOME": str(self.home / ".codex"),
+                    "CLAUDE_CONFIG_DIR": str(self.home / "claude-custom")}
+        with patch.dict(os.environ, profiles):
+            _, state = self.transition()
+            self.configure("--agent", "claude")
+        paths = {}
+        for agent, profile in zip(("codex", "claude"), profiles.values()):
+            paths[agent] = Path(profile) / "skills/other"
+            paths[agent].mkdir(parents=True)
+            (paths[agent] / "SKILL.md").write_text("---\nname: richi\n---\nUser skill.")
+        with patch.dict(os.environ, {key: str(self.home / "unused") for key in profiles}):
+            notices = agent_setup.rename_conflicts()
+            self.assertEqual({item["agent"]: item["conflicting_paths"] for item in notices},
+                             {agent: [str(path)] for agent, path in paths.items()})
+            with self.assertRaisesRegex(ConfigError, "Another skill named richi"):
+                installation._activate(self.ctx, state, "updated")
+        self.assertTrue(self.old_skill.is_symlink())
+        self.assertFalse(self.new_skill.exists())
+
     def test_empty_symlinked_codex_skill_root_allows_managed_rename(self):
         _, state = self.transition()
         external = self.home / "dotfiles/skills"
