@@ -45,12 +45,11 @@ def check_skill_change(record, previous, skill, target, *, check_alternates=Fals
         profiles.add((Path(record["instructions"]).parent, Path(record["skill"]).parent))
     directory = os.path.realpath(skill.parent)
     for profile, shared in sorted(profiles):
-        roots = [root for root in (shared, profile / "skills") if os.path.realpath(root) == directory]
-        if roots:
-            _check_profile_skill(profile, previous, skill, target, roots, check_alternates)
+        if any(os.path.realpath(root) == directory for root in (shared, profile / "skills")):
+            _check_profile_skill(profile, previous, skill, target, check_alternates)
 
 
-def _check_profile_skill(profile, previous, skill, target, roots, check_alternates):
+def _check_profile_skill(profile, previous, skill, target, check_alternates):
     names = ("project-memory", "richi")
     old = {Path(previous)} if previous else {skill.with_name(name) for name in names}
     if check_alternates:
@@ -68,7 +67,7 @@ def _check_profile_skill(profile, previous, skill, target, roots, check_alternat
     if not settings:
         return
     new_file = skill / "SKILL.md"
-    new_files = {root / skill.name / "SKILL.md" for root in roots} | {new_file}
+    discovery_file = Path(os.path.realpath(skill.parent)) / skill.name / "SKILL.md"
     # A user-owned link can be dangling or cyclic. It can still be backed up
     # by setup even if it has no discoverable SKILL.md to compare.
     new_target = os.path.realpath(Path(target) / "SKILL.md")
@@ -78,15 +77,18 @@ def _check_profile_skill(profile, previous, skill, target, roots, check_alternat
     remains_disabled = False
     could_enable = False
     for path, enabled in settings:
+        # Resolve profile-relative paths and aliases of the discovery root.
+        # Keep the skill directory itself lexical: its symlink is about to move.
+        location = Path(os.path.realpath(path.parent.parent)) / path.parent.name / path.name
         if enabled:
-            if path in new_files or os.path.realpath(path) == new_target:
+            if location == discovery_file or os.path.realpath(path) == new_target:
                 could_enable = True
             continue
         if path in (old - {skill}) or path in previous_files or os.path.realpath(path) in previous_targets:
             was_disabled = True
         # Codex matches SKILL.md. A directory-only entry cannot establish that
         # the destination stays disabled. An old symlink might disappear.
-        if path in new_files or str(path) == new_target:
+        if location == discovery_file or str(location) == new_target:
             remains_disabled = True
     if was_disabled and (not remains_disabled or could_enable):
         raise ConfigError("Moving the Codex skill would bypass a disabled skill setting in " + str(config)

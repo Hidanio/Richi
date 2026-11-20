@@ -76,6 +76,23 @@ class CodexSkillOptoutTests(test_agent_setup.AgentSetupFixture, unittest.TestCas
         self.assertTrue(self.new_skill.is_symlink())
         self.assertEqual(config.read_bytes(), data)
 
+    def test_profile_relative_optouts_cover_the_rename_and_next_target_change(self):
+        _, state = self.transition()
+        old = "../.agents/skills/project-memory/SKILL.md"
+        new = "../.agents/skills/richi/SKILL.md"
+        config = self.settings((old, False), (new, False))
+        before = config.read_bytes()
+        self.activate(state)
+        self.assertEqual(config.read_bytes(), before)
+        self.assertTrue(self.new_skill.is_symlink())
+        checkout = self.home / "checkout"
+        target = test_dev_skill_links.DevSkillLinkTests.make_checkout(checkout, "branded")
+        self.settings((new, False))
+        before = config.read_bytes()
+        self.assertEqual(agent_setup.switch_skills(True, checkout)["mode"], "dev")
+        self.assertEqual(os.readlink(self.new_skill), str(target))
+        self.assertEqual(config.read_bytes(), before)
+
     def test_dev_switch_preserves_a_disabled_resolved_skill_target(self):
         self.configure()
         skill = self.home / ".agents/skills/richi"
