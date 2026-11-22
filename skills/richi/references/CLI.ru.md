@@ -246,7 +246,7 @@ richi context --project service-example --limit 30
 ```sh
 richi backup
 richi backup --output '/путь с пробелами/memory-backup.sqlite3'
-richi --db '/путь с пробелами/memory-backup.sqlite3' check
+richi -w default --db '/путь с пробелами/memory-backup.sqlite3' check
 ```
 
 Без `--output` копия сохраняется в `backups/` с UTC-временем в имени. Используется SQLite backup API, поэтому копия включает закоммиченные данные из WAL и проходит проверку integrity. Существующий файл не перезаписывается. Для восстановления сначала остановите процессы, использующие исходную базу; наиболее простой безопасный вариант — работать с проверенной копией через `--db`. Не копируйте только активный `memory.sqlite3`, игнорируя `-wal` и `-shm`.

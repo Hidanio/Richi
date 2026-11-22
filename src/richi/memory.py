@@ -630,12 +630,32 @@ def context(conn, args):
 _SQLITE_SIDECARS = ("-journal", "-wal", "-shm")
 
 
+@contextmanager
+def _directory_fd(path):
+    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        yield descriptor
+    finally:
+        os.close(descriptor)
+
+
+def _ensure_backup_directory(folder):
+    if not folder.is_dir():
+        _ensure_backup_directory(folder.parent)
+        with _directory_fd(folder.parent) as parent:
+            folder.mkdir(exist_ok=True)
+            os.fsync(parent)
+
+
 def _backup_destination(database, output, label):
     if output:
         requested = Path(output).expanduser()
         return requested.parent.resolve() / requested.name
-    folder = database.parent / "backups"
-    folder.mkdir(parents=True, exist_ok=True)
+    folder = database.parent.resolve() / "backups"
+    # A concurrent first backup may just have created this directory.
+    with _directory_fd(folder.parent) as parent:
+        folder.mkdir(exist_ok=True)
+        os.fsync(parent)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     suffix = ("-" + label if label else "") + "-" + stamp + ".sqlite3"
     stem = database.stem
@@ -654,9 +674,17 @@ def _check_backup_destination(destination, database):
             base = destination.parent / destination.name[:-len(suffix)]
             if base.is_file() and base.samefile(database):
                 raise MemoryError("Backup destination must differ from the active database and sidecar files")
-        if os.path.lexists(str(destination) + suffix):
-            raise MemoryError("Backup destination has a leftover " + destination.name + suffix +
-                              " file of another database beside it; move it aside first")
+        sidecar = Path(str(destination) + suffix)
+        try:
+            sidecar.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            if exc.errno == errno.ENAMETOOLONG:
+                raise MemoryError("Backup path is too long for SQLite recovery files: " + str(destination)) from exc
+            raise
+        raise MemoryError("Backup destination has a leftover " + sidecar.name +
+                          " file of another database beside it; move it aside first")
 
 
 def _publish_backup(snapshot, destination):
@@ -685,8 +713,9 @@ def backup(conn, database, output, label=None):
     """Publish a verified, standalone SQLite snapshot without replacing an existing file."""
     destination = _backup_destination(database, output, label)
     _check_backup_destination(destination, database)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=destination.parent, prefix=".richi-backup-") as staging:
+    _ensure_backup_directory(destination.parent)
+    with _directory_fd(destination.parent) as directory, \
+            tempfile.TemporaryDirectory(dir=destination.parent, prefix=".richi-backup-") as staging:
         # SQLite may create sidecars. Keep all of them private until the snapshot is closed.
         snapshot = Path(staging) / "snapshot.sqlite3"
         snapshot.touch(mode=0o600)
@@ -702,11 +731,11 @@ def backup(conn, database, output, label=None):
             os.fsync(stream.fileno())
         _check_backup_destination(destination, database)
         _publish_backup(snapshot, destination)
-        directory = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(directory)
-        finally:
-            os.close(directory)
+        except OSError as exc:
+            raise MemoryError("Verified backup published at " + str(destination) +
+                              "; could not sync its directory: " + str(exc)) from exc
     return {"backup": str(destination), "status": "created"}
 
 

@@ -112,11 +112,11 @@ changing the installed version. Stop the map and every Richi command that uses
 the workspace, and move the database together with any `-wal`, `-shm` and `-journal` files
 aside. In a terminal, use the `config_file` and `database` paths from
 `richi config show` for the intended workspace. If the default workspace has
-no config file, replace `--config /path/to/config.json` below with `-w default`.
+no config file, replace `--config '/path/to/config.json'` below with `-w default`.
 
 ```sh
-richi --config /path/to/config.json --db /path/to/backups/memory-schema2-20261115T101500000000Z.sqlite3 backup --output /path/to/memory.sqlite3
-richi --config /path/to/config.json --db /path/to/memory.sqlite3 check
+richi --config '/path/to/config.json' --db '/path/to/backups/memory-schema2-20261115T101500000000Z.sqlite3' backup --output '/path/to/memory.sqlite3'
+richi --config '/path/to/config.json' --db '/path/to/memory.sqlite3' check
 ```
 
 `backup` verifies what it wrote and refuses a path that still has a database or

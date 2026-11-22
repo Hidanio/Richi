@@ -246,7 +246,7 @@ stays at version 2. See [GRAPH.md](GRAPH.md) for migration and compatibility.
 ```sh
 richi backup
 richi backup --output '/путь с пробелами/memory-backup.sqlite3'
-richi --db '/путь с пробелами/memory-backup.sqlite3' check
+richi -w default --db '/путь с пробелами/memory-backup.sqlite3' check
 ```
 
 Without `--output`, a backup is saved in `backups/` with a UTC timestamp in its name. The SQLite backup API includes committed data from WAL and validates integrity. Existing files are not overwritten. To restore, first stop processes using the original database; the simplest safe option is to use the verified copy through `--db`. Do not copy only an active `memory.sqlite3` while ignoring `-wal` and `-shm`.

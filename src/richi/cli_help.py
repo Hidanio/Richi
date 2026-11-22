@@ -704,7 +704,7 @@ DETAILS = {
     "check": dict(about="""
         Runs SQLite integrity and foreign key checks and reports the schema version
         and search backend. Exits with an error when anything is wrong.""",
-        examples=(("", "richi check"), ("Verify a backup", "richi --db /path/to/backup.sqlite3 check")),
+        examples=(("", "richi check"), ("Verify a backup", "richi -w default --db '/path/to/backup.sqlite3' check")),
         see=("backup", "punisher")),
     "backup": dict(about="""
         Uses SQLite's backup API, so committed WAL data is included, then checks the
@@ -714,9 +714,9 @@ DETAILS = {
         Captured Git artifacts in artifacts/git/ are not included: copy them
         separately.""",
         examples=(("", "richi backup"), ("", "richi backup --output /path/to/memory-backup.sqlite3"),
-                  ("Check the copy", "richi --db /path/to/memory-backup.sqlite3 check"),
+                  ("Check the copy", "richi -w default --db '/path/to/memory-backup.sqlite3' check"),
                   ("Put a copy back at a cleared database path",
-                   "richi --config /path/to/config.json --db /path/to/memory-backup.sqlite3 backup --output /path/to/memory.sqlite3")),
+                   "richi --config '/path/to/config.json' --db '/path/to/memory-backup.sqlite3' backup --output '/path/to/memory.sqlite3'")),
         see=("check", "migrate")),
     "storage": dict(about="""
         stats is read-only. optimize shows a plan; with --apply it makes a verified
@@ -748,7 +748,7 @@ DETAILS = {
         Writes a verified copy of the store to backups/ beside it, then upgrades
         schema 1 or 2 to the current schema in one transaction, keeping records,
         links, history and indexes. Before upgrading, migrate checks integrity and foreign keys.
-        The result names the copy. On the current schema it returns existing immediately;
+        The result names the copy. On the current schema it returns existing;
         run richi check for a full integrity and foreign key check.
 
         Upgrades go forward only: older releases may not support the upgraded schema.

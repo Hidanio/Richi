@@ -114,11 +114,11 @@ Richi обещает одно направление. Каждый опубли�
 этим workspace, и уберите базу вместе со всеми её файлами `-wal`, `-shm` и `-journal`.
 В терминале подставьте пути `config_file` и `database` из вывода `richi config show`
 для нужного workspace. Если у workspace по умолчанию нет файла конфигурации,
-замените `--config /path/to/config.json` в командах ниже на `-w default`.
+замените `--config '/path/to/config.json'` в командах ниже на `-w default`.
 
 ```sh
-richi --config /path/to/config.json --db /path/to/backups/memory-schema2-20261115T101500000000Z.sqlite3 backup --output /path/to/memory.sqlite3
-richi --config /path/to/config.json --db /path/to/memory.sqlite3 check
+richi --config '/path/to/config.json' --db '/path/to/backups/memory-schema2-20261115T101500000000Z.sqlite3' backup --output '/path/to/memory.sqlite3'
+richi --config '/path/to/config.json' --db '/path/to/memory.sqlite3' check
 ```
 
 `backup` проверяет записанное и отказывает, если по этому пути ещё лежит база или

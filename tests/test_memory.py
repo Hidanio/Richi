@@ -3,8 +3,10 @@ import concurrent.futures
 from contextlib import closing
 import errno
 import json
+import os
 import signal
 import sqlite3
+import stat
 import subprocess
 import sys
 import tempfile
@@ -225,6 +227,33 @@ with sqlite3.connect(str(source), factory=InterruptDuringCopy) as conn:
         self.assertEqual(process.returncode, -signal.SIGTERM)
         self.assertFalse(target.exists())
         self.run_cli("backup", "--output", str(target))
+        self.assertEqual(self.run_cli("check", db=target)["status"], "ok")
+
+    def test_explicit_backup_name_must_leave_room_for_sqlite_sidecars(self):
+        target = self.root / ("x" * os.pathconf(self.root, "PC_NAME_MAX"))
+        with closing(memory.connect(self.db, readonly=True)) as conn:
+            with self.assertRaisesRegex(memory.MemoryError, "too long for SQLite"):
+                memory.backup(conn, self.db, str(target))
+        self.assertFalse(target.exists())
+
+    def test_backup_reports_whether_directory_failure_preceded_publication(self):
+        target = self.root.resolve() / "result.sqlite3"
+        with closing(memory.connect(self.db, readonly=True)) as conn:
+            with mock.patch.object(memory, "_directory_fd", side_effect=PermissionError("directory unreadable")):
+                with self.assertRaises(PermissionError):
+                    memory.backup(conn, self.db, str(target))
+            self.assertFalse(target.exists())
+
+            fsync = os.fsync
+            def fail_directory_sync(fd):
+                if stat.S_ISDIR(os.fstat(fd).st_mode):
+                    raise OSError("directory sync failed")
+                fsync(fd)
+
+            with mock.patch.object(os, "fsync", side_effect=fail_directory_sync):
+                with self.assertRaises(memory.MemoryError) as error:
+                    memory.backup(conn, self.db, str(target))
+            self.assertIn("Verified backup published at " + str(target), str(error.exception))
         self.assertEqual(self.run_cli("check", db=target)["status"], "ok")
 
     def test_backup_publication_without_hard_links_never_overwrites(self):

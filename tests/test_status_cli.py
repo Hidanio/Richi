@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import sqlite3
 import subprocess
@@ -128,6 +129,8 @@ class StatusCliTests(unittest.TestCase):
         self.assertEqual(self.snapshot(), before)
 
     def test_documented_restore_works_with_named_workspace_selected(self):
+        self.environment["XDG_DATA_HOME"] = str(self.root / "workspace data")
+        self.environment["HOME"] = str(self.root / "user home")
         self.create("team", initialized=True)
         self.command("use", "team")
         self.project("team", "original")
@@ -146,9 +149,11 @@ class StatusCliTests(unittest.TestCase):
         guide = (ROOT / "docs" / "UPDATES.md").read_text().split('<a id="forward-only"></a>')[1]
         example = guide.split('```sh\n', 1)[1].split('```', 1)[0]
         for line in example.splitlines():
-            command, *args = line.split()
+            for placeholder, path in placeholders.items():
+                line = line.replace(placeholder, path)
+            command, *args = shlex.split(line)
             self.assertEqual(command, "richi")
-            self.command(*(placeholders.get(arg, arg) for arg in args))
+            self.command(*args)
         self.assertEqual(self.command("config", "show")["workspace"], "team")
         with closing(sqlite3.connect(database)) as restored:
             self.assertEqual(restored.execute("SELECT id FROM projects").fetchall(), [("original",)])
