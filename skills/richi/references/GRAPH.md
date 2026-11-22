@@ -42,7 +42,7 @@ to allow `tool`. IDs, payloads, history, graph links and existing search indexes
 are preserved. Integrity and foreign keys are checked before and after the
 change. An error rolls back the transaction and names the retained copy.
 Unknown versions are rejected before any copy is made; repeating the command on
-schema 3 returns `existing` and makes no copy.
+schema 3 returns `existing` and makes no copy. Run `richi check` to check integrity and foreign keys on the current schema.
 
 The current runtime reads/writes schemas 1, 2 and 3. Graph operations require
 schema 2 or 3; writing a `tool` requires schema 3. New `init` stores use schema 3.

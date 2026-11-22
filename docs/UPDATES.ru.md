@@ -111,13 +111,14 @@ Richi обещает одно направление. Каждый опубли�
 
 Текущий релиз по-прежнему читает копию, поэтому данные можно вернуть, не меняя
 установленную версию. Остановите карту и все команды Richi, которые работают с
-этим workspace, и уберите базу вместе со всеми её файлами `-wal`, `-shm` и `-journal`; путь к базе
-показывает `richi config show`. Затем запишите копию на место базы и проверьте
-результат:
+этим workspace, и уберите базу вместе со всеми её файлами `-wal`, `-shm` и `-journal`.
+В терминале подставьте пути `config_file` и `database` из вывода `richi config show`
+для нужного workspace. Если у workspace по умолчанию нет файла конфигурации,
+замените `--config /path/to/config.json` в командах ниже на `-w default`.
 
 ```sh
-richi --db /path/to/backups/memory-schema2-20261115T101500000000Z.sqlite3 backup --output /path/to/memory.sqlite3
-richi --db /path/to/memory.sqlite3 check
+richi --config /path/to/config.json --db /path/to/backups/memory-schema2-20261115T101500000000Z.sqlite3 backup --output /path/to/memory.sqlite3
+richi --config /path/to/config.json --db /path/to/memory.sqlite3 check
 ```
 
 `backup` проверяет записанное и отказывает, если по этому пути ещё лежит база или

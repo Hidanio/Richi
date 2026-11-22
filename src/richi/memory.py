@@ -4,6 +4,7 @@
 import argparse
 from contextlib import closing, contextmanager
 from datetime import date, datetime, timezone
+import errno
 import hashlib
 import json
 import os
@@ -11,6 +12,7 @@ from pathlib import Path
 import re
 import sqlite3
 import sys
+import tempfile
 from . import graph
 from . import compact
 from . import measurements
@@ -625,34 +627,86 @@ def context(conn, args):
             "selection": "Entries linked to the project first, then direct neighbors; newest updated first within each group."}
 
 
-def backup(conn, database, output, label=None):
-    """Write a verified copy of the store. label, a short word such as schema2,
-    goes into the default file name so that a copy can be told from the others."""
-    name = database.stem + ("-" + label if label else "") + "-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    destination = Path(output).expanduser().resolve() if output else database.parent / "backups" / (name + ".sqlite3")
-    sidecars = ("-journal", "-wal", "-shm")
-    if destination == database or any(destination == Path(str(database) + suffix) for suffix in sidecars):
-        raise MemoryError("Backup destination must differ from the active database and sidecar files")
-    # Opening the destination could consume recovery files belonging to the old store.
-    for suffix in sidecars:
-        if not os.path.lexists(str(destination)) and os.path.lexists(str(destination) + suffix):
+_SQLITE_SIDECARS = ("-journal", "-wal", "-shm")
+
+
+def _backup_destination(database, output, label):
+    if output:
+        requested = Path(output).expanduser()
+        return requested.parent.resolve() / requested.name
+    folder = database.parent / "backups"
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    suffix = ("-" + label if label else "") + "-" + stamp + ".sqlite3"
+    stem = database.stem
+    limit = os.pathconf(folder, "PC_NAME_MAX")
+    if limit > 0 and len(os.fsencode(stem + suffix + "-journal")) > limit:
+        stem = "memory"
+    return folder / (stem + suffix)
+
+
+def _check_backup_destination(destination, database):
+    if os.path.lexists(destination):
+        raise MemoryError("Backup destination already exists: " + str(destination))
+    for suffix in _SQLITE_SIDECARS:
+        if destination.name.lower().endswith(suffix) and len(destination.name) > len(suffix):
+            # Ask the filesystem whether the base names identify the same database.
+            base = destination.parent / destination.name[:-len(suffix)]
+            if base.is_file() and base.samefile(database):
+                raise MemoryError("Backup destination must differ from the active database and sidecar files")
+        if os.path.lexists(str(destination) + suffix):
             raise MemoryError("Backup destination has a leftover " + destination.name + suffix +
                               " file of another database beside it; move it aside first")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(destination), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    os.close(fd)
+
+
+def _publish_backup(snapshot, destination):
     try:
-        target = sqlite3.connect(str(destination))
-        try:
+        os.link(snapshot, destination)
+        return
+    except OSError as exc:
+        if exc.errno not in (errno.EPERM, errno.ENOTSUP, errno.ENOSYS):
+            raise
+        # Some removable volumes support exclusive rename but cannot make hard links.
+        import ctypes
+        libc = ctypes.CDLL(None, use_errno=True)
+        if sys.platform == "darwin" and hasattr(libc, "renamex_np"):
+            result = libc.renamex_np(os.fsencode(snapshot), os.fsencode(destination), 4)  # RENAME_EXCL
+        elif sys.platform.startswith("linux") and hasattr(libc, "renameat2"):
+            # Absolute paths ignore the directory descriptors; 1 is RENAME_NOREPLACE.
+            result = libc.renameat2(-100, os.fsencode(snapshot), -100, os.fsencode(destination), 1)
+        else:
+            raise
+        if result != 0:
+            code = ctypes.get_errno()
+            raise OSError(code, os.strerror(code), str(destination)) from exc
+
+
+def backup(conn, database, output, label=None):
+    """Publish a verified, standalone SQLite snapshot without replacing an existing file."""
+    destination = _backup_destination(database, output, label)
+    _check_backup_destination(destination, database)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=destination.parent, prefix=".richi-backup-") as staging:
+        # SQLite may create sidecars. Keep all of them private until the snapshot is closed.
+        snapshot = Path(staging) / "snapshot.sqlite3"
+        snapshot.touch(mode=0o600)
+        with closing(sqlite3.connect(str(snapshot))) as target:
             conn.backup(target)
-            integrity = target.execute("PRAGMA integrity_check").fetchall()
-            if integrity != [("ok",)]:
+            busy, _, _ = target.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+            if busy:
+                raise MemoryError("Backup checkpoint failed")
+        with closing(sqlite3.connect(snapshot.as_uri() + "?mode=ro&immutable=1", uri=True)) as standalone:
+            if standalone.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
                 raise MemoryError("Backup integrity check failed")
+        with snapshot.open("rb") as stream:
+            os.fsync(stream.fileno())
+        _check_backup_destination(destination, database)
+        _publish_backup(snapshot, destination)
+        directory = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
         finally:
-            target.close()
-    except BaseException:
-        destination.unlink(missing_ok=True)
-        raise
+            os.close(directory)
     return {"backup": str(destination), "status": "created"}
 
 
@@ -1023,6 +1077,8 @@ def run(args, cli=None):
 
 def _store_busy(exc):
     """Whether SQLite gave up waiting for a lock that another connection holds."""
+    while isinstance(exc, MemoryError) and exc.__cause__ is not None:
+        exc = exc.__cause__
     if not isinstance(exc, sqlite3.OperationalError):
         return False
     code = getattr(exc, "sqlite_errorcode", None)

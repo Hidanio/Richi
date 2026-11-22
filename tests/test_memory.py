@@ -1,16 +1,20 @@
 """Integration tests use isolated databases; never touch the user's knowledge store."""
 import concurrent.futures
 from contextlib import closing
+import errno
 import json
+import signal
 import sqlite3
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
+
+from richi import memory
 
 from cli_environment import cli_environment
-
 
 
 class MemoryIntegrationTests(unittest.TestCase):
@@ -197,6 +201,54 @@ class MemoryIntegrationTests(unittest.TestCase):
         target.write_bytes(b"existing valuable data")
         self.run_cli("backup", "--output", str(target), ok=False)
         self.assertEqual(target.read_bytes(), b"existing valuable data")
+
+    def test_interrupted_restore_can_retry_at_the_same_path(self):
+        target = self.root / "restored.sqlite3"
+        # Stop the child while sqlite3_backup is actually copying, before publication.
+        child = """
+import os, signal, sqlite3, sys
+from pathlib import Path
+from richi import memory
+
+class InterruptDuringCopy(sqlite3.Connection):
+    def backup(self, target):
+        def interrupt(*args):
+            os.kill(os.getpid(), signal.SIGTERM)
+        super().backup(target, pages=1, progress=interrupt)
+
+source = Path(sys.argv[1])
+with sqlite3.connect(str(source), factory=InterruptDuringCopy) as conn:
+    memory.backup(conn, source, sys.argv[2])
+"""
+        process = subprocess.run([sys.executable, "-I", "-c", child, str(self.db), str(target)],
+                                 env=cli_environment(self.root), timeout=20)
+        self.assertEqual(process.returncode, -signal.SIGTERM)
+        self.assertFalse(target.exists())
+        self.run_cli("backup", "--output", str(target))
+        self.assertEqual(self.run_cli("check", db=target)["status"], "ok")
+
+    def test_backup_publication_without_hard_links_never_overwrites(self):
+        staged = self.root / "verified"
+        target = self.root / "public"
+        staged.write_bytes(b"verified")
+        with mock.patch.object(memory.os, "link", side_effect=OSError(errno.ENOTSUP, "no hard links")):
+            target.write_bytes(b"another writer")
+            with self.assertRaises(FileExistsError):
+                memory._publish_backup(staged, target)
+            self.assertEqual(target.read_bytes(), b"another writer")
+            target.unlink()
+            memory._publish_backup(staged, target)
+            self.assertEqual(target.read_bytes(), b"verified")
+
+    def test_backup_refuses_case_alias_of_active_rollback_journal(self):
+        alias = self.db.with_name(self.db.name.swapcase())
+        if not alias.exists():
+            self.skipTest("requires a case-insensitive filesystem")
+        with closing(sqlite3.connect(str(self.db))) as source:
+            self.assertEqual(source.execute("PRAGMA journal_mode=DELETE").fetchone()[0], "delete")
+        journal = Path(str(alias) + "-journal")
+        self.run_cli("backup", "--output", str(journal), ok=False)
+        self.assertFalse(journal.exists())
 
     def test_backup_refuses_a_destination_with_leftover_sqlite_sidecars(self):
         # The prior database may need its journal for recovery.

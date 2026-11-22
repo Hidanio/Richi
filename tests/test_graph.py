@@ -105,6 +105,14 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(self.cli("check")["schema_version"], 1)
         self.assertIn("old", json.dumps(self.cli("search", "FTSneedlepersist")))
 
+    def test_current_schema_skips_migration_but_check_reports_invalid_foreign_keys(self):
+        with closing(sqlite3.connect(str(self.db))) as conn, conn:
+            conn.execute("PRAGMA foreign_keys=OFF")
+            conn.execute("INSERT INTO graph_nodes(ref, project_id) VALUES ('project:missing', 'missing')")
+        self.assertEqual(self.cli("migrate")["status"], "existing")
+        self.assertIn("foreign_keys", self.cli("check", ok=False)["error"])
+        self.assertFalse((self.db.parent / "backups").exists())
+
     def test_copy_made_by_migrate_can_be_put_back(self):
         store = self.db = Path(self.temp.name) / "wal" / "memory.sqlite3"
         store.parent.mkdir()

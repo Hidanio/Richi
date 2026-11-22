@@ -1,7 +1,10 @@
 """Tool schema upgrades use disposable databases, including legacy indexes."""
 
-from contextlib import closing
+from contextlib import closing, redirect_stderr
 from pathlib import Path
+import io
+import json
+import os
 import shutil
 import sqlite3
 import tempfile
@@ -9,6 +12,7 @@ import unittest
 from unittest import mock
 
 import ast
+from cli_environment import cli_environment
 import richi_bootstrap
 from richi import graph, memory, search_index
 from richi_launcher import installation
@@ -183,6 +187,40 @@ class ToolSchemaTests(unittest.TestCase):
         self.unchanged_at_schema_2(before)
         with closing(sqlite3.connect(str(copy))) as saved:
             self.assertEqual(list(saved.iterdump()), before)
+
+    def test_commit_blocked_by_reader_reports_busy_and_keeps_backup(self):
+        self.legacy()
+        real_connect = memory.connect
+
+        def connect_without_wait(path, **kwargs):
+            return real_connect(path, timeout=0, **kwargs)
+
+        with closing(real_connect(self.db)) as reader, memory.transaction(reader, write=False):
+            reader.execute("SELECT id FROM projects").fetchall()
+            error = io.StringIO()
+            with mock.patch.object(memory, "connect", connect_without_wait), redirect_stderr(error), \
+                    mock.patch.dict(os.environ, cli_environment(self.db.parent), clear=True):
+                self.assertEqual(memory.main(["--db", str(self.db), "migrate"]), 1)
+            result = json.loads(error.getvalue())
+            self.assertEqual(result.get("code"), "busy", result)
+            backup, = self.backups()
+            self.assertIn(str(backup), result["error"])
+            self.assertEqual(reader.execute("PRAGMA user_version").fetchone()[0], 2)
+        self.assertEqual(graph.migrate(self.conn, self.db, memory)["status"], "migrated")
+
+    def test_long_database_name_still_gets_a_restorable_pre_migration_copy(self):
+        self.legacy()
+        self.conn.close()
+        long_path = self.db.with_name("x" * 225 + ".sqlite3")
+        self.db.rename(long_path)
+        with closing(memory.connect(long_path)) as source:
+            result = graph.migrate(source, long_path, memory)
+        self.assertEqual(result["status"], "migrated")
+        copy = Path(result["backup"])
+        self.assertIn("-schema2-", copy.name)
+        with closing(memory.connect(copy, readonly=True)) as saved:
+            self.assertEqual(saved.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(saved.execute("SELECT id FROM projects").fetchone()[0], "demo")
 
     def check_migration_snapshot(self, journal):
         self.conn.execute("PRAGMA journal_mode = " + journal)
