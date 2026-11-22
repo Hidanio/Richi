@@ -651,7 +651,7 @@ def _backup_destination(database, output, label):
     if output:
         requested = Path(output).expanduser()
         return requested.parent.resolve() / requested.name
-    folder = database.parent.resolve() / "backups"
+    folder = database.parent / "backups"
     # A concurrent first backup may just have created this directory.
     with _directory_fd(folder.parent) as parent:
         folder.mkdir(exist_ok=True)
@@ -700,7 +700,7 @@ def _publish_backup(snapshot, destination):
         if sys.platform == "darwin" and hasattr(libc, "renamex_np"):
             result = libc.renamex_np(os.fsencode(snapshot), os.fsencode(destination), 4)  # RENAME_EXCL
         elif sys.platform.startswith("linux") and hasattr(libc, "renameat2"):
-            # Absolute paths ignore the directory descriptors; 1 is RENAME_NOREPLACE.
+            # AT_FDCWD resolves relative paths against cwd; 1 is RENAME_NOREPLACE.
             result = libc.renameat2(-100, os.fsencode(snapshot), -100, os.fsencode(destination), 1)
         else:
             raise
@@ -724,7 +724,7 @@ def backup(conn, database, output, label=None):
             busy, _, _ = target.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
             if busy:
                 raise MemoryError("Backup checkpoint failed")
-        with closing(sqlite3.connect(snapshot.as_uri() + "?mode=ro&immutable=1", uri=True)) as standalone:
+        with closing(sqlite3.connect(snapshot.absolute().as_uri() + "?mode=ro&immutable=1", uri=True)) as standalone:
             if standalone.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
                 raise MemoryError("Backup integrity check failed")
         with snapshot.open("rb") as stream:
