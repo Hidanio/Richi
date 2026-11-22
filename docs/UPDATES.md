@@ -109,17 +109,17 @@ deleted automatically; `richi storage stats --files` shows what they occupy.
 
 The current release still reads the copy, so the data can go back without
 changing the installed version. Stop the map and every Richi command that uses
-the workspace, and move the database together with its `-wal` and `-shm` files
+the workspace, and move the database together with any `-wal`, `-shm` and `-journal` files
 aside; `richi config show` reports the database path. Then write the copy back
 and check the result:
 
 ```sh
 richi --db /path/to/backups/memory-schema2-20261115T101500000000Z.sqlite3 backup --output /path/to/memory.sqlite3
-richi check
+richi --db /path/to/memory.sqlite3 check
 ```
 
 `backup` verifies what it wrote and refuses a path that still has a database or
-its `-wal` and `-shm` files: SQLite would replay such files into the copy. Records
+any of its SQLite sidecars. The original database may need them for recovery. Records
 written after the migration are not in the copy. Migration does not touch the
 captured Git bytes in `artifacts/git/`, and the copy does not contain them.
 

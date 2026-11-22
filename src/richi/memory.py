@@ -630,10 +630,11 @@ def backup(conn, database, output, label=None):
     goes into the default file name so that a copy can be told from the others."""
     name = database.stem + ("-" + label if label else "") + "-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     destination = Path(output).expanduser().resolve() if output else database.parent / "backups" / (name + ".sqlite3")
-    if destination in {database, Path(str(database) + "-wal"), Path(str(database) + "-shm")}:
+    sidecars = ("-journal", "-wal", "-shm")
+    if destination == database or any(destination == Path(str(database) + suffix) for suffix in sidecars):
         raise MemoryError("Backup destination must differ from the active database and sidecar files")
-    # SQLite would replay such a file into the new copy as if it were its own.
-    for suffix in ("-wal", "-shm"):
+    # Opening the destination could consume recovery files belonging to the old store.
+    for suffix in sidecars:
         if not os.path.lexists(str(destination)) and os.path.lexists(str(destination) + suffix):
             raise MemoryError("Backup destination has a leftover " + destination.name + suffix +
                               " file of another database beside it; move it aside first")

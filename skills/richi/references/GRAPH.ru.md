@@ -49,7 +49,7 @@ richi check
 3, а обратное переключение runtime не понижает версию базы. Путь назад — копия,
 которую сделал `migrate`; текущий runtime её по-прежнему читает, но записей,
 сделанных после миграции, в ней нет. Возвращать её решает человек, порядок описан
-в [UPDATES.ru.md](../../../docs/UPDATES.ru.md#forward-only).
+в [UPDATES.ru.md](https://github.com/Hidanio/Richi/blob/main/docs/UPDATES.ru.md#forward-only).
 
 `schema.sql` содержит общую основу, `graph_schema.sql` — расширение графа для
 новых баз. Для существующих баз используйте CLI-миграцию, не выполняйте эти

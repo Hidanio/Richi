@@ -1,6 +1,7 @@
 """Additive knowledge graph API. All calls use the caller's SQLite transaction."""
 
 from collections import deque
+from contextlib import closing
 import json
 import sqlite3
 
@@ -75,31 +76,24 @@ def _migratable(conn, api):
 
 
 def migrate(conn, path, api):
-    """Back the store up, then upgrade its schema in one transaction.
-
-    Upgrades are forward-only: an older runtime cannot read the result, so the
-    verified copy made here is the way back. SQLite cannot copy a store from
-    inside its own write transaction, hence the copy comes first; the checks
-    run before it, so that a refused store leaves no copy, and again under the
-    write lock."""
+    """Reserve the writer slot through the snapshot and schema change."""
     if conn.in_transaction:
         raise api.MemoryError("Migration requires a connection without an active transaction")
-    with api.transaction(conn, write=False):
-        version = _migratable(conn, api)
-    if version == MIGRATION_TARGET:
-        return {"status": "existing", "schema_version": MIGRATION_TARGET, "database": str(path)}
-    try:
-        copy = api.backup(conn, path, None, label="schema" + str(version))["backup"]
-    except (api.MemoryError, sqlite3.Error, OSError) as exc:
-        raise api.MemoryError("Cannot back up the store, so migration did not start and nothing changed: " + str(exc)) from exc
     foreign_keys = conn.execute("PRAGMA foreign_keys").fetchone()[0]
     conn.execute("PRAGMA foreign_keys = OFF")
+    copy = None
     try:
         with api.transaction(conn):
             current = _migratable(conn, api)
             if current == MIGRATION_TARGET:
-                # Another process migrated the store after the copy was made.
-                return {"status": "existing", "schema_version": MIGRATION_TARGET, "database": str(path), "backup": copy}
+                return {"status": "existing", "schema_version": current, "database": str(path)}
+            try:
+                # SQLite backup needs a reader independent of our write transaction.
+                # Keep the writer lock so the snapshot includes every pre-migration commit.
+                with closing(api.connect(path, readonly=True)) as reader:
+                    copy = api.backup(reader, path, None, label="schema" + str(current))["backup"]
+            except (api.MemoryError, sqlite3.Error, OSError) as exc:
+                raise api.MemoryError("Cannot back up the store, so migration did not start and nothing changed: " + str(exc)) from exc
             if current == 1:
                 api.execute_script(conn, (api.BASE / "graph_schema.sql").read_text(encoding="utf-8"))
             else:
@@ -112,6 +106,8 @@ def migrate(conn, path, api):
         return {"status": "migrated", "from_version": current, "schema_version": MIGRATION_TARGET, "database": str(path),
                 "backup": copy}
     except (api.MemoryError, sqlite3.Error, OSError) as exc:
+        if copy is None:
+            raise
         raise api.MemoryError("Migration failed and was rolled back; the store is unchanged and its backup is retained at " +
                               copy + ": " + str(exc)) from exc
     finally:

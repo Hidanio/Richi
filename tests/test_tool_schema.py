@@ -2,6 +2,7 @@
 
 from contextlib import closing
 from pathlib import Path
+import shutil
 import sqlite3
 import tempfile
 import unittest
@@ -183,26 +184,40 @@ class ToolSchemaTests(unittest.TestCase):
         with closing(sqlite3.connect(str(copy))) as saved:
             self.assertEqual(list(saved.iterdump()), before)
 
-    def test_store_migrated_by_another_process_after_the_copy_is_left_alone(self):
+    def check_migration_snapshot(self, journal):
+        self.conn.execute("PRAGMA journal_mode = " + journal)
         self.legacy()
-        make_copy, raced = memory.backup, []
+        make_copy = memory.backup
 
-        def copy_then_race(conn, database, output, label=None):
-            result = make_copy(conn, database, output, label=label)
-            if not raced:
-                raced.append(True)
-                with closing(memory.connect(self.db)) as other:
-                    self.assertEqual(graph.migrate(other, self.db, memory)["status"], "migrated")
+        def try_competing_writes(reader, database, output, label):
+            result = make_copy(reader, database, output, label=label)
+            with closing(memory.connect(self.db, timeout=0)) as other:
+                with self.assertRaisesRegex(sqlite3.OperationalError, "locked"):
+                    other.execute("INSERT INTO metadata VALUES ('concurrent', 'write')")
+                with self.assertRaisesRegex(sqlite3.OperationalError, "locked"):
+                    graph.migrate(other, self.db, memory)
             return result
-        with mock.patch.object(memory, "backup", side_effect=copy_then_race):
+
+        with mock.patch.object(memory, "backup", side_effect=try_competing_writes):
             result = graph.migrate(self.conn, self.db, memory)
-        self.assertEqual({key: result[key] for key in ("status", "schema_version")}, {"status": "existing", "schema_version": 3})
-        self.assertEqual(len(self.backups()), 2)
-        self.assertIn(Path(result["backup"]), self.backups())
-        for copy in self.backups():
-            with closing(sqlite3.connect(str(copy))) as saved:
-                self.assertEqual(saved.execute("PRAGMA user_version").fetchone()[0], 2)
-        self.assertEqual(self.conn.execute("PRAGMA foreign_keys").fetchone()[0], 1)
+        with closing(memory.connect(self.db)) as other:
+            self.assertEqual(graph.migrate(other, self.db, memory)["status"], "existing")
+            other.execute("INSERT INTO metadata VALUES ('after', 'migration')")
+        copy = Path(result["backup"])
+        self.assertEqual(list(copy.parent.glob("*.sqlite3")), [copy])
+        # The backup database is portable even if SQLite leaves WAL sidecars beside it.
+        standalone = self.db.parent / "standalone.sqlite3"
+        shutil.copyfile(copy, standalone)
+        with closing(sqlite3.connect(str(standalone))) as saved:
+            self.assertEqual(saved.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(saved.execute("SELECT id FROM projects").fetchall(), [("demo",)])
+            self.assertIsNone(saved.execute("SELECT value FROM metadata WHERE key = 'after'").fetchone())
+
+    def test_snapshot_and_migration_share_writer_lock_in_wal_mode(self):
+        self.check_migration_snapshot("WAL")
+
+    def test_snapshot_and_migration_share_writer_lock_in_rollback_mode(self):
+        self.check_migration_snapshot("DELETE")
 
     def test_release_stays_installable_by_1_0_1_updaters(self):
         # 1.0.1 accepts only manifests declaring [1, 2] and requires the release's

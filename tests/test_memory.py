@@ -198,10 +198,10 @@ class MemoryIntegrationTests(unittest.TestCase):
         self.run_cli("backup", "--output", str(target), ok=False)
         self.assertEqual(target.read_bytes(), b"existing valuable data")
 
-    def test_backup_refuses_a_destination_with_leftover_wal_files(self):
-        # Another database's -wal beside the new copy would be replayed into it.
+    def test_backup_refuses_a_destination_with_leftover_sqlite_sidecars(self):
+        # The prior database may need its journal for recovery.
         target = self.root / "restored.sqlite3"
-        for suffix in ("-wal", "-shm"):
+        for suffix in ("-wal", "-shm", "-journal"):
             leftover = Path(str(target) + suffix)
             leftover.write_bytes(b"stale")
             self.run_cli("backup", "--output", str(target), ok=False)

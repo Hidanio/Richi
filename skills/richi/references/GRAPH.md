@@ -55,7 +55,7 @@ Stores upgrade forward only. Older runtimes may not support schema 3, and
 switching runtime back does not downgrade the database. The way back is the copy
 `migrate` made, which the current runtime still reads; records written after the
 migration are not in it. Putting it back is the human's decision and procedure:
-[UPDATES.md](../../../docs/UPDATES.md#forward-only).
+[UPDATES.md](https://github.com/Hidanio/Richi/blob/main/docs/UPDATES.md#forward-only).
 
 `schema.sql` contains the shared core; `graph_schema.sql` contains the graph
 extension for new stores. Use the CLI migration for existing stores, never run

@@ -710,7 +710,7 @@ DETAILS = {
         Uses SQLite's backup API, so committed WAL data is included, then checks the
         copy's integrity. Without --output the copy goes to backups/ next to the
         database with a UTC timestamp; existing files are never overwritten, and a
-        destination with leftover -wal or -shm files beside it is refused.
+        destination with leftover -wal, -shm or -journal files beside it is refused.
         Captured Git artifacts in artifacts/git/ are not included: copy them
         separately.""",
         examples=(("", "richi backup"), ("", "richi backup --output /path/to/memory-backup.sqlite3"),
@@ -751,7 +751,7 @@ DETAILS = {
         integrity or foreign key problems are refused, and without the copy
         nothing is changed. Nothing migrates automatically.
 
-        Upgrades go forward only: older releases cannot read the upgraded store.
+        Upgrades go forward only: older releases may not support the upgraded schema.
         The way back is that copy, which this release still reads.""",
         examples=(("", ("richi migrate", "richi check")),), see=("backup", "check"), guide="GRAPH.md"),
     "help": dict(about="""
