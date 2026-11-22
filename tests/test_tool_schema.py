@@ -1,12 +1,18 @@
 """Tool schema upgrades use disposable databases, including legacy indexes."""
 
+from contextlib import closing, redirect_stderr
 from pathlib import Path
+import io
+import json
+import os
+import shutil
 import sqlite3
 import tempfile
 import unittest
 from unittest import mock
 
 import ast
+from cli_environment import cli_environment
 import richi_bootstrap
 from richi import graph, memory, search_index
 from richi_launcher import installation
@@ -42,6 +48,15 @@ class ToolSchemaTests(unittest.TestCase):
     def put_entity(self, **changes):
         with memory.transaction(self.conn):
             return graph.put(self.conn, self.entity(**changes), "entity", memory)
+
+    def backups(self):
+        folder = self.db.parent / "backups"
+        return sorted(folder.iterdir()) if folder.is_dir() else []
+
+    def unchanged_at_schema_2(self, before):
+        self.assertEqual(list(self.conn.iterdump()), before)
+        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], 2)
+        self.assertEqual(self.conn.execute("PRAGMA foreign_keys").fetchone()[0], 1)
 
     def test_new_store_supports_tool_with_graph_and_immutable_history(self):
         self.assertEqual(memory.initialize(self.conn, self.db)["schema_version"], 3)
@@ -118,10 +133,129 @@ class ToolSchemaTests(unittest.TestCase):
 
     def test_v1_upgrades_directly_to_three_and_allows_tool(self):
         self.legacy(version=1)
-        self.assertEqual(graph.migrate(self.conn, self.db, memory),
-                         {"status": "migrated", "from_version": 1, "schema_version": 3, "database": str(self.db)})
+        result = graph.migrate(self.conn, self.db, memory)
+        self.assertEqual(result, {"status": "migrated", "from_version": 1, "schema_version": 3, "database": str(self.db),
+                                  "backup": result["backup"]})
+        self.assertRegex(Path(result["backup"]).name, r"^legacy-schema1-")
         self.put_entity()
         self.assertEqual(self.conn.execute("SELECT count(*) FROM graph_nodes").fetchone()[0], 3)
+
+    def test_migration_backs_up_the_old_store_first(self):
+        self.legacy()
+        self.put_entity(id="concept:lint", kind="concept")
+        before = list(self.conn.iterdump())
+        copy = Path(graph.migrate(self.conn, self.db, memory)["backup"])
+        self.assertEqual(self.backups(), [copy])
+        self.assertRegex(copy.name, r"^legacy-schema2-\d{8}T\d{12}Z\.sqlite3$")
+        self.assertEqual(copy.stat().st_mode & 0o777, 0o600)
+        with closing(sqlite3.connect(str(copy))) as saved:
+            self.assertEqual(saved.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(list(saved.iterdump()), before)
+        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], 3)
+        # A current store is left alone: no second copy.
+        self.assertEqual(graph.migrate(self.conn, self.db, memory),
+                         {"status": "existing", "schema_version": 3, "database": str(self.db)})
+        self.assertEqual(self.backups(), [copy])
+
+    def test_refused_store_is_not_copied(self):
+        self.legacy()
+        self.conn.execute("PRAGMA user_version = 9")
+        with self.assertRaisesRegex(memory.MemoryError, "unknown schema version"):
+            graph.migrate(self.conn, self.db, memory)
+        self.conn.execute("PRAGMA user_version = 2")
+        self.conn.execute("DROP TABLE edge_history")
+        with self.assertRaisesRegex(memory.MemoryError, "missing required tables"):
+            graph.migrate(self.conn, self.db, memory)
+        self.assertEqual(self.backups(), [])
+
+    def test_migration_does_not_start_without_a_copy(self):
+        self.legacy()
+        (self.db.parent / "backups").write_text("not a directory", encoding="utf-8")
+        before = list(self.conn.iterdump())
+        with self.assertRaisesRegex(memory.MemoryError, "migration did not start and nothing changed"):
+            graph.migrate(self.conn, self.db, memory)
+        self.unchanged_at_schema_2(before)
+
+    def test_failed_migration_keeps_the_store_and_names_the_copy(self):
+        self.legacy()
+        before = list(self.conn.iterdump())
+        with mock.patch.object(graph, "_migrate_entities_v3", side_effect=sqlite3.OperationalError("synthetic failure")):
+            with self.assertRaisesRegex(memory.MemoryError, "store is unchanged and its backup is retained at") as caught:
+                graph.migrate(self.conn, self.db, memory)
+        (copy,) = self.backups()
+        self.assertIn(str(copy) + ": synthetic failure", str(caught.exception))
+        self.unchanged_at_schema_2(before)
+        with closing(sqlite3.connect(str(copy))) as saved:
+            self.assertEqual(list(saved.iterdump()), before)
+
+    def test_commit_blocked_by_reader_reports_busy_and_keeps_backup(self):
+        self.legacy()
+        real_connect = memory.connect
+
+        def connect_without_wait(path, **kwargs):
+            return real_connect(path, timeout=0, **kwargs)
+
+        with closing(real_connect(self.db)) as reader, memory.transaction(reader, write=False):
+            reader.execute("SELECT id FROM projects").fetchall()
+            error = io.StringIO()
+            with mock.patch.object(memory, "connect", connect_without_wait), redirect_stderr(error), \
+                    mock.patch.dict(os.environ, cli_environment(self.db.parent), clear=True):
+                self.assertEqual(memory.main(["--db", str(self.db), "migrate"]), 1)
+            result = json.loads(error.getvalue())
+            self.assertEqual(result.get("code"), "busy", result)
+            backup, = self.backups()
+            self.assertIn(str(backup), result["error"])
+            self.assertEqual(reader.execute("PRAGMA user_version").fetchone()[0], 2)
+        self.assertEqual(graph.migrate(self.conn, self.db, memory)["status"], "migrated")
+
+    def test_long_database_name_still_gets_a_restorable_pre_migration_copy(self):
+        self.legacy()
+        self.conn.close()
+        long_path = self.db.with_name("x" * 225 + ".sqlite3")
+        self.db.rename(long_path)
+        with closing(memory.connect(long_path)) as source:
+            result = graph.migrate(source, long_path, memory)
+        self.assertEqual(result["status"], "migrated")
+        copy = Path(result["backup"])
+        self.assertIn("-schema2-", copy.name)
+        with closing(memory.connect(copy, readonly=True)) as saved:
+            self.assertEqual(saved.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(saved.execute("SELECT id FROM projects").fetchone()[0], "demo")
+
+    def check_migration_snapshot(self, journal):
+        self.conn.execute("PRAGMA journal_mode = " + journal)
+        self.legacy()
+        make_copy = memory.backup
+
+        def try_competing_writes(reader, database, output, label):
+            result = make_copy(reader, database, output, label=label)
+            with closing(memory.connect(self.db, timeout=0)) as other:
+                with self.assertRaisesRegex(sqlite3.OperationalError, "locked"):
+                    other.execute("INSERT INTO metadata VALUES ('concurrent', 'write')")
+                with self.assertRaisesRegex(sqlite3.OperationalError, "locked"):
+                    graph.migrate(other, self.db, memory)
+            return result
+
+        with mock.patch.object(memory, "backup", side_effect=try_competing_writes):
+            result = graph.migrate(self.conn, self.db, memory)
+        with closing(memory.connect(self.db)) as other:
+            self.assertEqual(graph.migrate(other, self.db, memory)["status"], "existing")
+            other.execute("INSERT INTO metadata VALUES ('after', 'migration')")
+        copy = Path(result["backup"])
+        self.assertEqual(list(copy.parent.glob("*.sqlite3")), [copy])
+        # The backup database is portable even if SQLite leaves WAL sidecars beside it.
+        standalone = self.db.parent / "standalone.sqlite3"
+        shutil.copyfile(copy, standalone)
+        with closing(sqlite3.connect(str(standalone))) as saved:
+            self.assertEqual(saved.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(saved.execute("SELECT id FROM projects").fetchall(), [("demo",)])
+            self.assertIsNone(saved.execute("SELECT value FROM metadata WHERE key = 'after'").fetchone())
+
+    def test_snapshot_and_migration_share_writer_lock_in_wal_mode(self):
+        self.check_migration_snapshot("WAL")
+
+    def test_snapshot_and_migration_share_writer_lock_in_rollback_mode(self):
+        self.check_migration_snapshot("DELETE")
 
     def test_release_stays_installable_by_1_0_1_updaters(self):
         # 1.0.1 accepts only manifests declaring [1, 2] and requires the release's

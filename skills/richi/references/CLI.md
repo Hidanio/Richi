@@ -234,7 +234,7 @@ WAL, a lock wait of up to 10 seconds, foreign keys and explicit transactions are
 `check` verifies schema version, SQLite integrity and foreign keys. New databases
 use schema 3. Core commands support schemas 1, 2 and 3; graph commands support
 schemas 2 and 3. Tool entities require schema 3. For an older store, migration is
-explicit: `backup`, then `migrate`. Unknown versions are rejected. Repeated `init`
+explicit: `migrate` backs the store up, then upgrades it. Unknown versions are rejected. Repeated `init`
 does not reset data; schema 1/2 requires `migrate`, and an unknown nonempty database
 is not reinitialized. Original tables are `projects`, `entries`, `entry_projects`,
 `relations`, `entry_history`, `entry_events`, `metadata` and, where supported,
@@ -246,7 +246,7 @@ stays at version 2. See [GRAPH.md](GRAPH.md) for migration and compatibility.
 ```sh
 richi backup
 richi backup --output '/путь с пробелами/memory-backup.sqlite3'
-richi --db '/путь с пробелами/memory-backup.sqlite3' check
+richi -w default --db '/путь с пробелами/memory-backup.sqlite3' check
 ```
 
 Without `--output`, a backup is saved in `backups/` with a UTC timestamp in its name. The SQLite backup API includes committed data from WAL and validates integrity. Existing files are not overwritten. To restore, first stop processes using the original database; the simplest safe option is to use the verified copy through `--db`. Do not copy only an active `memory.sqlite3` while ignoring `-wal` and `-shm`.

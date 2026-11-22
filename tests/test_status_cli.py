@@ -1,8 +1,10 @@
 """Workspace status through the fixed launcher and selected disposable runtimes."""
+from contextlib import closing
 import hashlib
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import sqlite3
 import subprocess
@@ -125,6 +127,36 @@ class StatusCliTests(unittest.TestCase):
         self.assertEqual(report["diagnostics"]["projects"]["status"], "not_checked")
         self.assertFalse(Path(report["storage"]["database"]).exists())
         self.assertEqual(self.snapshot(), before)
+
+    def test_documented_restore_works_with_named_workspace_selected(self):
+        self.environment["XDG_DATA_HOME"] = str(self.root / "workspace data")
+        self.environment["HOME"] = str(self.root / "user home")
+        self.create("team", initialized=True)
+        self.command("use", "team")
+        self.project("team", "original")
+        settings = self.command("config", "show")
+        database = Path(settings["database"])
+        copy = self.command("backup")["backup"]
+        self.project("team", "later")
+        aside = self.root / "aside"
+        aside.mkdir()
+        for file in database.parent.glob(database.name + "*"):
+            file.rename(aside / file.name)
+
+        placeholders = {"/path/to/config.json": settings["config_file"],
+                        "/path/to/memory.sqlite3": str(database),
+                        "/path/to/backups/memory-schema2-20261115T101500000000Z.sqlite3": copy}
+        guide = (ROOT / "docs" / "UPDATES.md").read_text().split('<a id="forward-only"></a>')[1]
+        example = guide.split('```sh\n', 1)[1].split('```', 1)[0]
+        for line in example.splitlines():
+            for placeholder, path in placeholders.items():
+                line = line.replace(placeholder, path)
+            command, *args = shlex.split(line)
+            self.assertEqual(command, "richi")
+            self.command(*args)
+        self.assertEqual(self.command("config", "show")["workspace"], "team")
+        with closing(sqlite3.connect(database)) as restored:
+            self.assertEqual(restored.execute("SELECT id FROM projects").fetchall(), [("original",)])
 
     def test_checkpointed_wal_without_sidecars_is_read_and_preserved_across_sqlite_versions(self):
         self.command("init")

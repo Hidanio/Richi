@@ -82,7 +82,7 @@ UNCATALOGED = {
     'status': 'Selection and path diagnostics, described in WORKSPACES.md.',
     'project': 'Registration and membership checks are part of the SKILL.md selection procedure.',
     'init': 'Creates a store once per workspace, after the selection procedure.',
-    'migrate': 'Explicit schema upgrade after a backup; never automatic.',
+    'migrate': 'Explicit schema upgrade that backs up the store first; never automatic.',
     'map': 'Interactive browser view for people.',
     'help': 'Plain-text pages for people; agents read capabilities describe.',
     'capabilities': 'The catalog itself.',

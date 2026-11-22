@@ -1177,7 +1177,7 @@ def _main(argv=None):
     if schema is None:
         parser.error("Cannot read the database: " + str(database))
     if schema not in (2, 3):
-        parser.error("The map requires schema 2 or 3; run richi backup and richi migrate")
+        parser.error("The map requires schema 2 or 3; run richi migrate, which backs up the store first")
     # Taken before anything copies the environment: no child may see them.
     listener = inherited_listener(args.port)
     restarted = os.environ.pop(RESTARTED_ENV, None) == "1"

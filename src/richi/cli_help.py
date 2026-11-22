@@ -243,7 +243,8 @@ DETAILS = {
     "init": dict(about="""
         Creates the SQLite database with the current schema and full-text search
         when SQLite provides it. Running it again only reports the existing store.
-        A store with an older schema must be upgraded with migrate after a backup.""",
+        A store with an older schema must be upgraded with migrate, which backs it
+        up first.""",
         examples=(("", "richi init"), ("In another workspace", "richi -w work init"),
                   ("An explicit database file", "richi --db /path/to/memory.sqlite3 init")),
         see=("workspace create", "check", "migrate"), guide="CLI.md"),
@@ -703,16 +704,19 @@ DETAILS = {
     "check": dict(about="""
         Runs SQLite integrity and foreign key checks and reports the schema version
         and search backend. Exits with an error when anything is wrong.""",
-        examples=(("", "richi check"), ("Verify a backup", "richi --db /path/to/backup.sqlite3 check")),
+        examples=(("", "richi check"), ("Verify a backup", "richi -w default --db '/path/to/backup.sqlite3' check")),
         see=("backup", "punisher")),
     "backup": dict(about="""
         Uses SQLite's backup API, so committed WAL data is included, then checks the
         copy's integrity. Without --output the copy goes to backups/ next to the
-        database with a UTC timestamp; existing files are never overwritten.
+        database with a UTC timestamp; existing files are never overwritten, and a
+        destination with leftover -wal, -shm or -journal files beside it is refused.
         Captured Git artifacts in artifacts/git/ are not included: copy them
         separately.""",
         examples=(("", "richi backup"), ("", "richi backup --output /path/to/memory-backup.sqlite3"),
-                  ("Check the copy", "richi --db /path/to/memory-backup.sqlite3 check")),
+                  ("Check the copy", "richi -w default --db '/path/to/memory-backup.sqlite3' check"),
+                  ("Put a copy back at a cleared database path",
+                   "richi --config '/path/to/config.json' --db '/path/to/memory-backup.sqlite3' backup --output '/path/to/memory.sqlite3'")),
         see=("check", "migrate")),
     "storage": dict(about="""
         stats is read-only. optimize shows a plan; with --apply it makes a verified
@@ -741,10 +745,15 @@ DETAILS = {
         history stay unchanged.""",
         examples=(("", "richi search-index build"), ("Then confirm coverage", "richi search-index status"))),
     "migrate": dict(about="""
-        Upgrades schema 1 or 2 to the current schema in one transaction, keeping
-        records, links, history and indexes. Stores with integrity or foreign key
-        problems are refused. Nothing migrates automatically: back up first.""",
-        examples=(("", ("richi backup", "richi migrate", "richi check")),), see=("backup", "check"), guide="GRAPH.md"),
+        Writes a verified copy of the store to backups/ beside it, then upgrades
+        schema 1 or 2 to the current schema in one transaction, keeping records,
+        links, history and indexes. Before upgrading, migrate checks integrity and foreign keys.
+        The result names the copy. On the current schema it returns existing;
+        run richi check for a full integrity and foreign key check.
+
+        Upgrades go forward only: older releases may not support the upgraded schema.
+        The way back is that copy, which this release still reads.""",
+        examples=(("", ("richi migrate", "richi check")),), see=("backup", "check"), guide="GRAPH.md"),
     "help": dict(about="""
         Without arguments lists all commands. With a command and optional
         subcommands it shows the same page as COMMAND --help. Topics explain rules
