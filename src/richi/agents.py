@@ -79,7 +79,8 @@ class SkillSource(NamedTuple):
     subdirectory; "nested-skills" also searches category subdirectories. "cache" is a plugin cache,
     <marketplace>/<plugin>/<version>/skills/<skill>; "claude-app" is the Claude
     app's <account>/<organization>/rpm/<plugin> with rpm/manifest.json, and
-    skills-plugin/<account>/<organization> with its manifest of enabled skills.
+    skills-plugin/<account>/<organization> with its manifest of enabled skills;
+    "antigravity-plugins" is <plugin>/plugin.json with config.json switches.
     """
     key: str
     kind: str
@@ -163,6 +164,13 @@ def _cursor_sources(environ, home):
     return personal + [SkillSource("system", "system", "nested-skills", home / ".cursor/skills-cursor")]
 
 
+def _antigravity_sources(environ, home):
+    config = home / ".gemini" / "config"
+    return [SkillSource("skills", "skills", "skills", config / "skills"),
+            SkillSource("system", "system", "skills", home / ".gemini" / "antigravity" / "builtin" / "skills"),
+            SkillSource("plugins", "plugins", "antigravity-plugins", config / "plugins")]
+
+
 AGENTS = (
     Agent(id="claude", name="Claude Code", variables={"CLAUDECODE": "1"},
           invocation="front-matter", plugin_commands=True, sources=_claude_sources),
@@ -172,6 +180,8 @@ AGENTS = (
     Agent(id="cursor", name="Cursor", variables={"CURSOR_AGENT": None},
           invocation="front-matter", plugin_commands=False, sources=_cursor_sources, folder_layout="nested-skills",
           detection_sources=("cursor-skills", "system")),
+    Agent(id="antigravity", name="Antigravity", variables={"ANTIGRAVITY_AGENT": None},
+          invocation="front-matter", plugin_commands=False, sources=_antigravity_sources),
 )
 
 # Other agents a user may add as their own, with the user-wide skill folder

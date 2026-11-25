@@ -9,7 +9,7 @@
 `rules show` отдаёт каждому агенту его скилл.
 
 Richi задаёт источники скиллов для своих **встроенных** агентов Claude Code,
-Codex и Cursor. Пользователь может **подстроить** встроенного агента, выключив
+Codex, Cursor и Antigravity. Пользователь может **подстроить** встроенного агента, выключив
 источник или добавив папки со скиллами. Он также может **описать ещё одного
 агента**, указав его имя, папки скиллов и признак, по которому его
 узнать. Эти настройки принадлежат пользователю и общие для всех workspace на этом
@@ -34,7 +34,8 @@ richi --compact-json skill-sources list
 проверяется), `enabled` (источник включён), `added` (папку добавил пользователь) и
 число скиллов `skills`. `chat_prefix` говорит, называются ли чаты агента `ID:…` в
 `RICHI_CHAT_ID`, по чему Richi тоже узнаёт агента. Хук Cursor передаёт
-`--chat cursor:<id>`. У Codex идентификатор чата совпадает с ID треда.
+`--chat cursor:<id>`. Antigravity передаёт `ANTIGRAVITY_CONVERSATION_ID`, который
+Richi использует как `antigravity:<id>`. У Codex идентификатор чата совпадает с ID треда.
 `updated_at` — версия настроек пользователя для агента; null, если их нет.
 `presets` перечисляет известных агентов, которых можно добавить, с папкой, которую
 читает каждый. `problem` заполнено, когда файл настроек не удаётся использовать, а
@@ -79,6 +80,11 @@ richi --compact-json skill-sources add gemini-cli --name "Gemini CLI" \
 инструкции этого агента.
 
 ## Подстрой агента
+
+Antigravity читает скиллы пользователя из `~/.gemini/config/skills`, встроенные
+скиллы из `~/.gemini/antigravity/builtin/skills` и включённые плагины из
+`~/.gemini/config/plugins` (с учётом `disabled` в `plugin.json` и переключателей
+плагинов в `~/.gemini/config/config.json`).
 
 Cursor читает скиллы из `~/.cursor/skills`, `~/.agents/skills`, `~/.claude/skills`
 и `~/.codex/skills`. Встроенные скиллы Cursor находятся в `~/.cursor/skills-cursor`.

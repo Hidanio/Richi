@@ -4,9 +4,10 @@
 English | [Русский](CLI.ru.md)
 
 Use `richi agents --status` to see which local clients Richi detects and which
-are connected. Setup defaults to Codex. Select Claude Code or Cursor with
-`--agent claude` or `--agent cursor`. Setup applies to the installation
-and runs before workspace selection. See the [setup guide](SETUP.md).
+are connected. Setup defaults to Codex. Select Claude Code, Cursor or
+Antigravity with `--agent claude`, `--agent cursor` or `--agent antigravity`.
+Setup applies to the installation and runs before workspace selection. See the
+[setup guide](SETUP.md).
 
 Use `richi config show` to inspect the selected settings and runtime. In a
 regular terminal, put database and configuration options before the subcommand:
@@ -156,8 +157,8 @@ The map's **Rules** tab shows them and, in a page opened by `richi map`, adds
 and edits them with templates and a list of installed skills: one skill for every agent, or
 one per agent when they differ.
 
-The skill catalog lists sources for the built-in Claude Code, Codex and Cursor
-profiles, including clients that have yet to be connected. You can switch their skill sources,
+The skill catalog lists sources for the built-in Claude Code, Codex, Cursor and
+Antigravity profiles, including clients that have yet to be connected. You can switch their skill sources,
 add skill folders or describe another agent. These settings apply to every workspace.
 
 ```sh

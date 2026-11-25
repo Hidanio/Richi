@@ -44,7 +44,9 @@ class IsolatedHome(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         for key in [key for key in os.environ if key.startswith("RICHI_")
-                    or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "XDG_CONFIG_HOME"}]:
+                    or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT",
+                               "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID",
+                               "CLAUDE_CONFIG_DIR", "CODEX_HOME", "XDG_CONFIG_HOME"}]:
             del os.environ[key]
         agents.forget_settings()
         self.addCleanup(agents.forget_settings)
@@ -81,9 +83,10 @@ class RegistryTests(IsolatedHome):
                 for source in sources:
                     self.assertRegex(source.key, r"\A[a-z][a-z0-9-]*\Z")
                     self.assertIn(source.kind, skill_catalog.KINDS)
-                    self.assertIn(source.layout, {"skills", "nested-skills", "cache", "claude-app"})
+                    self.assertIn(source.layout, {"skills", "nested-skills", "cache", "claude-app", "antigravity-plugins"})
         self.assertEqual(agents.describe(), [{"id": "claude", "name": "Claude Code"}, {"id": "codex", "name": "Codex"},
-                                             {"id": "cursor", "name": "Cursor"}])
+                                             {"id": "cursor", "name": "Cursor"},
+                                             {"id": "antigravity", "name": "Antigravity"}])
         for identifier, name, folder in agents.PRESETS:
             with self.subTest(preset=identifier):
                 self.assertTrue(agents.valid_id(identifier) and agents.valid_name(name) and agents.valid_folder(folder))
@@ -95,6 +98,9 @@ class RegistryTests(IsolatedHome):
         for environment, agent in (({"CLAUDECODE": "1"}, "claude"), ({"CODEX_THREAD_ID": "thread"}, "codex"),
                                    ({"RICHI_CHAT_ID": "claude:chat"}, "claude"),
                                    ({"RICHI_CHAT_ID": "cursor:chat"}, "cursor"), ({"CURSOR_AGENT": "1"}, "cursor"),
+                                   ({"RICHI_CHAT_ID": "antigravity:chat"}, "antigravity"),
+                                   ({"ANTIGRAVITY_AGENT": "1"}, "antigravity"),
+                                   ({"RICHI_CHAT_ID": "antigravity:chat", "ANTIGRAVITY_AGENT": "1"}, "antigravity"),
                                    # Codex's chat identity is its thread ID: it names no agent, the variable does.
                                    ({"RICHI_CHAT_ID": "019a1b2c-thread", "CODEX_THREAD_ID": "019a1b2c-thread"}, "codex"),
                                    # A chat identity that names no agent says nothing either way.
@@ -106,6 +112,10 @@ class RegistryTests(IsolatedHome):
         for environment in ({"CLAUDECODE": "1", "CODEX_THREAD_ID": "thread"},
                             {"RICHI_CHAT_ID": "claude:chat", "CODEX_THREAD_ID": "thread"},
                             {"RICHI_CHAT_ID": "cursor:chat", "CODEX_THREAD_ID": "thread"},
+                            {"RICHI_CHAT_ID": "antigravity:chat", "CODEX_THREAD_ID": "thread"},
+                            {"ANTIGRAVITY_AGENT": "1", "CLAUDECODE": "1"},
+                            {"ANTIGRAVITY_AGENT": "1", "CURSOR_AGENT": "1"},
+                            {"ANTIGRAVITY_AGENT": ""},
                             {"CURSOR_AGENT": "1", "CLAUDECODE": "1"}, {"CURSOR_AGENT": ""},
                             {"RICHI_CHAT_ID": "codex:chat", "CLAUDECODE": "1"},
                             {"RICHI_CHAT_ID": "claude:chat", "CLAUDECODE": "1", "CODEX_THREAD_ID": "thread"},
@@ -1042,12 +1052,16 @@ class ListingTests(IsolatedHome):
         self.assertIn("setup record is damaged", listed["connections_problem"])
         self.assertEqual([agent["connection"] for agent in listed["agents"]], [None] * len(agents.AGENTS))
         (self.home / ".agents/skills").mkdir(parents=True)
+        (self.home / ".gemini/skills").mkdir(parents=True)
         with mock.patch.object(agent_setup, "agents_command", return_value={"agents": [
                 {"agent": "claude", "detected": False, "status": "configured"}]}):
             listed = agent_commands.listing()
             self.assertFalse(next(agent for agent in listed["agents"] if agent["id"] == "cursor")["detected"])
+            self.assertFalse(next(agent for agent in listed["agents"] if agent["id"] == "antigravity")["detected"])
             (self.home / ".cursor").mkdir()
+            (self.home / ".gemini/config/skills").mkdir(parents=True)
             self.assertTrue(self.listed()["cursor"]["detected"])
+            self.assertTrue(self.listed()["antigravity"]["detected"])
         self.assertEqual((listed["connections_problem"], listed["agents"][0]["connection"],
                           listed["agents"][0]["detected"]), (None, "configured", False))
 

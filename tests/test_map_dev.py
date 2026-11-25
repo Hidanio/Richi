@@ -100,7 +100,9 @@ class MapDevelopmentTests(unittest.TestCase):
             with closing(memory.connect(database, create=True)) as connection, connection:
                 memory.initialize(connection, database)
             port = free_port()
-            environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_") and key not in {"CODEX_THREAD_ID", "CURSOR_AGENT"}}
+            environment = {key: value for key, value in os.environ.items()
+                           if not key.startswith("RICHI_")
+                           and key not in {"CODEX_THREAD_ID", "CURSOR_AGENT", "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID"}}
             environment.update(HOME=str(root / "home"), XDG_CONFIG_HOME=str(root / "config"),
                                XDG_DATA_HOME=str(root / "data"))
             command = self.isolated_command(installed) + ["--db", str(database), "map", "serve", "--port", str(port)]
@@ -155,7 +157,9 @@ class MapDevelopmentTests(unittest.TestCase):
             with closing(memory.connect(database, create=True)) as connection, connection:
                 memory.initialize(connection, database)
             port = free_port()
-            environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_") and key not in {"CODEX_THREAD_ID", "CURSOR_AGENT"}}
+            environment = {key: value for key, value in os.environ.items()
+                           if not key.startswith("RICHI_")
+                           and key not in {"CODEX_THREAD_ID", "CURSOR_AGENT", "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID"}}
             bad_config = root / "broken.json"
             bad_config.write_text("not JSON")
             environment["RICHI_CONFIG"] = str(bad_config)

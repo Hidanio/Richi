@@ -23,7 +23,8 @@ import time
 
 def environment(root):
     env = {k: v for k, v in os.environ.items()
-           if not k.startswith(("RICHI_", "PYTHON")) and k not in {"CODEX_THREAD_ID", "CURSOR_AGENT"}}
+           if not k.startswith(("RICHI_", "PYTHON"))
+           and k not in {"CODEX_THREAD_ID", "CURSOR_AGENT", "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID"}}
     home = root / "synthetic-home"
     env.update(HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"),
                XDG_DATA_HOME=str(home / ".local/share"))

@@ -34,8 +34,9 @@ def clean_environment(test, home):
     test.addCleanup(patch.stop)
     # Agent settings are the user's: a test must read them only from its disposable home.
     for key in [key for key in os.environ if key.startswith("RICHI_")
-                or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "BROWSER",
-                           "XDG_CONFIG_HOME"}]:
+                or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT",
+                           "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID",
+                           "CLAUDE_CONFIG_DIR", "CODEX_HOME", "BROWSER", "XDG_CONFIG_HOME"}]:
         del os.environ[key]
     agents.forget_settings()
     test.addCleanup(agents.forget_settings)
@@ -123,14 +124,14 @@ class SkillCatalogTests(unittest.TestCase):
                 cut = skill_catalog.catalog({}, home)
                 listed = {agent["id"]: (agent["skills"], [source["skills"] for source in agent["sources"]][0])
                           for agent in agent_commands.listing({}, home)["agents"]}
-        totals = {"claude": 4, "codex": 3, "cursor": 6}
+        totals = {"claude": 4, "codex": 3, "cursor": 6, "antigravity": 0}
         self.assertEqual((len(full["skills"]), full["truncated"], full["totals"]), (6, False, totals))
         self.assertEqual(([skill["name"] for skill in cut["skills"]], cut["truncated"]), (["a1", "a2", "a3"], True))
         # The agent read second is not left with nothing: its skills are counted, and a skill that
         # made the list names every agent that has it.
         self.assertEqual(cut["totals"], totals)
         self.assertEqual(cut["skills"][0]["agents"], ["claude", "codex", "cursor"])
-        self.assertEqual(listed, {"claude": (4, 4), "codex": (3, 3), "cursor": (6, 0)})
+        self.assertEqual(listed, {"claude": (4, 4), "codex": (3, 3), "cursor": (6, 0), "antigravity": (0, 0)})
 
     def test_a_plugin_manifest_made_to_break_the_parser_is_passed_over(self):
         with tempfile.TemporaryDirectory(prefix="richi-skills-") as temporary:
@@ -191,7 +192,9 @@ class SkillCatalogTests(unittest.TestCase):
                          [("claude", "skills", True), ("claude", "plugins", False), ("claude", "plugins", False),
                           ("codex", "skills", True), ("codex", "skills", False), ("codex", "system", False),
                           ("codex", "plugins", False), ("cursor", "skills", True), ("cursor", "skills", True),
-                          ("cursor", "skills", False), ("cursor", "skills", False), ("cursor", "system", True)])
+                          ("cursor", "skills", False), ("cursor", "skills", False), ("cursor", "system", True),
+                          ("antigravity", "skills", False), ("antigravity", "system", False),
+                          ("antigravity", "plugins", False)])
         self.assertFalse(result["truncated"])
 
     def test_cursor_finds_nested_skills_once_in_its_enabled_user_roots(self):
@@ -210,7 +213,7 @@ class SkillCatalogTests(unittest.TestCase):
                 catalog = skill_catalog.catalog({}, home)
             self.assertEqual([(s["name"], s["agents"]) for s in catalog["skills"]],
                              [("manual", ["codex"]), ("release", ["codex", "cursor"]), ("triage", ["cursor"])])
-            self.assertEqual(catalog["totals"], {"claude": 0, "codex": 2, "cursor": 2})
+            self.assertEqual(catalog["totals"], {"claude": 0, "codex": 2, "cursor": 2, "antigravity": 0})
             self.assertFalse(catalog["truncated"])
             skill_file = (leaf / "SKILL.md").resolve()
             self.assertEqual(sum(call.args[0].resolve() == skill_file for call in reads.call_args_list), 2)
@@ -312,6 +315,55 @@ class SkillCatalogTests(unittest.TestCase):
                           "agents": ["claude"]})
         self.assertIn(("claude", "plugins", True),
                       [(entry["agent"], entry["kind"], entry["exists"]) for entry in result["roots"]])
+
+    def test_catalog_reads_antigravity_skills_builtin_and_jsonc_plugins(self):
+        with tempfile.TemporaryDirectory(prefix="richi-agy-skills-") as temporary:
+            home = Path(temporary)
+            cfg = home / ".gemini" / "config"
+            builtin = home / ".gemini" / "antigravity" / "builtin" / "skills"
+            write_skill(cfg / "skills" / "deploy", "---\nname: deploy\ndescription: Deploys\n---\n")
+            write_skill(builtin / "agy-guide", "---\nname: antigravity-guide\ndescription: Guide\n---\n")
+            write_skill(builtin / "native_swarm", "---\nname: swarm\ndisable-model-invocation: true\n---\n")
+            plugins = cfg / "plugins"
+            # JSONC comments, URLs inside strings, and trailing commas are accepted in plugin.json.
+            (plugins / "dir-one").mkdir(parents=True)
+            (plugins / "dir-one" / "plugin.json").write_text(
+                '{\n  // comment\n  "name": "team-kit", /* block */ "homepage": "https://example.com//ok,}",\n}\n',
+                encoding="utf-8")
+            write_skill(plugins / "dir-one" / "skills" / "triage", "---\nname: triage\n---\n")
+            write_skill(plugins / "dir-one" / "skills" / "manual",
+                        "---\nname: manual\ndisable-model-invocation: true\n---\n")
+            # Omitted name defaults to the directory name; disabled plugins stay out unless config.json enables them.
+            (plugins / "unnamed").mkdir()
+            (plugins / "unnamed" / "plugin.json").write_text("{}\n", encoding="utf-8")
+            write_skill(plugins / "unnamed" / "skills" / "lint", "---\nname: lint\n---\n")
+            (plugins / "shipped-off").mkdir()
+            (plugins / "shipped-off" / "plugin.json").write_text('{"disabled": true}\n', encoding="utf-8")
+            write_skill(plugins / "shipped-off" / "skills" / "off", "---\nname: off\n---\n")
+            (plugins / "turned-on").mkdir()
+            (plugins / "turned-on" / "plugin.json").write_text('{"disabled": true}\n', encoding="utf-8")
+            write_skill(plugins / "turned-on" / "skills" / "on", "---\nname: on\n---\n")
+            (plugins / "turned-off").mkdir()
+            (plugins / "turned-off" / "plugin.json").write_text('{"name": "muted"}\n', encoding="utf-8")
+            write_skill(plugins / "turned-off" / "skills" / "hidden", "---\nname: hidden\n---\n")
+            (plugins / "broken").mkdir()
+            (plugins / "broken" / "plugin.json").write_text("/* unclosed comment", encoding="utf-8")
+            write_skill(plugins / "broken" / "skills" / "bad", "---\nname: bad\n---\n")
+            (plugins / "leading-comma").mkdir()
+            (plugins / "leading-comma" / "plugin.json").write_text("{,}\n", encoding="utf-8")
+            write_skill(plugins / "leading-comma" / "skills" / "invalid", "---\nname: invalid\n---\n")
+            (cfg / "config.json").write_text(
+                "// Antigravity user config\n"
+                '{"plugins": {"turned-on": {"enabled": true,}, "turned-off": {"enabled": false}},}\n',
+                encoding="utf-8")
+            result = skill_catalog.catalog({}, home)
+        skills = {skill["name"]: skill for skill in result["skills"]}
+        self.assertEqual(sorted(skills),
+                         ["antigravity-guide", "deploy", "team-kit:triage", "turned-on:on", "unnamed:lint"])
+        self.assertEqual(skills["antigravity-guide"]["kind"], "system")
+        self.assertEqual(skills["team-kit:triage"]["kind"], "plugins")
+        self.assertTrue(all(skill["agents"] == ["antigravity"] for skill in skills.values()))
+        self.assertEqual(result["totals"]["antigravity"], 5)
 
 
 class MapAccessTests(unittest.TestCase):

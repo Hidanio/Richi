@@ -87,7 +87,7 @@ execution configuration separately.
    Create the JSON file and its parent directory if needed. Preserve other
    settings in an existing file. A named workspace already points to its assigned
    database. Remove direct storage overrides from the agent environment too.
-2. For Codex, Claude Code and Cursor, follow the [managed setup](SETUP.md) to
+2. For Codex, Claude Code, Cursor and Antigravity, follow the [managed setup](SETUP.md) to
    install or adopt the skill. For a manually integrated client, preserve any
    local additions, copy the `skills/richi` directory into the client's skills folder,
    and move your old `project-memory` copy outside that folder. Update any project

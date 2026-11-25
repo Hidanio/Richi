@@ -74,6 +74,9 @@ Public examples must be synthetic. Preserve copyright and licensing attribution.
 In Cursor, use the exact `--chat cursor:<id>` from this conversation's
 `sessionStart` hook for every Richi call, including the first. If the ID is
 unavailable, wait for it before accessing memory. Codex supplies `CODEX_THREAD_ID`.
+Antigravity supplies `ANTIGRAVITY_CONVERSATION_ID` (used as `antigravity:<id>`)
+and `ANTIGRAVITY_AGENT=1`; pass `--chat antigravity:<id>` to delegated subagents
+that share this chat's confirmed workspace.
 Claude Code supplies `RICHI_CHAT_ID` or an explicit ID in its hook output.
 At each new chat, inspect `richi chat current` and `richi workspace list` before
 memory access. If unbound and the human has not explicitly selected a workspace

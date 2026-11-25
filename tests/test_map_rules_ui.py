@@ -40,8 +40,9 @@ class RulesPageLogicTests(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         for key in [key for key in os.environ if key.startswith("RICHI_")
-                    or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT", "CLAUDE_CONFIG_DIR", "CODEX_HOME",
-                               "XDG_CONFIG_HOME"}]:
+                    or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT",
+                               "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID",
+                               "CLAUDE_CONFIG_DIR", "CODEX_HOME", "XDG_CONFIG_HOME"}]:
             del os.environ[key]
         agents.forget_settings()
         self.addCleanup(agents.forget_settings)

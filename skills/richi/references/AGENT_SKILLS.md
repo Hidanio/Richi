@@ -8,8 +8,8 @@ to each agent on this computer. A rule
 then names one skill for every agent or a different one per agent (see
 [RULES.md](RULES.md)), and `rules show` gives each agent its own.
 
-Richi defines the skill sources for its **built-in** agents Claude Code, Codex
-and Cursor. The user may **adjust** a built-in agent by switching off a skill
+Richi defines the skill sources for its **built-in** agents Claude Code, Codex,
+Cursor and Antigravity. The user may **adjust** a built-in agent by switching off a skill
 source or adding skill folders. The user may also **describe another agent**
 by its name, its skill folders and how to recognize it. These settings belong
 to the user and are shared by every workspace of this computer; they are not
@@ -33,8 +33,9 @@ its `path`, whether the folder `exists` (`denied` when this user may not read
 it; neither is checked for a source switched off), whether it is `enabled`,
 whether the user `added` it, and how many `skills` it gives. `chat_prefix` says
 whether the agent's chats are named `ID:…` in `RICHI_CHAT_ID`, which then also
-tells Richi who it is. Cursor's hook supplies `--chat cursor:<id>`. Codex's
-chat identity is its thread ID alone.
+tells Richi who it is. Cursor's hook supplies `--chat cursor:<id>`. Antigravity
+supplies `ANTIGRAVITY_CONVERSATION_ID`, which Richi uses as `antigravity:<id>`.
+Codex's chat identity is its thread ID alone.
 `updated_at` is the version of
 the user's settings for the agent, null when there are none. `presets` lists
 well-known agents that could be added, with the folder each reads. `problem` is
@@ -79,6 +80,11 @@ another agent, the user adds the `richi rules show --agent ID` step to that
 agent's own standing instructions.
 
 ## Adjust an agent
+
+Antigravity reads user skills from `~/.gemini/config/skills`, built-in skills
+from `~/.gemini/antigravity/builtin/skills` and enabled user plugins from
+`~/.gemini/config/plugins` (respecting `disabled` in `plugin.json` and plugin
+switches in `~/.gemini/config/config.json`).
 
 Cursor reads skills from `~/.cursor/skills`, `~/.agents/skills`, `~/.claude/skills`
 and `~/.codex/skills`. Its built-in skills are in `~/.cursor/skills-cursor`.

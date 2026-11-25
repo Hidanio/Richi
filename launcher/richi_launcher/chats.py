@@ -39,9 +39,20 @@ def detect_chat(explicit=None):
         raise ChatError("Pass --chat with the active client's conversation ID in a Cursor Agent shell. "
                         "Cursor supplies --chat cursor:<id> in its sessionStart hook.",
                         "chat_id_required")
-    for variable in ("RICHI_CHAT_ID", "CODEX_THREAD_ID"):
-        if variable in os.environ:
-            return _chat_id(os.environ[variable])
+    if "RICHI_CHAT_ID" in os.environ:
+        return _chat_id(os.environ["RICHI_CHAT_ID"])
+    if "ANTIGRAVITY_CONVERSATION_ID" in os.environ and "CODEX_THREAD_ID" in os.environ:
+        raise ChatError("Multiple chat IDs in the environment (ANTIGRAVITY_CONVERSATION_ID and CODEX_THREAD_ID); "
+                        "pass --chat with the active client's conversation ID.",
+                        "chat_id_required")
+    if "ANTIGRAVITY_CONVERSATION_ID" in os.environ:
+        return _chat_id("antigravity:" + _chat_id(os.environ["ANTIGRAVITY_CONVERSATION_ID"]))
+    if os.environ.get("ANTIGRAVITY_AGENT"):
+        raise ChatError("Pass --chat with the active conversation ID in an Antigravity shell when "
+                        "ANTIGRAVITY_CONVERSATION_ID is unavailable.",
+                        "chat_id_required")
+    if "CODEX_THREAD_ID" in os.environ:
+        return _chat_id(os.environ["CODEX_THREAD_ID"])
     return None
 
 
@@ -103,8 +114,15 @@ def _cli_current(registry):
 
 def _next_commands(chat_id, bound):
     cursor = chat_id is not None and chat_id.startswith("cursor:")
+    antigravity_manual = False
+    if chat_id is not None and "RICHI_CHAT_ID" not in os.environ:
+        if "ANTIGRAVITY_CONVERSATION_ID" in os.environ:
+            antigravity_manual = ("CODEX_THREAD_ID" in os.environ
+                                  or "antigravity:" + os.environ["ANTIGRAVITY_CONVERSATION_ID"] != chat_id)
+        elif os.environ.get("ANTIGRAVITY_AGENT"):
+            antigravity_manual = True
     cli = "richi"
-    if cursor or (chat_id is not None and os.environ.get("CURSOR_AGENT")):
+    if cursor or (chat_id is not None and os.environ.get("CURSOR_AGENT")) or antigravity_manual:
         cli += " --chat " + _chat_id(chat_id)
     if not bound:
         return [cli + " chat bind --current", cli + " chat bind NAME"]

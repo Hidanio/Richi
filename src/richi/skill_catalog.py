@@ -224,14 +224,110 @@ def _children(directory, files=None):
     return found
 
 
-def _json(path):
+def _strip_jsonc(text):
+    """JSONC without // or /* */ comments and without trailing commas before } or ]."""
+    without_comments, index, in_string = [], 0, False
+    while index < len(text):
+        char = text[index]
+        if in_string:
+            without_comments.append(char)
+            if char == "\\" and index + 1 < len(text):
+                without_comments.append(text[index + 1])
+                index += 2
+                continue
+            if char == '"':
+                in_string = False
+            index += 1
+        elif char == '"':
+            in_string = True
+            without_comments.append(char)
+            index += 1
+        elif text.startswith("//", index):
+            end = text.find("\n", index + 2)
+            index = len(text) if end < 0 else end
+        elif text.startswith("/*", index):
+            end = text.find("*/", index + 2)
+            if end < 0:
+                return ""
+            without_comments.append(" ")
+            index = end + 2
+        else:
+            without_comments.append(char)
+            index += 1
+    cleaned = "".join(without_comments)
+    result, index, in_string, after_value = [], 0, False, False
+    while index < len(cleaned):
+        char = cleaned[index]
+        if in_string:
+            result.append(char)
+            if char == "\\" and index + 1 < len(cleaned):
+                result.append(cleaned[index + 1])
+                index += 2
+                continue
+            if char == '"':
+                in_string = False
+                after_value = True
+        elif char == '"':
+            in_string = True
+            result.append(char)
+        elif char == ",":
+            look = index + 1
+            while look < len(cleaned) and cleaned[look] in " \t\r\n":
+                look += 1
+            if not after_value or look >= len(cleaned) or cleaned[look] not in "}]":
+                result.append(char)
+                after_value = False
+        else:
+            result.append(char)
+            if char in "{[:":
+                after_value = False
+            elif char not in " \t\r\n":
+                after_value = True
+        index += 1
+    return "".join(result)
+
+
+def _json(path, jsonc=False):
     """A small JSON file's value, or None when it is missing, too large or not JSON."""
     try:
         data = _read_regular(path, MAX_MANIFEST + 1)
-        return None if len(data) > MAX_MANIFEST else agents.parse_json(data.decode("utf-8"))
+        if len(data) > MAX_MANIFEST:
+            return None
+        text = data.decode("utf-8")
+        return agents.parse_json(_strip_jsonc(text) if jsonc else text)
     except (OSError, ValueError, RecursionError):
         # RecursionError: brackets nested deeper than the parser goes. A plugin's author wrote the file.
         return None
+
+
+_ANTIGRAVITY_MANIFESTS = (
+    Path("plugin.json"),
+    Path(".antigravity-plugin", "plugin.json"),
+    Path(".gemini-plugin", "plugin.json"),
+    Path(".claude-plugin", "plugin.json"),
+)
+
+
+def _antigravity_plugins(root):
+    """(name, directory, None) of enabled Antigravity plugins under ~/.gemini/config/plugins."""
+    config = _json(root.parent / "config.json", jsonc=True)
+    switches = config.get("plugins") if isinstance(config, dict) else None
+    for directory in _children(root):
+        manifest = next((loaded for candidate in _ANTIGRAVITY_MANIFESTS
+                         for loaded in (_json(directory / candidate, jsonc=True),)
+                         if isinstance(loaded, dict)), None)
+        if manifest is None:
+            continue
+        override = switches.get(directory.name) if isinstance(switches, dict) else None
+        if isinstance(override, dict) and type(override.get("enabled")) is bool:
+            enabled = override["enabled"]
+        else:
+            enabled = manifest.get("disabled") is not True
+        if not enabled:
+            continue
+        raw_name = manifest.get("name")
+        name = raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else directory.name
+        yield name, directory, None
 
 
 def _plugin_name(directory):
@@ -297,6 +393,9 @@ def _plugins(layout, root):
     """(name, directory, enabled skill names or None) of each plugin under a plugin root."""
     if layout == "claude-app":
         yield from _claude_app_plugins(root)
+        return
+    if layout == "antigravity-plugins":
+        yield from _antigravity_plugins(root)
         return
     for marketplace in _children(root):
         for plugin in _children(marketplace):

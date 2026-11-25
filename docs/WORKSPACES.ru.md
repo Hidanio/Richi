@@ -62,7 +62,8 @@ workspace не переносит и не разделяет старые зап
 меняет выбор для обычных вызовов из терминала. Новый чат сначала спрашивает:
 использовать текущий CLI workspace или выбрать другой только для этого чата.
 
-В Codex launcher получает ID из `CODEX_THREAD_ID`. Claude Code получает
+В Codex launcher получает ID из `CODEX_THREAD_ID`, а в Antigravity — из
+`ANTIGRAVITY_CONVERSATION_ID` (как `antigravity:<id>`). Claude Code получает
 `RICHI_CHAT_ID` от хука SessionStart, который также сообщает явный аргумент `--chat`.
 В локальном Cursor Agent добавляйте после `richi` аргумент `--chat cursor:<id>`
 из хука `sessionStart` текущего чата в каждой команде, начиная с первых двух вызовов ниже.

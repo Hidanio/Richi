@@ -91,7 +91,9 @@ def cli_environment(directory, **overrides):
     # CODEX_THREAD_ID and CURSOR_AGENT would tell rules show which agent runs the tests.
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith("RICHI_")
-                   and key not in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "ZDOTDIR"}}
+                   and key not in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT",
+                                   "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID",
+                                   "CODEX_HOME", "CLAUDE_CONFIG_DIR", "ZDOTDIR"}}
     environment.update(HOME=str(root), XDG_CONFIG_HOME=str(root / ".config"),
                        XDG_DATA_HOME=str(root / ".local" / "share"))
     environment.update(overrides)

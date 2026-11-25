@@ -526,7 +526,8 @@ def main(argv=None):
         environment.pop("RICHI_DB", None)
         if command == "map":
             # Even an older runtime can relaunch a map with its pinned store.
-            environment.pop("CURSOR_AGENT", None)
+            for marker in ("CURSOR_AGENT", "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID"):
+                environment.pop(marker, None)
         if chat_id is not None:
             environment["RICHI_CHAT_ID"] = chat_id
         environment["RICHI_DATA_DIR"] = str(settings.data_dir)

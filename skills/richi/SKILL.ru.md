@@ -42,7 +42,8 @@ description: Richi (прежнее имя — project-memory). Находи и �
    `-w NAME` может повторять привязку. Команда `chat bind NAME --replace`
    требует явного решения человека сменить workspace. Новые чаты и ответвления выбирают его
    независимо; делегированная работа наследует подтверждённый выбор и переданный идентификатор.
-   Codex передаёт `CODEX_THREAD_ID`. Хук SessionStart в Claude Code задаёт
+   Codex передаёт `CODEX_THREAD_ID`. Antigravity передаёт `ANTIGRAVITY_CONVERSATION_ID`
+   (используется как `antigravity:<id>`). Хук SessionStart в Claude Code задаёт
    `RICHI_CHAT_ID` и сообщает точный `--chat ID` для оболочек, которым нужен
    явный аргумент. Другие интеграции могут передавать стабильный `--chat ID`.
 3. Выполни `richi config show`, чтобы определить runtime и хранилище, и один раз

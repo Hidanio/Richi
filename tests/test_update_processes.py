@@ -24,7 +24,8 @@ from cli_environment import free_port
 
 def isolated_environment(root):
     environment = {key: value for key, value in os.environ.items()
-                   if not key.startswith("RICHI_") and key not in {"CODEX_THREAD_ID", "CURSOR_AGENT"}}
+                   if not key.startswith("RICHI_")
+                   and key not in {"CODEX_THREAD_ID", "CURSOR_AGENT", "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID"}}
     environment.update(HOME=str(root / "home"), XDG_CONFIG_HOME=str(root / "config"),
                        XDG_DATA_HOME=str(root / "data"))
     return environment

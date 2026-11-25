@@ -875,6 +875,7 @@ def setup_parser():
                     examples=(("Preview, then apply for Codex", ("richi setup --dry-run", "richi setup --yes")),
                               ("Connect Claude Code", "richi setup --agent claude --yes"),
                               ("Connect Cursor", "richi setup --agent cursor --yes"),
+                              ("Connect Antigravity", "richi setup --agent antigravity --yes"),
                               ("Is the integration intact?", "richi setup --status --agent claude")),
                     see=("agents", "start"), guide="docs/SETUP.md")
 
