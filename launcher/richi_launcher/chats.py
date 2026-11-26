@@ -15,6 +15,9 @@ _MAX_CHATS = 10000
 _STORAGE_ENV = ("RICHI_CONFIG", "RICHI_DB", "RICHI_DATA_DIR")
 CHAT_ID_VARS = ("RICHI_CHAT_ID", "CODEX_THREAD_ID", "ANTIGRAVITY_CONVERSATION_ID")
 AGENT_SHELL_VARS = ("CLAUDECODE", "CURSOR_AGENT", "ANTIGRAVITY_AGENT")
+_PREFIXED_AGENTS = ("cursor", "claude", "antigravity")
+_MULTI_AGENT_MSG = ("Multiple agent chat environments detected; "
+                    "pass --chat with the active client's conversation ID.")
 
 
 class ChatError(ConfigError):
@@ -35,29 +38,37 @@ def detect_chat(explicit=None):
     """Explicit IDs support other clients; no directory/session-based identity."""
     if explicit is not None:
         return _chat_id(explicit)
+    raw_richi = os.environ.get("RICHI_CHAT_ID")
+    has_codex = "CODEX_THREAD_ID" in os.environ
+    has_claude = os.environ.get("CLAUDECODE") == "1"
+    has_agy_id = "ANTIGRAVITY_CONVERSATION_ID" in os.environ
+    has_agy = has_agy_id or bool(os.environ.get("ANTIGRAVITY_AGENT"))
     # Cursor's session hook supplies the ID to the conversation. Shell
     # variables may be absent or inherited from a different conversation.
     if os.environ.get("CURSOR_AGENT"):
+        if (has_agy or has_codex or has_claude
+                or (raw_richi and not raw_richi.startswith("cursor:"))):
+            raise ChatError(_MULTI_AGENT_MSG, "chat_id_required")
         raise ChatError("Pass --chat with the active client's conversation ID in a Cursor Agent shell. "
                         "Cursor supplies --chat cursor:<id> in its sessionStart hook.",
                         "chat_id_required")
-    has_agy_id = "ANTIGRAVITY_CONVERSATION_ID" in os.environ
-    if has_agy_id or os.environ.get("ANTIGRAVITY_AGENT"):
+    if has_agy:
+        raw_agy = os.environ.get("ANTIGRAVITY_CONVERSATION_ID", "")
+        if (has_codex or has_claude
+                or (has_agy_id and raw_richi is not None and raw_richi != "antigravity:" + raw_agy)
+                or (not has_agy_id and raw_richi and not raw_richi.startswith("antigravity:"))):
+            raise ChatError(_MULTI_AGENT_MSG, "chat_id_required")
         if not has_agy_id:
             raise ChatError("Pass --chat with the active conversation ID in an Antigravity shell when "
                             "ANTIGRAVITY_CONVERSATION_ID is unavailable.",
                             "chat_id_required")
-        raw_agy = os.environ["ANTIGRAVITY_CONVERSATION_ID"]
-        if ("CODEX_THREAD_ID" in os.environ
-                or os.environ.get("CLAUDECODE") == "1"
-                or ("RICHI_CHAT_ID" in os.environ and os.environ["RICHI_CHAT_ID"] != "antigravity:" + raw_agy)):
-            raise ChatError("Multiple agent chat environments detected; "
-                            "pass --chat with the active client's conversation ID.",
-                            "chat_id_required")
         return _chat_id("antigravity:" + _chat_id(raw_agy))
-    if "RICHI_CHAT_ID" in os.environ:
-        return _chat_id(os.environ["RICHI_CHAT_ID"])
-    if "CODEX_THREAD_ID" in os.environ:
+    if (has_claude and (has_codex or (raw_richi is not None and raw_richi.startswith(("cursor:", "antigravity:"))))
+            or (has_codex and raw_richi is not None and raw_richi.startswith(("claude:", "cursor:", "antigravity:")))):
+        raise ChatError(_MULTI_AGENT_MSG, "chat_id_required")
+    if raw_richi is not None:
+        return _chat_id(raw_richi)
+    if has_codex:
         return _chat_id(os.environ["CODEX_THREAD_ID"])
     return None
 
@@ -127,23 +138,18 @@ def needs_explicit_chat(chat_id):
         detected = detect_chat()
     except ChatError:
         return True
-    if chat_id.startswith("antigravity:"):
+    if chat_id.startswith(("claude:", "antigravity:")):
         return detected != chat_id
     return detected is not None and detected != chat_id
 
 
 def _next_commands(chat_id, bound):
-    cursor = chat_id is not None and chat_id.startswith("cursor:")
     need_chat = needs_explicit_chat(chat_id)
     cli = "richi --chat " + _chat_id(chat_id) if need_chat else "richi"
     if not bound:
         return [cli + " chat bind --current", cli + " chat bind NAME"]
-    if cursor:
-        rules = "rules show --agent cursor"
-    elif chat_id is not None and chat_id.startswith("antigravity:") and need_chat:
-        rules = "rules show --agent antigravity"
-    else:
-        rules = "rules show"
+    prefix = chat_id.split(":", 1)[0] if chat_id is not None and ":" in chat_id else None
+    rules = "rules show --agent " + prefix if prefix in _PREFIXED_AGENTS and need_chat else "rules show"
     return [cli + " " + rules, cli + " --project-path PATH " + rules]
 
 

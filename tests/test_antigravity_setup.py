@@ -47,7 +47,13 @@ class AntigravitySetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCas
             app_dir.mkdir()
             with patch.dict("os.environ", {"ANTIGRAVITY_APP_DATA_DIR": str(app_dir)}):
                 self.assertTrue(antigravity_setup.detected())
-            with patch.dict("os.environ", {"ANTIGRAVITY_APP_DATA_DIR": "relative/path"}):
+            loop = self.home / "loop-agy"
+            loop.symlink_to(loop)
+            for rejected in ("relative/path", "~", "~/.gemini/antigravity", "/", str(self.home), str(loop)):
+                with self.subTest(rejected=rejected), patch.dict("os.environ", {"ANTIGRAVITY_APP_DATA_DIR": rejected}):
+                    self.assertFalse(antigravity_setup.detected())
+            with patch.object(antigravity_setup.os, "environ",
+                              dict(antigravity_setup.os.environ, ANTIGRAVITY_APP_DATA_DIR="/bad\x00path")):
                 self.assertFalse(antigravity_setup.detected())
         with patch.object(antigravity_setup, "SYSTEM_APPLICATIONS", system), \
              patch.object(shutil, "which", side_effect=lambda name: "/usr/bin/antigravity" if name == "antigravity" else None):
@@ -76,6 +82,7 @@ class AntigravitySetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCas
         self.assertIn("antigravity:<conversation_id>", rule)
         self.assertIn("chat_id_required", rule)
         self.assertIn("swarm worker", rule)
+        self.assertIn("unsandboxed execution", rule)
         self.assertIn("`richi` skill", rule)
         self.assertLessEqual(len(self.rule.read_bytes()), antigravity_setup.INSTRUCTION_LIMIT)
         self.assertTrue(self.skill.is_symlink())

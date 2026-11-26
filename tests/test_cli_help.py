@@ -1045,6 +1045,31 @@ class LauncherHelpTests(unittest.TestCase):
                         cli.main(argv)
                     self.assertEqual(hand_off.call_args_list, [mock.call(8799, terminal)] if hands_off else [])
 
+    def test_map_handoff_probe_validates_chat_pinning_and_selected_runtime(self):
+        # A 1.2.0/1.2.1 map started from an Antigravity shell retains
+        # ANTIGRAVITY_CONVERSATION_ID in its follower environment; RICHI_MAP_PROBE=1
+        # must run pin_chat and resolve_runtime instead of _runtime_help(in_chat=True).
+        for env, expected_code in (
+                ({"RICHI_MAP_PROBE": "1", "ANTIGRAVITY_CONVERSATION_ID": "legacy-agy"}, "chat_workspace_required"),
+                ({"RICHI_MAP_PROBE": "1", "RICHI_CHAT_ID": "bound-chat"}, "chat_storage_override")):
+            if expected_code == "chat_storage_override":
+                chats.bind_chat("bound-chat", "default")
+            with self.subTest(env=env), mock.patch.dict(os.environ, env):
+                self.assert_error(["--db", "/synthetic.sqlite3", "--version"], "", code_name=expected_code)
+        selected, installed = object(), object()
+        with mock.patch.dict(os.environ, {"RICHI_MAP_PROBE": "1", "RICHI_INSTALLATION_GENERATION": "gen-2"}), \
+                mock.patch.object(cli, "resolve_settings", return_value=mock.Mock(port=8799)) as resolve, \
+                mock.patch.object(cli, "resolve_runtime", return_value=selected), \
+                mock.patch.object(cli, "installed_runtime", return_value=installed), \
+                mock.patch.object(cli, "runtime_command", return_value=["/synthetic/python"]) as command, \
+                mock.patch.object(cli, "_hand_off_maps") as hand_off, \
+                mock.patch.object(cli.os, "execve", side_effect=SystemExit(0)):
+            with self.assertRaises(SystemExit):
+                cli.main(["--db", "/synthetic.sqlite3", "--version"])
+            resolve.assert_called_once_with(db="/synthetic.sqlite3")
+            command.assert_called_once_with(selected, ["--version"])
+            hand_off.assert_not_called()
+
     def test_a_chat_never_changes_the_default_whatever_it_selects(self):
         os.environ["RICHI_CHAT_ID"] = "synthetic"
         # Python 3.12+ drops a '--' before the subcommand and runs it.

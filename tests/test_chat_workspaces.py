@@ -72,11 +72,26 @@ class ChatBindingTests(unittest.TestCase):
         del os.environ["RICHI_CHAT_ID"]
         os.environ["CODEX_THREAD_ID"] = "codex-thread"
         self.assertEqual(chats.detect_chat(), "codex-thread")
-        for extra in ({"ANTIGRAVITY_AGENT": "1"}, {"ANTIGRAVITY_AGENT": "1", "RICHI_CHAT_ID": "claude:parent"}):
+        for extra in ({"ANTIGRAVITY_AGENT": "1"}, {"ANTIGRAVITY_AGENT": "1", "RICHI_CHAT_ID": "claude:parent"},
+                      {"CLAUDECODE": "1"}, {"RICHI_CHAT_ID": "claude:parent"},
+                      {"RICHI_CHAT_ID": "cursor:parent"}, {"RICHI_CHAT_ID": "antigravity:parent"}):
             with self.subTest(extra=extra), mock.patch.dict(os.environ, extra):
                 with self.assertRaises(chats.ChatError) as missing_agy:
                     chats.detect_chat()
                 self.assertEqual(missing_agy.exception.details["code"], "chat_id_required")
+                self.assertIn("Multiple agent chat environments", missing_agy.exception.details["error"])
+        with mock.patch.dict(os.environ, {"CURSOR_AGENT": "1", "ANTIGRAVITY_CONVERSATION_ID": "agy-conv-1"}, clear=True):
+            with self.assertRaises(chats.ChatError) as cursor_multi:
+                chats.detect_chat()
+            self.assertIn("Multiple agent chat environments", cursor_multi.exception.details["error"])
+        for cursor_only in ({"CURSOR_AGENT": "1"}, {"CURSOR_AGENT": "1", "RICHI_CHAT_ID": "cursor:hook"},
+                            {"CURSOR_AGENT": "1", "RICHI_CHAT_ID": ""}):
+            with self.subTest(cursor_only=cursor_only), mock.patch.dict(os.environ, cursor_only, clear=True):
+                with self.assertRaises(chats.ChatError) as cursor_err:
+                    chats.detect_chat()
+                self.assertIn("Cursor Agent shell", cursor_err.exception.details["error"])
+        with mock.patch.dict(os.environ, {"CLAUDECODE": "1"}, clear=True):
+            self.assertIsNone(chats.detect_chat())
         os.environ["RICHI_CHAT_ID"] = "client-thread"
         self.assertEqual(chats.detect_chat(), "client-thread")
         self.assertEqual(chats.detect_chat("explicit"), "explicit")
@@ -245,10 +260,16 @@ class ChatCliTests(unittest.TestCase):
             self.assertIn("EX-{number}_{description}", rejected["violations"][0]["message"])
         agy_nested = {"ANTIGRAVITY_AGENT": "1", "ANTIGRAVITY_CONVERSATION_ID": "agy-new", "CLAUDECODE": "1"}
         self.assertEqual(self.command("chat", "current", env=agy_nested, ok=False)["code"], "chat_id_required")
-        for args in (("bind", "default"), ("current",)):
-            shown = self.command("--chat", "antigravity:agy-new", "chat", *args, "--with-rules", repo, env=agy_nested)["rules_context"]
-            self.assertEqual((shown["workspace"], shown["agent"], shown["project"]), ("default", "antigravity", "service"))
-            self.assertEqual({item["id"] for item in shown["rules"]}, {"branch-names", "workspace-rule"})
+        for chat_name, agent_name in (("antigravity:agy-new", "antigravity"), ("claude:nested-1", "claude")):
+            for args in (("bind", "default"), ("current",)):
+                res = self.command("--chat", chat_name, "chat", *args, "--with-rules", repo, env=agy_nested)
+                shown = res["rules_context"]
+                self.assertEqual((shown["workspace"], shown["agent"], shown["project"]), ("default", agent_name, "service"))
+                self.assertEqual({item["id"] for item in shown["rules"]}, {"branch-names", "workspace-rule"})
+                self.assertEqual(res["next_commands"][0],
+                                 "richi --chat " + chat_name + " rules show --agent " + agent_name)
+        self.assertEqual(self.command("--chat", "claude:no-env-file", "chat", "current")["next_commands"][0],
+                         "richi --chat claude:no-env-file chat bind --current")
         global_rules = self.command("chat", "current", "--with-rules", chat="codex-new")["rules_context"]
         self.assertEqual([item["id"] for item in global_rules["rules"]], ["workspace-rule"])
         self.assertNotIn("rules_context", self.command("chat", "current", chat="codex-new"))

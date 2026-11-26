@@ -19,14 +19,14 @@ def profile_dir():
 def _is_dir(path):
     try:
         return path.is_dir()
-    except OSError:
+    except (OSError, ValueError):
         return False
 
 
 def _executable(path):
     try:
         return path.is_file() and os.access(path, os.X_OK)
-    except OSError:
+    except (OSError, ValueError):
         return False
 
 
@@ -35,13 +35,17 @@ def detected():
         return True
     try:
         home = Path.home().resolve()
-    except OSError:
+    except (OSError, RuntimeError, ValueError):
         return False
-    if _is_dir(profile_dir()):
+    if _is_dir(home / ".gemini/config"):
         return True
     raw_app = (os.environ.get("ANTIGRAVITY_APP_DATA_DIR") or "").strip()
-    if raw_app and (raw_app == "~" or raw_app.startswith("~/") or raw_app.startswith("/")):
-        if _is_dir(home / raw_app[2:].lstrip("/") if raw_app.startswith("~") else Path(raw_app)):
+    if raw_app.startswith("/") and "\x00" not in raw_app:
+        try:
+            app_path = Path(raw_app).resolve()
+        except (OSError, RuntimeError, ValueError):
+            app_path = None
+        if app_path is not None and app_path not in {Path("/"), home} and _is_dir(app_path):
             return True
     if any(_is_dir(home / ".gemini" / name) for name in ("antigravity", "antigravity-cli", "antigravity-ide")):
         return True
@@ -77,6 +81,8 @@ agent or swarm worker receives its own `ANTIGRAVITY_CONVERSATION_ID`: pass
 `--chat antigravity:<conversation_id>` when delegating memory work and use that
 caller-supplied `--chat` on every Richi call in the child, or skip Richi
 startup checks and binding when no memory task or `--chat` ID was delegated.
+If sandboxing blocks Richi's user storage, request unsandboxed execution rather
+than overriding `HOME`, storage options, or chat variables.
 
 """ + block + b"\n"
     if len(content) > INSTRUCTION_LIMIT:

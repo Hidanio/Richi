@@ -8,6 +8,8 @@ import sys
 import tempfile
 import unittest
 
+from cli_environment import SCRUBBED_AGENT_VARS
+
 
 ROOT = Path(__file__).resolve().parents[1]
 BOOTSTRAP = ("import sys; sys.path.insert(0, sys.argv[1]); "
@@ -25,9 +27,7 @@ class WorkspaceCliTests(unittest.TestCase):
                         self.installed / "richi_launcher", ignore=ignored)
         shutil.copytree(ROOT / "src" / "richi", self.installed / "richi", ignore=ignored)
         self.environment = {key: value for key, value in os.environ.items()
-                            if not key.startswith("RICHI_")
-                            and key not in {"CODEX_THREAD_ID", "CURSOR_AGENT",
-                                            "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID"}}
+                            if not key.startswith("RICHI_") and key not in SCRUBBED_AGENT_VARS}
         self.environment.update(HOME=str(self.root / "home"),
                                 XDG_CONFIG_HOME=str(self.root / "config"),
                                 XDG_DATA_HOME=str(self.root / "data"))

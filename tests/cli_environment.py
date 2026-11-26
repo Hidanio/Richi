@@ -12,6 +12,13 @@ from urllib.parse import urlsplit
 from richi_launcher import maps
 
 
+SCRUBBED_AGENT_VARS = frozenset({
+    "CODEX_THREAD_ID", "CODEX_SESSION_ID", "CLAUDECODE", "CURSOR_AGENT",
+    "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID", "ANTIGRAVITY_APP_DATA_DIR",
+    "CODEX_HOME", "CLAUDE_CONFIG_DIR",
+})
+
+
 def _ephemeral_start():
     """The first port the kernel may give to an outgoing connection."""
     try:
@@ -91,10 +98,8 @@ def cli_environment(directory, **overrides):
     # CLAUDECODE, CODEX_THREAD_ID, CURSOR_AGENT and ANTIGRAVITY_* would mark an agent shell.
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith("RICHI_")
-                   and key not in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT",
-                                   "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID",
-                                   "ANTIGRAVITY_APP_DATA_DIR",
-                                   "CODEX_HOME", "CLAUDE_CONFIG_DIR", "ZDOTDIR"}}
+                   and key not in SCRUBBED_AGENT_VARS
+                   and key != "ZDOTDIR"}
     environment.update(HOME=str(root), XDG_CONFIG_HOME=str(root / ".config"),
                        XDG_DATA_HOME=str(root / ".local" / "share"))
     environment.update(overrides)

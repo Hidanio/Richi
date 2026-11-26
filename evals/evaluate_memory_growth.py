@@ -37,7 +37,9 @@ def environment(directory):
     root = Path(directory) / "home"
     env = {key: value for key, value in os.environ.items()
            if not key.startswith(("RICHI_", "PYTHON"))
-           and key not in {"CODEX_THREAD_ID", "CURSOR_AGENT", "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID"}}
+           and key not in {"CLAUDECODE", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "CODEX_THREAD_ID",
+                           "CURSOR_AGENT", "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID",
+                           "ANTIGRAVITY_APP_DATA_DIR"}}
     env.update(HOME=str(root), XDG_CONFIG_HOME=str(root / ".config"),
                XDG_DATA_HOME=str(root / ".local" / "share"))
     return env

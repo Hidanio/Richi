@@ -19,13 +19,12 @@ from richi import launch_map, memory, serve
 from richi_launcher import cli, runtime, status, update
 from richi_launcher.config import ConfigError
 
-from cli_environment import free_port
+from cli_environment import SCRUBBED_AGENT_VARS, free_port
 
 
 def isolated_environment(root):
     environment = {key: value for key, value in os.environ.items()
-                   if not key.startswith("RICHI_")
-                   and key not in {"CODEX_THREAD_ID", "CURSOR_AGENT", "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID"}}
+                   if not key.startswith("RICHI_") and key not in SCRUBBED_AGENT_VARS}
     environment.update(HOME=str(root / "home"), XDG_CONFIG_HOME=str(root / "config"),
                        XDG_DATA_HOME=str(root / "data"))
     return environment

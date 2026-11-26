@@ -12,6 +12,7 @@ skill (or a plugin command, for an agent that lists those as skills) is named
 as the agents name it, "plugin:skill". Skills an agent never chooses by
 itself, only when the user invokes them, are left out for it.
 """
+import json
 import os
 from pathlib import Path
 import re
@@ -85,18 +86,19 @@ def _nested(line):
     return line == "-" or line.startswith(("- ", "#")) or ": " in line or line.endswith(":")
 
 
-def _parse_front_matter(text, cut=False):
+def _parse_front_matter(text, cut=False, *, strict_fence=False):
     """(top-level scalar fields of a SKILL.md YAML header, whether a valid header block was present)."""
     if cut:
         text = text[:text.rfind("\n") + 1]
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return {}, False
+    end_markers = {"---"} if strict_fence else {"---", "..."}
     fields, index, prose = {}, 1, False
     while index < len(lines):
         line = lines[index]
         # A separator inside an indented YAML value is content. Only a top-level one ends the header.
-        if line.rstrip(" \t") in {"---", "..."}:
+        if line.rstrip(" \t") in end_markers:
             return ({}, False) if prose else (fields, True)
         index += 1
         if not line or line[0] in " \t#":
@@ -156,7 +158,7 @@ def _read_regular(path, limit, *, frontmatter_only=False):
             first, newline, rest = prefix.partition(b"\n")
             if (len(prefix) < 1024 or newline and
                     (first.lstrip(b"\xef\xbb\xbf").strip() != b"---" or
-                     re.search(rb"(?m)^(?:---|\.\.\.)[ \t]*\r?\n", rest))):
+                     re.search(rb"(?m)^---[ \t]*\r?\n", rest))):
                 return prefix
             return prefix + handle.read(limit - len(prefix))
         return handle.read(limit)
@@ -292,14 +294,21 @@ def _strip_jsonc(text):
     return "".join(result)
 
 
-def _json_state(path, jsonc=False):
+def _no_constants(value):
+    raise ValueError("invalid JSON constant: " + value)
+
+
+def _json_state(path, jsonc=False, *, strict_constants=False):
     """(parsed JSON value or None, True when absent or readable, False on read/parse failure)."""
     try:
         data = _read_regular(path, MAX_MANIFEST + 1)
         if len(data) > MAX_MANIFEST:
             return None, False
         text = data.decode("utf-8-sig")
-        return agents.parse_json(_strip_jsonc(text) if jsonc else text), True
+        raw = _strip_jsonc(text) if jsonc else text
+        if strict_constants:
+            return json.loads(raw, parse_int=agents._short_integer, parse_constant=_no_constants), True
+        return agents.parse_json(raw), True
     except FileNotFoundError:
         return None, True
     except (OSError, ValueError, RecursionError):
@@ -312,44 +321,184 @@ def _json(path, jsonc=False):
     return _json_state(path, jsonc)[0]
 
 
-_ANTIGRAVITY_MANIFESTS = (
-    Path("plugin.json"),
-    Path(".antigravity-plugin", "plugin.json"),
-    Path(".gemini-plugin", "plugin.json"),
-)
+def _fold_char(ch):
+    upper = ch.upper()
+    upper = upper if len(upper) == 1 else ch
+    lower = upper.lower()
+    return lower if len(lower) == 1 else upper
 
 
-def _antigravity_plugins(root, plugin_state=None):
-    """(name, directory, None) of enabled Antigravity plugins under ~/.gemini/config/plugins."""
-    config, config_ok = _json_state(root.parent / "config.json", jsonc=True)
-    config_unknown = not config_ok or (config is not None and not isinstance(config, dict))
-    switches = config.get("plugins") if not config_unknown and isinstance(config, dict) else None
+def _equal_fold(left, right):
+    """Go strings.EqualFold parity: 1-to-1 code-point case folding without 1-to-many expansions."""
+    if left == right:
+        return True
+    if len(left) != len(right):
+        return False
+    if left.isascii() and right.isascii():
+        return left.lower() == right.lower()
+    return all(_fold_char(a) == _fold_char(b) for a, b in zip(left, right))
+
+
+def _antigravity_switches(config, config_ok):
+    """(plugins mapping, whether ~/.gemini/config/config.json could not be trusted)."""
+    if not config_ok or (config is not None and not isinstance(config, dict)):
+        return None, True
+    if config is None:
+        return {}, False
+    plugins = config.get("plugins")
+    if plugins is None:
+        return {}, False
+    if not isinstance(plugins, dict):
+        return None, True
+    for cfg in plugins.values():
+        if not isinstance(cfg, dict):
+            return None, True
+        if cfg.get("enabled") is not None and type(cfg.get("enabled")) is not bool:
+            return None, True
+        if "installDir" in cfg and "install_dir" in cfg:
+            return None, True
+        for key in ("installDir", "install_dir"):
+            if cfg.get(key) is not None and not isinstance(cfg.get(key), str):
+                return None, True
+    return plugins, False
+
+
+def _valid_install_dir(value):
+    return isinstance(value, str) and bool(value) and value[0] != "." and not any(ch in value for ch in "/\\\x00")
+
+
+def _plugin_install_dir(key, cfg):
+    if not isinstance(cfg, dict):
+        return ""
+    raw = cfg.get("installDir") if "installDir" in cfg else cfg.get("install_dir")
+    if not _valid_install_dir(raw):
+        return ""
+    if _equal_fold(raw, key):
+        return raw
+    at = raw.rfind("@")
+    prefix = raw[:at] if at > 0 else ""
+    return raw if _equal_fold(prefix, key) else ""
+
+
+def _plugin_lookup(switches, target):
+    if target in switches:
+        return target, switches[target], True
+    matches = [key for key in switches if _equal_fold(key, target)]
+    if not matches:
+        return "", None, False
+    best = min(matches)
+    return best, switches[best], True
+
+
+def _resolve_antigravity_plugin(dir_name, switches):
+    """Go plugindir.Resolve parity: (resolved config key, whether this plugin directory is active)."""
+    if not switches:
+        return dir_name, True
+    key, cfg, found = _plugin_lookup(switches, dir_name)
+    if found:
+        installed = _plugin_install_dir(key, cfg)
+        return key, (not installed or _equal_fold(installed, dir_name))
+    by_install = [candidate for candidate, entry in switches.items()
+                  if _equal_fold(_plugin_install_dir(candidate, entry), dir_name)]
+    if by_install:
+        return min(by_install), True
+    at = dir_name.rfind("@")
+    if at > 0:
+        key, cfg, found = _plugin_lookup(switches, dir_name[:at])
+        if found:
+            installed = _plugin_install_dir(key, cfg)
+            if not installed or _equal_fold(installed, dir_name):
+                return dir_name, True
+            return key, False
+    return dir_name, True
+
+
+def _antigravity_manifest(directory):
+    """(parsed manifest dict or None, whether an unreadable directory/file left visibility uncertain)."""
+    unreadable = False
+    for candidate_dir in (directory / ".antigravity-plugin", directory / ".gemini-plugin", directory):
+        try:
+            entries = sorted(candidate_dir.iterdir(), key=lambda item: item.name)
+        except (FileNotFoundError, NotADirectoryError):
+            if candidate_dir == directory:
+                return None, unreadable
+            continue
+        except OSError:
+            unreadable = True
+            if candidate_dir == directory:
+                return None, True
+            continue
+        for entry in entries:
+            if _equal_fold(entry.name, "plugin.json"):
+                try:
+                    data = _read_regular(entry, MAX_MANIFEST + 1)
+                except PermissionError:
+                    return None, True
+                except OSError:
+                    return None, unreadable
+                if len(data) > MAX_MANIFEST:
+                    return None, unreadable
+                try:
+                    loaded = agents.parse_json(_strip_jsonc(data.decode("utf-8-sig")))
+                except (UnicodeError, ValueError, RecursionError):
+                    return None, unreadable
+                return (loaded if isinstance(loaded, dict) else None), unreadable
+    return None, unreadable
+
+
+def _scan_ambiguous_antigravity_skills(directory, plugin_state):
+    """Conservatively flag potential richi/project-memory skills when plugin state cannot be verified."""
+    agent = plugin_state["agent"]
+    skills_dir = directory / "skills"
+    try:
+        entries = sorted(skills_dir.iterdir(), key=lambda item: item.name)
+    except (FileNotFoundError, NotADirectoryError):
+        return
+    except OSError:
+        plugin_state["config_incomplete"] = True
+        return
+    for child in entries:
+        if child.name.startswith("."):
+            continue
+        try:
+            if not child.is_dir():
+                continue
+            text, cut = _read_header(child / "SKILL.md", frontmatter_only=True)
+            fields, has_header = _parse_front_matter(text, cut, strict_fence=agent.requires_frontmatter)
+        except PermissionError:
+            plugin_state["config_incomplete"] = True
+            continue
+        except OSError:
+            continue
+        if not has_header:
+            continue
+        own = fields.get("name")
+        own = own.strip() if isinstance(own, str) and own.strip() else child.name
+        if own in {"richi", PREVIOUS_RICHI_SKILL} and _agent_may_choose(agent, child, fields):
+            plugin_state["config_incomplete"] = True
+            if own == "richi":
+                plugin_state.setdefault("ambiguous_richi_paths", set()).add(str(child))
+
+
+def _antigravity_plugins(root, home, plugin_state=None):
+    """(name, directory, None) of enabled Antigravity plugins under a plugin root."""
+    config, config_ok = _json_state(home / ".gemini" / "config" / "config.json", strict_constants=True)
+    switches, config_unknown = _antigravity_switches(config, config_ok)
+    user_plugins_root = root == home / ".gemini" / "config" / "plugins"
     seen = set()
     for directory in _children(root):
-        manifest = next((loaded for candidate in _ANTIGRAVITY_MANIFESTS
-                         for loaded in (_json(directory / candidate, jsonc=True),)
-                         if isinstance(loaded, dict)), None)
+        manifest, manifest_unreadable = _antigravity_manifest(directory)
+        if plugin_state is not None and (manifest_unreadable or (config_unknown and manifest is not None)):
+            _scan_ambiguous_antigravity_skills(directory, plugin_state)
         if manifest is None:
             continue
-        if config_unknown and plugin_state is not None:
-            # When config.json is unreadable (e.g. Seatbelt) or damaged, check every plugin directory
-            # without disabled or duplicate-name filtering for a potential richi/project-memory skill.
-            for child in _children(directory / "skills"):
-                try:
-                    text, cut = _read_header(child / "SKILL.md", frontmatter_only=True)
-                    fields, has_header = _parse_front_matter(text, cut)
-                except OSError:
-                    continue
-                if not has_header:
-                    continue
-                own = fields.get("name")
-                own = own.strip() if isinstance(own, str) and own.strip() else child.name
-                if own in {"richi", PREVIOUS_RICHI_SKILL} and _agent_may_choose(
-                        plugin_state["agent"], child, fields):
-                    plugin_state["config_incomplete"] = True
-                    if own == "richi":
-                        plugin_state.setdefault("ambiguous_richi_paths", set()).add(str(child))
-        override = switches.get(directory.name) if isinstance(switches, dict) else None
+        if not config_unknown and user_plugins_root:
+            resolved_name, active = _resolve_antigravity_plugin(directory.name, switches)
+            if not active:
+                continue
+        else:
+            resolved_name = directory.name
+        override = switches.get(resolved_name) if isinstance(switches, dict) else None
         if isinstance(override, dict) and type(override.get("enabled")) is bool:
             enabled = override["enabled"]
         else:
@@ -357,7 +506,7 @@ def _antigravity_plugins(root, plugin_state=None):
         if not enabled:
             continue
         raw_name = manifest.get("name")
-        name = raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else directory.name
+        name = raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else resolved_name
         if name in seen:
             continue
         seen.add(name)
@@ -423,13 +572,13 @@ def _installed_version(plugin):
     return max(dated)[2] if dated else None
 
 
-def _plugins(layout, root, plugin_state=None):
+def _plugins(layout, root, home, plugin_state=None):
     """(name, directory, enabled skill names or None) of each plugin under a plugin root."""
     if layout == "claude-app":
         yield from _claude_app_plugins(root)
         return
     if layout == "antigravity-plugins":
-        yield from _antigravity_plugins(root, plugin_state)
+        yield from _antigravity_plugins(root, home, plugin_state)
         return
     for marketplace in _children(root):
         for plugin in _children(marketplace):
@@ -478,7 +627,7 @@ def _nested_folders(root):
     return skills, limited
 
 
-def _candidates(agent, source, report, plugin_state=None):
+def _candidates(agent, source, home, report, plugin_state=None):
     """(name prefix, file with front matter, name without one, enabled names or None) under a root."""
     layout, root = source.layout, source.path
     if layout in ("skills", "nested-skills"):
@@ -492,7 +641,7 @@ def _candidates(agent, source, report, plugin_state=None):
             yield "", child / "SKILL.md", child.name, None
         return
     prefix_for = (lambda _name: "") if layout == "antigravity-plugins" else (lambda name: name + ":")
-    for name, directory, enabled in _plugins(layout, root, plugin_state):
+    for name, directory, enabled in _plugins(layout, root, home, plugin_state):
         prefix = prefix_for(name)
         for child in _children(directory / "skills"):
             yield prefix, child / "SKILL.md", child.name, enabled
@@ -548,12 +697,12 @@ def catalog(environ=None, home=None, registry=None, *, rule_aliases_only=False):
                 continue
             found = set()
             plugin_state = {"agent": agent}
-            for prefix, path, fallback, enabled in _candidates(agent, source, entry, plugin_state):
+            for prefix, path, fallback, enabled in _candidates(agent, source, home, entry, plugin_state):
                 try:
                     if source.kind != "plugins" and not agent.follows_skill_file_links and path.is_symlink():
                         continue
                     text, cut = _read_header(path, frontmatter_only=True)
-                    fields, has_header = _parse_front_matter(text, cut)
+                    fields, has_header = _parse_front_matter(text, cut, strict_fence=agent.requires_frontmatter)
                 except OSError:
                     continue
                 if agent.requires_frontmatter and not has_header:

@@ -17,7 +17,7 @@ from richi import memory, serve
 import richi_launcher
 from richi_launcher.runtime import current_runtime, describe_runtime
 
-from cli_environment import free_port
+from cli_environment import SCRUBBED_AGENT_VARS, free_port
 
 
 class MapDevelopmentTests(unittest.TestCase):
@@ -102,7 +102,7 @@ class MapDevelopmentTests(unittest.TestCase):
             port = free_port()
             environment = {key: value for key, value in os.environ.items()
                            if not key.startswith("RICHI_")
-                           and key not in {"CODEX_THREAD_ID", "CURSOR_AGENT", "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID"}}
+                           and key not in SCRUBBED_AGENT_VARS}
             environment.update(HOME=str(root / "home"), XDG_CONFIG_HOME=str(root / "config"),
                                XDG_DATA_HOME=str(root / "data"))
             command = self.isolated_command(installed) + ["--db", str(database), "map", "serve", "--port", str(port)]
@@ -159,7 +159,7 @@ class MapDevelopmentTests(unittest.TestCase):
             port = free_port()
             environment = {key: value for key, value in os.environ.items()
                            if not key.startswith("RICHI_")
-                           and key not in {"CODEX_THREAD_ID", "CURSOR_AGENT", "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID"}}
+                           and key not in SCRUBBED_AGENT_VARS}
             bad_config = root / "broken.json"
             bad_config.write_text("not JSON")
             environment["RICHI_CONFIG"] = str(bad_config)

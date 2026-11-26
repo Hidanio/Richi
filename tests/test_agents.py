@@ -1061,15 +1061,26 @@ class ListingTests(IsolatedHome):
         self.assertEqual([agent["connection"] for agent in listed["agents"]], [None] * len(agents.AGENTS))
         (self.home / ".agents/skills").mkdir(parents=True)
         (self.home / ".gemini/skills").mkdir(parents=True)
+        (self.home / "shared-team").mkdir()
+        self.cli("skill-sources", "update", "antigravity", "--add-skills", "~/shared-team")
         with mock.patch.object(agent_setup, "agents_command", return_value={"agents": [
                 {"agent": "claude", "detected": False, "status": "configured"}]}):
             listed = agent_commands.listing()
             self.assertFalse(next(agent for agent in listed["agents"] if agent["id"] == "cursor")["detected"])
             self.assertFalse(next(agent for agent in listed["agents"] if agent["id"] == "antigravity")["detected"])
+            updated_at = next(agent for agent in listed["agents"] if agent["id"] == "antigravity")["updated_at"]
+            self.cli("skill-sources", "update", "antigravity", "--expected-updated-at", updated_at,
+                     "--disable", "skills", "--disable", "system", "--disable", "plugins")
+            self.assertIsNone(self.listed()["antigravity"]["detected"])
+            self.cli("skill-sources", "remove", "antigravity",
+                     "--expected-updated-at", self.listed()["antigravity"]["updated_at"])
             (self.home / ".cursor").mkdir()
             (self.home / ".gemini/config/skills").mkdir(parents=True)
             self.assertTrue(self.listed()["cursor"]["detected"])
             self.assertTrue(self.listed()["antigravity"]["detected"])
+        for bad_app in ("/", "~", "~/.gemini/antigravity-ide", str(self.home), "relative/agy"):
+            sources = {s.key: s.path for s in agents.AGENTS[3].sources({"ANTIGRAVITY_APP_DATA_DIR": bad_app}, self.home)}
+            self.assertEqual(sources["system"], self.home / ".gemini" / "antigravity" / "builtin" / "skills")
         self.assertEqual((listed["connections_problem"], listed["agents"][0]["connection"],
                           listed["agents"][0]["detected"]), (None, "configured", False))
 

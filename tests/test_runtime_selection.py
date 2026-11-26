@@ -12,6 +12,8 @@ import sys
 import tempfile
 import unittest
 
+from cli_environment import SCRUBBED_AGENT_VARS
+
 
 ROOT = Path(__file__).resolve().parents[1]
 BOOTSTRAP = ("import sys; sys.path.insert(0, sys.argv[1]); "
@@ -40,9 +42,7 @@ class RuntimeSelectionTests(unittest.TestCase):
                                 "data_dir": str(self.database.parent), "port": 8943}
         self.config.write_text(json.dumps(self.original_config), encoding="utf-8")
         self.environment = {key: value for key, value in os.environ.items()
-                            if not key.startswith("RICHI_")
-                            and key not in {"CODEX_THREAD_ID", "CURSOR_AGENT",
-                                            "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID"}}
+                            if not key.startswith("RICHI_") and key not in SCRUBBED_AGENT_VARS}
         self.environment.update(HOME=str(self.root / "home"),
                                 XDG_CONFIG_HOME=str(self.root / "config"),
                                 XDG_DATA_HOME=str(self.root / "data"))

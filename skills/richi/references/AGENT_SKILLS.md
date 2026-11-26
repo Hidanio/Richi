@@ -25,8 +25,9 @@ richi --compact-json skill-sources list
 `rules show --agent ID`), `name`, `builtin`, `detected` (it looks installed for
 this user), `skills` (how many it can use) and `sources`. Richi gets `detected`
 from the installed launcher for agents it can connect. If an older launcher has
-no Cursor adapter, `connection` is null. Richi then checks Cursor’s own profile
-folders for detection and returns null if both of those sources are disabled.
+no adapter for a built-in agent (such as Cursor or Antigravity), `connection`
+is null. Richi then checks that agent's own built-in sources for detection and
+returns null if all of those sources are disabled.
 For a custom agent, Richi checks its enabled skill folders and returns null when
 all are disabled. A source has a `key`,
 its `path`, whether the folder `exists` (`denied` when this user may not read
@@ -82,11 +83,14 @@ agent's own standing instructions.
 ## Adjust an agent
 
 Antigravity reads user skills from `~/.gemini/config/skills`, built-in skills
-from `~/.gemini/antigravity/builtin/skills` (or `ANTIGRAVITY_APP_DATA_DIR/builtin/skills`)
-and enabled user plugins from `~/.gemini/config/plugins` (respecting `disabled`
-in `plugin.json` and plugin switches in `~/.gemini/config/config.json`). Extra
-skill directories declared in `skills.json` are not expanded automatically;
-register them with `skill-sources update antigravity --add-skills FOLDER`.
+from `~/.gemini/antigravity/builtin/skills` (or `ANTIGRAVITY_APP_DATA_DIR/builtin/skills`
+when `ANTIGRAVITY_APP_DATA_DIR` is an absolute `/...` path, such as for a
+standalone IDE or CLI surface) and enabled user plugins from
+`~/.gemini/config/plugins` (respecting `disabled` in `plugin.json` and plugin
+switches in `~/.gemini/config/config.json`). Extra directories declared in
+`skills.json` or `plugins.json` are not expanded automatically; register extra
+skill directories (`<folder>/<skill>/SKILL.md`) with
+`skill-sources update antigravity --add-skills FOLDER`.
 
 Cursor reads skills from `~/.cursor/skills`, `~/.agents/skills`, `~/.claude/skills`
 and `~/.codex/skills`. Its built-in skills are in `~/.cursor/skills-cursor`.

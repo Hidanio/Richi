@@ -290,10 +290,9 @@ def _include_rules(state, path):
     if path:
         args += ["--project-path", path]
     args += ["rules", "show"]
-    if chat.startswith("cursor:"):
-        args += ["--agent", "cursor"]
-    elif chat.startswith("antigravity:") and needs_explicit_chat(chat):
-        args += ["--agent", "antigravity"]
+    prefix = chat.split(":", 1)[0] if ":" in chat else None
+    if prefix in ("cursor", "claude", "antigravity") and needs_explicit_chat(chat):
+        args += ["--agent", prefix]
     try:
         result = subprocess.run(bootstrap_command(args), capture_output=True, text=True, timeout=10,
                                 pass_fds=lease_fds())

@@ -130,8 +130,9 @@ misses дополнительной причиной ненулевого вых
 
 Каждый сценарий использует временное синтетическое хранилище с явными временными
 конфигурацией и home, без унаследованных `RICHI_*`, `PYTHON*` и переменных оболочек
-агентов (`CODEX_THREAD_ID`, `CURSOR_AGENT`, `ANTIGRAVITY_AGENT`,
-`ANTIGRAVITY_CONVERSATION_ID`).
+и профилей агентов (`CLAUDECODE`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
+`CODEX_THREAD_ID`, `CURSOR_AGENT`, `ANTIGRAVITY_AGENT`,
+`ANTIGRAVITY_CONVERSATION_ID`, `ANTIGRAVITY_APP_DATA_DIR`).
 Изоляция ограничена тестовыми подпроцессами; runtime пользователя, привязка чата
 и workspace не переключаются. Production-память, частные корпуса и содержимое
 источников не читаются; вымышленные источники не загружаются. Runner измеряет

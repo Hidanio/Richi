@@ -126,7 +126,7 @@ class Agent(NamedTuple):
     skill_path_settings: Optional[Callable] = None
     # Some clients follow skill directory links but require a regular SKILL.md entry.
     follows_skill_file_links: bool = True
-    # Some clients drop SKILL.md files that have no YAML frontmatter block.
+    # Some clients drop SKILL.md files that have no '---'-fenced YAML frontmatter block.
     requires_frontmatter: bool = False
 
 
@@ -166,10 +166,22 @@ def _cursor_sources(environ, home):
     return personal + [SkillSource("system", "system", "nested-skills", home / ".cursor/skills-cursor")]
 
 
+def _antigravity_app_data(environ, home):
+    raw_app = (environ.get("ANTIGRAVITY_APP_DATA_DIR") or "").strip()
+    if raw_app.startswith("/") and valid_folder(raw_app):
+        try:
+            resolved_home = Path(home).resolve()
+            candidate = Path(raw_app).resolve()
+            if candidate not in {Path("/"), resolved_home}:
+                return Path(os.path.normpath(raw_app))
+        except (OSError, RuntimeError, ValueError):
+            pass
+    return home / ".gemini" / "antigravity"
+
+
 def _antigravity_sources(environ, home):
     config = home / ".gemini" / "config"
-    raw_app = (environ.get("ANTIGRAVITY_APP_DATA_DIR") or "").strip()
-    app_data = folder_path(raw_app, home) if valid_folder(raw_app) else home / ".gemini" / "antigravity"
+    app_data = _antigravity_app_data(environ, home)
     return [SkillSource("skills", "skills", "skills", config / "skills"),
             SkillSource("system", "system", "skills", app_data / "builtin" / "skills"),
             SkillSource("plugins", "plugins", "antigravity-plugins", config / "plugins")]
@@ -185,7 +197,8 @@ AGENTS = (
           invocation="front-matter", plugin_commands=False, sources=_cursor_sources, folder_layout="nested-skills",
           detection_sources=("cursor-skills", "system")),
     Agent(id="antigravity", name="Antigravity", variables={"ANTIGRAVITY_AGENT": None},
-          invocation="front-matter", plugin_commands=False, sources=_antigravity_sources, requires_frontmatter=True),
+          invocation="front-matter", plugin_commands=False, sources=_antigravity_sources,
+          detection_sources=("skills", "system", "plugins"), requires_frontmatter=True),
 )
 
 # Other agents a user may add as their own, with the user-wide skill folder

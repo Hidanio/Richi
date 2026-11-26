@@ -25,9 +25,10 @@ richi --compact-json skill-sources list
 и `rules show --agent ID`), `name`, `builtin`, `detected` (агент выглядит
 установленным у этого пользователя), `skills` (сколько скиллов ему доступно) и
 `sources`. Для агентов, которых умеет подключать установленный launcher,
-он сообщает `detected`. Если старый launcher ещё не умеет подключать Cursor,
-поле `connection` равно null. Тогда Richi определяет наличие Cursor по папкам
-его собственного профиля и возвращает null, если оба этих источника отключены.
+он сообщает `detected`. Если старый launcher ещё не умеет подключать встроенного
+агента (например, Cursor или Antigravity), поле `connection` равно null. Тогда
+Richi определяет наличие агента по его собственным встроенным источникам и
+возвращает null, если все эти источники отключены.
 Для агента, добавленного пользователем, Richi проверяет включённые папки скиллов и
 возвращает null, если все они выключены. У источника есть `key`, путь `path`, признак `exists` (папка есть; `denied`,
 если у пользователя нет к ней доступа; у выключенного источника ни то ни другое не
@@ -82,11 +83,14 @@ richi --compact-json skill-sources add gemini-cli --name "Gemini CLI" \
 ## Подстрой агента
 
 Antigravity читает скиллы пользователя из `~/.gemini/config/skills`, встроенные
-скиллы из `~/.gemini/antigravity/builtin/skills` (или `ANTIGRAVITY_APP_DATA_DIR/builtin/skills`)
-и включённые плагины из `~/.gemini/config/plugins` (с учётом `disabled` в
-`plugin.json` и переключателей плагинов в `~/.gemini/config/config.json`).
-Дополнительные каталоги из `skills.json` автоматически не раскрываются; добавьте
-их через `skill-sources update antigravity --add-skills FOLDER`.
+скиллы из `~/.gemini/antigravity/builtin/skills` (или `ANTIGRAVITY_APP_DATA_DIR/builtin/skills`,
+если `ANTIGRAVITY_APP_DATA_DIR` задаёт абсолютный путь `/...`, например у
+отдельного профиля IDE или CLI) и включённые плагины из `~/.gemini/config/plugins`
+(с учётом `disabled` в `plugin.json` и переключателей плагинов в
+`~/.gemini/config/config.json`). Дополнительные каталоги из `skills.json` и
+`plugins.json` автоматически не раскрываются; дополнительные каталоги со
+скиллами (`<папка>/<скилл>/SKILL.md`) можно добавить через
+`skill-sources update antigravity --add-skills FOLDER`.
 
 Cursor читает скиллы из `~/.cursor/skills`, `~/.agents/skills`, `~/.claude/skills`
 и `~/.codex/skills`. Встроенные скиллы Cursor находятся в `~/.cursor/skills-cursor`.

@@ -96,6 +96,14 @@ richi --chat task-123 project list
 richi --chat task-123 chat bind personal --replace
 ```
 
+In Antigravity scheduled `/automation` runs, each execution receives a fresh
+`ANTIGRAVITY_CONVERSATION_ID` with no human at a prompt. Pre-bind a stable chat
+identity once in a terminal (for example `richi --chat antigravity:daily-triage chat bind work`)
+and pass `--chat antigravity:daily-triage` on every Richi call in the automation
+prompt. If Antigravity's terminal sandbox blocks access to Richi's user storage
+or `~/.gemini/config`, approve unsandboxed execution for the `richi` command
+rather than overriding `HOME`, storage options, or chat variables.
+
 Outside Cursor Agent you can supply `RICHI_CHAT_ID`. Explicit `--chat` takes
 precedence. Until a choice is saved, a detected chat cannot read or write
 knowledge, even with `-w`. A `-w` that repeats the bound workspace is allowed;
