@@ -166,10 +166,12 @@ class ClaudeSetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
 
 class SyntheticEnvironmentTests(unittest.TestCase):
     def test_cli_environment_never_targets_the_callers_agent_profiles(self):
-        # Shells started by Claude Code export CLAUDE_CONFIG_DIR.
+        # Shells started by Claude Code and Antigravity export profile directory variables.
         from cli_environment import cli_environment
-        with patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": "/real/claude", "CODEX_HOME": "/real/codex"}):
+        with patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": "/real/claude", "CODEX_HOME": "/real/codex",
+                                     "ANTIGRAVITY_APP_DATA_DIR": "/real/antigravity"}):
             environment = cli_environment("/synthetic")
         self.assertNotIn("CLAUDE_CONFIG_DIR", environment)
         self.assertNotIn("CODEX_HOME", environment)
+        self.assertNotIn("ANTIGRAVITY_APP_DATA_DIR", environment)
         self.assertTrue(environment["HOME"].endswith("cli-home"))

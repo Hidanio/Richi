@@ -98,9 +98,11 @@ def parser():
 
 
 def _offer_review(chat_id):
+    from .chats import AGENT_SHELL_VARS, CHAT_ID_VARS
     from .cli import _interactive
     if (not _interactive(chat_id) or not sys.stderr.isatty()
-            or any(os.environ.get(key) for key in ("RICHI_CHAT_ID", "CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT"))):
+            or any(key in os.environ for key in CHAT_ID_VARS)
+            or any(os.environ.get(key) for key in AGENT_SHELL_VARS)):
         return False
     print("Richi has been updated. Show historical preferences from the selected workspace now? [y/N] ",
           file=sys.stderr, end="", flush=True)

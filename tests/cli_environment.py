@@ -86,13 +86,14 @@ def stop_test_map(started, database):
 def cli_environment(directory, **overrides):
     """Avoid the caller's chat, workspace registry, configuration, runtime and agent profiles."""
     root = Path(directory).resolve() / "cli-home"
-    # Claude Code exports CLAUDE_CONFIG_DIR into its shells; keeping it would aim
-    # Claude setup fixtures at the developer's real profile. CLAUDECODE and
-    # CODEX_THREAD_ID and CURSOR_AGENT would tell rules show which agent runs the tests.
+    # Claude Code exports CLAUDE_CONFIG_DIR and Antigravity exports ANTIGRAVITY_APP_DATA_DIR
+    # into their shells; keeping them would aim setup/catalog fixtures at real profiles.
+    # CLAUDECODE, CODEX_THREAD_ID, CURSOR_AGENT and ANTIGRAVITY_* would mark an agent shell.
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith("RICHI_")
                    and key not in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT",
                                    "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID",
+                                   "ANTIGRAVITY_APP_DATA_DIR",
                                    "CODEX_HOME", "CLAUDE_CONFIG_DIR", "ZDOTDIR"}}
     environment.update(HOME=str(root), XDG_CONFIG_HOME=str(root / ".config"),
                        XDG_DATA_HOME=str(root / ".local" / "share"))

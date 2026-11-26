@@ -44,8 +44,8 @@ Releases up to 1.1.0 cannot maintain checkout skill links: run
 ([what dev switches](INSTALLATION.md#what-dev-switches)).
 
 Before a rollback, check the connected agents with `richi agents --status`.
-If Cursor is configured, Richi refuses a release that lacks a compatible Cursor
-adapter even with `dev false`. The current release stays active.
+If Cursor or Antigravity is configured, Richi refuses a release that lacks a
+compatible adapter for that agent even with `dev false`. The current release stays active.
 
 <a id="установка-и-откат"></a>
 ## Installation and rollback

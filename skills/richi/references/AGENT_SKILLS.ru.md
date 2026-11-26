@@ -82,9 +82,11 @@ richi --compact-json skill-sources add gemini-cli --name "Gemini CLI" \
 ## Подстрой агента
 
 Antigravity читает скиллы пользователя из `~/.gemini/config/skills`, встроенные
-скиллы из `~/.gemini/antigravity/builtin/skills` и включённые плагины из
-`~/.gemini/config/plugins` (с учётом `disabled` в `plugin.json` и переключателей
-плагинов в `~/.gemini/config/config.json`).
+скиллы из `~/.gemini/antigravity/builtin/skills` (или `ANTIGRAVITY_APP_DATA_DIR/builtin/skills`)
+и включённые плагины из `~/.gemini/config/plugins` (с учётом `disabled` в
+`plugin.json` и переключателей плагинов в `~/.gemini/config/config.json`).
+Дополнительные каталоги из `skills.json` автоматически не раскрываются; добавьте
+их через `skill-sources update antigravity --add-skills FOLDER`.
 
 Cursor читает скиллы из `~/.cursor/skills`, `~/.agents/skills`, `~/.claude/skills`
 и `~/.codex/skills`. Встроенные скиллы Cursor находятся в `~/.cursor/skills-cursor`.
@@ -97,7 +99,7 @@ Richi также рекурсивно проверяет папки, добав�
 фактическое число скиллов может быть больше указанного.
 
 Если в прежней версии уже был настроен свой агент
-`cursor`, после обновления Richi использует встроенное имя Cursor и встроенные
+`cursor` или `antigravity`, после обновления Richi использует встроенное имя и встроенные
 правила распознавания агента и отбора скиллов. Добавленные папки остаются в
 списке. Выключенная папка остаётся выключенной, даже если теперь это встроенный
 источник. Включить её можно по ключу из `skill-sources list`. При обновлении

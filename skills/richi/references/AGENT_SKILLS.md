@@ -82,9 +82,11 @@ agent's own standing instructions.
 ## Adjust an agent
 
 Antigravity reads user skills from `~/.gemini/config/skills`, built-in skills
-from `~/.gemini/antigravity/builtin/skills` and enabled user plugins from
-`~/.gemini/config/plugins` (respecting `disabled` in `plugin.json` and plugin
-switches in `~/.gemini/config/config.json`).
+from `~/.gemini/antigravity/builtin/skills` (or `ANTIGRAVITY_APP_DATA_DIR/builtin/skills`)
+and enabled user plugins from `~/.gemini/config/plugins` (respecting `disabled`
+in `plugin.json` and plugin switches in `~/.gemini/config/config.json`). Extra
+skill directories declared in `skills.json` are not expanded automatically;
+register them with `skill-sources update antigravity --add-skills FOLDER`.
 
 Cursor reads skills from `~/.cursor/skills`, `~/.agents/skills`, `~/.claude/skills`
 and `~/.codex/skills`. Its built-in skills are in `~/.cursor/skills-cursor`.
@@ -95,12 +97,12 @@ Richi also searches folders you add for these agents recursively. It examines up
 directory entries per root. A source marked `truncated` may contain more skills
 than its count shows.
 
-If you added `cursor` in an earlier version, the upgrade
-uses Cursor’s built-in name, detection and skill filtering. Your additional
+If you added `cursor` or `antigravity` in an earlier version, the upgrade
+uses the built-in name, detection and skill filtering. Your additional
 folders still appear, and a disabled folder stays disabled even if it is now a
 built-in source. Use the source key from `skill-sources list` to enable it.
 Richi leaves the saved settings file intact on upgrade. To restore the defaults,
-reset Cursor as described below.
+reset the agent as described below.
 
 ```sh
 richi --compact-json skill-sources update claude --disable claude-app --add-skills ~/work/team-skills

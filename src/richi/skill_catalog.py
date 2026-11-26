@@ -85,26 +85,19 @@ def _nested(line):
     return line == "-" or line.startswith(("- ", "#")) or ": " in line or line.endswith(":")
 
 
-def front_matter(text, cut=False):
-    """The top-level scalar fields of a SKILL.md YAML header (a small, safe subset).
-
-    cut: the text is only the beginning of the file. A header that does not
-    end within it still gives the fields read so far, without the last line,
-    which may be cut in two: a skill that says it is not for the agent to
-    choose says so near the top. Prose read so far, a line that is no field,
-    means the file opens with a Markdown rule, not a header.
-    """
+def _parse_front_matter(text, cut=False):
+    """(top-level scalar fields of a SKILL.md YAML header, whether a valid header block was present)."""
     if cut:
         text = text[:text.rfind("\n") + 1]
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
-        return {}
+        return {}, False
     fields, index, prose = {}, 1, False
     while index < len(lines):
         line = lines[index]
         # A separator inside an indented YAML value is content. Only a top-level one ends the header.
         if line.rstrip(" \t") in {"---", "..."}:
-            return fields
+            return ({}, False) if prose else (fields, True)
         index += 1
         if not line or line[0] in " \t#":
             continue
@@ -127,7 +120,19 @@ def front_matter(text, cut=False):
                 value += " " + lines[index].strip()
                 index += 1
             fields[key] = _scalar(value)
-    return fields if cut and not prose else {}
+    return (fields, True) if cut and not prose else ({}, False)
+
+
+def front_matter(text, cut=False):
+    """The top-level scalar fields of a SKILL.md YAML header (a small, safe subset).
+
+    cut: the text is only the beginning of the file. A header that does not
+    end within it still gives the fields read so far, without the last line,
+    which may be cut in two: a skill that says it is not for the agent to
+    choose says so near the top. Prose read so far, a line that is no field,
+    means the file opens with a Markdown rule, not a header.
+    """
+    return _parse_front_matter(text, cut)[0]
 
 
 def _read_regular(path, limit, *, frontmatter_only=False):
@@ -287,37 +292,63 @@ def _strip_jsonc(text):
     return "".join(result)
 
 
-def _json(path, jsonc=False):
-    """A small JSON file's value, or None when it is missing, too large or not JSON."""
+def _json_state(path, jsonc=False):
+    """(parsed JSON value or None, True when absent or readable, False on read/parse failure)."""
     try:
         data = _read_regular(path, MAX_MANIFEST + 1)
         if len(data) > MAX_MANIFEST:
-            return None
-        text = data.decode("utf-8")
-        return agents.parse_json(_strip_jsonc(text) if jsonc else text)
+            return None, False
+        text = data.decode("utf-8-sig")
+        return agents.parse_json(_strip_jsonc(text) if jsonc else text), True
+    except FileNotFoundError:
+        return None, True
     except (OSError, ValueError, RecursionError):
         # RecursionError: brackets nested deeper than the parser goes. A plugin's author wrote the file.
-        return None
+        return None, False
+
+
+def _json(path, jsonc=False):
+    """A small JSON file's value, or None when it is missing, too large or not JSON."""
+    return _json_state(path, jsonc)[0]
 
 
 _ANTIGRAVITY_MANIFESTS = (
     Path("plugin.json"),
     Path(".antigravity-plugin", "plugin.json"),
     Path(".gemini-plugin", "plugin.json"),
-    Path(".claude-plugin", "plugin.json"),
 )
 
 
-def _antigravity_plugins(root):
+def _antigravity_plugins(root, plugin_state=None):
     """(name, directory, None) of enabled Antigravity plugins under ~/.gemini/config/plugins."""
-    config = _json(root.parent / "config.json", jsonc=True)
-    switches = config.get("plugins") if isinstance(config, dict) else None
+    config, config_ok = _json_state(root.parent / "config.json", jsonc=True)
+    config_unknown = not config_ok or (config is not None and not isinstance(config, dict))
+    switches = config.get("plugins") if not config_unknown and isinstance(config, dict) else None
+    seen = set()
     for directory in _children(root):
         manifest = next((loaded for candidate in _ANTIGRAVITY_MANIFESTS
                          for loaded in (_json(directory / candidate, jsonc=True),)
                          if isinstance(loaded, dict)), None)
         if manifest is None:
             continue
+        if config_unknown and plugin_state is not None:
+            # When config.json is unreadable (e.g. Seatbelt) or damaged, check every plugin directory
+            # without disabled or duplicate-name filtering for a potential richi/project-memory skill.
+            for child in _children(directory / "skills"):
+                try:
+                    text, cut = _read_header(child / "SKILL.md", frontmatter_only=True)
+                    fields, has_header = _parse_front_matter(text, cut)
+                except OSError:
+                    continue
+                if not has_header:
+                    continue
+                own = fields.get("name")
+                own = own.strip() if isinstance(own, str) and own.strip() else child.name
+                if own in {"richi", PREVIOUS_RICHI_SKILL} and _agent_may_choose(
+                        plugin_state["agent"], child, fields):
+                    plugin_state["config_incomplete"] = True
+                    if own == "richi":
+                        plugin_state.setdefault("ambiguous_richi_paths", set()).add(str(child))
         override = switches.get(directory.name) if isinstance(switches, dict) else None
         if isinstance(override, dict) and type(override.get("enabled")) is bool:
             enabled = override["enabled"]
@@ -327,6 +358,9 @@ def _antigravity_plugins(root):
             continue
         raw_name = manifest.get("name")
         name = raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else directory.name
+        if name in seen:
+            continue
+        seen.add(name)
         yield name, directory, None
 
 
@@ -389,13 +423,13 @@ def _installed_version(plugin):
     return max(dated)[2] if dated else None
 
 
-def _plugins(layout, root):
+def _plugins(layout, root, plugin_state=None):
     """(name, directory, enabled skill names or None) of each plugin under a plugin root."""
     if layout == "claude-app":
         yield from _claude_app_plugins(root)
         return
     if layout == "antigravity-plugins":
-        yield from _antigravity_plugins(root)
+        yield from _antigravity_plugins(root, plugin_state)
         return
     for marketplace in _children(root):
         for plugin in _children(marketplace):
@@ -444,7 +478,7 @@ def _nested_folders(root):
     return skills, limited
 
 
-def _candidates(agent, source, report):
+def _candidates(agent, source, report, plugin_state=None):
     """(name prefix, file with front matter, name without one, enabled names or None) under a root."""
     layout, root = source.layout, source.path
     if layout in ("skills", "nested-skills"):
@@ -457,13 +491,15 @@ def _candidates(agent, source, report):
         for child in children:
             yield "", child / "SKILL.md", child.name, None
         return
-    for name, directory, enabled in _plugins(layout, root):
+    prefix_for = (lambda _name: "") if layout == "antigravity-plugins" else (lambda name: name + ":")
+    for name, directory, enabled in _plugins(layout, root, plugin_state):
+        prefix = prefix_for(name)
         for child in _children(directory / "skills"):
-            yield name + ":", child / "SKILL.md", child.name, enabled
+            yield prefix, child / "SKILL.md", child.name, enabled
         if agent.plugin_commands:
             # Some agents, such as Claude Code, list a plugin's commands among its skills.
             for command in _children(directory / "commands", files=".md"):
-                yield name + ":", command, command.stem, enabled
+                yield prefix, command, command.stem, enabled
 
 
 def catalog(environ=None, home=None, registry=None, *, rule_aliases_only=False):
@@ -483,8 +519,7 @@ def catalog(environ=None, home=None, registry=None, *, rule_aliases_only=False):
     are marked truncated and the counts include only discovered skills.
 
     rule_aliases maps a stored rule's skill to its installed name for each
-    agent. On a rules read, skip plugin sources (their names are qualified)
-    and unrelated skills.
+    agent. On a rules read, skip qualified plugin sources and unrelated skills.
     """
     environ = os.environ if environ is None else environ
     home = Path(home) if home is not None else Path.home()
@@ -502,7 +537,7 @@ def catalog(environ=None, home=None, registry=None, *, rule_aliases_only=False):
             # disabled, or that a renamed skill is enabled for a standing rule.
             disabled, enabled_paths, incomplete = (), (), True
         for source in agent.sources(environ, home):
-            if rule_aliases_only and source.layout not in ("skills", "nested-skills"):
+            if rule_aliases_only and source.layout not in ("skills", "nested-skills", "antigravity-plugins"):
                 continue
             state = folder_state(source.path) if source.enabled else None
             entry = {"agent": agent.id, "key": source.key, "kind": source.kind, "layout": source.layout,
@@ -512,13 +547,16 @@ def catalog(environ=None, home=None, registry=None, *, rule_aliases_only=False):
             if not entry["exists"] or not source.enabled:
                 continue
             found = set()
-            for prefix, path, fallback, enabled in _candidates(agent, source, entry):
+            plugin_state = {"agent": agent}
+            for prefix, path, fallback, enabled in _candidates(agent, source, entry, plugin_state):
                 try:
-                    if not prefix and not agent.follows_skill_file_links and path.is_symlink():
+                    if source.kind != "plugins" and not agent.follows_skill_file_links and path.is_symlink():
                         continue
                     text, cut = _read_header(path, frontmatter_only=True)
-                    fields = front_matter(text, cut)
+                    fields, has_header = _parse_front_matter(text, cut)
                 except OSError:
+                    continue
+                if agent.requires_frontmatter and not has_header:
                     continue
                 own = fields.get("name")
                 own = own.strip() if isinstance(own, str) and own.strip() else fallback
@@ -551,7 +589,9 @@ def catalog(environ=None, home=None, registry=None, *, rule_aliases_only=False):
                     skill["agents"].append(agent.id)
             entry["skills"] = len(found)
             every |= found
-            incomplete |= bool(entry.get("truncated"))
+            incomplete |= bool(entry.get("truncated")) or bool(plugin_state.get("config_incomplete"))
+            if rule_aliases_only and plugin_state.get("ambiguous_richi_paths"):
+                richi_paths.setdefault(agent.id, set()).update(plugin_state["ambiguous_richi_paths"])
         if renamed == {True} and PREVIOUS_RICHI_SKILL not in every and not incomplete:
             aliases[agent.id] = {PREVIOUS_RICHI_SKILL: "richi"}
         totals[agent.id] = len(every)

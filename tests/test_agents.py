@@ -46,6 +46,7 @@ class IsolatedHome(unittest.TestCase):
         for key in [key for key in os.environ if key.startswith("RICHI_")
                     or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT",
                                "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID",
+                               "ANTIGRAVITY_APP_DATA_DIR",
                                "CLAUDE_CONFIG_DIR", "CODEX_HOME", "XDG_CONFIG_HOME"}]:
             del os.environ[key]
         agents.forget_settings()
@@ -113,6 +114,9 @@ class RegistryTests(IsolatedHome):
                             {"RICHI_CHAT_ID": "claude:chat", "CODEX_THREAD_ID": "thread"},
                             {"RICHI_CHAT_ID": "cursor:chat", "CODEX_THREAD_ID": "thread"},
                             {"RICHI_CHAT_ID": "antigravity:chat", "CODEX_THREAD_ID": "thread"},
+                            {"RICHI_CHAT_ID": "antigravity:chat", "CLAUDECODE": "1"},
+                            {"RICHI_CHAT_ID": "antigravity:chat", "CURSOR_AGENT": "1"},
+                            {"RICHI_CHAT_ID": "claude:chat", "ANTIGRAVITY_AGENT": "1"},
                             {"ANTIGRAVITY_AGENT": "1", "CLAUDECODE": "1"},
                             {"ANTIGRAVITY_AGENT": "1", "CURSOR_AGENT": "1"},
                             {"ANTIGRAVITY_AGENT": ""},
@@ -125,14 +129,18 @@ class RegistryTests(IsolatedHome):
                 self.assertIsNone(agents.detect(environment))
         self.assertEqual(agents.variables(agents.AGENTS[0]), ["CLAUDECODE=1"])
         self.assertEqual(agents.variables(agents.AGENTS[1]), ["CODEX_THREAD_ID"])
+        self.assertEqual(agents.variables(agents.AGENTS[3]), ["ANTIGRAVITY_AGENT"])
         for value in ("Claude", "-x", "a" * 33, "", None, "with space"):
             self.assertFalse(agents.valid_id(value))
 
     def test_every_agent_the_launcher_connects_is_built_in(self):
         # An agent `richi setup` connects but the registry lacks would have a connection nobody sees.
         # A built-in agent without an integration is fine: it is listed without a connection state.
-        from richi_launcher import agent_adapters
+        from richi_launcher import agent_adapters, chats
         self.assertLessEqual(set(agent_adapters.AGENTS), set(agents.builtin_ids()))
+        known_shell_vars = set(chats.CHAT_ID_VARS) | set(chats.AGENT_SHELL_VARS)
+        for agent in agents.AGENTS:
+            self.assertLessEqual(set(agent.variables), known_shell_vars, agent.id)
 
     def test_settings_live_in_the_launchers_configuration_directory(self):
         self.assertEqual(agents.settings_path(), config._platform_dirs()[0] / agents.SETTINGS_FILE)

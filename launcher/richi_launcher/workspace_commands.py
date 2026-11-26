@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 from .config import ConfigError, _path_text, resolve_settings, set_config_value
-from .chats import bind_chat, current_chat, reject_storage_overrides
+from .chats import bind_chat, current_chat, needs_explicit_chat, reject_storage_overrides
 from .cli import Parser, _emit, _interactive, usage
 from .help_format import complete, document
 from .runtime import installed_runtime, resolve_runtime
@@ -292,7 +292,7 @@ def _include_rules(state, path):
     args += ["rules", "show"]
     if chat.startswith("cursor:"):
         args += ["--agent", "cursor"]
-    elif chat.startswith("antigravity:"):
+    elif chat.startswith("antigravity:") and needs_explicit_chat(chat):
         args += ["--agent", "antigravity"]
     try:
         result = subprocess.run(bootstrap_command(args), capture_output=True, text=True, timeout=10,

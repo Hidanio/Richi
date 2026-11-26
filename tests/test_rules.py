@@ -77,7 +77,8 @@ class RulesTests(unittest.TestCase):
         for key in [key for key in os.environ if key.startswith("RICHI_")
                     or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT",
                                "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID",
-                               "XDG_CONFIG_HOME"}]:
+                               "ANTIGRAVITY_APP_DATA_DIR",
+                               "CLAUDE_CONFIG_DIR", "CODEX_HOME", "XDG_CONFIG_HOME"}]:
             del os.environ[key]
         agents.forget_settings()
         self.configs, self.repos = {}, {}

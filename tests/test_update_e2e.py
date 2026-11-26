@@ -301,7 +301,8 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             instructions.parent.mkdir(parents=True)
             personal = b"# My instructions\r\nKeep the original line endings.\r\n"
             instructions.write_bytes(personal)
-            agents = {"codex": ".agents", "claude": ".claude", "cursor": ".cursor"}
+            agents = {"codex": ".agents", "claude": ".claude", "cursor": ".cursor",
+                      "antigravity": ".gemini/config"}
             for agent in agents:
                 self.console("setup", "--agent", agent, "--yes", "--no-path")
             offline = self.root / "offline.py"

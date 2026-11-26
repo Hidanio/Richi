@@ -269,7 +269,10 @@ Open a new Antigravity conversation. Antigravity passes `ANTIGRAVITY_CONVERSATIO
 and `ANTIGRAVITY_AGENT=1` to command shells, and Richi identifies the conversation
 as `antigravity:<id>`. Choose a workspace once per conversation. When delegating
 memory work to a subagent, pass `--chat antigravity:<id>` so it shares the
-confirmed workspace.
+confirmed workspace. If Antigravity's terminal sandbox or non-workspace file
+access policy restricts Richi's user configuration/data directory (or a linked
+worktree's main `.git` directory), grant access in Antigravity settings or allow
+running `richi` outside the sandbox.
 
 ### Local Cursor Agent
 
@@ -321,8 +324,8 @@ and [SessionStart hooks](https://code.claude.com/docs/en/hooks#sessionstart).
 
 Managed skills and session scripts follow package updates and rollbacks together.
 Richi checks that each configured agent has a compatible adapter in the selected
-release before activation. This applies to Cursor when rolling back to a package
-that predates its adapter. Launcher changes require installing a new package,
+release before activation. This applies to Cursor and Antigravity when rolling back to a package
+that predates their adapters. Launcher changes require installing a new package,
 even with dev mode on.
 
 ## Adding another agent to Richi
@@ -341,8 +344,8 @@ Put agent-specific behavior in its module, following `codex_setup.py` or
 - `paths(current=None)` returns the profile, effective instruction file and
   skill path. Validate overrides and an existing record's profile here.
 - An optional `instruction_file(block)` returns the complete file as bytes when
-  an adapter owns a dedicated instruction file. Cursor uses this to add the MDC
-  frontmatter to its user rule. Richi checks the complete file for local edits.
+  an adapter owns a dedicated instruction file. Cursor and Antigravity use this
+  to add frontmatter to their user rules. Richi checks the complete file for local edits.
 - `setup_operations(ctx, profile, current, replace_skill)` and
   `activation_operations(ctx, record, site)` return `(extra_metadata, operations)`.
   Plan changes with `setup_files`; never write directly. The activation method

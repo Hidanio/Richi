@@ -13,6 +13,8 @@ _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}\Z")
 _MAX_BYTES = 4 * 1024 * 1024
 _MAX_CHATS = 10000
 _STORAGE_ENV = ("RICHI_CONFIG", "RICHI_DB", "RICHI_DATA_DIR")
+CHAT_ID_VARS = ("RICHI_CHAT_ID", "CODEX_THREAD_ID", "ANTIGRAVITY_CONVERSATION_ID")
+AGENT_SHELL_VARS = ("CLAUDECODE", "CURSOR_AGENT", "ANTIGRAVITY_AGENT")
 
 
 class ChatError(ConfigError):
@@ -39,18 +41,22 @@ def detect_chat(explicit=None):
         raise ChatError("Pass --chat with the active client's conversation ID in a Cursor Agent shell. "
                         "Cursor supplies --chat cursor:<id> in its sessionStart hook.",
                         "chat_id_required")
+    has_agy_id = "ANTIGRAVITY_CONVERSATION_ID" in os.environ
+    if has_agy_id or os.environ.get("ANTIGRAVITY_AGENT"):
+        if not has_agy_id:
+            raise ChatError("Pass --chat with the active conversation ID in an Antigravity shell when "
+                            "ANTIGRAVITY_CONVERSATION_ID is unavailable.",
+                            "chat_id_required")
+        raw_agy = os.environ["ANTIGRAVITY_CONVERSATION_ID"]
+        if ("CODEX_THREAD_ID" in os.environ
+                or os.environ.get("CLAUDECODE") == "1"
+                or ("RICHI_CHAT_ID" in os.environ and os.environ["RICHI_CHAT_ID"] != "antigravity:" + raw_agy)):
+            raise ChatError("Multiple agent chat environments detected; "
+                            "pass --chat with the active client's conversation ID.",
+                            "chat_id_required")
+        return _chat_id("antigravity:" + _chat_id(raw_agy))
     if "RICHI_CHAT_ID" in os.environ:
         return _chat_id(os.environ["RICHI_CHAT_ID"])
-    if "ANTIGRAVITY_CONVERSATION_ID" in os.environ and "CODEX_THREAD_ID" in os.environ:
-        raise ChatError("Multiple chat IDs in the environment (ANTIGRAVITY_CONVERSATION_ID and CODEX_THREAD_ID); "
-                        "pass --chat with the active client's conversation ID.",
-                        "chat_id_required")
-    if "ANTIGRAVITY_CONVERSATION_ID" in os.environ:
-        return _chat_id("antigravity:" + _chat_id(os.environ["ANTIGRAVITY_CONVERSATION_ID"]))
-    if os.environ.get("ANTIGRAVITY_AGENT"):
-        raise ChatError("Pass --chat with the active conversation ID in an Antigravity shell when "
-                        "ANTIGRAVITY_CONVERSATION_ID is unavailable.",
-                        "chat_id_required")
     if "CODEX_THREAD_ID" in os.environ:
         return _chat_id(os.environ["CODEX_THREAD_ID"])
     return None
@@ -112,21 +118,32 @@ def _cli_current(registry):
     return os.environ.get("RICHI_WORKSPACE", registry["current"])
 
 
+def needs_explicit_chat(chat_id):
+    if chat_id is None:
+        return False
+    if chat_id.startswith("cursor:") or os.environ.get("CURSOR_AGENT"):
+        return True
+    try:
+        detected = detect_chat()
+    except ChatError:
+        return True
+    if chat_id.startswith("antigravity:"):
+        return detected != chat_id
+    return detected is not None and detected != chat_id
+
+
 def _next_commands(chat_id, bound):
     cursor = chat_id is not None and chat_id.startswith("cursor:")
-    antigravity_manual = False
-    if chat_id is not None and "RICHI_CHAT_ID" not in os.environ:
-        if "ANTIGRAVITY_CONVERSATION_ID" in os.environ:
-            antigravity_manual = ("CODEX_THREAD_ID" in os.environ
-                                  or "antigravity:" + os.environ["ANTIGRAVITY_CONVERSATION_ID"] != chat_id)
-        elif os.environ.get("ANTIGRAVITY_AGENT"):
-            antigravity_manual = True
-    cli = "richi"
-    if cursor or (chat_id is not None and os.environ.get("CURSOR_AGENT")) or antigravity_manual:
-        cli += " --chat " + _chat_id(chat_id)
+    need_chat = needs_explicit_chat(chat_id)
+    cli = "richi --chat " + _chat_id(chat_id) if need_chat else "richi"
     if not bound:
         return [cli + " chat bind --current", cli + " chat bind NAME"]
-    rules = "rules show --agent cursor" if cursor else "rules show"
+    if cursor:
+        rules = "rules show --agent cursor"
+    elif chat_id is not None and chat_id.startswith("antigravity:") and need_chat:
+        rules = "rules show --agent antigravity"
+    else:
+        rules = "rules show"
     return [cli + " " + rules, cli + " --project-path PATH " + rules]
 
 

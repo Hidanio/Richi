@@ -43,6 +43,19 @@ class AntigravitySetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCas
             self.assertTrue(antigravity_setup.detected())
             shutil.rmtree(self.home / ".gemini/antigravity")
             self.assertFalse(antigravity_setup.detected())
+            app_dir = self.home / "custom-agy-data"
+            app_dir.mkdir()
+            with patch.dict("os.environ", {"ANTIGRAVITY_APP_DATA_DIR": str(app_dir)}):
+                self.assertTrue(antigravity_setup.detected())
+            with patch.dict("os.environ", {"ANTIGRAVITY_APP_DATA_DIR": "relative/path"}):
+                self.assertFalse(antigravity_setup.detected())
+        with patch.object(antigravity_setup, "SYSTEM_APPLICATIONS", system), \
+             patch.object(shutil, "which", side_effect=lambda name: "/usr/bin/antigravity" if name == "antigravity" else None):
+            self.assertTrue(antigravity_setup.detected())
+        with patch.object(antigravity_setup, "SYSTEM_APPLICATIONS", system), \
+             patch.object(shutil, "which", return_value=None), \
+             patch.object(Path, "is_dir", side_effect=PermissionError("sandbox denied")):
+            self.assertFalse(antigravity_setup.detected())
         self.assertFalse(self.profile.exists())
 
     def test_setup_preserves_user_rules_and_repeated_setup_is_idempotent(self):
@@ -61,6 +74,8 @@ class AntigravitySetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCas
         self.assertTrue(rule.startswith("---\ntrigger: always_on\n---\n"))
         self.assertIn("ANTIGRAVITY_CONVERSATION_ID", rule)
         self.assertIn("antigravity:<conversation_id>", rule)
+        self.assertIn("chat_id_required", rule)
+        self.assertIn("swarm worker", rule)
         self.assertIn("`richi` skill", rule)
         self.assertLessEqual(len(self.rule.read_bytes()), antigravity_setup.INSTRUCTION_LIMIT)
         self.assertTrue(self.skill.is_symlink())
@@ -105,6 +120,26 @@ class AntigravitySetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCas
 
         with self.assertRaisesRegex(ConfigError, "24 KB"):
             antigravity_setup.instruction_file(b"x" * antigravity_setup.INSTRUCTION_LIMIT)
+
+        # Competing richi skill inside an enabled Antigravity plugin blocks setup until reconciled.
+        self.rule.unlink()
+        self.skill.unlink()
+        records_path = self.root / agent_setup.MANIFEST
+        records_path.unlink()
+        plugin_skill = self.profile / "plugins/migrated/skills/richi"
+        plugin_skill.mkdir(parents=True)
+        (self.profile / "plugins/migrated/plugin.json").write_text('{"name": "migrated"}\n', encoding="utf-8")
+        (plugin_skill / "SKILL.md").write_text("---\nname: richi\ndescription: Migrated\n---\n", encoding="utf-8")
+        with self.assertRaisesRegex(ConfigError, "Another skill named richi is visible to antigravity"):
+            self.connect()
+        shutil.rmtree(self.profile / "plugins")
+        self.connect()
+        self.assertEqual(agent_setup.rules_setup_notices(), [])
+        import json
+        manifest = json.loads(records_path.read_text(encoding="utf-8"))
+        manifest["agents"]["antigravity"]["block_sha256"] = "0" * 64
+        records_path.write_text(json.dumps(manifest), encoding="utf-8")
+        self.assertEqual([n["agent"] for n in agent_setup.rules_setup_notices()], ["antigravity"])
 
     def test_release_updates_and_rollbacks_keep_antigravity_skill_in_sync(self):
         self.connect()

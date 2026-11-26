@@ -36,6 +36,7 @@ def clean_environment(test, home):
     for key in [key for key in os.environ if key.startswith("RICHI_")
                 or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT",
                            "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID",
+                           "ANTIGRAVITY_APP_DATA_DIR",
                            "CLAUDE_CONFIG_DIR", "CODEX_HOME", "BROWSER", "XDG_CONFIG_HOME"}]:
         del os.environ[key]
     agents.forget_settings()
@@ -320,19 +321,33 @@ class SkillCatalogTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="richi-agy-skills-") as temporary:
             home = Path(temporary)
             cfg = home / ".gemini" / "config"
-            builtin = home / ".gemini" / "antigravity" / "builtin" / "skills"
+            builtin = home / ".gemini" / "antigravity-ide" / "builtin" / "skills"
             write_skill(cfg / "skills" / "deploy", "---\nname: deploy\ndescription: Deploys\n---\n")
+            write_skill(cfg / "skills" / "fallback-name", "---\n# comment-only header\n---\n")
+            write_skill(cfg / "skills" / "no-header", "Plain Markdown without frontmatter.\n")
+            write_skill(cfg / "skills" / "hr-spoof", "---\nPlain prose between rules.\n---\n")
             write_skill(builtin / "agy-guide", "---\nname: antigravity-guide\ndescription: Guide\n---\n")
             write_skill(builtin / "native_swarm", "---\nname: swarm\ndisable-model-invocation: true\n---\n")
             plugins = cfg / "plugins"
-            # JSONC comments, URLs inside strings, and trailing commas are accepted in plugin.json.
+            # JSONC comments, UTF-8 BOM, URLs inside strings, and trailing commas are accepted in plugin.json.
             (plugins / "dir-one").mkdir(parents=True)
             (plugins / "dir-one" / "plugin.json").write_text(
-                '{\n  // comment\n  "name": "team-kit", /* block */ "homepage": "https://example.com//ok,}",\n}\n',
+                '\ufeff{\n  // comment\n  "name": "team-kit", /* block */ "homepage": "https://example.com//ok,}",\n}\n',
                 encoding="utf-8")
             write_skill(plugins / "dir-one" / "skills" / "triage", "---\nname: triage\n---\n")
             write_skill(plugins / "dir-one" / "skills" / "manual",
                         "---\nname: manual\ndisable-model-invocation: true\n---\n")
+            # A disabled plugin with the same name does not shadow an enabled one; a second enabled one is dropped.
+            (plugins / "00-disabled-dup").mkdir()
+            (plugins / "00-disabled-dup" / "plugin.json").write_text('{"name": "team-kit", "disabled": true}\n', encoding="utf-8")
+            write_skill(plugins / "00-disabled-dup" / "skills" / "ghost", "---\nname: ghost\n---\n")
+            (plugins / "zz-enabled-dup").mkdir()
+            (plugins / "zz-enabled-dup" / "plugin.json").write_text('{"name": "team-kit"}\n', encoding="utf-8")
+            write_skill(plugins / "zz-enabled-dup" / "skills" / "shadowed", "---\nname: shadowed\n---\n")
+            # Unstaged .claude-plugin/plugin.json is ignored at runtime.
+            (plugins / "raw-claude" / ".claude-plugin").mkdir(parents=True)
+            (plugins / "raw-claude" / ".claude-plugin" / "plugin.json").write_text('{"name": "raw"}\n', encoding="utf-8")
+            write_skill(plugins / "raw-claude" / "skills" / "raw-skill", "---\nname: raw-skill\n---\n")
             # Omitted name defaults to the directory name; disabled plugins stay out unless config.json enables them.
             (plugins / "unnamed").mkdir()
             (plugins / "unnamed" / "plugin.json").write_text("{}\n", encoding="utf-8")
@@ -353,17 +368,29 @@ class SkillCatalogTests(unittest.TestCase):
             (plugins / "leading-comma" / "plugin.json").write_text("{,}\n", encoding="utf-8")
             write_skill(plugins / "leading-comma" / "skills" / "invalid", "---\nname: invalid\n---\n")
             (cfg / "config.json").write_text(
-                "// Antigravity user config\n"
+                "\ufeff// Antigravity user config\n"
                 '{"plugins": {"turned-on": {"enabled": true,}, "turned-off": {"enabled": false}},}\n',
                 encoding="utf-8")
-            result = skill_catalog.catalog({}, home)
+            env = {"ANTIGRAVITY_APP_DATA_DIR": "~/.gemini/antigravity-ide"}
+            result = skill_catalog.catalog(env, home)
+            # Seatbelt/corrupt config.json keeps rule_aliases working for unrelated plugins,
+            # and fails closed if any plugin (even disabled or duplicate-named) carries richi/project-memory.
+            branded = (Path(__file__).resolve().parents[1] / "skills/richi/SKILL.md").read_text(encoding="utf-8")
+            write_skill(cfg / "skills" / "richi", branded)
+            (cfg / "config.json").write_text("{broken jsonc", encoding="utf-8")
+            unrelated = skill_catalog.catalog(env, home, rule_aliases_only=True)
+            write_skill(plugins / "zz-enabled-dup" / "skills" / "richi", "---\nname: richi\n---\n")
+            ambiguous = skill_catalog.catalog(env, home, rule_aliases_only=True)
         skills = {skill["name"]: skill for skill in result["skills"]}
         self.assertEqual(sorted(skills),
-                         ["antigravity-guide", "deploy", "team-kit:triage", "turned-on:on", "unnamed:lint"])
+                         ["antigravity-guide", "deploy", "fallback-name", "lint", "on", "triage"])
         self.assertEqual(skills["antigravity-guide"]["kind"], "system")
-        self.assertEqual(skills["team-kit:triage"]["kind"], "plugins")
+        self.assertEqual(skills["triage"]["kind"], "plugins")
         self.assertTrue(all(skill["agents"] == ["antigravity"] for skill in skills.values()))
-        self.assertEqual(result["totals"]["antigravity"], 5)
+        self.assertEqual(result["totals"]["antigravity"], 6)
+        self.assertEqual(unrelated["rule_aliases"].get("antigravity"), {"project-memory": "richi"})
+        self.assertNotIn("antigravity", ambiguous["rule_aliases"])
+        self.assertIn(str(plugins / "zz-enabled-dup" / "skills" / "richi"), ambiguous["richi_paths"]["antigravity"])
 
 
 class MapAccessTests(unittest.TestCase):

@@ -16,20 +16,37 @@ def profile_dir():
     return Path.home().resolve() / ".gemini/config"
 
 
+def _is_dir(path):
+    try:
+        return path.is_dir()
+    except OSError:
+        return False
+
+
 def _executable(path):
-    return path.is_file() and os.access(path, os.X_OK)
+    try:
+        return path.is_file() and os.access(path, os.X_OK)
+    except OSError:
+        return False
 
 
 def detected():
-    home = Path.home().resolve()
-    if shutil.which("agy") or profile_dir().is_dir():
+    if shutil.which("agy") or shutil.which("antigravity"):
         return True
-    if any((home / ".gemini" / name).is_dir() for name in ("antigravity", "antigravity-cli", "antigravity-ide")):
+    try:
+        home = Path.home().resolve()
+    except OSError:
+        return False
+    if _is_dir(profile_dir()):
         return True
-    for wrapper in (home / ".gemini/antigravity/bin/agy",
-                    home / "Library/Application Support/Antigravity/bin/agy"):
-        if _executable(wrapper):
+    raw_app = (os.environ.get("ANTIGRAVITY_APP_DATA_DIR") or "").strip()
+    if raw_app and (raw_app == "~" or raw_app.startswith("~/") or raw_app.startswith("/")):
+        if _is_dir(home / raw_app[2:].lstrip("/") if raw_app.startswith("~") else Path(raw_app)):
             return True
+    if any(_is_dir(home / ".gemini" / name) for name in ("antigravity", "antigravity-cli", "antigravity-ide")):
+        return True
+    if _executable(home / "Library/Application Support/Antigravity/bin/agy"):
+        return True
     if sys.platform == "darwin":
         for directory in (SYSTEM_APPLICATIONS, home / "Applications"):
             if _executable(directory / "Antigravity.app/Contents/MacOS/Antigravity"):
@@ -52,11 +69,14 @@ trigger: always_on
 
 Antigravity supplies `ANTIGRAVITY_CONVERSATION_ID` and `ANTIGRAVITY_AGENT=1`
 to command shells, and Richi identifies this conversation as
-`antigravity:<conversation_id>`. When delegating memory work to a subagent,
-pass `--chat antigravity:<conversation_id>` so it uses this conversation's
-confirmed workspace; if `ANTIGRAVITY_CONVERSATION_ID` is unavailable, pass
-the active conversation's `--chat antigravity:<id>` explicitly. Never use an
-inherited environment ID from another agent to identify an Antigravity chat.
+`antigravity:<conversation_id>`. If `ANTIGRAVITY_CONVERSATION_ID` is unavailable
+or Richi reports conflicting agent environment variables (`chat_id_required`),
+pass `--chat antigravity:<conversation_id>` explicitly on every Richi command;
+never use an inherited ID from another agent. Each delegated subagent, workflow
+agent or swarm worker receives its own `ANTIGRAVITY_CONVERSATION_ID`: pass
+`--chat antigravity:<conversation_id>` when delegating memory work and use that
+caller-supplied `--chat` on every Richi call in the child, or skip Richi
+startup checks and binding when no memory task or `--chat` ID was delegated.
 
 """ + block + b"\n"
     if len(content) > INSTRUCTION_LIMIT:

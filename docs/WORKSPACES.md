@@ -65,7 +65,8 @@ chat first asks whether to use the current CLI workspace or choose another one
 for that chat only.
 
 Codex supplies `CODEX_THREAD_ID`. Antigravity supplies `ANTIGRAVITY_CONVERSATION_ID`
-(used as `antigravity:<id>`). Claude Code's SessionStart hook supplies
+(used as `antigravity:<id>`; pass `--chat antigravity:<id>` if another agent's
+chat or shell variables are also present). Claude Code's SessionStart hook supplies
 `RICHI_CHAT_ID` and an explicit `--chat` fallback. In local Cursor Agent,
 insert the exact `--chat cursor:<id>` from this chat's `sessionStart` hook after
 `richi` on every call, starting with the first two commands below. With `CURSOR_AGENT` set,

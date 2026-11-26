@@ -274,7 +274,8 @@ class SkillRenameTests(test_agent_setup.AgentSetupFixture, unittest.TestCase):
         self.assertEqual(agent_setup.command(["--status"])["status"], "configured")
 
     def test_first_setup_of_copied_old_skills_requires_explicit_backup(self):
-        for agent, root in (("codex", ".agents"), ("claude", ".claude"), ("cursor", ".cursor")):
+        for agent, root in (("codex", ".agents"), ("claude", ".claude"), ("cursor", ".cursor"),
+                            ("antigravity", ".gemini/config")):
             with self.subTest(agent=agent):
                 old = self.home / root / "skills/project-memory"
                 old.mkdir(parents=True)

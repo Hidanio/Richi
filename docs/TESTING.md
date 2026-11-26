@@ -3,7 +3,7 @@
 English | [Русский](TESTING.ru.md)
 
 Check whether a new chat can read a synthetic note saved by another chat in the
-same workspace. Use local Codex, Claude Code or Cursor Agent on macOS or Linux.
+same workspace. Use local Codex, Claude Code, Cursor Agent or Antigravity on macOS or Linux.
 
 ## Prepare your chosen agent
 
