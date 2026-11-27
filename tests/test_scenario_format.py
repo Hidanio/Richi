@@ -3,8 +3,8 @@ import copy
 import json
 import unittest
 
-from richi import scenario_format
-from richi.scenario_format import FormatError
+from richi import memory, scenario_format, templating
+from richi.scenario_format import FormatError, UnsupportedVersion
 
 
 def review():
@@ -36,11 +36,13 @@ def review():
              "checks": [{"kind": "data_required", "path": "findings"}]},
             {"id": "merge", "type": "instruction",
              "params": {"text": "Merge {{steps.angle.data.findings}} and rank them."},
-             "checks": [{"kind": "min_items", "path": "findings", "count": 1}], "retry": {"max": 2}},
+             "checks": [{"kind": "min_items", "path": "findings", "count": 1},
+                        {"kind": "file_exists", "path": "reports/review.md"}], "retry": {"max": 2}},
             {"id": "approve", "type": "gate",
              "params": {"question": "Accept the findings?", "options": ["all", "some", "none"], "allow_comment": True}},
             {"id": "tests", "type": "command", "needs": ["context"], "if": "inputs.strict",
-             "params": {"command": "make test", "expect_exit": 0, "tail_lines": 50},
+             "params": {"command": "git diff --stat {{inputs.base | shell}}...{{inputs.branch | shell}}",
+                        "expect_exit": 0, "tail_lines": 50},
              "checks": [{"kind": "exit_code", "expect": 0}], "continue_on_failure": True},
             {"id": "done", "type": "checklist", "needs": ["approve", "tests"],
              "if": "steps.approve.answer != 'none'",
@@ -60,9 +62,14 @@ class ScenarioFormatTests(unittest.TestCase):
             self.assertEqual(caught.exception.where, where)
         return caught.exception
 
+    def test_entry_kinds_match_memory_store(self):
+        self.assertEqual(set(scenario_format.ENTRY_KINDS), memory.KINDS)
+
     def test_valid_definition_is_normalized_without_changing_the_input(self):
         original = review()
         kept = copy.deepcopy(original)
+        # ancestors() works even before normalization.
+        self.assertEqual(scenario_format.ancestors(original)["done"], {"context", "angle", "merge", "approve", "tests"})
         result = scenario_format.normalize(original)
         self.assertEqual(original, kept)
         needs = {step["id"]: step["needs"] for step in result["steps"]}
@@ -87,13 +94,16 @@ class ScenarioFormatTests(unittest.TestCase):
         self.assertNotEqual(scenario_format.digest(result), scenario_format.digest(changed))
         self.assertNotIn(" ", scenario_format.canonical_json({"a": [1, 2]}))
 
-    def test_executor(self):
+    def test_executor_distinguishes_roles_from_agent_ids(self):
         steps = {step["id"]: step for step in scenario_format.normalize(review())["steps"]}
-        self.assertEqual(scenario_format.executor(steps["context"]), "richi")
-        self.assertEqual(scenario_format.executor(steps["angle"]), "agent")
-        self.assertEqual(scenario_format.executor(steps["approve"]), "human")
+        self.assertEqual(scenario_format.executor(steps["context"]), ("richi", None))
+        self.assertEqual(scenario_format.executor(steps["angle"]), ("agent", None))
+        self.assertEqual(scenario_format.executor(steps["approve"]), ("human", None))
         pinned = dict(steps["merge"], executor={"agent": "codex"})
-        self.assertEqual(scenario_format.executor(pinned), "codex")
+        self.assertEqual(scenario_format.executor(pinned), ("agent", "codex"))
+        # A custom agent whose ID happens to be 'human' or 'richi' cannot be confused with a role.
+        named_human = dict(steps["merge"], executor={"agent": "human"})
+        self.assertEqual(scenario_format.executor(named_human), ("agent", "human"))
 
     def test_parse(self):
         text = json.dumps(review())
@@ -113,24 +123,39 @@ class ScenarioFormatTests(unittest.TestCase):
                 scenario_format.parse(text)
         with self.assertRaisesRegex(FormatError, "UTF-8"):
             scenario_format.parse(b"\xff")
+        with self.assertRaisesRegex(FormatError, "UTF-8"):
+            scenario_format.parse('{"a": "\ud800"}')
         with self.assertRaisesRegex(FormatError, "larger than"):
             scenario_format.parse('{"a": "' + "x" * scenario_format.MAX_BYTES + '"}')
 
-    def test_top_level_fields(self):
+    def test_newer_format_version_is_checked_before_unknown_top_fields(self):
+        newer = {"format": "richi-scenario", "format_version": 2, "on_failure": {}}
+        with self.assertRaises(UnsupportedVersion) as caught:
+            scenario_format.normalize(newer)
+        self.assertEqual(caught.exception.version, 2)
+        self.assertIn("update Richi", str(caught.exception))
+
+    def test_top_level_fields_and_python_inputs(self):
         self.assertRejects(lambda d: d.update(on_failure={}), "unknown field on_failure")
         self.assertRejects(lambda d: d.pop("steps"), "missing required field steps")
         self.assertRejects(lambda d: d.update(format="other"), "must be 'richi-scenario'", "format")
-        self.assertRejects(lambda d: d.update(format_version=2), "reads scenario format 1, not 2; update Richi")
+        self.assertRejects(lambda d: d.update(format_version=0), "reads scenario format 1, not 0")
         self.assertRejects(lambda d: d.update(format_version=True), "whole number")
         self.assertRejects(lambda d: d.update(id="-bad"), "Scenario ID", "id")
         self.assertRejects(lambda d: d.update(title=""), "nonempty text", "title")
         self.assertRejects(lambda d: d.update(title="a\nb"), "one line", "title")
+        self.assertRejects(lambda d: d.update(title="a\u0085b"), "one line", "title")
+        self.assertRejects(lambda d: d.update(title="a\u2028b"), "one line", "title")
         self.assertRejects(lambda d: d.update(description="\x00"), "control characters", "description")
-        self.assertRejects(lambda d: d.update(tags=["ok", ""]), "1-60 characters", "tags[1]")
+        self.assertRejects(lambda d: d.update(tags=["ok", ""]), "nonempty text", "tags[1]")
+        self.assertRejects(lambda d: d.update(tags=["   "]), "nonempty text", "tags[0]")
         self.assertRejects(lambda d: d.update(tags=["\ud800"]), "UTF-8", "tags[0]")
         self.assertRejects(lambda d: d.update(steps=[]), "1 to 100 items", "steps")
         self.assertRejects(lambda d: d.update(layout=[]), "must be an object", "layout")
+        self.assertRejects(lambda d: d.update(layout={"x": {1, 2}}), "not JSON", "layout")
+        self.assertRejects(lambda d: d.update(layout={1: "a"}), "object keys must be text", "layout")
         self.assertRejects(lambda d: d.update(layout={"x": "y" * scenario_format.MAX_LAYOUT}), "larger than", "layout")
+        self.assertRejects(lambda d: d["inputs"].update({1: {"type": "string"}}), "object keys must be text")
         deep = {}
         node = deep
         for _ in range(40):
@@ -167,7 +192,52 @@ class ScenarioFormatTests(unittest.TestCase):
         self.assertEqual(scenario_format.check_input("x", {"type": "string"}, ""), "")
         self.assertEqual(scenario_format.check_input("x", {"type": "text"}, "a\nb"), "a\nb")
 
-    def test_steps(self):
+    def test_secrets_are_restricted_to_execution_params_and_presence_checks(self):
+        def with_secret(change):
+            def run(d):
+                d["inputs"]["token"] = {"type": "secret"}
+                change(d)
+            return run
+
+        # Allowed: agent instruction, skill instruction, shell-quoted command, and presence/null condition checks.
+        ok = review()
+        ok["inputs"]["token"] = {"type": "secret"}
+        ok["steps"][1]["params"]["instruction"] = "Use {{inputs.token}}"
+        ok["steps"][2]["params"]["text"] = "Use {{inputs.token}}"
+        ok["steps"][4]["params"]["command"] = "curl -H {{inputs.token | shell}} https://example.test"
+        ok["steps"][4]["if"] = "inputs.token != null and inputs.strict"
+        scenario_format.normalize(ok)
+
+        ok_bare = review()
+        ok_bare["inputs"]["token"] = {"type": "secret"}
+        ok_bare["steps"][4]["if"] = "not inputs.token"
+        scenario_format.normalize(ok_bare)
+
+        # Refused: stored fields, cwd, matrix, and value comparisons in conditions.
+        self.assertRejects(with_secret(lambda d: d.update(run_title="Run {{inputs.token}}")), "secret input token")
+        self.assertRejects(with_secret(lambda d: d["steps"][2].update(title="Step {{inputs.token}}")), "secret input token")
+        self.assertRejects(with_secret(lambda d: d["steps"][0]["params"].update(question="{{inputs.token}}")), "secret input token")
+        self.assertRejects(with_secret(lambda d: d["steps"][3]["params"].update(question="Use {{inputs.token}}?")), "secret input token")
+        self.assertRejects(with_secret(lambda d: d["steps"][4]["params"].update(cwd="sub/{{inputs.token}}")), "secret input token")
+        self.assertRejects(with_secret(lambda d: d["steps"][1].update(matrix={"angle": "{{inputs.token}}"})), "secret input token")
+        self.assertRejects(with_secret(lambda d: d["steps"][4].update({"if": "inputs.token == 'abc'"})),
+                           "only be checked for presence or null")
+        self.assertRejects(with_secret(lambda d: d["steps"][4].update({"if": "'a' in inputs.token"})),
+                           "only be checked for presence or null")
+
+    def test_command_quoting_and_cwd_rules(self):
+        self.assertRejects(lambda d: d["steps"][4]["params"].update(command="git log {{inputs.branch}}"),
+                           "must end with \\| shell")
+        self.assertRejects(lambda d: d["steps"][4]["params"].update(command="make test \u202e; rm -rf ~ \u202c"),
+                           "control or bidirectional")
+        self.assertRejects(lambda d: d["steps"][4]["params"].update(cwd="{{steps.context.summary}}"),
+                           "cwd cannot read step results")
+        # cwd does NOT require | shell.
+        ok = review()
+        ok["steps"][4]["params"]["cwd"] = "packages/{{inputs.branch}}"
+        scenario_format.normalize(ok)
+
+    def test_steps_and_checks(self):
         def step(index, **fields):
             return lambda d: d["steps"][index].update(fields)
         self.assertRejects(lambda d: d["steps"].append("x"), "must be an object", "steps[6]")
@@ -177,6 +247,9 @@ class ScenarioFormatTests(unittest.TestCase):
         self.assertRejects(step(0, type=["x"]), "type must be one of")
         self.assertRejects(step(0, unknown=1), "unknown field unknown")
         self.assertRejects(step(2, params={}), "missing required field text", "steps.merge.params")
+        self.assertRejects(step(2, params={"text": ""}), "nonempty text", "steps.merge.params.text")
+        self.assertRejects(step(3, params={"question": "   "}), "nonempty text", "steps.approve.params.question")
+        self.assertRejects(step(0, params={"question": ""}), "nonempty text", "steps.context.params.question")
         self.assertRejects(step(2, params={"text": "x", "skill": "y"}), "unknown field skill")
         self.assertRejects(step(1, params={"skill": {}}), "default skill or one per agent")
         self.assertRejects(step(1, params={"skill": {"default": "bad name"}}), "Skill name")
@@ -188,9 +261,9 @@ class ScenarioFormatTests(unittest.TestCase):
         self.assertRejects(step(0, params={"question": "q", "limit": 0}), "1 to 50")
         self.assertRejects(step(0, type="memory.recall", params={"query": "q", "kinds": ["idea"]}), "must be one of task")
         self.assertRejects(step(0, type="condition", params={"expr": "inputs.strict =="}), "expected")
-        self.assertRejects(step(2, executor={"agent": "codex", "role": "agent"}), "either agent or role")
+        self.assertRejects(step(2, executor={"agent": "codex", "role": "agent"}), "unknown field role")
         self.assertRejects(step(3, executor={"agent": "codex"}), "can be pinned to an agent")
-        self.assertRejects(step(3, executor={"role": "agent"}), "performed by human")
+        self.assertRejects(step(3, executor={"role": "human"}), "unknown field role")
         self.assertRejects(step(2, hints={"subagent": "yes"}), "true or false")
         self.assertRejects(step(2, hints={"timeout_minutes": 0}), "1 to 1440")
         self.assertRejects(step(3, outputs={}), "only instruction, skill and command steps report data")
@@ -200,24 +273,67 @@ class ScenarioFormatTests(unittest.TestCase):
         self.assertRejects(step(2, checks=[{"kind": "min_items", "path": "findings"}]), "missing required field count")
         self.assertRejects(step(2, checks=[{"kind": "data_required", "path": "Bad Path"}]), "dotted path")
         self.assertRejects(step(2, checks=[{"kind": "exit_code", "expect": 0}]), "only command steps report an exit")
+        self.assertRejects(step(4, checks=[{"kind": "exit_code", "expect": 1}]), "conflicts with params.expect_exit")
         self.assertRejects(step(3, checks=[{"kind": "evidence_git"}]), "report results to check")
+        self.assertRejects(step(2, outputs={"data": {"note": {"type": "string"}}},
+                                checks=[{"kind": "min_items", "path": "note", "count": 1}]),
+                           "outputs declares as string")
+        # file_exists accepts relative POSIX paths (including uppercase/templates) and rejects traversal/absolute.
+        ok = review()
+        ok["steps"][1]["checks"].append({"kind": "file_exists", "path": "reports/README-{{matrix.angle}}.md"})
+        scenario_format.normalize(ok)
+        for bad_path in ("/etc/passwd", "../a.md", "a/../b.md", "a\\b.md", "C:a.md", "a//b.md", "."):
+            with self.subTest(bad_path=bad_path):
+                self.assertRejects(step(2, checks=[{"kind": "file_exists", "path": bad_path}]),
+                                   "relative POSIX|path segments")
+        # retry and continue_on_failure are for agent steps only.
         self.assertRejects(step(2, retry={"max": 9}), "0 to 5")
+        self.assertRejects(step(3, retry={"max": 1}), "only instruction, skill and command steps can be retried")
+        self.assertRejects(step(0, continue_on_failure=True), "continue on failure")
         self.assertRejects(step(2, continue_on_failure=1), "true or false")
         self.assertRejects(step(2, needs="angle"), "must be a list")
         self.assertRejects(step(2, needs=["angle", "angle"]), "names a step twice")
 
-    def test_matrix(self):
+    def test_matrix_validation_and_expansion(self):
         def matrix(value, index=1):
             return lambda d: d["steps"][index].update(matrix=value)
         self.assertRejects(matrix({}), "1 to 3 keys")
         self.assertRejects(matrix({"Bad": ["a"]}), "Matrix key")
         self.assertRejects(matrix({"angle": "angles: {{inputs.angles}}"}), "one {{...}} expression")
+        self.assertRejects(matrix({"angle": "{{inputs.angles | join}}"}), "cannot use filters")
+        self.assertRejects(matrix({"angle": "{{inputs.branch}}"}), "multiselect input")
+        self.assertRejects(matrix({"angle": "{{run.id}}"}), "multiselect input or steps")
         self.assertRejects(matrix({"angle": ["a", "a"]}), "repeats a value")
         self.assertRejects(matrix({"angle": "{{matrix.angle}}"}), "matrix cannot read itself")
         self.assertRejects(matrix({"angle": ["a"]}, index=0), "only agent and human steps can be repeated")
-        definition = review()
-        definition["steps"][1]["matrix"] = {"angle": ["security"], "level": ["low", "high"]}
-        scenario_format.normalize(definition)
+        # Product overflow is rejected at save time.
+        self.assertRejects(matrix({"angle": ["a%d" % n for n in range(10)], "b": ["b%d" % n for n in range(6)]}),
+                           "more than 50 instances")
+        # matrix.* in `if` is rejected (if runs before expansion).
+        self.assertRejects(lambda d: d["steps"][1].update({"if": "matrix.angle == 'security'"}),
+                           "before matrix expansion")
+        # A step whose ID is literally "matrix" may still read its own matrix.* keys.
+        named = review()
+        named["steps"][1]["id"] = "matrix"
+        named["steps"][2]["needs"] = ["matrix"]
+        named["steps"][2]["params"]["text"] = "Merge {{steps.matrix.data.findings}}"
+        scenario_format.normalize(named)
+        # Matrix step exposes aggregate fields (status, items, data, files), not scalar summary/answer.
+        self.assertRejects(lambda d: d["steps"][2]["params"].update(text="{{steps.angle.summary}}"),
+                           "exposes data, files, items, status")
+        ok_items = review()
+        ok_items["steps"][2]["params"]["text"] = "First: {{steps.angle.items[0].summary}}"
+        scenario_format.normalize(ok_items)
+        # Runtime expansion helper enforces types, uniqueness and cap.
+        step = scenario_format.normalize(review())["steps"][1]
+        self.assertEqual(scenario_format.expand_matrix(step, {"inputs": {"angles": ["security", "api"]}}),
+                         [{"angle": "security"}, {"angle": "api"}])
+        with self.assertRaises(templating.Unresolved):
+            scenario_format.expand_matrix(step, {"inputs": {}})
+        with self.assertRaisesRegex(ValueError, "nonempty list"):
+            scenario_format.expand_matrix(step, {"inputs": {"angles": []}})
+        with self.assertRaisesRegex(ValueError, "more than 50 instances"):
+            scenario_format.expand_matrix(step, {"inputs": {"angles": ["a%d" % n for n in range(51)]}})
 
     def test_graph(self):
         self.assertRejects(lambda d: d["steps"][0].update(needs=["context"]), "cannot depend on itself")
@@ -232,13 +348,21 @@ class ScenarioFormatTests(unittest.TestCase):
                            "steps.merge.params.text")
         self.assertRejects(text(2, "{{steps.merge.summary}}"), "cannot read its own results")
         self.assertRejects(text(2, "{{steps.ghost.summary}}"), "unknown step")
-        self.assertRejects(text(2, "{{steps.angle.output}}"), "a step result has")
+        self.assertRejects(text(2, "{{steps.context.answer}}"), "exposes data, status, summary")
+        self.assertRejects(text(2, "{{steps.context.exit_code}}"), "exposes data, status, summary")
         self.assertRejects(text(2, "{{matrix.angle}}"), "matrix key this step does not have")
         self.assertRejects(text(2, "{{inputs.ghost}}"), "does not declare")
+        self.assertRejects(text(2, "{{inputs.branch.sub}}"), "scalar input branch has no sub-fields")
+        self.assertRejects(text(2, "{{inputs.angles.foo}}"), "only an integer index")
+        self.assertRejects(text(2, "{{inputs.angles[0].x}}"), "only an integer index")
+        self.assertRejects(text(2, "{{now.dtae}}"), "unknown system value")
+        self.assertRejects(text(2, "{{run.ID}}"), "unknown system value")
+        self.assertRejects(text(2, "{{agent}}"), "unknown system value")
         self.assertRejects(lambda d: d["steps"][4].update({"if": "steps.merge.status == 'done'"}),
                            "does not depend on", "steps.tests.if")
         definition = review()
-        definition["steps"][2]["params"]["text"] = "{{steps.context.summary}} and {{run.id}} for {{agent.id}}"
+        definition["steps"][2]["params"]["text"] = (
+            "{{steps.context.summary}} {{inputs.angles[0]}} {{run.id}} {{project.path}} {{agent.id}} {{now.date}}")
         scenario_format.normalize(definition)
 
     def test_limits(self):

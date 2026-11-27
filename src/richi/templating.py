@@ -8,26 +8,44 @@ the agent that runs the step, and both are evaluated by this module alone: no
 Python is ever evaluated, a template cannot call anything, and the only
 operations are the few filters and comparisons below.
 
-Paths are dotted names with optional `[index]` parts. Their first name is one
-of the roots a caller allows (ROOTS by default). A template refuses a value it
-cannot resolve unless its `default` filter supplies one; a condition reads a
-missing value as null, since a step that was skipped has no answer to compare.
+Template syntax:
+* `{{ path | filter(arg) }}` substitutes a value. Filters are `join`,
+  `default`, `first`, `length` and `shell` (POSIX shell quoting with
+  `shlex.quote`).
+* Outside an expression, `\\{{` produces literal `{{` and `\\}}` produces
+  literal `}}`. Consecutive backslashes immediately before `{{` or `}}` halve:
+  `\\\\{{inputs.x}}` produces `\\` followed by the value of `inputs.x`. Any
+  other backslash stays literal. An unescaped `}}` outside an expression is
+  kept as literal text, so inline JSON examples such as
+  `{"data": {"findings": []}}` need no escaping. Inside an expression, closing
+  `}}` is recognized only outside quoted string literals.
+* Paths are dotted names with optional `[index]` or `["key"]` parts. Nested
+  list indices use bracket notation (`[0][1]`), because dotted `0.1` lexes as
+  a decimal number; numeric object keys use quoted brackets (`["0"]`), because
+  unquoted integer parts index lists only.
+* A template refuses a value it cannot resolve unless a `default` filter
+  supplies one; a missing value passes through non-`default` filters until
+  `default` replaces it or the expression fails with `Unresolved`.
+* A condition reads a missing value as `null`, since a step that was skipped
+  has no answer to compare.
 """
 import json
 import math
 import re
-from typing import NamedTuple, Optional, Tuple
+import shlex
+from typing import NamedTuple, Tuple
 
 
 ROOTS = frozenset({"inputs", "steps", "matrix", "run", "project", "agent", "now"})
-FILTERS = {"join": (0, 1), "default": (1, 1), "first": (0, 0), "length": (0, 0)}
+FILTERS = {"join": (0, 1), "default": (1, 1), "first": (0, 0), "length": (0, 0), "shell": (0, 0)}
 MAX_TEMPLATE = 20000
 MAX_EXPRESSIONS = 200
 MAX_CONDITION = 1000
 MAX_DEPTH = 32
+MAX_NUMBER_DIGITS = 16
 MAX_RENDERED = 200000
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_-]{0,63}")
-_NUMBER = re.compile(r"-?(?:0|[1-9][0-9]{0,15})(?:\.[0-9]{1,16})?")
+_RAW_NUMBER = re.compile(r"-?[0-9]+(?:\.[0-9]+)?")
 _OPEN, _CLOSE = "{{", "}}"
 
 
@@ -67,6 +85,9 @@ class Template(NamedTuple):
 
     def paths(self):
         return [part.path for part in self.parts if isinstance(part, Expression)]
+
+    def expressions(self):
+        return [part for part in self.parts if isinstance(part, Expression)]
 
     @property
     def single(self):
@@ -126,11 +147,8 @@ class _Scanner:
         char = text[start]
         if char in "'\"":
             return self._string(char)
-        number = _NUMBER.match(text, start)
-        if number and (char == "-" or char.isdigit()):
-            self.index = number.end()
-            value = number.group()
-            return ("number", float(value) if "." in value else int(value), start)
+        if char.isdigit() or (char == "-" and start + 1 < len(text) and text[start + 1].isdigit()):
+            return self._number(start)
         name = _NAME.match(text, start)
         if name:
             self.index = name.end()
@@ -140,6 +158,18 @@ class _Scanner:
                 self.index += len(symbol)
                 return ("symbol", symbol, start)
         self._fail("unexpected character %r" % char)
+
+    def _number(self, start):
+        match = _RAW_NUMBER.match(self.text, start)
+        raw = match.group()
+        self.index = match.end()
+        unsigned = raw[1:] if raw.startswith("-") else raw
+        whole, _, fraction = unsigned.partition(".")
+        if len(whole) > 1 and whole.startswith("0"):
+            self._fail("invalid number %r" % raw, start)
+        if len(whole) > MAX_NUMBER_DIGITS or len(fraction) > MAX_NUMBER_DIGITS:
+            self._fail("number is too long", start)
+        return ("number", float(raw) if "." in raw else int(raw), start)
 
     def _string(self, quote):
         text, start = self.text, self.index
@@ -233,32 +263,73 @@ def _literal(scanner):
 # ---------------------------------------------------------------- templates
 
 
+def _find_close(text, start):
+    """Index of the closing '}}' for an expression starting at start, ignoring quoted strings."""
+    index, length, quote, quote_start = start, len(text), None, None
+    while index < length:
+        char = text[index]
+        if quote is not None:
+            if char == "\\":
+                index += 2
+                continue
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in "'\"":
+            quote, quote_start = char, index
+            index += 1
+            continue
+        if text.startswith(_CLOSE, index):
+            return index
+        index += 1
+    if quote is not None:
+        raise TemplateError("unterminated string", quote_start)
+    raise TemplateError("'{{' without '}}'", start - 2)
+
+
 def parse_template(text, roots=ROOTS):
     """Template of literal text and {{ path | filter(arg) }} expressions."""
     if not isinstance(text, str):
         raise TemplateError("a template must be text")
     if len(text) > MAX_TEMPLATE:
         raise TemplateError("template is longer than %d characters" % MAX_TEMPLATE)
-    parts, index, expressions = [], 0, 0
-    while True:
-        start = text.find(_OPEN, index)
-        stray = text.find(_CLOSE, index)
-        if stray != -1 and (start == -1 or stray < start):
-            raise TemplateError("'}}' without '{{'", stray)
-        if start == -1:
-            if index < len(text):
-                parts.append(text[index:])
-            break
-        if start > index:
-            parts.append(text[index:start])
-        end = text.find(_CLOSE, start + 2)
-        if end == -1:
-            raise TemplateError("'{{' without '}}'", start)
-        expressions += 1
-        if expressions > MAX_EXPRESSIONS:
-            raise TemplateError("more than %d expressions" % MAX_EXPRESSIONS, start)
-        parts.append(_expression(text[start + 2:end], start + 2, roots))
-        index = end + 2
+    parts, literal, index, length, expressions = [], [], 0, len(text), 0
+
+    def flush():
+        if literal:
+            parts.append("".join(literal))
+            literal.clear()
+
+    while index < length:
+        if text[index] == "\\":
+            end_slashes = index
+            while end_slashes < length and text[end_slashes] == "\\":
+                end_slashes += 1
+            if text.startswith(_OPEN, end_slashes) or text.startswith(_CLOSE, end_slashes):
+                count = end_slashes - index
+                literal.append("\\" * (count // 2))
+                if count % 2 == 1:
+                    literal.append(text[end_slashes:end_slashes + 2])
+                    index = end_slashes + 2
+                else:
+                    index = end_slashes
+                continue
+            literal.append(text[index:end_slashes])
+            index = end_slashes
+            continue
+        if text.startswith(_OPEN, index):
+            flush()
+            end = _find_close(text, index + 2)
+            expressions += 1
+            if expressions > MAX_EXPRESSIONS:
+                raise TemplateError("more than %d expressions" % MAX_EXPRESSIONS, index)
+            parts.append(_expression(text[index + 2:end], index + 2, roots))
+            index = end + 2
+        else:
+            literal.append(text[index])
+            index += 1
+    flush()
     return Template(tuple(parts), text)
 
 
@@ -308,18 +379,20 @@ def lookup(context, path):
     return value
 
 
+_MISSING = object()
+
+
 def _apply(expression, context):
-    filters = list(expression.filters)
     try:
         value = lookup(context, expression.path)
     except Unresolved:
-        fallback = next((args[0] for name, args in filters if name == "default"), _MISSING)
-        if fallback is _MISSING:
-            raise
-        value = fallback
-    for name, args in filters:
+        value = _MISSING
+    for name, args in expression.filters:
         if name == "default":
-            value = args[0] if value is None else value
+            if value is _MISSING or value is None:
+                value = args[0]
+        elif value is _MISSING:
+            continue
         elif name == "join":
             if not isinstance(value, list):
                 raise ValueError("join needs a list at " + expression.path.text)
@@ -330,10 +403,11 @@ def _apply(expression, context):
             if not isinstance(value, (list, dict, str)):
                 raise ValueError("length needs a list, an object or text at " + expression.path.text)
             value = len(value)
+        elif name == "shell":
+            value = shlex.quote(_text(value))
+    if value is _MISSING:
+        raise Unresolved(expression.path.text)
     return value
-
-
-_MISSING = object()
 
 
 def _text(value):
@@ -481,12 +555,24 @@ def _eval(node, context):
         return any(_truth(_eval(item, context)) for item in node[1:])
     operator, left, right = node[1], _eval(node[2], context), _eval(node[3], context)
     if operator in ("in", "not in"):
-        if isinstance(right, (list, dict)):
-            found = left in right
-        elif isinstance(right, str) and isinstance(left, str):
-            found = left in right
-        elif right is None:
+        if right is None:
             found = False
+        elif isinstance(right, list):
+            found = any(_equal(left, item) for item in right)
+        elif isinstance(right, dict):
+            if left is None:
+                found = False
+            elif isinstance(left, str):
+                found = left in right
+            else:
+                raise ValueError("'in' with an object needs text on its left")
+        elif isinstance(right, str):
+            if left is None:
+                found = False
+            elif isinstance(left, str):
+                found = left in right
+            else:
+                raise ValueError("'in' with text needs text on its left")
         else:
             raise ValueError("'in' needs a list, an object or text on its right")
         return found if operator == "in" else not found
@@ -506,6 +592,10 @@ def _number(value):
 def _equal(left, right):
     if isinstance(left, bool) or isinstance(right, bool):
         return isinstance(left, bool) and isinstance(right, bool) and left == right
+    if isinstance(left, list) and isinstance(right, list):
+        return len(left) == len(right) and all(_equal(a, b) for a, b in zip(left, right))
+    if isinstance(left, dict) and isinstance(right, dict):
+        return left.keys() == right.keys() and all(_equal(left[key], right[key]) for key in left)
     return left == right
 
 
@@ -525,8 +615,3 @@ def _truth(value):
     if isinstance(value, (list, dict, str)):
         return bool(value)
     return bool(value) if value is not None else False
-
-
-def references(item) -> Optional[list]:
-    """Paths a parsed template or condition reads."""
-    return item.paths()

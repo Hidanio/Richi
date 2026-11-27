@@ -6,7 +6,8 @@ from richi.templating import TemplateError, Unresolved
 
 
 CONTEXT = {
-    "inputs": {"branch": "feature_x", "angles": ["security", "tests"], "strict": False, "count": 3, "empty": []},
+    "inputs": {"branch": "feature_x", "angles": ["security", "tests"], "strict": False, "count": 3, "empty": [],
+               "weird": "a'b; rm -rf ~"},
     "steps": {"review": {"summary": "2 findings", "status": "done", "data": {"findings": [{"file": "a.py"}], "p95": 120.5},
                          "answer": None},
               "approve": {"answer": "all", "status": "done"}},
@@ -31,6 +32,8 @@ class TemplateTests(unittest.TestCase):
         self.assertEqual(render("{{steps.review.data.findings[0].file}}"), "a.py")
         self.assertEqual(render("{{steps.review.data.findings.0.file}}"), "a.py")
         self.assertEqual(render('{{steps.review["data"].p95}}'), "120.5")
+        nested = {"inputs": {"grid": [["a", "b"]], "nums": {"0": "zero"}}}
+        self.assertEqual(render("{{inputs.grid[0][1]}} {{inputs.nums[\"0\"]}}", nested), "b zero")
 
     def test_formats_values_that_are_not_text(self):
         self.assertEqual(render("{{inputs.strict}}"), "false")
@@ -38,7 +41,23 @@ class TemplateTests(unittest.TestCase):
         self.assertEqual(render("{{steps.review.answer}}"), "")
         self.assertEqual(render("{{steps.review.data.findings}}"), '[{"file": "a.py"}]')
 
-    def test_filters(self):
+    def test_literal_braces_and_quote_aware_closing(self):
+        # Inline JSON and jq need no escaping for stray '}}'.
+        self.assertEqual(render('Reply as {"data": {"findings": []}}'), 'Reply as {"data": {"findings": []}}')
+        self.assertEqual(render("a }} b"), "a }} b")
+        # Escaped '{{' and '}}' support GitHub Actions and Go/Jinja snippets.
+        self.assertEqual(render(r"Check $\{{ secrets.TOKEN }}"), "Check ${{ secrets.TOKEN }}")
+        self.assertEqual(render(r"Check $\{{ secrets.TOKEN \}}"), "Check ${{ secrets.TOKEN }}")
+        self.assertIsNone(templating.parse_template(r"\{{inputs.branch}}").single)
+        # Closing '}}' inside a string literal does not terminate the expression early.
+        self.assertEqual(render("{{inputs.missing | default('}}')}}"), "}}")
+        self.assertEqual(render('{{inputs.missing | default("a \\"}} b")}}'), 'a "}} b')
+        # Backslashes outside \{{ / \}} stay untouched; doubled backslashes before {{ produce literal \ + expression.
+        self.assertEqual(render(r"C:\work\file {{inputs.branch}}"), r"C:\work\file feature_x")
+        self.assertEqual(render(r"C:\work\\{{inputs.branch}}"), r"C:\work\feature_x")
+        self.assertEqual(render(r"\\\{{x}}"), r"\{{x}}")
+
+    def test_filters_and_missing_propagation(self):
         self.assertEqual(render("{{inputs.angles | join}}"), "security, tests")
         self.assertEqual(render("{{inputs.angles | join(' / ')}}"), "security / tests")
         self.assertEqual(render("{{inputs.angles | first}}"), "security")
@@ -46,10 +65,29 @@ class TemplateTests(unittest.TestCase):
         self.assertEqual(render("{{inputs.angles | length}}"), "2")
         self.assertEqual(render("{{inputs.missing | default('n/a')}}"), "n/a")
         self.assertEqual(render("{{steps.review.answer | default(\"no answer\")}}"), "no answer")
+        # default protects preceding filters when the value is missing.
+        self.assertEqual(render("{{inputs.missing | length | default(0)}}"), "0")
+        self.assertEqual(render("{{inputs.missing | join | default('none')}}"), "none")
+        self.assertEqual(render("{{inputs.missing | first | default('none')}}"), "none")
+        self.assertEqual(render("{{inputs.missing | shell | default('none')}}"), "none")
+        with self.assertRaises(Unresolved):
+            render("{{inputs.missing | length}}")
+        # shell quotes metacharacters cleanly, including after default.
+        self.assertEqual(render("git log {{inputs.weird | shell}}"), "git log 'a'\"'\"'b; rm -rf ~'")
+        self.assertEqual(render("echo {{inputs.missing | default('a b') | shell}}"), "echo 'a b'")
         with self.assertRaisesRegex(ValueError, "join needs a list"):
             render("{{inputs.branch | join}}")
         with self.assertRaisesRegex(ValueError, "length needs"):
             render("{{inputs.count | length}}")
+
+    def test_redacted_context_never_leaks_secret_values(self):
+        # PR 3/4 renders stored strings with a redacted context where secret inputs are omitted or replaced.
+        template = templating.parse_template("Token: {{inputs.token | default('<redacted>')}}")
+        self.assertEqual(templating.render(template, {"inputs": {}}), "Token: <redacted>")
+        raw = templating.parse_template("Token: {{inputs.token}}")
+        with self.assertRaises(Unresolved) as caught:
+            templating.render(raw, {"inputs": {}})
+        self.assertEqual(caught.exception.path, "inputs.token")
 
     def test_missing_value_is_unresolved(self):
         with self.assertRaises(Unresolved) as caught:
@@ -57,6 +95,8 @@ class TemplateTests(unittest.TestCase):
         self.assertEqual(caught.exception.path, "steps.later.summary")
         with self.assertRaises(Unresolved):
             render("{{inputs.angles[5]}}")
+        with self.assertRaises(Unresolved):
+            templating.value(templating.parse_template("{{inputs.missing}}"), CONTEXT)
 
     def test_single_expression_keeps_its_value(self):
         template = templating.parse_template("{{inputs.angles}}")
@@ -73,12 +113,12 @@ class TemplateTests(unittest.TestCase):
     def test_rejects_malformed_templates_with_positions(self):
         cases = {
             "{{inputs.branch": "'{{' without '}}' at character 1",
-            "a }} b": "'}}' without '{{'",
             "{{}}": "expected a name",
             "{{ secrets.token }}": "unknown name 'secrets'",
             "{{inputs.branch | upper}}": "unknown filter 'upper'",
             "{{inputs.branch | default}}": "filter default takes 1 argument",
             "{{inputs.branch | first(1)}}": "filter first takes no arguments",
+            "{{inputs.branch | shell('x')}}": "filter shell takes no arguments",
             "{{inputs.branch.}}": "a name after '.'",
             "{{inputs.branch[-1]}}": "an index or a quoted key",
             "{{inputs.branch extra}}": "expected '|' or '}}'",
@@ -125,12 +165,26 @@ class ConditionTests(unittest.TestCase):
         self.assertTrue(check("inputs.branch > 'a'"))
         self.assertTrue(check("inputs.count == 3.0"))
 
-    def test_membership(self):
+    def test_membership_and_nested_equality(self):
         self.assertTrue(check("'security' in inputs.angles"))
         self.assertTrue(check("'api' not in inputs.angles"))
         self.assertTrue(check("matrix.angle in ['security', 'tests']"))
         self.assertTrue(check("'feature' in inputs.branch"))
         self.assertFalse(check("'x' in steps.review.answer"))
+        # Booleans are distinct from numbers inside lists/dicts and `in`.
+        self.assertFalse(check("inputs.strict in [0]"))
+        self.assertTrue(check("inputs.strict not in [0]"))
+        self.assertFalse(check("1 in [true]"))
+        self.assertFalse(check("inputs.flag_list == [1]", {"inputs": {"flag_list": [True]}}))
+        self.assertFalse(check("inputs.obj == inputs.other", {"inputs": {"obj": {"a": True}, "other": {"a": 1}}}))
+        # Missing (null) left operand against dict or string is False, not an error.
+        self.assertFalse(check("steps.skipped.answer in 'abc'"))
+        self.assertFalse(check("steps.skipped.answer in steps.review.data"))
+        # Unhashable or non-text left operands raise ValueError, never TypeError.
+        with self.assertRaisesRegex(ValueError, "'in' with an object needs text"):
+            check("inputs.angles in steps.review.data")
+        with self.assertRaisesRegex(ValueError, "'in' with text needs text"):
+            check("inputs.count in inputs.branch")
         with self.assertRaisesRegex(ValueError, "'in' needs"):
             check("'x' in inputs.count")
 
@@ -171,6 +225,9 @@ class ConditionTests(unittest.TestCase):
             "inputs.x == 3 3": "expected end of condition",
             "os.system('x')": "unknown name 'os'",
             "inputs.x in [inputs.y]": "expected a quoted string",
+            "inputs.x == 12345678901234567": "number is too long",
+            "inputs.x == 1.12345678901234567": "number is too long",
+            "inputs.x == 01": "invalid number",
         }
         for text, message in cases.items():
             with self.subTest(text=text), self.assertRaisesRegex(TemplateError, message):
