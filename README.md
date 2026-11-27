@@ -46,11 +46,11 @@ The example connects Codex. For Claude Code, replace `codex` with `claude`.
 curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh | sh -s -- --agent codex --yes
 ```
 
-Local Cursor Agent requires Richi 1.2.0 or later; Antigravity support is added
-after 1.2.1. To check the latest stable installer, replace `--agent codex --yes`
-in the command above with `--help`. If the agent list includes `cursor` or
-`antigravity`, run the command with `--agent cursor --yes` or
-`--agent antigravity --yes`. If your agent is missing from the published
+Local Cursor Agent requires Richi 1.2.0 or later, and Antigravity requires a
+release after 1.2.1. To check the latest stable installer, replace
+`--agent codex --yes` in the command above with `--help`. If the agent list
+includes `cursor` or `antigravity`, run the command with `--agent cursor --yes`
+or `--agent antigravity --yes`. If your agent is missing from the published
 installer, [install Richi from source](docs/INSTALLATION.md).
 
 The installer downloads a stable release from GitHub. Open a new chat in the

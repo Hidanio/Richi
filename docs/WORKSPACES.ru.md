@@ -94,14 +94,11 @@ richi --chat task-123 project list
 richi --chat task-123 chat bind personal --replace
 ```
 
-В фоновых задачах `/automation` в Antigravity каждый запуск получает новый
-`ANTIGRAVITY_CONVERSATION_ID` без участия человека. Заранее привяжите постоянный ID
-в терминале (например, `richi --chat antigravity:daily-triage chat bind work`) и
-передавайте `--chat antigravity:daily-triage` в каждом вызове `richi` в инструкции
-автоматизации. Если песочница терминала Antigravity блокирует доступ к хранилищу
-Richi пользователя, `~/.gemini/config` или основному каталогу `.git` связанного
-worktree, запросите запуск команды `richi` вне песочницы, не подменяя `HOME`,
-параметры хранилища или переменные чата.
+При запусках `/automation` по расписанию Antigravity выдаёт каждому запуску
+новый `ANTIGRAVITY_CONVERSATION_ID` без участия человека. Заранее привяжите
+постоянный ID в терминале (например, `richi --chat antigravity:daily-triage chat bind work`)
+и укажите `--chat antigravity:daily-triage` для каждого вызова `richi` в
+инструкции автоматизации.
 
 Вне Cursor Agent ID можно передать через `RICHI_CHAT_ID`. Явный `--chat` имеет приоритет.
 Без выбора обнаруженный чат не читает и не записывает знания даже с `-w`.

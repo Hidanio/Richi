@@ -252,10 +252,11 @@ def chat_parser():
         action.add_argument("--with-rules", nargs="?", const="", metavar="PATH",
                             help="Include this bound chat's standing rules, optionally for a repository path")
     document(parser, "Show or set the workspace bound to an agent chat.", """
-        Pass --chat ID to identify a chat explicitly. When CURSOR_AGENT is set,
-        workspace commands require the active client's explicit ID. In Cursor,
-        use the ID from its sessionStart hook. Other shells can use RICHI_CHAT_ID,
-        Antigravity's ANTIGRAVITY_CONVERSATION_ID or Codex's CODEX_THREAD_ID.
+        Pass --chat ID to identify a chat explicitly. When CURSOR_AGENT is set
+        or multiple agent environments conflict, commands require the active
+        client's --chat ID. In Cursor, use the ID from its sessionStart hook.
+        Other shells can use Antigravity's ANTIGRAVITY_CONVERSATION_ID (as
+        antigravity:<id>), RICHI_CHAT_ID or Codex's CODEX_THREAD_ID.
         The binding overrides the terminal default only for that chat.
         Until a chat is bound it cannot read or write knowledge. No
         agent chat may run richi use, bound or not, and a bound chat also rejects

@@ -75,24 +75,17 @@ def instruction_file(block):
 trigger: always_on
 ---
 
-Antigravity supplies `ANTIGRAVITY_CONVERSATION_ID` and `ANTIGRAVITY_AGENT=1`
-to command shells, and Richi identifies this conversation as
-`antigravity:<conversation_id>`. If `ANTIGRAVITY_CONVERSATION_ID` is unavailable
-or Richi reports conflicting agent environment variables (`chat_id_required`),
-pass `--chat antigravity:<conversation_id>` explicitly on every Richi command;
-never use an inherited ID from another agent. Each delegated subagent, workflow
-agent or swarm worker receives its own `ANTIGRAVITY_CONVERSATION_ID`: pass
-`--chat antigravity:<conversation_id>` when delegating memory work and use that
-caller-supplied `--chat` on every Richi call in the child, or skip Richi
-startup checks and binding in that delegated child when no memory task or
-`--chat` ID was delegated. In unattended scheduled `/automation` runs (where no
-human can choose a workspace), use only a prompt-supplied pre-bound
-`--chat antigravity:<workflow>` on every Richi call, or skip Richi startup
-checks, binding, and memory access when none was supplied or unattended
-permissions auto-deny `richi`; never guess or auto-bind a workspace. If
-sandboxing blocks Richi's user storage, `~/.gemini/config`, or a linked
-worktree's main `.git` directory, request unsandboxed execution rather than
-overriding `HOME`, storage options, or chat variables.
+Richi reads `ANTIGRAVITY_CONVERSATION_ID` as `antigravity:<conversation_id>`.
+If it is unavailable or Richi reports `chat_id_required`, pass
+`--chat antigravity:<conversation_id>` on every Richi command; never use another
+agent's ID. Delegated subagents, workflows, swarm workers and unattended
+`/automation` runs each receive a fresh `ANTIGRAVITY_CONVERSATION_ID`: pass
+`--chat antigravity:<conversation_id>` when delegating memory work, and in a
+delegated or `/automation` run use Richi only with an explicit caller- or
+prompt-supplied `--chat` (otherwise skip Richi startup checks, binding and
+memory access). If sandboxing blocks Richi's user directories, `~/.gemini/config`
+or a worktree's main `.git` directory, request unsandboxed execution instead of
+overriding `HOME`, storage options or chat variables.
 
 """ + block + b"\n"
     if len(content) > INSTRUCTION_LIMIT:

@@ -9,8 +9,8 @@ Each agent in the agents registry says where it finds skills: its user-wide
 skill directories, skills built into it, and the plugins it has installed
 (for Claude Code also the claude.ai plugins the Claude app gives it). A plugin
 skill (or a plugin command, for an agent that lists those as skills) is named
-as the agents name it, "plugin:skill". Skills an agent never chooses by
-itself, only when the user invokes them, are left out for it.
+as the agent names it ("plugin:skill" in Claude Code, or unprefixed). Skills an
+agent never chooses by itself, only when the user invokes them, are left out for it.
 """
 import json
 import os

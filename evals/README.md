@@ -127,9 +127,7 @@ distinguish a valid measurement from a useful record being present in a bounded 
 
 Each scenario uses disposable synthetic storage with an explicit temporary
 configuration and home, without inherited `RICHI_*` or `PYTHON*` settings or
-agent shell and profile variables (`CLAUDECODE`, `CLAUDE_CONFIG_DIR`,
-`CODEX_HOME`, `CODEX_THREAD_ID`, `CURSOR_AGENT`, `ANTIGRAVITY_AGENT`,
-`ANTIGRAVITY_CONVERSATION_ID`, `ANTIGRAVITY_APP_DATA_DIR`). This isolation is confined to the test subprocesses; it does not switch the user's
+agent chat, shell and profile variables. This isolation is confined to the test subprocesses; it does not switch the user's
 runtime, chat binding or workspace. Production memory, private corpora and
 referenced source contents are not read; fictional sources are never fetched.
 The runner measures existing behavior; it neither implements archival/cleanup

@@ -207,7 +207,8 @@ every agent; when an agent lacks the chosen skill, it switches to one list per
 agent and suggests the skill with the same name after the plugin prefix. The
 lists come from where each known agent keeps skills: its skill directories,
 skills built into it and its plugins, for Claude Code also the claude.ai plugins
-the Claude app installed; a plugin skill is named `plugin:skill`, as the agents name it, and
+the Claude app installed; a plugin skill is named as the agent names it (such as
+`plugin:skill` in Claude Code, or unprefixed in Antigravity), and
 skills an agent only runs when the user invokes them are left out. The map
 accepts changes of rules and of agent settings
 ([AGENT_SKILLS.md](AGENT_SKILLS.md)), and only from such a page; knowledge stays

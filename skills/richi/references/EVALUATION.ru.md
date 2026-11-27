@@ -134,10 +134,8 @@ p95 при трёх повторах равен максимуму и не оц�
 и разброс; эти измерения не доказывают экономию токенов или качество LLM.
 
 Сценарии используют disposable stores и отдельную конфигурацию; тестовые
-процессы не наследуют `RICHI_*` и переменные оболочек и профилей агентов
-(`CLAUDECODE`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CODEX_THREAD_ID`,
-`CURSOR_AGENT`, `ANTIGRAVITY_AGENT`, `ANTIGRAVITY_CONVERSATION_ID`,
-`ANTIGRAVITY_APP_DATA_DIR`). Production memory не читается,
+процессы не наследуют `RICHI_*` и переменные чата, оболочки и профиля агентов.
+Production memory не читается,
 пользовательские runtime и workspace не переключаются. Изоляция теста не
 разрешает обходить chat binding для живой памяти. Архив/очистка не реализуются.
 

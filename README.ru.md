@@ -46,8 +46,8 @@ SQLite-хранилище, Git-навигацию, локальную карту
 curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh | sh -s -- --agent codex --yes
 ```
 
-Для локального Cursor Agent нужен Richi 1.2.0 или новее; поддержка Antigravity
-добавлена после 1.2.1. Чтобы проверить текущий стабильный установщик, замените
+Для локального Cursor Agent нужен Richi 1.2.0 или новее, для Antigravity —
+релиз после 1.2.1. Чтобы проверить текущий стабильный установщик, замените
 `--agent codex --yes` в команде выше на `--help`. Если в списке агентов есть
 `cursor` или `antigravity`, выполните команду с `--agent cursor --yes` или
 `--agent antigravity --yes`. Если нужного агента в опубликованном установщике

@@ -82,16 +82,12 @@ agent's own standing instructions.
 
 ## Adjust an agent
 
-Antigravity reads user skills from `~/.gemini/config/skills`, built-in skills
-from `~/.gemini/antigravity/builtin/skills` (falling back to `antigravity-ide`
-or `antigravity-cli` under `~/.gemini`, or using
-`ANTIGRAVITY_APP_DATA_DIR/builtin/skills` when `ANTIGRAVITY_APP_DATA_DIR` is an
-absolute `/...` path) and enabled user plugins from
-`~/.gemini/config/plugins` (respecting `disabled` in `plugin.json` and plugin
-switches in `~/.gemini/config/config.json`). Extra directories declared in
-`skills.json` or `plugins.json` are not expanded automatically; register extra
-skill directories (`<folder>/<skill>/SKILL.md`) with
-`skill-sources update antigravity --add-skills FOLDER`.
+Antigravity reads user skills in `~/.gemini/config/skills`, built-in skills in
+`~/.gemini/antigravity/builtin/skills` (or `antigravity-ide`, `antigravity-cli`
+or `$ANTIGRAVITY_APP_DATA_DIR/builtin/skills`) and enabled plugins in
+`~/.gemini/config/plugins`. It requires YAML frontmatter in `SKILL.md`. Extra
+paths in `skills.json` or `plugins.json` are not read automatically; add skill
+folders with `skill-sources update antigravity --add-skills FOLDER`.
 
 Cursor reads skills from `~/.cursor/skills`, `~/.agents/skills`, `~/.claude/skills`
 and `~/.codex/skills`. Its built-in skills are in `~/.cursor/skills-cursor`.

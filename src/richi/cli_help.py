@@ -209,7 +209,7 @@ selection (command-line options take precedence):
 agent chats:
   RICHI_CHAT_ID     stable chat identity for workspace binding; Claude Code
                     setup provides it through its SessionStart hook, and
-                    CLAUDECODE marks its shells
+                    CLAUDECODE=1 marks its shells
   CODEX_THREAD_ID   chat identity supplied by Codex
   ANTIGRAVITY_CONVERSATION_ID
                     chat identity supplied by Antigravity (used as

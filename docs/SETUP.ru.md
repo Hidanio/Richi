@@ -10,8 +10,8 @@
 curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh | sh -s -- --agent codex --yes
 ```
 
-Для локального Cursor Agent нужен Richi 1.2.0 или новее; поддержка Antigravity
-добавлена после 1.2.1. Чтобы проверить текущий стабильный установщик, замените
+Для локального Cursor Agent нужен Richi 1.2.0 или новее, для Antigravity —
+релиз после 1.2.1. Чтобы проверить текущий стабильный установщик, замените
 `--agent codex --yes` в команде выше на `--help`. Если в списке агентов есть
 `cursor` или `antigravity`, выполните команду с `--agent cursor --yes` или
 `--agent antigravity --yes`. Если нужного агента пока нет,
@@ -263,8 +263,8 @@ python3 -I richi-installer.pyz --yes --wheel richi-X.Y.Z-py3-none-any.whl --mani
 В Richi 1.0.1 подключайте Codex через `richi setup --yes` и проверяйте его
 состояние через `richi setup --status`. Этот launcher выпущен до появления
 меню агентов и параметра `--agent`. Для Claude Code нужен Richi 1.1.0 или новее,
-для локального Cursor Agent — 1.2.0 или новее, а поддержка Antigravity добавлена
-после 1.2.1. Когда выйдет стабильный релиз
+для локального Cursor Agent — 1.2.0 или новее, для Antigravity — релиз после
+1.2.1. Когда выйдет стабильный релиз
 с поддержкой нужного клиента, обновите старую установку командой `richi update apply`.
 Перед подключением проверьте, что клиент есть в списке `richi setup --help`.
 Список определяет установленный launcher, в том числе при включённом dev.
@@ -272,7 +272,7 @@ python3 -I richi-installer.pyz --yes --wheel richi-X.Y.Z-py3-none-any.whl --mani
 ### Antigravity
 
 На macOS Richi также находит Antigravity в `/Applications` и `~/Applications`
-ещё до первого запуска, даже если команда `agy` отсутствует в PATH.
+ещё до первого запуска, даже если команда клиента отсутствует в PATH.
 
 ```sh
 richi setup --agent antigravity --dry-run
@@ -286,14 +286,15 @@ Setup создаёт ссылку `~/.gemini/config/skills/richi` и устан�
 Существующий пользовательский skill при передаче `--replace-skill` сохраняется в
 `~/.gemini/config/richi-skill-backups/`.
 
-Откройте новый диалог Antigravity. Antigravity передаёт `ANTIGRAVITY_CONVERSATION_ID`
-и `ANTIGRAVITY_AGENT=1` в оболочку команд, и Richi определяет чат как
-`antigravity:<id>`. Выберите workspace один раз на диалог. При делегировании
-работы с памятью субагенту передавайте `--chat antigravity:<id>`, чтобы он
-использовал подтверждённый workspace. Если терминальная песочница Antigravity или
-политика доступа к файлам вне рабочей папки ограничивает доступ к каталогам
-конфигурации и данных Richi (либо к основному каталогу `.git` связанного worktree),
-разрешите доступ в настройках Antigravity или запускайте `richi` вне песочницы.
+Откройте новый чат Antigravity. Antigravity передаёт в оболочку
+`ANTIGRAVITY_CONVERSATION_ID` и `ANTIGRAVITY_AGENT=1`, и Richi определяет чат
+как `antigravity:<id>`. Выберите workspace один раз для каждого чата.
+Делегированные субагенты получают собственный ID, поэтому для работы с памятью
+родительский агент передаёт им `--chat antigravity:<id>`. Если песочница
+терминала Antigravity закрывает чтение вне рабочей папки — например,
+пользовательских каталогов Richi или основного `.git` связанного worktree, —
+разрешите доступ в настройках Antigravity или одобрите запуск `richi` вне
+песочницы.
 
 ### Локальный Cursor Agent
 

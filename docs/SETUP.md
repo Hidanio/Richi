@@ -9,11 +9,11 @@ The example connects Codex. For Claude Code, replace `codex` with `claude`.
 curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh | sh -s -- --agent codex --yes
 ```
 
-Local Cursor Agent requires Richi 1.2.0 or later; Antigravity support is added
-after 1.2.1. To check the latest stable installer, replace `--agent codex --yes`
-in the command above with `--help`. If the agent list includes `cursor` or
-`antigravity`, run the command with `--agent cursor --yes` or
-`--agent antigravity --yes`. If your agent is missing,
+Local Cursor Agent requires Richi 1.2.0 or later, and Antigravity requires a
+release after 1.2.1. To check the latest stable installer, replace
+`--agent codex --yes` in the command above with `--help`. If the agent list
+includes `cursor` or `antigravity`, run the command with `--agent cursor --yes`
+or `--agent antigravity --yes`. If your agent is missing,
 [install Richi from source](INSTALLATION.md).
 
 You need macOS or Linux, curl and Python 3.9+ with sqlite3, venv and ensurepip.
@@ -243,7 +243,7 @@ the interactive menu. Connect each client you want to use.
 On Richi 1.0.1, use `richi setup --yes` to connect Codex and `richi setup --status`
 to inspect it. That launcher predates the agents menu and the `--agent` option.
 Claude Code requires Richi 1.1.0 or later, local Cursor Agent requires 1.2.0 or
-later, and Antigravity support is added after 1.2.1. Once a stable release supports your client, run `richi update apply`
+later, and Antigravity requires a release after 1.2.1. Once a stable release supports your client, run `richi update apply`
 on the older installation. Check that the client appears in `richi setup --help`
 before connecting it. The installed launcher supplies the agent choices even
 in dev mode.
@@ -251,7 +251,7 @@ in dev mode.
 ### Antigravity
 
 On macOS, Richi also finds Antigravity in `/Applications` and `~/Applications`
-before its first launch and without `agy` on PATH.
+before its first launch and without a shell command on PATH.
 
 ```sh
 richi setup --agent antigravity --dry-run
@@ -265,14 +265,14 @@ leaving `~/.gemini/config/AGENTS.md` and `GEMINI.md` untouched. Existing custom
 skills are backed up under `~/.gemini/config/richi-skill-backups/` when
 `--replace-skill` is supplied.
 
-Open a new Antigravity conversation. Antigravity passes `ANTIGRAVITY_CONVERSATION_ID`
-and `ANTIGRAVITY_AGENT=1` to command shells, and Richi identifies the conversation
-as `antigravity:<id>`. Choose a workspace once per conversation. When delegating
-memory work to a subagent, pass `--chat antigravity:<id>` so it shares the
-confirmed workspace. If Antigravity's terminal sandbox or non-workspace file
-access policy restricts Richi's user configuration/data directory (or a linked
-worktree's main `.git` directory), grant access in Antigravity settings or allow
-running `richi` outside the sandbox.
+Open a new Antigravity chat. Antigravity passes `ANTIGRAVITY_CONVERSATION_ID`
+and `ANTIGRAVITY_AGENT=1` to command shells, and Richi identifies the chat as
+`antigravity:<id>`. Choose a workspace once per chat. Delegated subagents
+receive their own conversation IDs, so the parent agent passes
+`--chat antigravity:<id>` when delegating memory work. If Antigravity's
+terminal sandbox restricts files outside the workspace, such as Richi's user
+directories or a linked worktree's main `.git` directory, allow access in
+Antigravity settings or approve running `richi` outside the sandbox.
 
 ### Local Cursor Agent
 
