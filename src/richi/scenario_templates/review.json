@@ -1,0 +1,119 @@
+{
+  "format": "richi-scenario",
+  "format_version": 1,
+  "id": "review",
+  "title": "Branch review",
+  "description": "Review the full diff of a branch against its target with project memory context and parallel review angles.",
+  "when_to_use": "When the user asks to review a branch, diff or pull request.",
+  "run_title": "Review: {{inputs.branch}}",
+  "tags": ["review"],
+  "inputs": {
+    "branch": {
+      "type": "string",
+      "title": "Branch",
+      "description": "Branch or local ref to review",
+      "required": true,
+      "picker": "git-branch"
+    },
+    "base": {
+      "type": "string",
+      "title": "Base branch",
+      "description": "Target branch for the full diff",
+      "default": "main",
+      "picker": "git-branch"
+    },
+    "angles": {
+      "type": "multiselect",
+      "title": "Review angles",
+      "description": "Independent review focuses run in parallel",
+      "options": ["security", "tests", "api", "migrations", "performance"],
+      "default": ["security", "tests"]
+    },
+    "strict": {
+      "type": "boolean",
+      "title": "Strict mode",
+      "description": "Report minor issues and edge cases as well",
+      "default": false
+    }
+  },
+  "steps": [
+    {
+      "id": "context",
+      "type": "memory.brief",
+      "title": "Load prior memory for the diff",
+      "params": {
+        "question": "Decisions, risks and known issues relevant to diff {{inputs.base}}...{{inputs.branch}}",
+        "limit": 12
+      }
+    },
+    {
+      "id": "angle",
+      "type": "skill",
+      "title": "Review: {{matrix.angle}}",
+      "needs": ["context"],
+      "matrix": {
+        "angle": "{{inputs.angles}}"
+      },
+      "params": {
+        "skill": {
+          "default": "code-review"
+        },
+        "instruction": "Review the full diff {{inputs.base}}...{{inputs.branch}} focusing on {{matrix.angle}} (strict={{inputs.strict}}). Prior memory context: {{steps.context.summary}}. Report findings as a list in data.findings."
+      },
+      "hints": {
+        "subagent": true
+      },
+      "outputs": {
+        "data": {
+          "findings": {
+            "type": "list",
+            "required": true
+          }
+        }
+      },
+      "checks": [
+        {
+          "kind": "data_required",
+          "path": "findings"
+        }
+      ]
+    },
+    {
+      "id": "merge",
+      "type": "instruction",
+      "title": "Merge and rank findings",
+      "needs": ["angle"],
+      "params": {
+        "text": "Deduplicate and rank all findings from {{steps.angle.data.findings}} by severity. Present a concise review summary and return the final list in data.findings."
+      },
+      "outputs": {
+        "data": {
+          "findings": {
+            "type": "list",
+            "required": true
+          }
+        }
+      },
+      "checks": [
+        {
+          "kind": "data_required",
+          "path": "findings"
+        }
+      ]
+    },
+    {
+      "id": "approve",
+      "type": "gate",
+      "title": "Review decision",
+      "needs": ["merge"],
+      "params": {
+        "question": "Which review findings should be accepted for {{inputs.branch}}?",
+        "options": ["all", "selected", "none"],
+        "allow_comment": true
+      }
+    }
+  ],
+  "layout": {
+    "mode": "list"
+  }
+}
