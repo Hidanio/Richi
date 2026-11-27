@@ -199,6 +199,58 @@ class ScenarioCliTests(unittest.TestCase):
         self.assertEqual(acc["status"], "accepted")
         self.assertEqual(acc["run_status"], "done")
 
+    def test_preflight_agent_id_file_exists_and_monorepo_subfolder_containment_r3_i2_i4(self):
+        # R3-I2: CLI report preflight renders {{agent.id}} accurately in file_exists!
+        reports_dir = self.repo / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "claude.md").write_text("ok\n", encoding="utf-8")
+        defn = {
+            "format": "richi-scenario", "format_version": 1, "id": "agent-file", "title": "Agent file",
+            "steps": [{
+                "id": "s1", "type": "instruction", "params": {"text": "write report"},
+                "checks": [{"kind": "file_exists", "path": "reports/{{agent.id}}.md"}],
+            }],
+        }
+        self.cli("scenario", "apply", "--json", "-",
+                 stdin_text=json.dumps({"action": "add", "scope": "project", "project": "service", "definition": defn}))
+        started = self.cli("--project-path", str(self.repo), "scenario", "run", "agent-file", chat="claude:chat-a")
+        rid = started["run_id"]
+        self.cli("--project-path", str(self.repo), "scenario", "next", rid, "--claim", chat="claude:chat-a")
+        rep = self.cli("--project-path", str(self.repo), "scenario", "report", rid, "s1", "--json", "-",
+                       stdin_text=json.dumps({"status": "done", "summary": "done"}), chat="claude:chat-a")
+        self.assertEqual(rep["status"], "accepted")
+        self.assertEqual(rep["run_status"], "done")
+
+        # R3-I4 / R3-A4: Monorepo subfolder project keeps {{project.path}} and file_exists inside the subfolder!
+        mono = self.root / "monorepo"
+        pkg_a = mono / "packages" / "svc-a"
+        pkg_b = mono / "packages" / "svc-b"
+        pkg_a.mkdir(parents=True)
+        pkg_b.mkdir(parents=True)
+        (pkg_a / "a.txt").write_text("a\n", encoding="utf-8")
+        (pkg_b / "secret.txt").write_text("b\n", encoding="utf-8")
+        subprocess.run(["git", "init", "-q"], cwd=mono, check=True)
+        subprocess.run(["git", "config", "user.email", "t@example.test"], cwd=mono, check=True)
+        subprocess.run(["git", "config", "user.name", "T"], cwd=mono, check=True)
+        subprocess.run(["git", "add", "."], cwd=mono, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "mono"], cwd=mono, check=True)
+        self.cli("project", "add", str(pkg_a), "--id", "svc-a", "--name", "Svc A")
+        mono_def = {
+            "format": "richi-scenario", "format_version": 1, "id": "mono-check", "title": "Mono",
+            "steps": [{
+                "id": "s1", "type": "instruction", "params": {"text": "Root={{project.path}}"},
+                "checks": [{"kind": "file_exists", "path": "a.txt"}],
+            }],
+        }
+        self.cli("scenario", "apply", "--json", "-",
+                 stdin_text=json.dumps({"action": "add", "scope": "project", "project": "svc-a", "definition": mono_def}))
+        r_mono = self.cli("--project-path", str(pkg_a), "scenario", "run", "mono-check")
+        nxt_mono = self.cli("--project-path", str(pkg_a), "scenario", "next", r_mono["run_id"], "--claim")
+        self.assertEqual(nxt_mono["step"]["text"], "Root=" + str(pkg_a.resolve()))
+        acc_mono = self.cli("--project-path", str(pkg_a), "scenario", "report", r_mono["run_id"], "s1", "--json", "-",
+                            stdin_text=json.dumps({"status": "done", "summary": "in pkg_a"}))
+        self.assertEqual(acc_mono["status"], "accepted")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -397,8 +397,13 @@ def check_input(name, spec, value, where=None):
     elif kind == "text":
         _prose(value, where, 20000)
     elif kind == "number":
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise FormatError("must be a number", where)
+        if isinstance(value, int):
+            if len(str(abs(value))) > MAX_DIGITS:
+                raise FormatError("number is longer than %d digits" % MAX_DIGITS, where)
+        elif not math.isfinite(value):
+            raise FormatError("must be a finite number", where)
     elif kind == "boolean":
         _bool(value, where)
     elif kind == "select":
@@ -473,7 +478,7 @@ def _params(step, here, found):
                 if entry_kind not in ENTRY_KINDS:
                     raise FormatError("must be one of " + ", ".join(ENTRY_KINDS), "%s.kinds[%d]" % (where, index))
     elif kind == "memory.brief":
-        text("question", "stored_param", limit=4000, empty=False)
+        text("question", "stored_param", limit=2000, empty=False)
         if "limit" in params:
             _integer(params["limit"], where + ".limit", 1, 50)
     elif kind == "condition":

@@ -590,17 +590,28 @@ def _eval(node, context):
 
 
 def _number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    return (isinstance(value, int) and not isinstance(value, bool)) or (isinstance(value, float) and math.isfinite(value))
 
 
 def _equal(left, right):
-    if isinstance(left, bool) or isinstance(right, bool):
-        return isinstance(left, bool) and isinstance(right, bool) and left == right
-    if isinstance(left, list) and isinstance(right, list):
-        return len(left) == len(right) and all(_equal(a, b) for a, b in zip(left, right))
-    if isinstance(left, dict) and isinstance(right, dict):
-        return left.keys() == right.keys() and all(_equal(left[key], right[key]) for key in left)
-    return left == right
+    stack = [(left, right)]
+    while stack:
+        a, b = stack.pop()
+        if isinstance(a, bool) or isinstance(b, bool):
+            if not (isinstance(a, bool) and isinstance(b, bool) and a == b):
+                return False
+        elif isinstance(a, list) and isinstance(b, list):
+            if len(a) != len(b):
+                return False
+            stack.extend(zip(a, b))
+        elif isinstance(a, dict) and isinstance(b, dict):
+            if a.keys() != b.keys():
+                return False
+            for key in a:
+                stack.append((a[key], b[key]))
+        elif a != b:
+            return False
+    return True
 
 
 def _kind(value):

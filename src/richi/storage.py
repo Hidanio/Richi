@@ -19,6 +19,9 @@ LOGICAL_COLUMNS = {
     "entry_history": ("before_json", "after_json"),
     "entity_history": ("before_json", "after_json"),
     "edge_history": ("before_json", "after_json"),
+    "scenario_runs": ("definition_json", "inputs_json"),
+    "scenario_steps": ("result_json", "matrix_json", "reason"),
+    "scenario_events": ("detail_json",),
 }
 FILE_AREAS = ("backups", "artifacts/git", "evaluations", "runtime")
 SQL_SECONDS, FILE_SECONDS, FILE_ENTRIES = 5.0, 2.0, 10000
@@ -167,6 +170,8 @@ def _deep(conn, tables):
                 category = "idempotency"
             elif kind == "index":
                 category = "secondary_indexes"
+            elif table in SCENARIO_TABLES:
+                category = "scenarios"
             elif table in ("entries", "entities", "graph_edges", "projects", "relations"):
                 category = "current_records"
             else:

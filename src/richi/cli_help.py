@@ -350,7 +350,7 @@ DETAILS = {
 
         Fields: id, kind, title, summary, sources, knowledge_state, verified_at,
         tags, aliases. Confirmed entities need at least one source; tool entities
-        need schema 3.""",
+        need schema 3 or newer.""",
         examples=(("", "richi entity put --json entity.json"),)),
     "entity get": dict(examples=(("", "richi entity get concept:connection-pool --history"),)),
     "edge": dict(about="""

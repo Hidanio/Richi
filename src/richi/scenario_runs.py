@@ -26,6 +26,7 @@ from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import re
+import time
 from types import SimpleNamespace
 import unicodedata
 
@@ -35,9 +36,12 @@ from . import agents, git_evidence, rules, scenario_format, scenarios, templatin
 LEASE_SECONDS = 30 * 60
 MAX_REPORT_BYTES = 1024 * 1024
 MAX_REASON = 4000
+MAX_EVIDENCE_ITEMS = 100
+MAX_GIT_EVIDENCE = 20
 ACTIVE_RUN_STATUSES = ("running", "waiting", "paused")
 TERMINAL_RUN_STATUSES = ("done", "failed", "cancelled")
 _GIT_REV = re.compile(r"[0-9A-Za-z][0-9A-Za-z._/@~^-]{0,199}\Z")
+_UNSET = object()
 
 
 def require_v4(conn, api):
@@ -294,7 +298,7 @@ def _expire_leases(conn, run_row, step_rows, at_dt, at_iso):
             if _parse_iso(row["lease_until"]) <= at_dt:
                 conn.execute(
                     "UPDATE scenario_steps SET status = 'ready', claimed_by_chat = NULL, claimed_by_agent = NULL, "
-                    "lease_until = NULL WHERE run_id = ? AND step_key = ?",
+                    "lease_until = NULL, stop_continuations = 0 WHERE run_id = ? AND step_key = ?",
                     (run_row["id"], row["step_key"]),
                 )
                 _record_event(conn, at_iso, run_row["scenario_id"], run_row["id"], row["step_key"],
@@ -308,7 +312,7 @@ def _release_all_claims(conn, run_id):
     """Clear active leases and move claimed steps back to ready when a run stops (cancel/failed)."""
     conn.execute(
         "UPDATE scenario_steps SET status = 'ready', claimed_by_chat = NULL, claimed_by_agent = NULL, "
-        "lease_until = NULL WHERE run_id = ? AND status = 'claimed'",
+        "lease_until = NULL, stop_continuations = 0 WHERE run_id = ? AND status = 'claimed'",
         (run_id,),
     )
 
@@ -346,7 +350,7 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
         return {"status": "done", "summary": summary[:1500], "data": {"refs": refs, "count": len(refs)}}
     if kind == "memory.brief":
         from . import task_brief
-        question = _render_field(params["question"], ctx, line=False, limit=4000, field="params.question", empty=False)
+        question = _render_field(params["question"], ctx, line=False, limit=2000, field="params.question", empty=False)
         limit = params.get("limit", 12)
         args = SimpleNamespace(
             query=question, project=run_row["project_id"], limit=limit, max_chars=16000,
@@ -378,17 +382,24 @@ def _compute_run_status(run_row, step_rows, by_def):
     return "waiting"
 
 
-def _advance(conn, api, database, run_id, *, project_path=None, agent=None, now_override=None):
+def _advance(conn, api, database, run_id, *, project_path=None, agent=None, now_override=None,
+             force_bump=False, previous_status=None):
     """Expire stale leases, unlock ready steps, expand matrices, execute Richi steps, update run status."""
     at_dt = _now_dt(api, now_override)
     at_iso = _format_iso(at_dt)
     run_row = _load_run(conn, run_id, api)
     if run_row["status"] in ("paused", "cancelled", "done", "failed"):
+        if force_bump:
+            conn.execute(
+                "UPDATE scenario_runs SET updated_at = ?, revision = revision + 1 WHERE id = ?",
+                (at_iso, run_id),
+            )
+            run_row = _load_run(conn, run_id, api)
         return run_row, _load_steps(conn, run_id), False
 
     definition = json.loads(run_row["definition_json"])
     by_def = _step_by_id_map(definition)
-    previous_status = run_row["status"]
+    prev = previous_status if previous_status is not None else run_row["status"]
     changed = False
 
     step_rows = _load_steps(conn, run_id)
@@ -504,16 +515,16 @@ def _advance(conn, api, database, run_id, *, project_path=None, agent=None, now_
     if new_status == "failed":
         _release_all_claims(conn, run_id)
         step_rows = _load_steps(conn, run_id)
-    if new_status != previous_status or changed:
+    if new_status != prev or changed or force_bump:
         conn.execute(
             "UPDATE scenario_runs SET status = ?, updated_at = ?, revision = revision + 1 WHERE id = ?",
             (new_status, at_iso, run_id),
         )
-        if new_status != previous_status:
+        if new_status != prev:
             _record_event(conn, at_iso, run_row["scenario_id"], run_id, None,
-                          "run_" + new_status, None, None, {"from": previous_status, "to": new_status})
+                          "run_" + new_status, None, None, {"from": prev, "to": new_status})
         run_row = _load_run(conn, run_id, api)
-    return run_row, step_rows, new_status != previous_status
+    return run_row, step_rows, new_status != prev
 
 
 # ---------------------------------------------------------------- run task entry ("Запущенные сценарии")
@@ -554,14 +565,25 @@ def _format_run_summary(run_row, step_rows, definition):
 
 
 def _sync_task_entry(conn, api, run_row, step_rows, definition, *, title=None, create=False):
-    """Create or update the run's task entry (tag: scenario-run) only on milestone transitions."""
+    """Create or update the run's task entry (tag: scenario-run) on milestone transitions (R3-A1)."""
     entry_id = run_row["task_entry_id"]
     if not entry_id:
         return
+    status = run_row["status"]
     state_map = {"running": "in_progress", "waiting": "blocked", "paused": "blocked",
                  "failed": "blocked", "done": "done", "cancelled": "done"}
-    work_state = state_map.get(run_row["status"], "in_progress")
+    work_state = state_map.get(status, "in_progress")
     summary = _format_run_summary(run_row, step_rows, definition)
+    if status == "done":
+        target_ks = "confirmed"
+        verified_at = run_row["updated_at"]
+    elif status == "cancelled":
+        target_ks = "superseded"
+        verified_at = None
+    else:
+        target_ks = "hypothesis"
+        verified_at = None
+
     if create:
         clean_title = (title or "").strip() or ("%s: %s" % (definition["title"], run_row["id"]))
         record = {
@@ -571,7 +593,7 @@ def _sync_task_entry(conn, api, run_row, step_rows, definition, *, title=None, c
             "summary": summary,
             "project_ids": [run_row["project_id"]] if run_row["project_id"] else [],
             "work_state": work_state,
-            "knowledge_state": "hypothesis",
+            "knowledge_state": target_ks,
             "sources": [
                 {"reference": "scenario:%s@v%d" % (run_row["scenario_id"], run_row["scenario_version"]),
                  "type": "scenario", "label": definition["title"]},
@@ -581,6 +603,8 @@ def _sync_task_entry(conn, api, run_row, step_rows, definition, *, title=None, c
             "aliases": [run_row["id"]],
             "expected_updated_at": None,
         }
+        if verified_at is not None:
+            record["verified_at"] = verified_at
         api.entry_put(conn, record)
         return
     # R2-J12: use entry_record() so a deleted task entry never crashes run transitions.
@@ -590,6 +614,13 @@ def _sync_task_entry(conn, api, run_row, step_rows, definition, *, title=None, c
     updated = {k: v for k, v in current.items() if k not in ("created_at", "updated_at", "history")}
     updated["summary"] = summary
     updated["work_state"] = work_state
+    if status == "done":
+        updated["knowledge_state"] = "confirmed"
+        updated["verified_at"] = run_row["updated_at"]
+    elif status == "cancelled":
+        updated["knowledge_state"] = "superseded"
+    elif current.get("knowledge_state") != "confirmed":
+        updated["knowledge_state"] = "hypothesis"
     updated["expected_updated_at"] = current["updated_at"]
     api.entry_put(conn, updated)
 
@@ -635,6 +666,18 @@ def start_run(conn, api, database, scenario_id, *, project_id=None, project_path
         raise api.NotFoundError("Unknown scenario: " + scenario_id + "; see scenario list or scenario templates")
 
     definition = record["definition"]
+    # R3-X1: fail fast when starting a workspace-wide run for a scenario with project-bound checks.
+    if project_id is None and any(
+        c["kind"] in ("file_exists", "evidence_git")
+        for step in definition.get("steps") or []
+        for c in step.get("checks") or []
+    ):
+        raise _failure(
+            api,
+            "Scenario %s uses project-bound checks (file_exists/evidence_git) and requires --project or --project-path"
+            % record["id"],
+            "invalid_input",
+        )
     try:
         provided = scenarios.parse_input_options(definition, raw_inputs, inputs_json)
         _, redacted, missing, secret_names = scenarios.resolve_inputs(definition, provided)
@@ -816,7 +859,8 @@ def _block_step_and_commit(conn, api, run_row, definition, step_key, reason, aut
 
 
 def next_step(conn, api, database, run_id, *, claim=False, step_key=None, checked_project=None,
-              project_path=None, agent=None, author=None, secrets_runtime=None, now_override=None):
+              project_path=None, agent=None, author=None, secrets_runtime=None, installed_skills=_UNSET,
+              now_override=None):
     """Return the next actionable step for this agent/chat; with claim=True, acquire a 30m lease."""
     require_v4(conn, api)
     author = author or rules.current_author()
@@ -842,8 +886,13 @@ def next_step(conn, api, database, run_id, *, claim=False, step_key=None, checke
     input_specs = definition.get("inputs") or {}
     secret_names = {name for name, spec in input_specs.items() if spec["type"] == "secret"}
 
-    # R2-J05: exact ownership match (handles both named chats and author.by is None consistently).
-    mine = [row for row in step_rows if row["status"] == "claimed" and row["claimed_by_chat"] == author.by]
+    # R2-J05 & R3-I13: exact ownership match + consistent agent filter when --agent overrides.
+    mine = [
+        row for row in step_rows
+        if row["status"] == "claimed"
+        and row["claimed_by_chat"] == author.by
+        and (not active_agent or row["executor_agent"] is None or row["executor_agent"] == active_agent)
+    ]
     ready_for_me = [
         row for row in step_rows
         if row["status"] == "ready"
@@ -885,7 +934,10 @@ def next_step(conn, api, database, run_id, *, claim=False, step_key=None, checke
     ctx = _context(run_row, step_rows, definition, project_path=project_path, agent=active_agent,
                    now_dt=at_dt, secrets_runtime=validated_secrets)
     spec = by_def[chosen["step_id"]]
-    installed = scenarios.installed_skills(active_agent) if spec["type"] == "skill" else None
+    if spec["type"] == "skill":
+        installed = scenarios.installed_skills(active_agent) if installed_skills is _UNSET else installed_skills
+    else:
+        installed = None
     try:
         rendered = _render_step_payload(chosen, spec, ctx, definition, project_path=project_path,
                                         agent=active_agent, secrets_names=secret_names, installed_skills=installed)
@@ -933,7 +985,7 @@ def next_step(conn, api, database, run_id, *, claim=False, step_key=None, checke
         if chosen["status"] == "ready":
             conn.execute(
                 "UPDATE scenario_steps SET status = 'claimed', claimed_by_chat = ?, claimed_by_agent = ?, "
-                "lease_until = ?, attempts = attempts + 1, started_at = COALESCE(started_at, ?) "
+                "lease_until = ?, stop_continuations = 0, attempts = attempts + 1, started_at = COALESCE(started_at, ?) "
                 "WHERE run_id = ? AND step_key = ?",
                 (author.by, active_agent, lease_until, at_iso, run_id, chosen["step_key"]),
             )
@@ -945,6 +997,7 @@ def next_step(conn, api, database, run_id, *, claim=False, step_key=None, checke
                 "UPDATE scenario_steps SET lease_until = ? WHERE run_id = ? AND step_key = ?",
                 (lease_until, run_id, chosen["step_key"]),
             )
+            conn.execute("UPDATE scenario_runs SET updated_at = ?, revision = revision + 1 WHERE id = ?", (at_iso, run_id))
         rendered["status"] = "claimed"
         rendered["lease_until"] = lease_until
 
@@ -966,7 +1019,8 @@ def next_step(conn, api, database, run_id, *, claim=False, step_key=None, checke
 
 
 def claim_step(conn, api, database, run_id, step_key, *, checked_project=None, project_path=None,
-               agent=None, author=None, secrets_runtime=None, expected_revision=None, now_override=None):
+               agent=None, author=None, secrets_runtime=None, expected_revision=None,
+               installed_skills=_UNSET, now_override=None):
     """Claim a specific ready step and return its rendered payload (supporting single-chat parallel fan-out, R2-J11)."""
     require_v4(conn, api)
     author = author or rules.current_author()
@@ -1005,7 +1059,10 @@ def claim_step(conn, api, database, run_id, step_key, *, checked_project=None, p
     secret_names = {name for name, s in (definition.get("inputs") or {}).items() if s["type"] == "secret"}
     ctx = _context(run_row, step_rows, definition, project_path=project_path, agent=active_agent,
                    now_dt=at_dt, secrets_runtime=validated_secrets)
-    installed = scenarios.installed_skills(active_agent) if spec["type"] == "skill" else None
+    if spec["type"] == "skill":
+        installed = scenarios.installed_skills(active_agent) if installed_skills is _UNSET else installed_skills
+    else:
+        installed = None
     try:
         rendered = _render_step_payload(step, spec, ctx, definition, project_path=project_path,
                                         agent=active_agent, secrets_names=secret_names, installed_skills=installed)
@@ -1030,7 +1087,7 @@ def claim_step(conn, api, database, run_id, step_key, *, checked_project=None, p
     if step["status"] == "ready":
         conn.execute(
             "UPDATE scenario_steps SET status = 'claimed', claimed_by_chat = ?, claimed_by_agent = ?, "
-            "lease_until = ?, attempts = attempts + 1, started_at = COALESCE(started_at, ?) "
+            "lease_until = ?, stop_continuations = 0, attempts = attempts + 1, started_at = COALESCE(started_at, ?) "
             "WHERE run_id = ? AND step_key = ?",
             (author.by, active_agent, lease_until, at_iso, run_id, step_key),
         )
@@ -1040,6 +1097,7 @@ def claim_step(conn, api, database, run_id, step_key, *, checked_project=None, p
     else:
         conn.execute("UPDATE scenario_steps SET lease_until = ? WHERE run_id = ? AND step_key = ?",
                      (lease_until, run_id, step_key))
+        conn.execute("UPDATE scenario_runs SET updated_at = ?, revision = revision + 1 WHERE id = ?", (at_iso, run_id))
 
     rendered["status"] = "claimed"
     rendered["lease_until"] = lease_until
@@ -1066,7 +1124,7 @@ def release_step(conn, api, run_id, step_key, *, checked_project=None, author=No
         raise _failure(api, "Step %s is claimed by another chat (%s)" % (step_key, step["claimed_by_chat"] or "anonymous"), "conflict")
     conn.execute(
         "UPDATE scenario_steps SET status = 'ready', claimed_by_chat = NULL, claimed_by_agent = NULL, "
-        "lease_until = NULL WHERE run_id = ? AND step_key = ?",
+        "lease_until = NULL, stop_continuations = 0 WHERE run_id = ? AND step_key = ?",
         (run_id, step_key),
     )
     conn.execute("UPDATE scenario_runs SET updated_at = ?, revision = revision + 1 WHERE id = ?", (at_iso, run_id))
@@ -1120,13 +1178,18 @@ def _verify_file_exists_io(rel_path, project_path):
 
 
 def _verify_git_evidence_io(evidence, project_path):
-    """Hardened read-only Git verification for ALL git evidence items using git_evidence._git (R2-J03)."""
+    """Hardened read-only Git verification for ALL git evidence items using git_evidence._git (R2-J03, R3-I7)."""
     git_items = [item for item in evidence if isinstance(item, dict) and item.get("type") == "git"]
     if not git_items:
         return ["check evidence_git failed: report.evidence needs a git revision"]
+    if len(git_items) > MAX_GIT_EVIDENCE:
+        return ["check evidence_git failed: at most %d git evidence items allowed (got %d)" % (
+            MAX_GIT_EVIDENCE, len(git_items))]
     if project_path is None:
         return ["check evidence_git requires --project-path to verify git revision(s)"]
     reasons = []
+    valid_revs = []
+    seen = set()
     for index, item in enumerate(git_items):
         raw_rev = item.get("revision")
         if not isinstance(raw_rev, str) or not raw_rev.strip():
@@ -1136,22 +1199,29 @@ def _verify_git_evidence_io(evidence, project_path):
         if "\x00" in rev or rev.startswith("-") or not _GIT_REV.fullmatch(rev):
             reasons.append("check evidence_git failed: invalid git revision syntax: %r" % rev[:80])
             continue
-        try:
-            _out, returncode = git_evidence._git(
-                Path(project_path),
-                ["rev-parse", "--verify", "--quiet", "--end-of-options", rev + "^{commit}"],
-                allowed=(0, 1),
-            )
-        except (git_evidence.GitEvidenceError, OSError) as exc:
-            reasons.append("check evidence_git failed: " + str(exc))
-            continue
-        if returncode != 0:
-            reasons.append("check evidence_git failed: revision not found in repository: " + rev)
+        if rev not in seen:
+            seen.add(rev)
+            valid_revs.append(rev)
+    if valid_revs:
+        with git_evidence.operation_deadline(time.monotonic() + git_evidence.TIMEOUT):
+            for rev in valid_revs:
+                try:
+                    _out, returncode = git_evidence._git(
+                        Path(project_path),
+                        ["rev-parse", "--verify", "--quiet", "--end-of-options", rev + "^{commit}"],
+                        allowed=(0, 1),
+                    )
+                except (git_evidence.GitEvidenceError, OSError) as exc:
+                    reasons.append("check evidence_git failed: " + str(exc))
+                    continue
+                if returncode != 0:
+                    reasons.append("check evidence_git failed: revision not found in repository: " + rev)
     return reasons
 
 
-def prepare_report_preflight(conn, api, run_id, step_key, report, *, checked_project=None, project_path=None):
-    """Load DB context for read-only report checks inside a brief read transaction (R2-J03)."""
+def prepare_report_preflight(conn, api, run_id, step_key, report, *, checked_project=None, project_path=None,
+                             author=None, now_dt=None):
+    """Load DB context for read-only report checks inside a brief read transaction (R2-J03, R3-I2, R3-C2)."""
     if conn.execute("PRAGMA user_version").fetchone()[0] < 4:
         return None
     if not isinstance(report, dict) or report.get("status") != "done":
@@ -1160,12 +1230,19 @@ def prepare_report_preflight(conn, api, run_id, step_key, report, *, checked_pro
     if row is None:
         return None
     run_row = dict(row)
+    if run_row["status"] in ("paused", "cancelled", "done", "failed"):
+        return None
     if checked_project is not None and run_row["project_id"] != checked_project:
         return None
     definition = json.loads(run_row["definition_json"])
     step_rows = _load_steps(conn, run_id)
     step = next((r for r in step_rows if r["step_key"] == step_key), None)
-    if step is None:
+    if step is None or step["status"] != "claimed":
+        return None
+    at_dt = now_dt if now_dt is not None else _now_dt(api)
+    if author is not None and step["claimed_by_chat"] != author.by:
+        return None
+    if step["lease_until"] and _parse_iso(step["lease_until"]) <= at_dt:
         return None
     spec = _step_by_id_map(definition).get(step["step_id"])
     if spec is None:
@@ -1173,12 +1250,12 @@ def prepare_report_preflight(conn, api, run_id, step_key, report, *, checked_pro
     checks = spec.get("checks") or []
     if not any(c["kind"] in ("file_exists", "evidence_git") for c in checks):
         return None
-    ctx = _context(run_row, step_rows, definition, project_path=project_path)
+    ctx = _context(run_row, step_rows, definition, project_path=project_path,
+                   agent=author.agent if author is not None else None, now_dt=at_dt)
     step_ctx = dict(ctx)
     if step["matrix_json"]:
         step_ctx["matrix"] = json.loads(step["matrix_json"])
     return {
-        "run_revision": run_row["revision"],
         "project_path": str(project_path) if project_path is not None else None,
         "checks": checks,
         "step_ctx": step_ctx,
@@ -1187,16 +1264,16 @@ def prepare_report_preflight(conn, api, run_id, step_key, report, *, checked_pro
 
 
 def run_report_preflight_io(prepared):
-    """Run read-only filesystem/git report checks completely outside any SQLite transaction (R2-J03)."""
+    """Run read-only filesystem/git report checks completely outside any SQLite transaction (R2-J03, R3-I2, R3-A3)."""
     if prepared is None:
         return None
     project_path = prepared["project_path"]
     step_ctx = prepared["step_ctx"]
     evidence = prepared["evidence"]
     io_results = {
-        "run_revision": prepared["run_revision"],
         "project_path": project_path,
         "file_exists": {},
+        "evidence": evidence,
         "evidence_git": None,
     }
     for check in prepared["checks"]:
@@ -1204,20 +1281,23 @@ def run_report_preflight_io(prepared):
             try:
                 rel_path = _render_field(check["path"], step_ctx, line=True,
                                          limit=scenario_format.MAX_PROJECT_PATH, field="check.file_exists", empty=False)
-            except (templating.Unresolved, ValueError) as exc:
-                io_results["file_exists"][check["path"]] = "check file_exists failed: " + str(exc)
-            else:
-                io_results["file_exists"][check["path"]] = _verify_file_exists_io(rel_path, project_path)
+            except (templating.Unresolved, ValueError):
+                continue
+            if rel_path not in io_results["file_exists"]:
+                io_results["file_exists"][rel_path] = _verify_file_exists_io(rel_path, project_path)
         elif check["kind"] == "evidence_git" and io_results["evidence_git"] is None:
-            io_results["evidence_git"] = _verify_git_evidence_io(evidence, project_path)
+            if len(evidence) <= MAX_EVIDENCE_ITEMS:
+                io_results["evidence_git"] = _verify_git_evidence_io(evidence, project_path)
     return io_results
 
 
-def preflight_report_checks(conn, api, run_id, step_key, report, *, checked_project=None, project_path=None):
+def preflight_report_checks(conn, api, run_id, step_key, report, *, checked_project=None, project_path=None,
+                            author=None, now_dt=None):
     """Convenience wrapper combining prepare_report_preflight and run_report_preflight_io."""
     return run_report_preflight_io(
         prepare_report_preflight(conn, api, run_id, step_key, report,
-                                 checked_project=checked_project, project_path=project_path)
+                                 checked_project=checked_project, project_path=project_path,
+                                 author=author, now_dt=now_dt)
     )
 
 
@@ -1229,7 +1309,11 @@ def _validate_report(report, step_row, step_spec, ctx, project_path, preflight_i
     status = report.get("status")
     if status not in ("done", "failed"):
         return ["report.status must be 'done' or 'failed'"]
-    if len(json.dumps(report, ensure_ascii=False).encode("utf-8")) > MAX_REPORT_BYTES:
+    try:
+        encoded = json.dumps(report, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError):
+        return ["report must be valid finite JSON"]
+    if len(encoded) > MAX_REPORT_BYTES:
         return ["report is larger than %d bytes" % MAX_REPORT_BYTES]
 
     summary = report.get("summary")
@@ -1254,7 +1338,13 @@ def _validate_report(report, step_row, step_spec, ctx, project_path, preflight_i
     if data is not None and not isinstance(data, dict):
         reasons.append("report.data must be a JSON object")
         data = {}
-    data = data or {}
+    else:
+        data = data or {}
+        if data:
+            try:
+                scenario_format._shallow(data, "report.data")
+            except scenario_format.FormatError as exc:
+                reasons.append(str(exc))
 
     files = report.get("files")
     if files is not None and (not isinstance(files, list) or not all(isinstance(item, str) and "\x00" not in item for item in files)):
@@ -1266,7 +1356,15 @@ def _validate_report(report, step_row, step_spec, ctx, project_path, preflight_i
     if evidence is not None and (not isinstance(evidence, list) or not all(isinstance(item, dict) for item in evidence)):
         reasons.append("report.evidence must be a list of objects")
         evidence = []
-    evidence = evidence or []
+    else:
+        evidence = evidence or []
+        if len(evidence) > MAX_EVIDENCE_ITEMS:
+            reasons.append("report.evidence may contain at most %d items" % MAX_EVIDENCE_ITEMS)
+        elif evidence:
+            try:
+                scenario_format._shallow(evidence, "report.evidence")
+            except scenario_format.FormatError as exc:
+                reasons.append(str(exc))
 
     if status == "failed":
         return reasons
@@ -1294,6 +1392,10 @@ def _validate_report(report, step_row, step_spec, ctx, project_path, preflight_i
     step_ctx = dict(ctx)
     if step_row["matrix_json"]:
         step_ctx["matrix"] = json.loads(step_row["matrix_json"])
+    expected_root = str(project_path) if project_path is not None else None
+    preflight_matches_root = (
+        preflight_io is not None and preflight_io.get("project_path") == expected_root
+    )
 
     for check in step_spec.get("checks") or []:
         kind = check["kind"]
@@ -1310,22 +1412,21 @@ def _validate_report(report, step_row, step_spec, ctx, project_path, preflight_i
             if isinstance(exit_code, bool) or not isinstance(exit_code, int) or exit_code != check["expect"]:
                 reasons.append("check exit_code failed: expected %d, got %r" % (check["expect"], exit_code))
         elif kind == "file_exists":
-            if preflight_io is not None and check["path"] in preflight_io["file_exists"]:
-                err = preflight_io["file_exists"][check["path"]]
-                if err:
-                    reasons.append(err)
+            try:
+                rel_path = _render_field(check["path"], step_ctx, line=True,
+                                         limit=scenario_format.MAX_PROJECT_PATH, field="check.file_exists", empty=False)
+            except (templating.Unresolved, ValueError) as exc:
+                reasons.append("check file_exists failed: " + str(exc))
             else:
-                try:
-                    rel_path = _render_field(check["path"], step_ctx, line=True,
-                                             limit=scenario_format.MAX_PROJECT_PATH, field="check.file_exists", empty=False)
-                except (templating.Unresolved, ValueError) as exc:
-                    reasons.append("check file_exists failed: " + str(exc))
+                if preflight_matches_root and rel_path in (preflight_io.get("file_exists") or {}):
+                    err = preflight_io["file_exists"][rel_path]
                 else:
                     err = _verify_file_exists_io(rel_path, project_path)
-                    if err:
-                        reasons.append(err)
+                if err:
+                    reasons.append(err)
         elif kind == "evidence_git":
-            if preflight_io is not None and preflight_io["evidence_git"] is not None:
+            if (preflight_matches_root and preflight_io.get("evidence_git") is not None
+                    and preflight_io.get("evidence") == evidence):
                 reasons.extend(preflight_io["evidence_git"])
             else:
                 reasons.extend(_verify_git_evidence_io(evidence, project_path))
@@ -1360,19 +1461,14 @@ def report_step(conn, api, database, run_id, step_key, report, *, checked_projec
 
     spec = by_def[step["step_id"]]
     ctx = _context(run_row, step_rows, definition, project_path=project_path, agent=author.agent, now_dt=at_dt)
-    active_preflight = preflight_io
-    if active_preflight is not None:
-        expected_root = str(project_path) if project_path is not None else None
-        if (active_preflight.get("run_revision") != run_row["revision"]
-                or active_preflight.get("project_path") != expected_root):
-            active_preflight = None
-    reasons = _validate_report(report, step, spec, ctx, project_path, preflight_io=active_preflight)
+    reasons = _validate_report(report, step, spec, ctx, project_path, preflight_io=preflight_io)
     if reasons:
         lease_until = _format_iso(at_dt + timedelta(seconds=LEASE_SECONDS))
         conn.execute(
             "UPDATE scenario_steps SET rejections = rejections + 1, lease_until = ? WHERE run_id = ? AND step_key = ?",
             (lease_until, run_id, step_key),
         )
+        conn.execute("UPDATE scenario_runs SET updated_at = ?, revision = revision + 1 WHERE id = ?", (at_iso, run_id))
         _record_event(conn, at_iso, run_row["scenario_id"], run_id, step_key,
                       "report_rejected", author.by, author.agent, {"reasons": reasons})
         return {"status": "rejected", "run_id": run_id, "step_key": step_key,
@@ -1387,7 +1483,7 @@ def report_step(conn, api, database, run_id, step_key, report, *, checked_projec
         "agent": author.agent,
         "chat": author.by,
     }
-    if "exit_code" in report:
+    if report.get("exit_code") is not None:
         stored["exit_code"] = report["exit_code"]
     elif "exit_code" in stored["data"]:
         stored["exit_code"] = stored["data"]["exit_code"]
@@ -1404,7 +1500,7 @@ def report_step(conn, api, database, run_id, step_key, report, *, checked_projec
                   author.by, author.agent, {"summary": stored["summary"][:300]})
 
     run_row, step_rows, status_changed = _advance(conn, api, database, run_id, project_path=project_path,
-                                                  agent=author.agent, now_override=at_dt)
+                                                  agent=author.agent, now_override=at_dt, force_bump=True)
     if status_changed:
         _sync_task_entry(conn, api, run_row, step_rows, definition)
     return {"status": "accepted", "run_id": run_id, "step_key": step_key,
@@ -1412,16 +1508,18 @@ def report_step(conn, api, database, run_id, step_key, report, *, checked_projec
 
 
 def _parse_checklist_answer(value, items, ctx, api):
-    """Parse checklist answer into canonical 0-based indices and enforce required: true items (R2-J13)."""
+    """Parse checklist answer into canonical 0-based indices, rejecting ambiguous texts and enforcing required items."""
     if value in ("done", "all", "ok"):
         return list(range(len(items)))
     rendered_texts = {}
     for idx, item in enumerate(items):
+        texts = {item["text"]}
         try:
-            rendered_texts[_render_field(item["text"], ctx, line=True, limit=1000, field="item")] = idx
+            texts.add(_render_field(item["text"], ctx, line=True, limit=1000, field="item"))
         except (templating.Unresolved, ValueError):
-            rendered_texts[item["text"]] = idx
-        rendered_texts[item["text"]] = idx
+            pass
+        for text in texts:
+            rendered_texts.setdefault(text, []).append(idx)
 
     parts = [part.strip() for part in value.split(",") if part.strip()]
     if not parts:
@@ -1434,7 +1532,15 @@ def _parse_checklist_answer(value, items, ctx, api):
                 raise _failure(api, "Checklist index out of range: " + part, "invalid_answer")
             selected.add(idx)
         elif part in rendered_texts:
-            selected.add(rendered_texts[part])
+            matches = rendered_texts[part]
+            if len(matches) > 1:
+                raise _failure(
+                    api,
+                    "Ambiguous checklist item %r (matches indices %s); answer with 0-based indices instead"
+                    % (part, ", ".join(str(i) for i in matches)),
+                    "invalid_answer",
+                )
+            selected.add(matches[0])
         else:
             raise _failure(api, "Unknown checklist item: " + part, "invalid_answer")
     missing_required = [idx for idx, item in enumerate(items) if item.get("required") and idx not in selected]
@@ -1470,6 +1576,8 @@ def answer_step(conn, api, database, run_id, step_key, value, *, comment=None, c
     spec = by_def[step["step_id"]]
     params = spec.get("params") or {}
     if spec["type"] == "gate":
+        if not value.strip():
+            raise _failure(api, "Gate answer must be nonempty text", "invalid_answer")
         options = params.get("options")
         if options and value not in options:
             raise _failure(api, "Answer must be one of: " + ", ".join(options), "invalid_answer")
@@ -1479,21 +1587,36 @@ def answer_step(conn, api, database, run_id, step_key, value, *, comment=None, c
                   "summary": value + (": " + comment if comment else "")}
     else:
         ctx = _context(run_row, step_rows, definition, project_path=project_path, agent=author.agent, now_dt=at_dt)
-        checked = _parse_checklist_answer(value, params["items"], ctx, api)
+        step_ctx = dict(ctx)
+        if step["matrix_json"]:
+            step_ctx["matrix"] = json.loads(step["matrix_json"])
+        checked = _parse_checklist_answer(value, params["items"], step_ctx, api)
         stored = {"status": "done", "checked": checked, "summary": "checked %d/%d" % (len(checked), len(params["items"]))}
 
     conn.execute(
         "UPDATE scenario_steps SET status = 'done', result_json = ?, finished_at = ? WHERE run_id = ? AND step_key = ?",
         (json.dumps(stored, ensure_ascii=False, separators=(",", ":")), at_iso, run_id, step_key),
     )
+    event_detail = {"value": value}
+    if comment is not None:
+        event_detail["comment"] = comment
     _record_event(conn, at_iso, run_row["scenario_id"], run_id, step_key,
-                  "answered", author.by, author.agent, {"value": value, "comment": comment})
+                  "answered", author.by, author.agent, event_detail)
 
     run_row, step_rows, status_changed = _advance(conn, api, database, run_id, project_path=project_path,
-                                                  agent=author.agent, now_override=at_dt)
+                                                  agent=author.agent, now_override=at_dt, force_bump=True)
     if status_changed:
         _sync_task_entry(conn, api, run_row, step_rows, definition)
     return {"status": "answered", "run_id": run_id, "step_key": step_key, "run_status": run_row["status"]}
+
+
+def _has_other_blocking_failure(step_rows, by_def, exclude_key):
+    return any(
+        row["step_key"] != exclude_key
+        and row["status"] == "failed"
+        and not by_def[row["step_id"]].get("continue_on_failure")
+        for row in step_rows
+    )
 
 
 def skip_step(conn, api, database, run_id, step_key, reason, *, checked_project=None, project_path=None,
@@ -1510,40 +1633,41 @@ def skip_step(conn, api, database, run_id, step_key, reason, *, checked_project=
     _check_expected_revision(run_row, expected_revision, api)
     if run_row["status"] in ("paused", "cancelled", "done"):
         raise _failure(api, "Run %s is %s and cannot skip steps" % (run_id, run_row["status"]), "invalid_state")
-    step = conn.execute("SELECT * FROM scenario_steps WHERE run_id = ? AND step_key = ?", (run_id, step_key)).fetchone()
+    step_rows = _load_steps(conn, run_id)
+    if _expire_leases(conn, run_row, step_rows, at_dt, at_iso):
+        step_rows = _load_steps(conn, run_id)
+    step = next((row for row in step_rows if row["step_key"] == step_key), None)
     if step is None:
         raise api.NotFoundError("Unknown step %s in run %s" % (step_key, run_id))
-    if step["status"] in ("done", "skipped"):
-        raise _failure(api, "Step %s is already %s" % (step_key, step["status"]), "invalid_state")
+    if step["status"] in ("pending", "done", "skipped"):
+        raise _failure(api, "Step %s is %s and cannot be skipped" % (step_key, step["status"]), "invalid_state")
     if step["status"] == "claimed" and step["claimed_by_chat"] != author.by:
         raise _failure(api, "Step %s is claimed by another chat (%s)" % (step_key, step["claimed_by_chat"] or "anonymous"), "conflict")
 
+    definition = json.loads(run_row["definition_json"])
+    by_def = _step_by_id_map(definition)
     previous_status = run_row["status"]
     conn.execute(
         "UPDATE scenario_steps SET status = 'skipped', claimed_by_chat = NULL, claimed_by_agent = NULL, "
-        "lease_until = NULL, reason = ?, finished_at = ? WHERE run_id = ? AND step_key = ?",
+        "lease_until = NULL, stop_continuations = 0, reason = ?, finished_at = ? WHERE run_id = ? AND step_key = ?",
         (reason.strip(), at_iso, run_id, step_key),
     )
     _record_event(conn, at_iso, run_row["scenario_id"], run_id, step_key,
                   "step_skipped", author.by, author.agent, {"reason": reason.strip()})
-    if previous_status == "failed":
-        conn.execute("UPDATE scenario_runs SET status = 'running', updated_at = ?, revision = revision + 1 WHERE id = ?",
-                     (at_iso, run_id))
-    definition = json.loads(run_row["definition_json"])
-    run_row, step_rows, status_changed = _advance(conn, api, database, run_id, project_path=project_path,
-                                                  agent=author.agent, now_override=at_dt)
-    if status_changed or run_row["status"] != previous_status:
-        if previous_status == "failed" and not status_changed:
-            _record_event(conn, at_iso, run_row["scenario_id"], run_id, None,
-                          "run_" + run_row["status"], author.by, author.agent,
-                          {"from": previous_status, "to": run_row["status"]})
+    if previous_status == "failed" and not _has_other_blocking_failure(step_rows, by_def, step_key):
+        conn.execute("UPDATE scenario_runs SET status = 'running' WHERE id = ?", (run_id,))
+    run_row, step_rows, status_changed = _advance(
+        conn, api, database, run_id, project_path=project_path, agent=author.agent,
+        now_override=at_dt, force_bump=True, previous_status=previous_status,
+    )
+    if status_changed:
         _sync_task_entry(conn, api, run_row, step_rows, definition)
     return {"status": "skipped", "run_id": run_id, "step_key": step_key, "run_status": run_row["status"]}
 
 
 def retry_step(conn, api, database, run_id, step_key=None, *, checked_project=None, project_path=None,
                author=None, expected_revision=None, now_override=None):
-    """Retry a failed or blocked step, enforcing retry.max when configured (R2-J13)."""
+    """Retry a failed or blocked step, enforcing retry.max and downstream invariants (R2-J13, R3-S3, R3-C1)."""
     require_v4(conn, api)
     author = author or rules.current_author()
     at_dt = _now_dt(api, now_override)
@@ -1555,7 +1679,11 @@ def retry_step(conn, api, database, run_id, step_key=None, *, checked_project=No
         raise _failure(api, "Run %s is %s and cannot be retried" % (run_id, run_row["status"]), "invalid_state")
     step_rows = _load_steps(conn, run_id)
     if step_key is None:
-        target = next((row for row in step_rows if row["status"] in ("failed", "blocked")), None)
+        if run_row["status"] == "failed":
+            target = next((row for row in step_rows if row["status"] == "failed"), None) or next(
+                (row for row in step_rows if row["status"] == "blocked"), None)
+        else:
+            target = next((row for row in step_rows if row["status"] in ("failed", "blocked")), None)
         if target is None:
             raise _failure(api, "No failed or blocked step to retry in run " + run_id, "invalid_state")
     else:
@@ -1566,7 +1694,19 @@ def retry_step(conn, api, database, run_id, step_key=None, *, checked_project=No
             raise _failure(api, "Step %s is %s, not failed or blocked" % (step_key, target["status"]), "invalid_state")
 
     definition = json.loads(run_row["definition_json"])
-    spec = _step_by_id_map(definition)[target["step_id"]]
+    by_def = _step_by_id_map(definition)
+    spec = by_def[target["step_id"]]
+    # R3-S3 / R3-I9: refuse retrying a failed step once any downstream dependent has already left pending.
+    if target["status"] == "failed" or spec.get("continue_on_failure"):
+        ancestry = scenario_format.ancestors(definition)
+        for row in step_rows:
+            if target["step_id"] in ancestry.get(row["step_id"], set()) and row["status"] != "pending":
+                raise _failure(
+                    api,
+                    "Cannot retry step %s because downstream step %s is already %s"
+                    % (target["step_key"], row["step_key"], row["status"]),
+                    "invalid_state",
+                )
     retry_cfg = spec.get("retry")
     if retry_cfg is not None and target["status"] == "failed":
         max_attempts = 1 + retry_cfg["max"]
@@ -1574,21 +1714,25 @@ def retry_step(conn, api, database, run_id, step_key=None, *, checked_project=No
             raise _failure(api, "Step %s reached its retry limit (%d retries)" % (
                 target["step_key"], retry_cfg["max"]), "retry_limit")
 
+    previous_status = run_row["status"]
     reset_status = "pending" if target["status"] == "blocked" and target["matrix_index"] is None else "ready"
     if spec["type"] in ("gate", "checklist") and reset_status == "ready":
         reset_status = "waiting_human"
     conn.execute(
         "UPDATE scenario_steps SET status = ?, claimed_by_chat = NULL, claimed_by_agent = NULL, lease_until = NULL, "
-        "result_json = NULL, reason = NULL, finished_at = NULL WHERE run_id = ? AND step_key = ?",
+        "stop_continuations = 0, result_json = NULL, reason = NULL, finished_at = NULL WHERE run_id = ? AND step_key = ?",
         (reset_status, run_id, target["step_key"]),
     )
-    conn.execute("UPDATE scenario_runs SET status = 'running', updated_at = ?, revision = revision + 1 WHERE id = ?",
-                 (at_iso, run_id))
+    if previous_status == "failed" and not _has_other_blocking_failure(step_rows, by_def, target["step_key"]):
+        conn.execute("UPDATE scenario_runs SET status = 'running' WHERE id = ?", (run_id,))
     _record_event(conn, at_iso, run_row["scenario_id"], run_id, target["step_key"],
                   "retried", author.by, author.agent, {})
-    run_row, step_rows, _ = _advance(conn, api, database, run_id, project_path=project_path,
-                                     agent=author.agent, now_override=at_dt)
-    _sync_task_entry(conn, api, run_row, step_rows, definition)
+    run_row, step_rows, status_changed = _advance(
+        conn, api, database, run_id, project_path=project_path, agent=author.agent,
+        now_override=at_dt, force_bump=True, previous_status=previous_status,
+    )
+    if status_changed:
+        _sync_task_entry(conn, api, run_row, step_rows, definition)
     return {"status": "retried", "run_id": run_id, "step_key": target["step_key"], "run_status": run_row["status"]}
 
 
@@ -1708,7 +1852,7 @@ def list_runs(conn, api, *, active=False, chat=None, project_id=None, scenario_i
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     rows = conn.execute(
         "SELECT id, scenario_id, scope, project_id, scenario_version, status, task_entry_id, "
-        "created_by_chat, created_by_agent, created_at, updated_at FROM scenario_runs"
+        "created_by_chat, created_by_agent, created_at, updated_at, revision FROM scenario_runs"
         + where + " ORDER BY updated_at DESC, id DESC LIMIT ?",
         params + [limit],
     ).fetchall()

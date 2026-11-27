@@ -254,6 +254,47 @@ class ScenariosStoreTests(unittest.TestCase):
         _, redacted_set, _, _ = scenarios.resolve_inputs(defn, {"tok": "abc"})
         self.assertEqual(redacted_set["tok"], "<secret>")
 
+    def test_unmocked_installed_skills_pinned_agent_utf8_stdin_and_huge_int_r3(self):
+        # R3-I1: unmocked installed_skills works with real synthetic HOME + skill folder.
+        fake_home = Path(self.temp.name) / "fake_home"
+        skill_dir = fake_home / ".codex" / "skills" / "code-review"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("---\nname: code-review\ndescription: Review\n---\nBody\n", encoding="utf-8")
+        with mock.patch.dict(os.environ, {"HOME": str(fake_home)}, clear=False):
+            shown_ok = scenarios.show(self.conn, memory, "review", agent="codex")
+            self.assertNotIn("missing_skills", shown_ok)
+            shown_miss = scenarios.show(self.conn, memory, "review", agent="claude")
+            self.assertEqual(shown_miss["missing_skills"][0]["skill"], "code-review")
+            # R3-C4: pinned executor.agent is used instead of caller's agent!
+            pinned_def = {
+                "format": "richi-scenario", "format_version": 1, "id": "pinned-scn", "title": "Pinned",
+                "steps": [{
+                    "id": "s1", "type": "skill", "executor": {"agent": "codex"},
+                    "params": {"skill": {"per_agent": {"codex": "code-review", "claude": "missing-cl"}}},
+                    "checks": [{"kind": "evidence_git"}],
+                }],
+            }
+            with memory.transaction(self.conn):
+                scenarios.change(self.conn, {"action": "add", "scope": "global", "definition": pinned_def},
+                                 memory, author=self.author)
+            shown_p = scenarios.show(self.conn, memory, "pinned-scn", agent="claude")
+            self.assertEqual(shown_p["resolved_skills"]["s1"], "code-review")
+            self.assertNotIn("missing_skills", shown_p)
+            planned_p = scenarios.plan(self.conn, memory, "pinned-scn", agent="claude")
+            self.assertEqual(planned_p["steps"][0]["skill"], "code-review")
+            # R3-X1: plan warns when project_id is None and scenario uses evidence_git.
+            self.assertTrue(any("project-bound checks" in w for w in planned_p["warnings"]))
+        # R3-I12: invalid UTF-8 on stdin buffer maps to invalid_json (not UnicodeDecodeError).
+        import io
+        fake_stdin = SimpleNamespace(buffer=io.BytesIO(b"\xff\xfe"))
+        with mock.patch("sys.stdin", fake_stdin):
+            with self.assertRaises(memory.MemoryError) as caught_u:
+                scenarios.read_json_input("-", memory, limit=1024)
+        self.assertEqual(caught_u.exception.code, "invalid_json")
+        # R3-X2: huge integer CLI input fails with FormatError cleanly.
+        with self.assertRaises(scenario_format.FormatError):
+            scenarios._coerce_cli_input("n", {"type": "number"}, "9" * 400)
+
 
 if __name__ == "__main__":
     unittest.main()

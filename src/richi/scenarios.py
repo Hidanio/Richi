@@ -18,9 +18,10 @@ read-only). Resolving a scenario ID checks the project scope first, then global,
 then built-in templates, so a fresh workspace can run or preview `review` right
 away and shadow it later with `scenario copy`.
 
-Every definition change is recorded in `scenario-log:` rows (latest 200) and,
-on schema 4+, also in `scenario_events` so the unified journal shows definition
-edits alongside run events.
+Every definition change is recorded in `scenario_events` on schema 4+ so the
+unified journal shows definition edits alongside run events; on pre-v4 stores
+it falls back to `scenario-log:` metadata rows (latest 200), which
+`richi migrate` backfills into `scenario_events`.
 """
 from datetime import datetime, timezone
 import json
@@ -305,7 +306,11 @@ def installed_skills(agent_id, settings=None):
     if not agent_id:
         return None
     try:
-        data = skill_catalog.catalog(registry=settings.entries if settings else None)
+        reg = agents.registry(entries=settings.entries if settings else None)
+        target = [item for item in reg if item.id == agent_id]
+        if not target:
+            return None
+        data = skill_catalog.catalog(registry=target)
     except Exception:
         return None
     totals = data.get("totals")
@@ -328,10 +333,10 @@ def _resolve_agent(explicit_agent, settings=None):
     return agents.detect(entries=entries)
 
 
-def show(conn, api, scenario_id, *, project_id=None, scope=None, agent=None):
+def show(conn, api, scenario_id, *, project_id=None, scope=None, agent=None, settings=None):
     if project_id is not None:
         api.require_project(conn, project_id)
-    settings = agents.read_settings()
+    settings = settings if settings is not None else agents.read_settings()
     try:
         record = resolve(conn, scenario_id, project_id, scope=scope)
     except scenario_format.UnsupportedVersion as exc:
@@ -341,15 +346,25 @@ def show(conn, api, scenario_id, *, project_id=None, scope=None, agent=None):
     if record is None:
         raise api.NotFoundError("Unknown scenario: " + scenario_id + "; see scenario list or scenario templates")
     detected = _resolve_agent(agent, settings)
-    installed = _installed_skills(detected, settings)
+    installed_by_agent = {}
+
+    def _get_installed(target_agent):
+        if target_agent not in installed_by_agent:
+            installed_by_agent[target_agent] = _installed_skills(target_agent, settings)
+        return installed_by_agent[target_agent]
+
     resolved_skills = {}
     missing_skills = []
     for step in record["definition"]["steps"]:
         if step["type"] == "skill":
-            chosen = skill_for(step["params"]["skill"], detected)
+            _, pinned_agent = scenario_format.executor(step)
+            target_agent = pinned_agent or detected
+            chosen = skill_for(step["params"]["skill"], target_agent)
             resolved_skills[step["id"]] = chosen
-            if detected and chosen and installed is not None and chosen not in installed:
-                missing_skills.append({"step": step["id"], "agent": detected, "skill": chosen})
+            if target_agent and chosen:
+                installed = _get_installed(target_agent)
+                if installed is not None and chosen not in installed:
+                    missing_skills.append({"step": step["id"], "agent": target_agent, "skill": chosen})
     result = dict(record)
     result["view"] = "scenario"
     result["agent"] = detected
@@ -393,8 +408,17 @@ def _coerce_cli_input(name, spec, raw):
             return False
         raise scenario_format.FormatError("must be true or false", "inputs." + name)
     if kind == "number":
+        cleaned = raw.strip()
         try:
-            val = float(raw) if "." in raw else int(raw)
+            if "." in cleaned or "e" in cleaned.lower():
+                val = float(cleaned)
+            else:
+                digits = cleaned.lstrip("+-")
+                if not digits or len(digits) > scenario_format.MAX_DIGITS:
+                    raise scenario_format.FormatError(
+                        "number is longer than %d digits" % scenario_format.MAX_DIGITS, "inputs." + name
+                    )
+                val = int(cleaned)
         except ValueError as exc:
             raise scenario_format.FormatError("must be a number", "inputs." + name) from exc
         return scenario_format.check_input(name, spec, val)
@@ -445,11 +469,11 @@ def _topological_steps(steps):
 
 
 def plan(conn, api, scenario_id, *, project_id=None, project_path=None, scope=None, agent=None,
-         raw_inputs=None, inputs_json=None):
+         raw_inputs=None, inputs_json=None, settings=None):
     """Dry-run preview: resolve skills, inputs, run_title and step plan without writing."""
     if project_id is not None:
         api.require_project(conn, project_id)
-    settings = agents.read_settings()
+    settings = settings if settings is not None else agents.read_settings()
     try:
         record = resolve(conn, scenario_id, project_id, scope=scope)
     except scenario_format.UnsupportedVersion as exc:
@@ -465,7 +489,13 @@ def plan(conn, api, scenario_id, *, project_id=None, project_path=None, scope=No
     except scenario_format.FormatError as exc:
         raise _failure(api, str(exc), "invalid_input") from exc
     detected = _resolve_agent(agent, settings)
-    installed = _installed_skills(detected, settings)
+    installed_by_agent = {}
+
+    def _get_installed(target_agent):
+        if target_agent not in installed_by_agent:
+            installed_by_agent[target_agent] = _installed_skills(target_agent, settings)
+        return installed_by_agent[target_agent]
+
     now_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     preview_inputs = {k: v for k, v in values.items() if k not in secrets}
     context = {
@@ -485,6 +515,7 @@ def plan(conn, api, scenario_id, *, project_id=None, project_path=None, scope=No
 
     planned_steps = []
     warnings = []
+    needs_project_checks = False
     for step in _topological_steps(definition["steps"]):
         role, pinned_agent = scenario_format.executor(step)
         entry = {
@@ -503,17 +534,29 @@ def plan(conn, api, scenario_id, *, project_id=None, project_path=None, scope=No
             except (templating.Unresolved, ValueError) as exc:
                 entry["matrix_pending"] = str(exc)
         if step["type"] == "skill":
-            chosen = skill_for(step["params"]["skill"], detected)
+            target_agent = pinned_agent or detected
+            chosen = skill_for(step["params"]["skill"], target_agent)
             entry["skill"] = chosen
-            if detected and chosen and installed is not None and chosen not in installed:
-                warnings.append("Agent %s does not have skill %s (step %s)" % (detected, chosen, step["id"]))
+            if target_agent:
+                if chosen is None:
+                    warnings.append("No skill configured for agent %s (step %s)" % (target_agent, step["id"]))
+                else:
+                    installed = _get_installed(target_agent)
+                    if installed is not None and chosen not in installed:
+                        warnings.append("Agent %s does not have skill %s (step %s)" % (target_agent, chosen, step["id"]))
         if step.get("hints"):
             entry["hints"] = step["hints"]
         if step.get("outputs"):
             entry["outputs"] = step["outputs"]
         if step.get("checks"):
             entry["checks"] = step["checks"]
+            if any(c["kind"] in ("file_exists", "evidence_git") for c in step["checks"]):
+                needs_project_checks = True
         planned_steps.append(entry)
+    if project_id is None and needs_project_checks:
+        warnings.append(
+            "Scenario uses project-bound checks (file_exists/evidence_git) and requires --project or --project-path to run"
+        )
 
     return {
         "view": "scenario-plan",
@@ -665,11 +708,15 @@ def read_json_input(path_arg, api, limit=MAX_CHANGE):
     """Read a bounded JSON object from a file path or '-' (stdin) before acquiring a write lock."""
     try:
         if path_arg == "-":
-            raw_text = sys.stdin.read(limit + 1)
-            try:
-                raw_bytes = raw_text.encode("utf-8")
-            except UnicodeEncodeError as exc:
-                raise _failure(api, "JSON input must be UTF-8 text", "invalid_json") from exc
+            buf = getattr(sys.stdin, "buffer", None)
+            if buf is not None:
+                raw_bytes = buf.read(limit + 1)
+            else:
+                try:
+                    raw_text = sys.stdin.read(limit + 1)
+                    raw_bytes = raw_text.encode("utf-8")
+                except (UnicodeDecodeError, UnicodeEncodeError) as exc:
+                    raise _failure(api, "JSON input must be UTF-8 text", "invalid_json") from exc
         else:
             with Path(path_arg).expanduser().open("rb") as handle:
                 raw_bytes = handle.read(limit + 1)

@@ -85,6 +85,30 @@ class ScenarioMigrationTests(unittest.TestCase):
         self.assertEqual(res["schema_version"], 4)
         scenario_runs.require_v4(self.conn, memory)
 
+    def test_corrupt_scenario_log_backfill_and_storage_deep_accounting_r3_i8_a6(self):
+        from types import SimpleNamespace
+        from richi import storage
+        self.seed_schema_3()
+        with memory.transaction(self.conn):
+            self.conn.execute(
+                "INSERT INTO metadata(key, value) VALUES (?, ?)",
+                ("scenario-log:2026-01-01T00:00:00Z:corrupt",
+                 '{"at": "2026-01-01T00:00:00Z", "action": "created", "id": ["bad"], "by": 123, "agent": {}}'),
+            )
+        migrated = graph.migrate(self.conn, self.db, memory)
+        self.assertEqual(migrated["status"], "migrated")
+        stats = storage.run(
+            self.conn,
+            SimpleNamespace(action="stats", deep=True, files=False, max_chars=20000, storage_workspace="demo"),
+            memory,
+            self.db,
+        )
+        deep = stats["deep"]
+        for tbl in ("scenario_runs", "scenario_steps", "scenario_events"):
+            self.assertIn(tbl, deep["logical_text_bytes"])
+        if deep["physical_pages"]["status"] == "measured":
+            self.assertIn("scenarios", deep["physical_pages"]["by_category"])
+
 
 if __name__ == "__main__":
     unittest.main()

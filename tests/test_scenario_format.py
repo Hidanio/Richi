@@ -195,6 +195,11 @@ class ScenarioFormatTests(unittest.TestCase):
             scenario_format.check_input("x", spec, ["c"])
         self.assertEqual(scenario_format.check_input("x", {"type": "string"}, ""), "")
         self.assertEqual(scenario_format.check_input("x", {"type": "text"}, "a\nb"), "a\nb")
+        with self.assertRaisesRegex(FormatError, "longer than 100 digits"):
+            scenario_format.check_input("n", {"type": "number"}, 10 ** 400)
+        with self.assertRaisesRegex(FormatError, "finite number"):
+            scenario_format.check_input("n", {"type": "number"}, float("inf"))
+        self.assertRejects(lambda d: d["steps"][0]["params"].update(question="q" * 2001), "longer than 2000")
 
     def test_secrets_are_restricted_to_execution_params_and_presence_checks(self):
         def with_secret(change):

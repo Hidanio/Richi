@@ -285,13 +285,22 @@ def ensure_project_match(conn, path, expected_id=None):
 
 
 def checkout_root(match, fallback_path=None):
-    """Effective checkout/worktree root directory from a matched project_check() result."""
+    """Effective checkout/worktree root directory from a matched project_check() result.
+
+    Preserves subfolder monorepo projects (checkout in registered.parents) while keeping
+    linked Git worktree roots (match == 'git_common_dir') pointed at the active worktree.
+    """
     repo = match.get("repository") or {}
-    if repo.get("repo_path"):
-        return Path(repo["repo_path"])
     project_repo = (match.get("project") or {}).get("repo_path")
+    if repo.get("repo_path"):
+        checkout = Path(repo["repo_path"]).expanduser().resolve()
+        if project_repo and match.get("match") != "git_common_dir":
+            registered = Path(project_repo).expanduser().resolve()
+            if checkout in registered.parents and registered.is_dir():
+                return registered
+        return checkout
     if project_repo:
-        return Path(project_repo)
+        return Path(project_repo).expanduser().resolve()
     if fallback_path is not None:
         candidate = Path(fallback_path).expanduser().resolve()
         return candidate if candidate.is_dir() else candidate.parent

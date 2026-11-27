@@ -168,9 +168,19 @@ def read_request(args, api):
 
 
 def preflight(conn, args, api, *, request=None, project_path=None):
-    """Run read-only filesystem/git report checks completely outside SQLite transactions (R2-J03)."""
-    if args.command != "scenario" or args.action != "report" or request is None:
+    """Run read-only settings/skill-catalog/filesystem/git work completely outside SQLite write locks (R2-J03, R3-I2, R3-A3)."""
+    if args.command != "scenario":
         return None
+    settings = agents.read_settings()
+    author = rules.current_author(entries=settings.entries)
+    out = {"settings": settings, "author": author}
+    if args.action in ("next", "claim"):
+        active_agent = getattr(args, "agent", None) or author.agent
+        out["installed_skills"] = scenarios.installed_skills(active_agent, settings)
+        return out
+    if args.action != "report" or request is None:
+        return out
+    at_dt = scenario_runs._now_dt(api)
     prepared = None
     if project_path is not None:
         from .projects import checkout_root, ensure_project_match
@@ -181,14 +191,17 @@ def preflight(conn, args, api, *, request=None, project_path=None):
             prepared = scenario_runs.prepare_report_preflight(
                 conn, api, args.run_id, args.step_key, request,
                 checked_project=checked_project, project_path=effective_root,
+                author=author, now_dt=at_dt,
             )
     else:
         with api.transaction(conn, write=False):
             prepared = scenario_runs.prepare_report_preflight(
                 conn, api, args.run_id, args.step_key, request,
                 checked_project=None, project_path=None,
+                author=author, now_dt=at_dt,
             )
-    return scenario_runs.run_report_preflight_io(prepared)
+    out["report_io"] = scenario_runs.run_report_preflight_io(prepared)
+    return out
 
 
 def _parse_secrets(raw_pairs, api):
@@ -208,8 +221,11 @@ def _parse_secrets(raw_pairs, api):
 def run(conn, args, api, database, *, workspace=None, checked_project=None, project_path=None,
         request=None, preflight_io=None):
     action = args.action
-    settings = agents.read_settings()
-    author = rules.current_author(entries=settings.entries)
+    pf = preflight_io if isinstance(preflight_io, dict) else {}
+    settings = pf.get("settings") if "settings" in pf else agents.read_settings()
+    author = pf.get("author") if "author" in pf else rules.current_author(entries=settings.entries)
+    installed_kw = {"installed_skills": pf["installed_skills"]} if "installed_skills" in pf else {}
+    report_io = pf.get("report_io")
 
     if action == "templates":
         return scenarios.list_templates()
@@ -219,7 +235,7 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
         # R2-J21: --project resolves project-first and falls back to global/builtin as documented.
         scope = "builtin" if args.builtin else ("global" if args.global_scope else None)
         project_id = args.project if args.project is not None else checked_project
-        return scenarios.show(conn, api, args.id, project_id=project_id, scope=scope, agent=args.agent)
+        return scenarios.show(conn, api, args.id, project_id=project_id, scope=scope, agent=args.agent, settings=settings)
     if action == "copy":
         scope = "global" if args.global_scope else "project"
         return scenarios.copy_template(conn, api, args.template, new_id=args.new_id, scope=scope,
@@ -229,7 +245,7 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
     if action == "plan":
         project_id = args.project if args.project is not None else checked_project
         return scenarios.plan(conn, api, args.id, project_id=project_id, project_path=project_path,
-                              agent=args.agent, raw_inputs=args.inputs, inputs_json=request)
+                              agent=args.agent, raw_inputs=args.inputs, inputs_json=request, settings=settings)
     if action == "log":
         return scenarios.log(conn, scenario_id=args.scenario_id, run_id=args.run_id, entries=args.entries)
     if action == "run":
@@ -241,19 +257,19 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
         secrets_runtime = _parse_secrets(args.secrets, api)
         return scenario_runs.next_step(conn, api, database, args.run_id, claim=args.claim, step_key=args.step_key,
                                        checked_project=checked_project, project_path=project_path,
-                                       agent=args.agent, author=author, secrets_runtime=secrets_runtime)
+                                       agent=args.agent, author=author, secrets_runtime=secrets_runtime, **installed_kw)
     if action == "claim":
         secrets_runtime = _parse_secrets(args.secrets, api)
         return scenario_runs.claim_step(conn, api, database, args.run_id, args.step_key,
                                         checked_project=checked_project, project_path=project_path,
-                                        agent=args.agent, author=author, secrets_runtime=secrets_runtime)
+                                        agent=args.agent, author=author, secrets_runtime=secrets_runtime, **installed_kw)
     if action == "release":
         return scenario_runs.release_step(conn, api, args.run_id, args.step_key,
                                           checked_project=checked_project, author=author)
     if action == "report":
         return scenario_runs.report_step(conn, api, database, args.run_id, args.step_key, request,
                                          checked_project=checked_project, project_path=project_path,
-                                         author=author, preflight_io=preflight_io)
+                                         author=author, preflight_io=report_io)
     if action == "answer":
         return scenario_runs.answer_step(conn, api, database, args.run_id, args.step_key, args.value,
                                          comment=args.comment, checked_project=checked_project,

@@ -80,17 +80,23 @@ def _backfill_scenario_log_v4(conn):
             continue
         if not action.startswith("scenario_"):
             action = "scenario_" + action
+        scenario_id = entry.get("id") if isinstance(entry.get("id"), str) else None
+        chat_by = entry.get("by") if isinstance(entry.get("by"), str) else None
+        agent_by = entry.get("agent") if isinstance(entry.get("agent"), str) else None
         detail = {
             "scope": entry.get("scope"),
             "project_id": entry.get("project_id"),
             "before": entry.get("before"),
             "after": entry.get("after"),
         }
+        try:
+            detail_json = json.dumps(detail, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        except (TypeError, ValueError):
+            continue
         conn.execute(
             "INSERT INTO scenario_events(at, scenario_id, run_id, step_key, action, chat, agent, detail_json) "
             "VALUES (?, ?, NULL, NULL, ?, ?, ?, ?)",
-            (entry["at"], entry.get("id"), action, entry.get("by"), entry.get("agent"),
-             json.dumps(detail, ensure_ascii=False, sort_keys=True, separators=(",", ":"))),
+            (entry["at"], scenario_id, action, chat_by, agent_by, detail_json),
         )
     conn.execute("DELETE FROM metadata WHERE 1=1 AND key >= 'scenario-log:' AND key < 'scenario-log;'")
 

@@ -252,6 +252,20 @@ class ConditionTests(unittest.TestCase):
         condition = templating.parse_condition("steps.a.answer == 'x' and (inputs.b in ['y'] or not matrix.c)")
         self.assertEqual(sorted(path.text for path in condition.paths()), ["inputs.b", "matrix.c", "steps.a.answer"])
 
+    def test_huge_int_and_deep_equality_r3_x2_x3(self):
+        self.assertTrue(templating._number(10 ** 400))
+        self.assertFalse(templating._number(float("inf")))
+        a, b = [], []
+        cur_a, cur_b = a, b
+        for _ in range(1500):
+            nxt_a, nxt_b = [], []
+            cur_a.append(nxt_a)
+            cur_b.append(nxt_b)
+            cur_a, cur_b = nxt_a, nxt_b
+        self.assertTrue(templating._equal(a, b))
+        cur_b.append(1)
+        self.assertFalse(templating._equal(a, b))
+
 
 if __name__ == "__main__":
     unittest.main()

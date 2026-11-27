@@ -374,7 +374,7 @@ class ScenarioRunsTests(unittest.TestCase):
         # R2-J09: runtime cwd="../outside" blocks even when project_path is None!
         with memory.transaction(self.conn):
             r_trav = scenario_runs.start_run(self.conn, memory, self.db, "git-hard",
-                                             raw_inputs=["dir=../outside"], author=self.chat_a)
+                                             project_id="demo", raw_inputs=["dir=../outside"], author=self.chat_a)
             blocked = scenario_runs.next_step(self.conn, memory, self.db, r_trav["run_id"], claim=True,
                                               project_path=None, author=self.chat_a)
         self.assertEqual(blocked["blocked_step"]["key"], "s1")
@@ -634,6 +634,195 @@ class ScenarioRunsTests(unittest.TestCase):
         # R2-J27: list_runs rejects unknown project_id.
         with self.assertRaisesRegex(memory.MemoryError, "Unknown project"):
             scenario_runs.list_runs(self.conn, memory, project_id="nonexistent-proj")
+
+    def test_completed_task_confirmed_recalled_and_cancelled_superseded_r3_a1(self):
+        from types import SimpleNamespace
+        from richi import punisher, recall
+        self.add_scenario({
+            "format": "richi-scenario", "format_version": 1, "id": "richi-only", "title": "Richi only",
+            "run_title": "UniqueMarkerRun {{inputs.tag}}",
+            "inputs": {"tag": {"type": "string", "required": True}},
+            "steps": [{"id": "c1", "type": "condition", "params": {"expr": "true"}}],
+        })
+        self.add_scenario({
+            "format": "richi-scenario", "format_version": 1, "id": "cancellable", "title": "Cancellable",
+            "run_title": "CancelledMarkerRun",
+            "steps": [{"id": "s1", "type": "instruction", "params": {"text": "work"}}],
+        })
+        # Richi-only scenario reaches done inside start_run() -> confirmed + verified_at!
+        with memory.transaction(self.conn):
+            done_run = scenario_runs.start_run(self.conn, memory, self.db, "richi-only",
+                                               project_id="demo", raw_inputs=["tag=NeedleAlpha"],
+                                               author=self.chat_a, now_override=self.t0)
+            c_run = scenario_runs.start_run(self.conn, memory, self.db, "cancellable",
+                                            project_id="demo", author=self.chat_a, now_override=self.t0)
+            scenario_runs.set_run_state(self.conn, memory, self.db, c_run["run_id"], "cancel",
+                                        author=self.chat_a, now_override=self.t0 + timedelta(minutes=1))
+        done_task = memory.entry_get(self.conn, done_run["task_entry_id"])
+        self.assertEqual(done_task["knowledge_state"], "confirmed")
+        self.assertEqual(done_task["verified_at"], done_run["updated_at"])
+        cancel_task = memory.entry_get(self.conn, c_run["task_entry_id"])
+        self.assertEqual(cancel_task["knowledge_state"], "superseded")
+        # Default recall finds completed run and omits cancelled run!
+        rec_done = recall.recall(self.conn, SimpleNamespace(
+            query="NeedleAlpha", project="demo", where=None, limit=10, max_chars=8000,
+            include_hypotheses=False, include_superseded=False, explain=False, expect=None), memory)
+        self.assertIn("entry:" + done_run["task_entry_id"], [r["ref"] for r in rec_done["results"]])
+        rec_cancel = recall.recall(self.conn, SimpleNamespace(
+            query="CancelledMarkerRun", project="demo", where=None, limit=10, max_chars=8000,
+            include_hypotheses=False, include_superseded=False, explain=False, expect=None), memory)
+        self.assertEqual(rec_cancel["results"], [])
+        # Punisher does NOT emit verification_date_missing on completed run task entry!
+        audit = punisher.punisher(self.conn, SimpleNamespace(
+            project="demo", where=None, include_hypotheses=False, include_superseded=False,
+            stale_days=90, limit=50, max_chars=20000, summary_threshold=1500,
+            findings_only=False, kind=None), memory)
+        vdm = [f for f in audit.get("findings") or []
+               if f.get("code") == "verification_date_missing" and done_run["task_entry_id"] in str(f)]
+        self.assertEqual(vdm, [])
+
+    def test_r3_dag_skip_retry_revision_leases_checklist_preflight_and_limits(self):
+        # R3-I3: skipping pending step rejected; R3-I5/A2: revision bumps on parallel/rejection/renew;
+        # R3-S3/I9: retry on continue_on_failure with progressed descendant rejected;
+        # R3-I10: skip expires stale lease and avoids duplicate run_failed;
+        # R3-X1: start_run fails fast on workspace-wide run with file_exists;
+        # R3-S1/I6 & R3-X4: matrix checklist text match + duplicate item text ambiguity;
+        # R3-I7, R3-I11, R3-X3, R3-C1, R3-C2, R3-C3, R3-A5, R3-S5, R3-S6.
+        self.add_scenario({
+            "format": "richi-scenario", "format_version": 1, "id": "r3-dag", "title": "R3 DAG",
+            "steps": [
+                {"id": "a", "type": "instruction", "matrix": {"k": ["x", "y"]}, "params": {"text": "do {{matrix.k}}"}},
+                {"id": "b", "type": "instruction", "continue_on_failure": True, "params": {"text": "mid"}},
+                {"id": "c", "type": "instruction", "params": {"text": "end"}},
+            ],
+        })
+        with memory.transaction(self.conn):
+            r = scenario_runs.start_run(self.conn, memory, self.db, "r3-dag", author=self.chat_a, now_override=self.t0)
+            rid = r["run_id"]
+        # R3-S5: list_runs includes revision.
+        listed = scenario_runs.list_runs(self.conn, memory, scenario_id="r3-dag")["runs"]
+        self.assertIn("revision", listed[0])
+        # R3-I3: skipping pending `b` while `a` is unfinished rejected!
+        with self.assertRaises(memory.MemoryError) as c_pend:
+            with memory.transaction(self.conn):
+                scenario_runs.skip_step(self.conn, memory, self.db, rid, "b", "too early", author=self.chat_a)
+        self.assertEqual(c_pend.exception.code, "invalid_state")
+        # Claim a.0 and a.1; bump stop_continuations manually to verify R3-A5 resets it!
+        with memory.transaction(self.conn):
+            scenario_runs.claim_step(self.conn, memory, self.db, rid, "a.0", author=self.chat_a, now_override=self.t0)
+            scenario_runs.claim_step(self.conn, memory, self.db, rid, "a.1", author=self.chat_a, now_override=self.t0)
+            self.conn.execute("UPDATE scenario_steps SET stop_continuations = 5 WHERE run_id = ? AND step_key = 'a.0'", (rid,))
+            # R3-C2: prepare_report_preflight returns None for wrong chat, expired lease, or ready step.
+            self.assertIsNone(scenario_runs.prepare_report_preflight(
+                self.conn, memory, rid, "a.0", {"status": "done", "summary": "ok"}, author=self.chat_b, now_dt=self.t0))
+            self.assertIsNone(scenario_runs.prepare_report_preflight(
+                self.conn, memory, rid, "a.0", {"status": "done", "summary": "ok"}, author=self.chat_a,
+                now_dt=self.t0 + timedelta(minutes=31)))
+        # R3-I5/A2: report rejection + parallel completion bump revision!
+        rev0 = scenario_runs.run_status(self.conn, memory, rid)["revision"]
+        with memory.transaction(self.conn):
+            rej = scenario_runs.report_step(self.conn, memory, self.db, rid, "a.0",
+                                            {"status": "done", "summary": ""}, author=self.chat_a, now_override=self.t0)
+        self.assertEqual(rej["status"], "rejected")
+        rev1 = scenario_runs.run_status(self.conn, memory, rid)["revision"]
+        self.assertGreater(rev1, rev0)
+        # R3-X3 & R3-C3: deep nesting rejected; float('nan') rejected; ~960 KB compact report passes size!
+        deep = []
+        cur = deep
+        for _ in range(40):
+            nxt = []
+            cur.append(nxt)
+            cur = nxt
+        with memory.transaction(self.conn):
+            rej_deep = scenario_runs.report_step(self.conn, memory, self.db, rid, "a.0",
+                                                 {"status": "done", "summary": "d", "data": {"x": deep}},
+                                                 author=self.chat_a, now_override=self.t0)
+            rej_nan = scenario_runs.report_step(self.conn, memory, self.db, rid, "a.0",
+                                                {"status": "done", "summary": "n", "data": {"x": float("nan")}},
+                                                author=self.chat_a, now_override=self.t0)
+        self.assertEqual(rej_deep["status"], "rejected")
+        self.assertEqual(rej_nan["status"], "rejected")
+        # R3-I5/A2: completing a.0 while a.1 is still claimed bumps revision!
+        rev_before_a0 = scenario_runs.run_status(self.conn, memory, rid)["revision"]
+        with memory.transaction(self.conn):
+            scenario_runs.report_step(self.conn, memory, self.db, rid, "a.0",
+                                      {"status": "done", "summary": "ok0", "exit_code": None, "data": {"exit_code": 0}},
+                                      author=self.chat_a, now_override=self.t0 + timedelta(minutes=1))
+        self.assertGreater(scenario_runs.run_status(self.conn, memory, rid)["revision"], rev_before_a0)
+        # R3-I11: exit_code=None fell back to data.exit_code == 0!
+        a0_res = json.loads(self.conn.execute(
+            "SELECT result_json FROM scenario_steps WHERE run_id = ? AND step_key = 'a.0'", (rid,)
+        ).fetchone()[0])
+        self.assertEqual(a0_res["exit_code"], 0)
+        # R3-I10 & R3-A5: after 31 min, chat B can skip a.1 (expired lease) and stop_continuations resets to 0!
+        with memory.transaction(self.conn):
+            self.conn.execute("UPDATE scenario_steps SET stop_continuations = 4 WHERE run_id = ? AND step_key = 'a.1'", (rid,))
+            scenario_runs.skip_step(self.conn, memory, self.db, rid, "a.1", "abandoned",
+                                    author=self.chat_b, now_override=self.t0 + timedelta(minutes=32))
+        self.assertEqual(self.conn.execute(
+            "SELECT stop_continuations FROM scenario_steps WHERE run_id = ? AND step_key = 'a.1'", (rid,)
+        ).fetchone()[0], 0)
+        # Now b (continue_on_failure) fails -> c unlocks to ready -> retrying b is REFUSED (R3-S3/I9)!
+        with memory.transaction(self.conn):
+            scenario_runs.claim_step(self.conn, memory, self.db, rid, "b", author=self.chat_a)
+            scenario_runs.report_step(self.conn, memory, self.db, rid, "b",
+                                      {"status": "failed", "summary": "soft fail"}, author=self.chat_a)
+        with self.assertRaises(memory.MemoryError) as c_ret:
+            with memory.transaction(self.conn):
+                scenario_runs.retry_step(self.conn, memory, self.db, rid, "b", author=self.chat_a)
+        self.assertEqual(c_ret.exception.code, "invalid_state")
+
+        # R3-X1: workspace-wide run with file_exists fails fast at start_run!
+        self.add_scenario({
+            "format": "richi-scenario", "format_version": 1, "id": "needs-proj", "title": "Needs proj",
+            "steps": [{"id": "s1", "type": "instruction", "params": {"text": "x"},
+                       "checks": [{"kind": "file_exists", "path": "README.md"}]}],
+        })
+        with self.assertRaises(memory.MemoryError) as c_np:
+            with memory.transaction(self.conn):
+                scenario_runs.start_run(self.conn, memory, self.db, "needs-proj", author=self.chat_a)
+        self.assertEqual(c_np.exception.code, "invalid_input")
+
+        # R3-S1/I6, R3-X4, R3-I11, R3-S6: matrix checklist text match, ambiguous duplicate text, blank gate, no null comment.
+        self.add_scenario({
+            "format": "richi-scenario", "format_version": 1, "id": "chk-gate", "title": "Chk Gate",
+            "steps": [
+                {"id": "g", "type": "gate", "params": {"question": "Say something?"}},
+                {"id": "mchk", "type": "checklist", "matrix": {"env": ["staging"]},
+                 "params": {"items": [{"text": "Deploy {{matrix.env}}", "required": True},
+                                      {"text": "Dup"}, {"text": "Dup"}]}},
+            ],
+        })
+        with memory.transaction(self.conn):
+            rg = scenario_runs.start_run(self.conn, memory, self.db, "chk-gate", author=self.chat_a)
+            rg_id = rg["run_id"]
+        with self.assertRaises(memory.MemoryError) as c_blank:
+            with memory.transaction(self.conn):
+                scenario_runs.answer_step(self.conn, memory, self.db, rg_id, "g", "   ", author=self.chat_a)
+        self.assertEqual(c_blank.exception.code, "invalid_answer")
+        with memory.transaction(self.conn):
+            scenario_runs.answer_step(self.conn, memory, self.db, rg_id, "g", "go", author=self.chat_a)
+        # R3-S6: answered event omits comment when None.
+        ans_ev = [e for e in scenarios.log(self.conn, run_id=rg_id, entries=10)["entries"] if e["action"] == "answered"][0]
+        self.assertNotIn("comment", ans_ev["detail"])
+        # R3-X4: duplicate checklist text rejected as ambiguous.
+        with self.assertRaises(memory.MemoryError) as c_dup:
+            with memory.transaction(self.conn):
+                scenario_runs.answer_step(self.conn, memory, self.db, rg_id, "mchk.0", "Deploy staging,Dup", author=self.chat_a)
+        self.assertEqual(c_dup.exception.code, "invalid_answer")
+        # R3-S1/I6: rendered matrix text "Deploy staging" matches cleanly!
+        with memory.transaction(self.conn):
+            fin_chk = scenario_runs.answer_step(self.conn, memory, self.db, rg_id, "mchk.0", "Deploy staging", author=self.chat_a)
+        self.assertEqual(fin_chk["run_status"], "done")
+
+        # R3-I7: >20 git evidence items rejected and duplicate revs deduplicated.
+        too_many = [{"type": "git", "revision": self.head_sha}] * 21
+        res_many = scenario_runs._verify_git_evidence_io(too_many, self.repo)
+        self.assertTrue(any("at most 20" in r for r in res_many))
+        with mock.patch("richi.git_evidence._git", wraps=scenario_runs.git_evidence._git) as spy_git:
+            res_dup = scenario_runs._verify_git_evidence_io([{"type": "git", "revision": self.head_sha}] * 5, self.repo)
+            self.assertEqual(res_dup, [])
+            self.assertEqual(spy_git.call_count, 1)
 
 
 if __name__ == "__main__":
