@@ -117,6 +117,7 @@ class ScenarioFormatTests(unittest.TestCase):
             '{"a": 1e999}': "too large",
             '{"a": ' + "1" * 101 + "}": "longer than 100 digits",
             "[" * 100000 + "]" * 100000: "too deeply|larger than",
+            '{"a":' * 60 + "{}" + "}" * 60: "too deeply",
         }
         for text, message in cases.items():
             with self.subTest(text=text[:20]), self.assertRaisesRegex(FormatError, message):

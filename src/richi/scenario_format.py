@@ -208,6 +208,7 @@ def parse(text, *, max_bytes=MAX_BYTES, what="a definition"):
         raise FormatError(what + " is nested too deeply") from exc
     except ValueError as exc:
         raise FormatError("not valid JSON: " + str(exc)) from exc
+    _shallow(value, what)
     if not isinstance(value, dict):
         raise FormatError(what + " must be a JSON object")
     return value
