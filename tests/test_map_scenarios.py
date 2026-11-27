@@ -297,6 +297,9 @@ class MapScenariosAPITests(unittest.TestCase):
         self.assertEqual(gate_step["title"], "Human confirmation")
         self.assertEqual(gate_step["gate"]["options"], ["approve", "reject"])
         self.assertTrue(gate_step["gate"]["allow_comment"])
+        self.assertEqual([s["id"] for s in detail["run"]["definition_steps"]], ["recall", "approve"])
+        self.assertEqual(detail["run"]["definition_steps"][1]["needs"], ["recall"])
+        self.assertEqual(detail["run"]["layout"]["positions"]["approve"], {"x": 352, "y": 36})
         self.assertTrue(len(detail["log"]) >= 1)
 
         # Error handling on /api/scenario-run
@@ -482,6 +485,51 @@ console.log(JSON.stringify({applyReq, applyCmd, runCmdProj, runCmdGlobal, ansCmd
             parsed = parser.parse_args(words[1:])
             self.assertEqual(parsed.value, exp_val)
             self.assertEqual(parsed.comment, exp_comment)
+
+    def test_token_parser_and_pipeline_linter(self):
+        self.evaluate(r"""
+const parsed = scenarioParseTokens('Check {{steps.s1.summary}} and {{inputs.branch | shell}}!');
+assert.equal(parsed.length, 5);
+assert.equal(parsed[1].root, 'steps');
+assert.equal(parsed[1].target, 's1');
+assert.equal(parsed[1].field, 'summary');
+assert.equal(parsed[3].root, 'inputs');
+assert.equal(parsed[3].target, 'branch');
+assert.equal(parsed[3].filter, 'shell');
+
+const cleanDef = {
+  id: 'clean-pipe',
+  title: 'Clean',
+  inputs: {branch: {type: 'string', required: true}},
+  steps: [
+    {id: 's1', type: 'instruction', title: 'One', needs: [], params: {text: 'Review {{inputs.branch}}'}},
+    {id: 's2', type: 'command', title: 'Two', needs: ['s1'], params: {command: 'git diff {{inputs.branch | shell}}'}},
+    {id: 's3', type: 'skill', title: 'Three', needs: ['s2'], params: {skill: {default: 'known-skill'}, instruction: 'Use {{steps.s1.summary}}'}},
+  ],
+};
+const okRes = scenarioLintDraft(cleanDef, ['known-skill']);
+assert.equal(okRes.ok, true);
+assert.equal(okRes.issues.length, 0);
+assert.equal(okRes.byStep.s1.severity, 'ok');
+
+const badDef = {
+  id: 'bad-pipe',
+  title: 'Bad',
+  inputs: {tok: {type: 'secret'}},
+  steps: [
+    {id: 's1', type: 'instruction', title: 'One', needs: [], params: {text: 'Use {{steps.s2.summary}}'}},
+    {id: 's2', type: 'command', title: 'Two', needs: [], params: {command: 'echo {{project.path}}'}},
+    {id: 's3', type: 'gate', title: 'Three', needs: ['s1'], params: {question: 'Leak {{inputs.tok}}?'}},
+    {id: 's4', type: 'skill', title: 'Four', needs: ['s3'], params: {skill: {default: 'missing-skill'}}},
+  ],
+};
+const badRes = scenarioLintDraft(badDef, ['known-skill']);
+assert.equal(badRes.ok, false);
+assert.equal(badRes.byStep.s1.severity, 'err');
+assert.equal(badRes.byStep.s2.severity, 'err');
+assert.equal(badRes.byStep.s3.severity, 'err');
+assert.equal(badRes.byStep.s4.severity, 'warn');
+""")
 
 
 class ScenariosHtmlSafetyTests(unittest.TestCase):

@@ -46,6 +46,42 @@ richi --compact-json scenario apply --json change.json
 `expected_updated_at` для обновлений и удаления. Определения хранятся в
 `metadata` и никогда не попадают в `recall` или `search`.
 
+## Создание сценария по запросу пользователя
+
+Когда пользователь просит создать или изменить сценарий (например, *«создай
+сценарий глубокого ревью / релиза / разбора инцидента»*), собери его напрямую
+через `richi scenario apply --json -` и сразу проверь:
+
+1. **Не добавляй лишние ручные `inputs`**: не заставляй пользователя вводить
+   `branch`, `diff` или путь к репозиторию вручную, если агент в чате сам видит
+   контекст. Объявляй `inputs` только для осмысленных параметров выбора.
+2. **Используй точные формы шагов формата v1**:
+   - `instruction`: `params: {"text": "..."}` (для независимых ревьюеров и
+     критиков добавляй `hints: {"subagent": true}`).
+   - `skill`: `params: {"skill": {"default": "имя-скилла"}, "instruction": "..."}`
+     (проверяй наличие скилла через `scenario plan`).
+   - `command`: `params: {"command": "pytest -q"}` (любая подстановка `{{...}}`
+     в `command` обязана заканчиваться на `| shell`).
+   - `gate`: `params: {"question": "...", "options": ["Да", "Доработать"], "allow_comment": true}`.
+   - `checklist`: `params: {"items": [{"text": "Тесты пройдены", "required": true}]}`.
+   - `memory.recall`: `params: {"query": "...", "limit": 10}` (выполняется
+     автоматически движком Richi до агента).
+   - `memory.brief`: `params: {"question": "...", "limit": 10}`.
+   - `condition`: `params: {"expr": "steps.gate.answer == 'Да'"}`.
+3. **Задай явные `needs` и проверь план**: для параллельных стартовых шагов
+   ставь `needs: []`, для шагов сведения — `needs: ["step_a", "step_b"]`.
+   Координаты `layout.positions` необязательны (карта разложит граф сама). После
+   `scenario apply` выполни `richi --compact-json scenario plan <id>`, чтобы
+   убедиться в валидности ссылок и скиллов, и сообщи пользователю, что сценарий
+   доступен в `richi map` → **«Сценарии»**.
+
+```sh
+richi --compact-json scenario apply --json - <<'EOF'
+{"action":"add","scope":"global","definition":{"format":"richi-scenario","format_version":1,"id":"quick-check","title":"Быстрая проверка","steps":[{"id":"review","type":"instruction","title":"Self-review","needs":[],"params":{"text":"Проверь текущие изменения и выпиши конкретные замечания."}},{"id":"confirm","type":"gate","title":"Подтверждение","needs":["review"],"params":{"question":"Применяем найденные правки?","options":["Да","Нет"],"allow_comment":true}}]}}
+EOF
+richi --compact-json scenario plan quick-check
+```
+
 ## Пошаговое выполнение запуска
 
 Запуски требуют схему 4 (`richi migrate` предварительно делает резервную копию

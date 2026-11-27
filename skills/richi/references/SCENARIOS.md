@@ -45,6 +45,42 @@ richi --compact-json scenario apply --json change.json
 `expected_updated_at` for updates and removals. Definitions live in workspace
 `metadata` and never appear in `recall` or `search`.
 
+## Authoring a scenario from a user request
+
+When the user asks you to create or modify a scenario (for example, *"create a
+multi-stage review / release / triage scenario"*), author it directly via
+`richi scenario apply --json -` and verify it immediately:
+
+1. **Avoid unnecessary manual `inputs`**: do not ask the user to fill `branch`,
+   `diff`, or `project_path` manually when the agent running in chat can inspect
+   them automatically. Add `inputs` only for genuine user choices.
+2. **Use the exact v1 step shapes**:
+   - `instruction`: `params: {"text": "..."}` (add `hints: {"subagent": true}`
+     for independent reviewer/critic steps).
+   - `skill`: `params: {"skill": {"default": "skill-name"}, "instruction": "..."}`
+     (check installed skills first or verify with `scenario plan`).
+   - `command`: `params: {"command": "pytest -q"}` (every `{{...}}` in `command`
+     must end with `| shell`).
+   - `gate`: `params: {"question": "...", "options": ["Approve", "Revise"], "allow_comment": true}`.
+   - `checklist`: `params: {"items": [{"text": "Tests pass", "required": true}]}`.
+   - `memory.recall`: `params: {"query": "...", "limit": 10}` (runs automatically
+     inside Richi before the agent).
+   - `memory.brief`: `params: {"question": "...", "limit": 10}`.
+   - `condition`: `params: {"expr": "steps.gate.answer == 'Approve'"}`.
+3. **Wire explicit `needs` and verify**: set `needs: []` on parallel root steps
+   and `needs: ["step_a", "step_b"]` on fan-in steps. Optionally include
+   `layout.positions` (the map also auto-lays out omitted positions). After
+   `scenario apply`, run `richi --compact-json scenario plan <id>` to confirm
+   valid references and installed skills, then tell the user the scenario is
+   ready in `richi map` → **Scenarios**.
+
+```sh
+richi --compact-json scenario apply --json - <<'EOF'
+{"action":"add","scope":"global","definition":{"format":"richi-scenario","format_version":1,"id":"quick-check","title":"Quick verification","steps":[{"id":"review","type":"instruction","title":"Self-review","needs":[],"params":{"text":"Review current changes and list concrete issues."}},{"id":"confirm","type":"gate","title":"Confirm fixes","needs":["review"],"params":{"question":"Apply the listed fixes?","options":["Yes","No"],"allow_comment":true}}]}}
+EOF
+richi --compact-json scenario plan quick-check
+```
+
 ## Run a scenario step by step
 
 Runs require schema 4 (`richi migrate` backs up the store before upgrading).

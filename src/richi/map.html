@@ -215,9 +215,39 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 .rule-confirm{font-size:13px;line-height:1.7}
 .rule-quote{margin:0;border-left:3px solid var(--line);padding:6px 0 6px 12px;color:var(--muted);font-size:12px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
 @media(max-width:760px){.rules-totals{width:100%}.rules-totals>*{flex:1;min-width:0}.rule-templates{grid-template-columns:minmax(0,1fr)}.rule-dialog{width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:11px}.rule-dialog-body,.rule-dialog-head,.rule-dialog-foot{padding-left:16px;padding-right:16px}.rule-agent-skill{grid-template-columns:minmax(0,1fr);gap:4px}.rule-agent-name{line-height:1.4}.agents-layout{grid-template-columns:minmax(0,1fr)}.agent-detail{padding:16px}.agent-source{grid-template-columns:auto minmax(0,1fr) auto;row-gap:4px}.agent-source-count{grid-column:2}}
-.scn-subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:12px}
-.scn-subtab{border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:600;color:var(--muted)}
-.scn-subtab[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.scn-subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.scn-subtab{border-radius:999px;padding:7px 15px;font-size:12.5px;font-weight:600;color:var(--muted);transition:background .14s,color .14s,border-color .14s}
+.scn-subtab[aria-pressed=true]{background:var(--accent);color:#fff;border-color:var(--accent)}
+@media(prefers-color-scheme:dark){.scn-subtab[aria-pressed=true]{color:#0d1424}}
+.scn-btn-primary{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600}
+.scn-btn-primary:hover{filter:brightness(1.06);background:var(--accent);border-color:var(--accent)}
+@media(prefers-color-scheme:dark){.scn-btn-primary{color:#0d1424}}
+.scn-catalog-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px;padding:14px 18px;border:1px solid var(--line);border-radius:13px;background:var(--panel)}
+.scn-catalog-bar p{font-size:13px;color:var(--muted);max-width:740px;line-height:1.55}
+.scn-cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,390px),1fr));gap:18px}
+.scn-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;min-width:0;box-shadow:0 4px 18px #18233409;transition:border-color .18s,box-shadow .18s,transform .18s}
+.scn-card:hover{border-color:var(--accent);box-shadow:0 12px 32px #18233414;transform:translateY(-2px)}
+.scn-card-preview{position:relative;height:132px;background:radial-gradient(circle,var(--grid) 1px,transparent 1px) 0 0/16px 16px var(--panel-soft);border-bottom:1px solid var(--line);overflow:hidden;cursor:pointer}
+.scn-card-preview svg{display:block;width:100%;height:100%}
+.scn-card-preview-badges{position:absolute;top:10px;left:12px;right:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;pointer-events:none}
+.scn-pill-badge{font-size:11px;font-weight:650;padding:3px 9px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);box-shadow:0 2px 8px #0001}
+.scn-pill-badge.tpl{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.scn-pill-badge.global{color:var(--record);border-color:var(--record)}
+.scn-pill-badge.project{color:var(--project);border-color:var(--project)}
+.scn-pill-badge.count{font-family:ui-monospace,SFMono-Regular,monospace;color:var(--muted)}
+.scn-card-body{padding:18px 20px 14px;display:flex;flex-direction:column;gap:10px;flex:1}
+.scn-card-title{font-size:17px;font-weight:700;letter-spacing:-.3px;line-height:1.3;color:var(--ink)}
+.scn-card-desc{font-size:13px;line-height:1.58;color:var(--muted);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.scn-card-steps{display:grid;gap:5px;margin-top:4px}
+.scn-card-step{display:flex;align-items:center;gap:8px;font-size:12.5px;line-height:1.35;color:var(--ink)}
+.scn-card-step-num{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:700;font-family:ui-monospace,SFMono-Regular,monospace;flex:none;background:var(--accent-soft);color:var(--accent)}
+.scn-card-step-num.role-richi{background:#36988820;color:var(--record)}
+.scn-card-step-num.role-human{background:#ba874024;color:var(--entity)}
+.scn-card-step-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scn-card-step-tag{margin-left:auto;font-size:10.5px;color:var(--muted);padding:1px 7px;border-radius:999px;background:var(--panel-soft);border:1px solid var(--line);white-space:nowrap}
+.scn-card-footer{margin-top:auto;padding:13px 20px 15px;border-top:1px solid var(--line);background:var(--panel-soft);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.scn-card-footer-extra{margin-left:auto;display:flex;gap:6px;align-items:center}
+.scn-card-id{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11px;color:var(--muted)}
 .scn-flow{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:4px 0}
 .scn-step-pill{font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid var(--line);background:var(--panel-soft);color:var(--ink);display:inline-flex;align-items:center;gap:5px;max-width:100%;overflow-wrap:anywhere}
 .scn-step-pill.role-richi{border-color:var(--record);color:var(--record)}
@@ -233,38 +263,88 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 .scn-inputs-list{display:grid;gap:8px;margin-top:6px}
 .scn-input-row{display:grid;grid-template-columns:minmax(100px,1fr) 120px minmax(110px,1fr) minmax(120px,1.2fr) auto auto;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel-soft)}
 .scn-input-row input[type=text],.scn-input-row select{height:33px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);padding:4px 8px;font-size:12px;width:100%;min-width:0}
-.scn-builder{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(300px,410px);gap:16px;align-items:start}
+.scn-builder{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(320px,430px);gap:16px;align-items:start}
 .scn-stage{border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden;display:flex;flex-direction:column;min-width:0}
-.scn-stage-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px 15px;border-bottom:1px solid var(--line);background:var(--panel-soft)}
+.scn-stage-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--panel-soft)}
 .scn-stage-head-left,.scn-stage-head-right{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.scn-canvas-scroll{position:relative;overflow:auto;height:540px;background:radial-gradient(circle,var(--grid) 1px,transparent 1px) 0 0/22px 22px var(--panel-soft);user-select:none}
-.scn-canvas-surface{position:relative;min-width:100%;min-height:100%}
-.scn-edges-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
-.scn-edge-path{fill:none;stroke:var(--edge);stroke-width:2;transition:stroke .12s}
-.scn-edge-hit{fill:none;stroke:transparent;stroke-width:14;pointer-events:stroke;cursor:pointer}
-.scn-edge-group:hover .scn-edge-path{stroke:var(--danger);stroke-width:2.8}
-.scn-edge-preview{fill:none;stroke:var(--accent);stroke-width:2.2;stroke-dasharray:6 4;pointer-events:none}
-.scn-node{position:absolute;width:224px;border:1.5px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 4px 14px #1823340f;transition:border-color .12s,box-shadow .12s}
-.scn-node.role-richi{border-left:4px solid var(--record)}
-.scn-node.role-human{border-left:4px solid var(--entity)}
-.scn-node.role-agent{border-left:4px solid var(--accent)}
-.scn-node.selected{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),0 8px 20px #18233418}
-.scn-node.dragging{opacity:.92;z-index:20;box-shadow:0 12px 28px #18233428}
-.scn-node.drop-target{border-color:var(--record);box-shadow:0 0 0 3px var(--accent-soft)}
-.scn-node-head{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 11px 6px;border-bottom:1px solid var(--line);cursor:grab;border-radius:10px 10px 0 0;background:var(--panel-soft)}
+.scn-canvas-viewport{position:relative;overflow:hidden;height:580px;background:radial-gradient(circle,var(--grid) 1.1px,transparent 1.1px) 0 0/22px 22px var(--panel-soft);user-select:none;cursor:grab;touch-action:none}
+.scn-canvas-viewport.panning{cursor:grabbing}
+.scn-canvas-layer{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+.scn-canvas-hud{position:absolute;right:14px;bottom:14px;z-index:25;display:inline-flex;align-items:center;gap:4px;padding:5px 7px;border:1px solid var(--line);border-radius:11px;background:var(--panel);box-shadow:0 8px 24px #1823341c}
+.scn-canvas-hud button{border:0;background:transparent;padding:4px 7px;font-size:12px;border-radius:7px;color:var(--ink)}
+.scn-canvas-hud button:hover{background:var(--panel-soft)}
+.scn-canvas-hud span{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11.5px;color:var(--muted);min-width:42px;text-align:center}
+.scn-wire-menu{position:absolute;z-index:40;width:250px;background:var(--panel);border:1px solid var(--accent);border-radius:12px;box-shadow:0 16px 40px #1823342c;padding:6px;display:grid;gap:2px}
+.scn-wire-menu-head{font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:5px 8px 4px}
+.scn-wire-menu button{border:0;background:transparent;text-align:left;padding:7px 9px;border-radius:8px;display:grid;gap:1px}
+.scn-wire-menu button:hover{background:var(--accent-soft)}
+.scn-wire-menu strong{font-size:12.5px;color:var(--ink)}
+.scn-wire-menu span{font-size:11px;color:var(--muted)}
+.scn-edges-svg{position:absolute;top:0;left:0;pointer-events:none;overflow:visible}
+.scn-edge-path{fill:none;stroke:var(--edge);stroke-width:2.1;transition:stroke .14s,stroke-width .14s}
+.scn-edge-hit{fill:none;stroke:transparent;stroke-width:16;pointer-events:stroke;cursor:pointer}
+.scn-edge-group:hover .scn-edge-path{stroke:var(--danger);stroke-width:3}
+.scn-edge-group.hi .scn-edge-path{stroke:var(--accent);stroke-width:3.2}
+.scn-edge-preview{fill:none;stroke:var(--accent);stroke-width:2.4;stroke-dasharray:6 4;pointer-events:none}
+.scn-node{position:absolute;width:236px;border:1.5px solid var(--line);border-radius:13px;background:var(--panel);box-shadow:0 4px 16px #18233410;transition:border-color .14s,box-shadow .14s,opacity .14s}
+.scn-node:hover{border-color:var(--muted);box-shadow:0 8px 22px #18233418}
+.scn-node.role-richi{border-top:3.5px solid var(--record)}
+.scn-node.role-human{border-top:3.5px solid var(--entity)}
+.scn-node.role-agent{border-top:3.5px solid var(--accent)}
+.scn-node.selected{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft),0 10px 24px #1823341c}
+.scn-node.hi{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft),0 10px 26px #18233424;z-index:18}
+.scn-node.dragging{opacity:.94;z-index:22;box-shadow:0 16px 34px #1823342c}
+.scn-node.drop-target{border-color:var(--record);box-shadow:0 0 0 3px #36988833}
+.scn-node-head{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 11px 7px;border-bottom:1px solid var(--line);cursor:grab;border-radius:10px 10px 0 0;background:var(--panel-soft)}
 .scn-node-head:active{cursor:grabbing}
-.scn-node-type{font-size:10px;font-weight:650;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
-.scn-node-body{padding:9px 11px 10px;cursor:pointer;display:grid;gap:4px}
-.scn-node-title{font-size:13px;font-weight:650;line-height:1.35;overflow-wrap:anywhere}
+.scn-node-head-left{display:flex;align-items:center;gap:6px;min-width:0}
+.scn-node-num{font-family:ui-monospace,SFMono-Regular,monospace;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:5px;background:var(--accent-soft);color:var(--accent);flex:none}
+.scn-node.role-richi .scn-node-num{background:#36988820;color:var(--record)}
+.scn-node.role-human .scn-node-num{background:#ba874024;color:var(--entity)}
+.scn-node-type{font-size:10.5px;font-weight:650;text-transform:uppercase;letter-spacing:.45px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scn-node-body{padding:10px 12px 11px;cursor:pointer;display:grid;gap:5px}
+.scn-node-title{font-size:13.5px;font-weight:650;line-height:1.35;color:var(--ink);overflow-wrap:anywhere}
 .scn-node-id{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
-.scn-node-badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
-.scn-node-badge{font-size:10px;padding:1px 6px;border-radius:999px;background:var(--panel-soft);border:1px solid var(--line);color:var(--muted)}
-.scn-port{position:absolute;top:50%;transform:translateY(-50%);width:15px;height:15px;border-radius:50%;border:2px solid var(--accent);background:var(--panel);padding:0;display:grid;place-items:center;cursor:crosshair;z-index:5;transition:transform .12s,background .12s}
-.scn-port:hover,.scn-port.active{transform:translateY(-50%) scale(1.25);background:var(--accent)}
+.scn-node-badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}
+.scn-node-badge{font-size:10.5px;padding:2px 7px;border-radius:999px;background:var(--panel-soft);border:1px solid var(--line);color:var(--muted)}
+.scn-node-lint{font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:999px;flex:none}
+.scn-node-lint.ok{background:#36988822;color:var(--record)}
+.scn-node-lint.warn{background:#ba874026;color:var(--entity)}
+.scn-node-lint.err{background:#b4464d24;color:var(--danger)}
+.scn-port{position:absolute;top:52%;transform:translateY(-50%);width:15px;height:15px;border-radius:50%;border:2px solid var(--accent);background:var(--panel);padding:0;display:grid;place-items:center;cursor:crosshair;z-index:5;transition:transform .12s,background .12s}
+.scn-port:hover,.scn-port.active{transform:translateY(-50%) scale(1.28);background:var(--accent)}
 .scn-port-in{left:-8px;border-color:var(--record)}
 .scn-port-in:hover,.scn-port-in.active{background:var(--record)}
 .scn-port-out{right:-8px}
-.scn-list-view{padding:14px;display:grid;gap:9px;max-height:540px;overflow:auto}
+.scn-lint-bar{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 15px;display:grid;gap:8px}
+.scn-lint-bar.ok{border-left:4px solid var(--record)}
+.scn-lint-bar.warn{border-left:4px solid var(--entity)}
+.scn-lint-bar.err{border-left:4px solid var(--danger)}
+.scn-lint-list{display:grid;gap:5px}
+.scn-lint-item{text-align:left;padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-soft);font-size:12px;display:flex;align-items:center;gap:8px}
+.scn-lint-item:hover{border-color:var(--accent)}
+.scn-incoming{border:1px solid var(--line);border-radius:10px;background:var(--panel-soft);padding:10px 12px;display:grid;gap:7px}
+.scn-incoming-head{font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.scn-incoming-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 8px;border-radius:8px;background:var(--panel);border:1px solid var(--line);font-size:12px;transition:border-color .12s}
+.scn-incoming-row:hover{border-color:var(--accent)}
+.scn-live-preview{border:1px solid var(--line);border-radius:9px;background:var(--panel-soft);padding:9px 11px;font-size:12.5px;line-height:1.65;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.scn-live-preview-label{font-size:10.5px;font-weight:650;text-transform:uppercase;letter-spacing:.45px;color:var(--muted);margin-bottom:4px;display:block}
+.scn-var-pill{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;margin:0 2px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);cursor:pointer;vertical-align:baseline;transition:filter .12s,transform .12s}
+.scn-var-pill:hover{filter:brightness(.96);transform:translateY(-1px)}
+.scn-var-pill.role-richi{background:#3698881e;color:var(--record);border-color:var(--record)}
+.scn-var-pill.role-human{background:#ba874022;color:var(--entity);border-color:var(--entity)}
+.scn-var-pill.bad{background:#b4464d20;color:var(--danger);border-color:var(--danger)}
+.scn-run-graph{position:relative;height:300px;border:1px solid var(--line);border-radius:12px;background:radial-gradient(circle,var(--grid) 1px,transparent 1px) 0 0/18px 18px var(--panel-soft);overflow:auto}
+.scn-run-node{position:absolute;width:210px;border:1.5px solid var(--line);border-radius:11px;background:var(--panel);padding:9px 11px;display:grid;gap:4px;cursor:pointer;transition:border-color .14s,box-shadow .14s}
+.scn-run-node:hover{box-shadow:0 6px 18px #18233418}
+.scn-run-node.st-done{border-color:var(--record);background:var(--panel)}
+.scn-run-node.st-claimed,.scn-run-node.st-running{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.scn-run-node.st-waiting_human{border-color:var(--entity);box-shadow:0 0 0 3px #ba874028}
+.scn-run-node.st-failed,.scn-run-node.st-blocked{border-color:var(--danger)}
+.scn-run-node.st-skipped{opacity:.58}
+.scn-run-pulse{width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block;animation:scn-pulse 1.5s ease-in-out infinite}
+@keyframes scn-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.35)}}
+.scn-list-view{padding:14px;display:grid;gap:9px;max-height:580px;overflow:auto}
 .scn-list-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px 13px;border:1px solid var(--line);border-radius:11px;background:var(--panel);cursor:pointer}
 .scn-list-row.selected{border-color:var(--accent);background:var(--accent-soft)}
 .scn-list-row.drag-over{border-top:3px solid var(--accent)}
@@ -2240,13 +2320,109 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     parts.push(scnShellQuote(valStr));
     return parts.join(' ');
   }
+  function scenarioParseTokens(text){
+    const raw=String(text||''),parts=[];
+    const re=/\{\{\s*([^}]+?)\s*\}\}/g;
+    let last=0,m;
+    while((m=re.exec(raw))!==null){
+      if(m.index>last)parts.push({type:'text',value:raw.slice(last,m.index)});
+      const expr=m[1].trim(),segs=expr.split('|').map(s=>s.trim());
+      const path=segs[0]||'',filter=segs.slice(1).join(' | ');
+      const dot=path.split('.');
+      parts.push({type:'token',raw:m[0],expr,path,filter,root:dot[0]||'',target:dot[1]||'',field:dot.slice(2).join('.')});
+      last=m.index+m[0].length;
+    }
+    if(last<raw.length)parts.push({type:'text',value:raw.slice(last)});
+    return parts;
+  }
+  function scenarioLintDraft(rawDef,installedSkillNames=null){
+    const def=scenarioNormalizeDraft(rawDef);
+    const issues=[],byStep={};
+    const push=(stepId,severity,message)=>{
+      issues.push({stepId,severity,message});
+      if(stepId){
+        const cur=byStep[stepId]||(byStep[stepId]={severity:'ok',messages:[]});
+        cur.messages.push(message);
+        if(severity==='err'||(severity==='warn'&&cur.severity!=='err'))cur.severity=severity;
+      }
+    };
+    if(!SCN_ID_RE.test(def.id||''))push(null,'err','Неверный ID сценария (нужны латиница, цифры, «.», «_», «:», «-»).');
+    if(!String(def.title||'').trim())push(null,'err','Не указано название сценария.');
+    if(!Array.isArray(def.steps)||!def.steps.length){push(null,'err','Добавьте хотя бы один шаг.');return {ok:false,issues,byStep};}
+    const inputs=def.inputs&&typeof def.inputs==='object'?def.inputs:{};
+    const secrets=new Set(Object.entries(inputs).filter(([,s])=>s?.type==='secret').map(([k])=>k));
+    const stepById=new Map();
+    for(const step of def.steps){
+      if(!SCN_STEP_ID_RE.test(step.id||''))push(step.id,'err','Некорректный ID шага.');
+      if(stepById.has(step.id))push(step.id,'err','Повторяющийся ID шага.');
+      stepById.set(step.id,step);
+    }
+    const knownSkills=Array.isArray(installedSkillNames)?new Set(installedSkillNames):null;
+    const checkTemplates=(step,text,opts={})=>{
+      const ancestors=scenarioAncestors(def.steps,step.id);
+      for(const part of scenarioParseTokens(text)){
+        if(part.type!=='token')continue;
+        if(opts.requireShell&&!/(^|\|\s*)shell\s*$/.test(part.filter)){
+          push(step.id,'err','В команде подстановка '+part.raw+' должна заканчиваться на | shell.');
+        }
+        if(part.root==='inputs'){
+          if(!inputs[part.target])push(step.id,'err','Необъявленный параметр «'+part.target+'» в '+part.raw+'.');
+          else if(opts.forbidSecret&&secrets.has(part.target))push(step.id,'err','Секрет «'+part.target+'» нельзя использовать в этом поле.');
+        }else if(part.root==='steps'){
+          if(!stepById.has(part.target))push(step.id,'err','Ссылка на несуществующий шаг «'+part.target+'» в '+part.raw+'.');
+          else if(!ancestors.has(part.target))push(step.id,'err','Шаг «'+part.target+'» не является предком — сначала соедините его стрелкой (needs).');
+        }
+      }
+    };
+    for(const step of def.steps){
+      const p=step.params||{};
+      for(const need of Array.isArray(step.needs)?step.needs:[]){
+        if(!stepById.has(need))push(step.id,'err','Ссылка на несуществующий шаг «'+need+'».');
+        else if(scenarioWouldCycle(def.steps,need,step.id))push(step.id,'err','Обнаружен цикл зависимостей через «'+need+'».');
+      }
+      if(step.type==='instruction'){
+        if(!String(p.text||'').trim())push(step.id,'err','Заполните текст задания для агента.');
+        else checkTemplates(step,p.text);
+      }else if(step.type==='skill'){
+        const sk=p.skill||{},defName=typeof sk.default==='string'?sk.default.trim():'';
+        const pa=sk.per_agent&&typeof sk.per_agent==='object'?Object.values(sk.per_agent):[];
+        if(!defName&&!pa.length)push(step.id,'err','Не выбран скилл.');
+        else if(knownSkills){
+          for(const nm of [defName,...pa].filter(Boolean)){
+            if(!knownSkills.has(nm))push(step.id,'warn','Скилл «'+nm+'» не найден среди установленных на этом компьютере.');
+          }
+        }
+        if(p.instruction)checkTemplates(step,p.instruction);
+      }else if(step.type==='command'){
+        if(!String(p.command||'').trim())push(step.id,'err','Укажите консольную команду.');
+        else checkTemplates(step,p.command,{requireShell:true});
+      }else if(step.type==='gate'){
+        if(!String(p.question||'').trim())push(step.id,'err','Укажите вопрос пользователю.');
+        else checkTemplates(step,p.question,{forbidSecret:true});
+        if(Array.isArray(p.options)&&p.options.length&&(p.options.length<2||p.options.length>10))push(step.id,'err','Вариантов ответа должно быть 0 либо от 2 до 10.');
+      }else if(step.type==='checklist'){
+        if(!Array.isArray(p.items)||!p.items.length)push(step.id,'err','Добавьте хотя бы один пункт чек-листа.');
+        else for(const it of p.items)checkTemplates(step,it.text||'',{forbidSecret:true});
+      }else if(step.type==='memory.recall'){
+        if(!String(p.query||'').trim())push(step.id,'err','Укажите поисковый запрос в память.');
+        else checkTemplates(step,p.query,{forbidSecret:true});
+      }else if(step.type==='memory.brief'){
+        if(!String(p.question||'').trim())push(step.id,'err','Укажите вопрос для сводки из памяти.');
+        else checkTemplates(step,p.question,{forbidSecret:true});
+      }else if(step.type==='condition'){
+        if(!String(p.expr||'').trim())push(step.id,'err','Укажите условие.');
+      }
+      if(!byStep[step.id])byStep[step.id]={severity:'ok',messages:[]};
+    }
+    return {ok:!issues.some(i=>i.severity==='err'),issues,byStep};
+  }
   // scenarios-pure: end.
 
   const scenariosState={
     data:null,loading:false,error:'',request:0,
     subtab:'definitions',scope:'',query:'',
     editing:null,selectedStepId:'',viewMode:'graph',showJson:false,metaOpen:false,advOpen:false,
-    canvasScroll:{left:0,top:0},
+    camera:{x:20,y:20,k:1},cameraFitNeeded:true,lintResult:null,
     busy:false,saveError:'',outcome:'',commandText:'',
     runFilter:'all',selectedRunId:'',runDetail:null,runDetailLoading:false,runDetailError:'',runDetailRequest:0,
     logFilter:'all',
@@ -2407,6 +2583,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     scenariosState.saveError='';
     scenariosState.commandText='';
     scenariosState.showJson=false;
+    scenariosState.cameraFitNeeded=true;
+    scenariosState.lintResult=null;
     scenariosState.subtab='definitions';
     renderScenarios();
   }
@@ -2553,44 +2731,86 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const raw=String(step.title||step.id||'');
     return raw.replace(/\{\{\s*matrix\.([a-zA-Z0-9_]+)\s*\}\}/g,'(по каждому пункту)').replace(/\{\{[^}]+\}\}/g,'…');
   }
-  function renderStepFlowPreview(steps){
-    const box=make('div','scn-steps-preview');
-    const items=list(steps);
-    items.slice(0,9).forEach((step,idx)=>{
-      const role=scenarioStepRole(step.type),row=make('div','scn-steps-preview-item role-'+role);
-      const label=prettyStepLabel(step),hasNum=/^\d+\.\s/.test(label);
-      row.append(make('span','',hasNum?label:(idx+1)+'. '+label));
-      const roleText=step.hints?.subagent?'Субагент':(SCN_STEP_META[step.type]?.label||SCN_ROLE_LABEL[role]||role);
-      row.append(make('span','scn-steps-preview-role',roleText));
-      box.append(row);
+  function renderScenarioMiniSvg(def){
+    const steps=list(def.steps),auto=scenarioAutoLayout(steps);
+    const saved=def.layout&&typeof def.layout==='object'&&def.layout.positions&&typeof def.layout.positions==='object'?def.layout.positions:{};
+    const pos={};
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    const nw=108,nh=38;
+    for(const s of steps){
+      const p=saved[s.id]&&Number.isFinite(Number(saved[s.id].x))&&Number.isFinite(Number(saved[s.id].y))
+        ?{x:Number(saved[s.id].x)*0.55,y:Number(saved[s.id].y)*0.55}
+        :{x:(auto[s.id]?.x||36)*0.55,y:(auto[s.id]?.y||36)*0.55};
+      pos[s.id]=p;
+      if(p.x<minX)minX=p.x;if(p.y<minY)minY=p.y;
+      if(p.x+nw>maxX)maxX=p.x+nw;if(p.y+nh>maxY)maxY=p.y+nh;
+    }
+    if(!Number.isFinite(minX)){minX=0;minY=0;maxX=240;maxY=100;}
+    const padX=22,padY=30,vbW=Math.max(260,(maxX-minX)+padX*2),vbH=Math.max(104,(maxY-minY)+padY*2);
+    const svg=makeSvg('svg',{viewBox:`${Math.round(minX-padX)} ${Math.round(minY-padY)} ${Math.round(vbW)} ${Math.round(vbH)}`,preserveAspectRatio:'xMidYMid meet'});
+    for(const s of steps){
+      for(const dep of list(s.needs)){
+        const a=pos[dep],b=pos[s.id];if(!a||!b)continue;
+        const d=scenarioEdgePath(a.x+nw,a.y+nh/2,b.x,b.y+nh/2);
+        svg.append(makeSvg('path',{d,fill:'none',stroke:'var(--edge)','stroke-width':'2.2','stroke-linecap':'round'}));
+      }
+    }
+    const roleColor={agent:'var(--accent)',richi:'var(--record)',human:'var(--entity)'};
+    steps.forEach((s,idx)=>{
+      const p=pos[s.id],role=scenarioStepRole(s.type),col=roleColor[role]||'var(--accent)';
+      const g=makeSvg('g');
+      g.append(makeSvg('rect',{x:Math.round(p.x),y:Math.round(p.y),width:nw,height:nh,rx:'8',fill:'var(--panel)',stroke:col,'stroke-width':'1.8'}));
+      g.append(makeSvg('rect',{x:Math.round(p.x),y:Math.round(p.y),width:'6',height:nh,rx:'3',fill:col}));
+      const txt=makeSvg('text',{x:Math.round(p.x+14),y:Math.round(p.y+23),fill:'var(--ink)','font-size':'11','font-weight':'600'});
+      txt.textContent='#'+(idx+1)+' '+cut(prettyStepLabel(s).replace(/^\d+\.\s*/,''),12);
+      g.append(txt);svg.append(g);
     });
-    if(items.length>9)box.append(make('div','tools-inline-note','И ещё '+plural(items.length-9,['шаг','шага','шагов'])));
-    return box;
+    return svg;
   }
   function renderScenarioCard(item){
-    const def=item.definition||{},card=make('article','rule-card');
-    const top=make('div','rule-card-top'),badges=make('div','badges');
-    badges.append(make('span','rule-scope',item.builtin?'Готовый шаблон':scenarioScopeText(item)));
-    if(!item.builtin&&item.version)badges.append(make('span','badge','v'+item.version));
-    if(item.shadowed)badges.append(make('span','badge hypothesis','Уже скопирован в workspace'));
-    const actions=make('div','rule-actions');
-    if(item.builtin){
-      actions.append(toolButton('Открыть и настроить',()=>openScenarioEditor({copyFrom:item}),'small primary'));
-      actions.append(toolButton('Как запустить',()=>openScenarioRunModal(item),'small'));
-    }else{
-      actions.append(toolButton('Конструктор',()=>openScenarioEditor({record:item}),'small primary'));
-      actions.append(toolButton('Запустить',()=>openScenarioRunModal(item),'small'));
-      actions.append(toolButton('Копия',()=>openScenarioEditor({copyFrom:item}),'small'));
-      actions.append(toolButton('Удалить',()=>openScenarioRemoval(item),'small danger'));
+    const def=item.definition||{},steps=list(def.steps),card=make('article','scn-card');
+    const openEdit=()=>item.builtin?openScenarioEditor({copyFrom:item}):openScenarioEditor({record:item});
+    const preview=make('div','scn-card-preview');
+    preview.title='Открыть пайплайн в визуальном конструкторе';
+    preview.append(renderScenarioMiniSvg(def));
+    const pBadges=make('div','scn-card-preview-badges');
+    const scopeCls=item.builtin?'tpl':(item.scope==='project'?'project':'global');
+    pBadges.append(
+      make('span','scn-pill-badge '+scopeCls,item.builtin?'Готовый шаблон':scenarioScopeText(item)),
+      make('span','scn-pill-badge count',plural(steps.length,['этап','этапа','этапов'])+(!item.builtin&&item.version?' · v'+item.version:''))
+    );
+    preview.append(pBadges);
+    preview.addEventListener('click',openEdit);
+    card.append(preview);
+
+    const body=make('div','scn-card-body');
+    body.append(make('div','scn-card-title',def.title||item.id));
+    if(def.description)body.append(make('div','scn-card-desc',def.description));
+    const stepBox=make('div','scn-card-steps');
+    steps.slice(0,7).forEach((step,idx)=>{
+      const role=scenarioStepRole(step.type),row=make('div','scn-card-step');
+      row.append(make('span','scn-card-step-num role-'+role,String(idx+1)));
+      row.append(make('span','scn-card-step-name',prettyStepLabel(step).replace(/^\d+\.\s*/,'')));
+      const tag=step.hints?.subagent?'субагент':(step.type==='instruction'?'':(SCN_STEP_META[step.type]?.label||''));
+      if(tag)row.append(make('span','scn-card-step-tag',tag));
+      stepBox.append(row);
+    });
+    if(steps.length>7)stepBox.append(make('div','scn-card-id','+ ещё '+plural(steps.length-7,['этап','этапа','этапов'])));
+    body.append(stepBox);
+    card.append(body);
+
+    const footer=make('div','scn-card-footer');
+    footer.append(toolButton(item.builtin?'Открыть и настроить':'Открыть конструктор',openEdit,'small scn-btn-primary'));
+    footer.append(toolButton('Запустить в чате',()=>openScenarioRunModal(item),'small'));
+    const extra=make('div','scn-card-footer-extra');
+    if(!item.builtin){
+      extra.append(toolButton('Копия',()=>openScenarioEditor({copyFrom:item}),'small'));
+      extra.append(toolButton('Удалить',()=>openScenarioRemoval(item),'small danger'));
+    }else if(item.shadowed){
+      extra.append(make('span','scn-card-id','есть копия'));
     }
-    top.append(badges,actions);card.append(top);
-    const title=make('div','rule-text',def.title||item.id);title.style.fontWeight='650';title.style.fontSize='15px';card.append(title);
-    if(def.description)card.append(make('div','tools-inline-note',cut(def.description,320)));
-    card.append(renderStepFlowPreview(def.steps));
-    const meta=make('div','rule-meta');
-    meta.append(make('span','',plural(list(def.steps).length,['этап','этапа','этапов'])),make('code','',item.id));
-    if(item.updated_at)meta.append(make('span','','Обновлён '+dateText(item.updated_at)));
-    card.append(meta);
+    footer.append(extra);
+    card.append(footer);
     return card;
   }
   function scenarioMatchesFilter(item){
@@ -2607,22 +2827,22 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const builtins=list(scenariosState.data?.builtin_templates).filter(scenarioMatchesFilter);
     for(const inv of list(scenariosState.data?.invalid_scenarios))toolWarning(root,'Повреждённое определение сценария: '+(inv.id||inv.key)+' — '+(inv.error||'некорректный JSON'));
     for(const uns of list(scenariosState.data?.unsupported_scenarios))toolWarning(root,'Сценарий «'+(uns.id||uns.key)+'» требует более новую версию формата Richi.');
-    const bar=make('div','rules-actions');
-    bar.append(make('div','tools-inline-note','Создавайте пайплайны шагов (инструкции, скиллы, команды, вопросы человеку, запросы к памяти) в визуальном конструкторе или клонируйте встроенные шаблоны.'));
-    bar.append(keyed(toolButton('+ Новый сценарий',()=>openScenarioEditor(),'primary'),'scn-add'));
+    const bar=make('div','scn-catalog-bar');
+    bar.append(make('p','','Собирайте повторяемые пайплайны для агентов на визуальном холсте, клонируйте готовые шаблоны или попросите агента в чате создать сценарий через richi scenario apply.'));
+    bar.append(keyed(toolButton('+ Новый сценарий',()=>openScenarioEditor(),'scn-btn-primary'),'scn-add'));
     root.append(bar);
-    toolSection(root,'Сохранённые сценарии',stored.length);
+    toolSection(root,'Ваши сценарии',stored.length);
     if(!stored.length){
       const empty=make('div','tools-empty');
-      empty.append(ruleMark('rule'),make('h3','',list(scenariosState.data?.scenarios).length?'Подходящих сценариев нет':'Собственных сценариев пока нет'),make('p','',list(scenariosState.data?.scenarios).length?'Измените поиск или фильтр области.':'Создайте новый сценарий в визуальном конструкторе или скопируйте встроенный шаблон «review» ниже.'));
-      empty.append(toolButton('+ Создать сценарий',()=>openScenarioEditor(),'primary'));
+      empty.append(ruleMark('rule'),make('h3','',list(scenariosState.data?.scenarios).length?'Подходящих сценариев нет':'Своих сценариев пока нет'),make('p','',list(scenariosState.data?.scenarios).length?'Измените поиск или фильтр области.':'Создайте новый сценарий с нуля или откройте готовый шаблон «Глубокое ревью в 7 этапов» ниже.'));
+      empty.append(toolButton('+ Создать сценарий',()=>openScenarioEditor(),'scn-btn-primary'));
       root.append(empty);
     }else{
-      const grid=make('div','rules-grid');stored.forEach(item=>grid.append(renderScenarioCard(item)));root.append(grid);
+      const grid=make('div','scn-cards-grid');stored.forEach(item=>grid.append(renderScenarioCard(item)));root.append(grid);
     }
-    toolSection(root,'Встроенные шаблоны',builtins.length);
+    toolSection(root,'Готовые шаблоны',builtins.length);
     if(builtins.length){
-      const grid=make('div','rules-grid');builtins.forEach(item=>grid.append(renderScenarioCard(item)));root.append(grid);
+      const grid=make('div','scn-cards-grid');builtins.forEach(item=>grid.append(renderScenarioCard(item)));root.append(grid);
     }
   }
   function renameStepId(draft,oldId,newId){
@@ -2639,26 +2859,55 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     if(scenariosState.selectedStepId===oldId)scenariosState.selectedStepId=newId;
     return true;
   }
+  function highlightScenarioNode(stepId,active,targetStepId=''){
+    const root=$('scenarios-content');if(!root||!stepId)return;
+    for(const n of root.querySelectorAll('.scn-node[data-step-id]')){
+      if(n.dataset.stepId===stepId)n.classList.toggle('hi',Boolean(active));
+    }
+    for(const g of root.querySelectorAll('.scn-edge-group[data-from]')){
+      const match=g.dataset.from===stepId&&(!targetStepId||g.dataset.to===targetStepId);
+      if(match)g.classList.toggle('hi',Boolean(active));
+    }
+  }
   function renderScenarioCanvas(ed){
     const def=ed.draft,steps=list(def.steps),positions=ensureDraftPositions(def);
-    const scroll=make('div','scn-canvas-scroll'),surface=make('div','scn-canvas-surface');
-    let maxX=760,maxY=500;
-    for(const step of steps){
-      const p=positions[step.id]||{x:SCN_PAD,y:SCN_PAD};
-      if(p.x+SCN_NODE_W+140>maxX)maxX=p.x+SCN_NODE_W+140;
-      if(p.y+SCN_NODE_H+140>maxY)maxY=p.y+SCN_NODE_H+140;
-    }
-    surface.style.width=maxX+'px';surface.style.height=maxY+'px';
-    const svgEl=makeSvg('svg',{class:'scn-edges-svg',width:String(maxX),height:String(maxY)});
+    const viewport=make('div','scn-canvas-viewport'),layer=make('div','scn-canvas-layer');
+    const cam=scenariosState.camera||(scenariosState.camera={x:20,y:20,k:1});
+    const svgEl=makeSvg('svg',{class:'scn-edges-svg',width:'2400',height:'1600'});
     svgEl.style.color='var(--edge)';
     const defsEl=makeSvg('defs'),marker=makeSvg('marker',{id:'scn-arrow',viewBox:'0 0 10 10',refX:'9',refY:'5',markerWidth:'7',markerHeight:'7',orient:'auto'});
     marker.append(makeSvg('path',{d:'M 0 1.5 L 9 5 L 0 8.5 z',fill:'currentColor'}));
     defsEl.append(marker);svgEl.append(defsEl);
     const edgesGroup=makeSvg('g');svgEl.append(edgesGroup);
     const previewPath=makeSvg('path',{class:'scn-edge-preview',d:''});svgEl.append(previewPath);
-    surface.append(svgEl);
+    layer.append(svgEl);
 
-    const nodeEls=new Map();
+    const nodeEls=new Map(),zoomReadout=make('span','','100%');
+    const applyCamera=()=>{
+      cam.k=Math.min(1.8,Math.max(0.35,Number(cam.k)||1));
+      layer.style.transform='translate('+Math.round(cam.x)+'px,'+Math.round(cam.y)+'px) scale('+cam.k.toFixed(3)+')';
+      viewport.style.backgroundPosition=Math.round(cam.x)+'px '+Math.round(cam.y)+'px';
+      zoomReadout.textContent=Math.round(cam.k*100)+'%';
+    };
+    const fitCamera=()=>{
+      const vw=viewport.clientWidth||760,vh=viewport.clientHeight||560;
+      if(!steps.length){cam.x=20;cam.y=20;cam.k=1;applyCamera();return;}
+      let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+      for(const step of steps){
+        const p=positions[step.id]||{x:SCN_PAD,y:SCN_PAD},el=nodeEls.get(step.id);
+        const w=el?.offsetWidth||SCN_NODE_W,h=el?.offsetHeight||SCN_NODE_H;
+        minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);maxX=Math.max(maxX,p.x+w);maxY=Math.max(maxY,p.y+h);
+      }
+      const bw=Math.max(180,maxX-minX),bh=Math.max(120,maxY-minY);
+      cam.k=Math.min(1,Math.max(0.42,Math.min((vw-72)/bw,(vh-72)/bh)));
+      cam.x=Math.round((vw-bw*cam.k)/2-minX*cam.k);
+      cam.y=Math.round((vh-bh*cam.k)/2-minY*cam.k);
+      applyCamera();
+    };
+    const toWorld=(clientX,clientY)=>{
+      const rect=viewport.getBoundingClientRect();
+      return {x:(clientX-rect.left-cam.x)/cam.k,y:(clientY-rect.top-cam.y)/cam.k};
+    };
     const portCoords=(stepId,side)=>{
       const p=positions[stepId]||{x:SCN_PAD,y:SCN_PAD},el=nodeEls.get(stepId);
       const w=el?el.offsetWidth||SCN_NODE_W:SCN_NODE_W,h=el?el.offsetHeight||SCN_NODE_H:SCN_NODE_H;
@@ -2666,24 +2915,65 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     };
     function redrawEdges(){
       edgesGroup.replaceChildren();
+      let maxX=2000,maxY=1200;
       for(const step of steps){
+        const p=positions[step.id]||{x:SCN_PAD,y:SCN_PAD};
+        if(p.x+SCN_NODE_W+300>maxX)maxX=p.x+SCN_NODE_W+300;
+        if(p.y+SCN_NODE_H+300>maxY)maxY=p.y+SCN_NODE_H+300;
         for(const dep of list(step.needs)){
           if(!positions[dep])continue;
           const a=portCoords(dep,'out'),b=portCoords(step.id,'in'),d=scenarioEdgePath(a.x,a.y,b.x,b.y);
-          const g=makeSvg('g',{class:'scn-edge-group'});
+          const g=makeSvg('g',{class:'scn-edge-group','data-from':dep,'data-to':step.id});
           const title=makeSvg('title');title.textContent=dep+' → '+step.id+' (нажмите, чтобы удалить связь)';
           const path=makeSvg('path',{class:'scn-edge-path',d,'marker-end':'url(#scn-arrow)'});
           const hit=makeSvg('path',{class:'scn-edge-hit',d});
           hit.addEventListener('click',event=>{
             event.stopPropagation();
-            step.needs=list(step.needs).filter(n=>n!==dep);ed.dirty=true;
+            step.needs=list(step.needs).filter(n=>n!==dep);ed.dirty=true;scenariosState.lintResult=null;
             announce('Связь '+dep+' → '+step.id+' удалена');
             renderScenarios();
           });
           g.append(title,path,hit);edgesGroup.append(g);
         }
       }
+      svgEl.setAttribute('width',String(maxX));svgEl.setAttribute('height',String(maxY));
     }
+
+    let wireMenuEl=null;
+    const closeWireMenu=()=>{if(wireMenuEl){wireMenuEl.remove();wireMenuEl=null;}};
+    const openWireCreateMenu=(fromId,clientX,clientY,worldPt)=>{
+      closeWireMenu();
+      const rect=viewport.getBoundingClientRect();
+      const menu=make('div','scn-wire-menu');
+      const left=Math.max(10,Math.min(rect.width-264,clientX-rect.left));
+      const top=Math.max(10,Math.min(rect.height-320,clientY-rect.top));
+      menu.style.left=Math.round(left)+'px';menu.style.top=Math.round(top)+'px';
+      menu.append(make('div','scn-wire-menu-head','Создать и подключить шаг'));
+      const quickTypes=[
+        ['instruction','Задание агенту','Свободная инструкция в чате'],
+        ['skill','Скилл из профиля','Вызов установленного скилла'],
+        ['command','Команда терминала','Тесты, линтер или сборка'],
+        ['gate','Вопрос человеку','Пауза до ответа в чате'],
+        ['checklist','Чек-лист','Список пунктов на проверку'],
+        ['memory.recall','Поиск в памяти','Richi найдёт прошлые записи'],
+        ['condition','Условие / ветвление','Развилка по ответу или статусу'],
+      ];
+      for(const [type,label,desc] of quickTypes){
+        const btn=make('button');btn.type='button';
+        btn.append(make('strong','',label),make('span','',desc));
+        btn.addEventListener('click',e=>{
+          e.stopPropagation();
+          const id=uniqueStepId(def.steps,type.replace('.','_'));
+          const newStep={id,type,title:label,needs:[fromId],params:scenarioDefaultParams(type)};
+          def.steps.push(newStep);
+          positions[id]={x:Math.max(12,Math.round(worldPt.x)),y:Math.max(12,Math.round(worldPt.y-SCN_NODE_H/2))};
+          scenariosState.selectedStepId=id;ed.dirty=true;scenariosState.lintResult=null;
+          closeWireMenu();announce('Создан шаг «'+label+'» после «'+fromId+'»');renderScenarios();
+        });
+        menu.append(btn);
+      }
+      viewport.append(menu);wireMenuEl=menu;
+    };
 
     let wireState=null;
     const stopWire=()=>{
@@ -2694,19 +2984,30 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       wireState=null;
     };
 
-    for(const step of steps){
+    const lintByStep=scenariosState.lintResult?.byStep||null;
+    steps.forEach((step,idx)=>{
       const p=positions[step.id]||{x:SCN_PAD,y:SCN_PAD},role=scenarioStepRole(step.type);
       const node=make('div','scn-node role-'+role+(scenariosState.selectedStepId===step.id?' selected':''));
       node.dataset.stepId=step.id;node.style.left=p.x+'px';node.style.top=p.y+'px';
       const head=make('div','scn-node-head');
-      head.append(make('span','scn-node-type',SCN_STEP_META[step.type]?.label||step.type),make('span','scn-node-badge',SCN_ROLE_LABEL[role]||role));
+      const hLeft=make('div','scn-node-head-left');
+      hLeft.append(make('span','scn-node-num','#'+(idx+1)),make('span','scn-node-type',SCN_STEP_META[step.type]?.label||step.type));
+      head.append(hLeft);
+      const stepLint=lintByStep&&lintByStep[step.id];
+      if(stepLint){
+        const lb=make('span','scn-node-lint '+stepLint.severity,stepLint.severity==='err'?'✕':stepLint.severity==='warn'?'!':'✓');
+        lb.title=stepLint.messages.length?stepLint.messages.join('\n'):'Проверка пройдена';
+        head.append(lb);
+      }else{
+        head.append(make('span','scn-node-badge',SCN_ROLE_LABEL[role]||role));
+      }
       const body=make('div','scn-node-body');
       body.append(make('div','scn-node-title',prettyStepLabel(step)));
       const badges=make('div','scn-node-badges');
       if(step.hints?.subagent)badges.append(make('span','scn-node-badge','субагент'));
       if(step.type==='skill'&&step.params?.skill){
         const rawSk=step.params.skill;
-        const sk=typeof rawSk==='string'?rawSk:(rawSk.default||(rawSk.per_agent?'свой по агентам ('+Object.keys(rawSk.per_agent).length+')':''));
+        const sk=typeof rawSk==='string'?rawSk:(rawSk.default||(rawSk.per_agent?'по агентам ('+Object.keys(rawSk.per_agent).length+')':''));
         if(sk)badges.append(make('span','scn-node-badge','скилл: '+cut(sk,22)));
       }
       if(step.type==='checklist'&&list(step.params?.items).length)badges.append(make('span','scn-node-badge','пунктов: '+step.params.items.length));
@@ -2715,28 +3016,26 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       if(step.matrix)badges.append(make('span','scn-node-badge','матрица'));
       if(badges.childElementCount)body.append(badges);
 
-      const inPort=make('button','scn-port scn-port-in');inPort.type='button';inPort.title='Вход (зависимость needs): отпустите сюда линию от другого шага';inPort.setAttribute('aria-label','Входной порт шага '+step.id);
-      const outPort=make('button','scn-port scn-port-out');outPort.type='button';outPort.title='Выход: потяните к другому шагу, чтобы соединить (needs)';outPort.setAttribute('aria-label','Выходной порт шага '+step.id);
+      const inPort=make('button','scn-port scn-port-in');inPort.type='button';inPort.title='Вход: отпустите сюда линию от предыдущего шага';inPort.setAttribute('aria-label','Входной порт шага '+step.id);
+      const outPort=make('button','scn-port scn-port-out');outPort.type='button';outPort.title='Выход: потяните к шагу для связи или в пустое место, чтобы создать новый шаг';outPort.setAttribute('aria-label','Выходной порт шага '+step.id);
 
-      body.addEventListener('click',()=>{if(scenariosState.selectedStepId!==step.id){scenariosState.selectedStepId=step.id;renderScenarios();}});
+      body.addEventListener('click',()=>{closeWireMenu();if(scenariosState.selectedStepId!==step.id){scenariosState.selectedStepId=step.id;renderScenarios();}});
 
-      // Drag node by header
+      // Drag node by header (zoom-aware)
       let nodeDrag=null;
       head.addEventListener('pointerdown',event=>{
         if(event.button!==0)return;
-        event.stopPropagation();
+        event.stopPropagation();closeWireMenu();
         nodeDrag={pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,origX:positions[step.id].x,origY:positions[step.id].y,moved:false};
         head.setPointerCapture(event.pointerId);node.classList.add('dragging');
       });
       head.addEventListener('pointermove',event=>{
         if(!nodeDrag||nodeDrag.pointerId!==event.pointerId)return;
-        const dx=event.clientX-nodeDrag.startX,dy=event.clientY-nodeDrag.startY;
+        const dx=(event.clientX-nodeDrag.startX)/cam.k,dy=(event.clientY-nodeDrag.startY)/cam.k;
         if(Math.hypot(dx,dy)>3)nodeDrag.moved=true;
         if(!nodeDrag.moved)return;
         const nx=Math.max(12,Math.round(nodeDrag.origX+dx)),ny=Math.max(12,Math.round(nodeDrag.origY+dy));
         positions[step.id]={x:nx,y:ny};node.style.left=nx+'px';node.style.top=ny+'px';
-        if(nx+SCN_NODE_W+140>maxX){maxX=nx+SCN_NODE_W+140;surface.style.width=maxX+'px';svgEl.setAttribute('width',String(maxX));}
-        if(ny+SCN_NODE_H+140>maxY){maxY=ny+SCN_NODE_H+140;surface.style.height=maxY+'px';svgEl.setAttribute('height',String(maxY));}
         redrawEdges();
       });
       const finishNodeDrag=event=>{
@@ -2748,20 +3047,19 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       };
       head.addEventListener('pointerup',finishNodeDrag);head.addEventListener('pointercancel',finishNodeDrag);
 
-      // Drag wire from output port to target node / input port
+      // Drag wire from output port to target node OR empty canvas (Wire-to-Create)
       outPort.addEventListener('pointerdown',event=>{
         if(event.button!==0)return;
-        event.stopPropagation();
+        event.stopPropagation();closeWireMenu();
         const origin=portCoords(step.id,'out');
-        wireState={pointerId:event.pointerId,fromId:step.id,fromPort:outPort,origin};
+        wireState={pointerId:event.pointerId,fromId:step.id,fromPort:outPort,origin,startClientX:event.clientX,startClientY:event.clientY};
         outPort.classList.add('active');outPort.setPointerCapture(event.pointerId);
         previewPath.setAttribute('d',scenarioEdgePath(origin.x,origin.y,origin.x+24,origin.y));
       });
       outPort.addEventListener('pointermove',event=>{
         if(!wireState||wireState.pointerId!==event.pointerId)return;
-        const rect=surface.getBoundingClientRect();
-        const tx=event.clientX-rect.left,ty=event.clientY-rect.top;
-        previewPath.setAttribute('d',scenarioEdgePath(wireState.origin.x,wireState.origin.y,tx,ty));
+        const pt=toWorld(event.clientX,event.clientY);
+        previewPath.setAttribute('d',scenarioEdgePath(wireState.origin.x,wireState.origin.y,pt.x,pt.y));
         const hitEl=document.elementFromPoint(event.clientX,event.clientY)?.closest?.('.scn-node');
         for(const [sid,el] of nodeEls.entries()){
           el.classList.toggle('drop-target',Boolean(hitEl&&hitEl.dataset.stepId===sid&&sid!==wireState.fromId&&!scenarioWouldCycle(steps,wireState.fromId,sid)));
@@ -2769,20 +3067,25 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       });
       const finishWire=event=>{
         if(!wireState||wireState.pointerId!==event.pointerId)return;
-        const fromId=wireState.fromId;
+        const {fromId,startClientX,startClientY}=wireState;
         if(outPort.hasPointerCapture(event.pointerId))outPort.releasePointerCapture(event.pointerId);
         const hitEl=document.elementFromPoint(event.clientX,event.clientY)?.closest?.('.scn-node');
+        const dist=Math.hypot(event.clientX-startClientX,event.clientY-startClientY);
+        const worldPt=toWorld(event.clientX,event.clientY);
         stopWire();
         const targetId=hitEl?.dataset?.stepId;
-        if(!targetId||targetId===fromId)return;
-        if(scenarioWouldCycle(steps,fromId,targetId)){
-          scenariosState.saveError='Нельзя соединить «'+fromId+'» → «'+targetId+'»: получится цикл зависимостей.';
-          renderScenarios();return;
-        }
-        const target=steps.find(s=>s.id===targetId);
-        if(target){
-          if(!Array.isArray(target.needs))target.needs=[];
-          if(!target.needs.includes(fromId)){target.needs.push(fromId);ed.dirty=true;scenariosState.saveError='';announce('Соединены шаги '+fromId+' → '+targetId);renderScenarios();}
+        if(targetId&&targetId!==fromId){
+          if(scenarioWouldCycle(steps,fromId,targetId)){
+            scenariosState.saveError='Нельзя соединить «'+fromId+'» → «'+targetId+'»: получится цикл зависимостей.';
+            renderScenarios();return;
+          }
+          const target=steps.find(s=>s.id===targetId);
+          if(target){
+            if(!Array.isArray(target.needs))target.needs=[];
+            if(!target.needs.includes(fromId)){target.needs.push(fromId);ed.dirty=true;scenariosState.saveError='';scenariosState.lintResult=null;announce('Соединены шаги '+fromId+' → '+targetId);renderScenarios();}
+          }
+        }else if(!targetId&&dist>36){
+          openWireCreateMenu(fromId,event.clientX,event.clientY,worldPt);
         }
       };
       const cancelWire=event=>{
@@ -2793,16 +3096,69 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       outPort.addEventListener('pointerup',finishWire);outPort.addEventListener('pointercancel',cancelWire);
 
       node.append(head,body,inPort,outPort);
-      surface.append(node);nodeEls.set(step.id,node);
-    }
-    scroll.append(surface);
-    scroll.addEventListener('scroll',()=>{scenariosState.canvasScroll={left:scroll.scrollLeft,top:scroll.scrollTop};});
-    requestAnimationFrame(()=>{
-      scroll.scrollLeft=scenariosState.canvasScroll.left||0;
-      scroll.scrollTop=scenariosState.canvasScroll.top||0;
-      redrawEdges();
+      layer.append(node);nodeEls.set(step.id,node);
     });
-    return scroll;
+
+    // Pan background & wheel zoom centered on cursor
+    let panState=null;
+    viewport.addEventListener('pointerdown',event=>{
+      if(event.button!==0)return;
+      if(event.target.closest('.scn-node,.scn-port,.scn-canvas-hud,.scn-wire-menu,.scn-edge-hit'))return;
+      closeWireMenu();
+      panState={pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,origX:cam.x,origY:cam.y};
+      viewport.classList.add('panning');viewport.setPointerCapture(event.pointerId);
+    });
+    viewport.addEventListener('pointermove',event=>{
+      if(!panState||panState.pointerId!==event.pointerId)return;
+      cam.x=panState.origX+(event.clientX-panState.startX);
+      cam.y=panState.origY+(event.clientY-panState.startY);
+      applyCamera();
+    });
+    const endPan=event=>{
+      if(!panState||panState.pointerId!==event.pointerId)return;
+      panState=null;viewport.classList.remove('panning');
+      if(viewport.hasPointerCapture(event.pointerId))viewport.releasePointerCapture(event.pointerId);
+    };
+    viewport.addEventListener('pointerup',endPan);viewport.addEventListener('pointercancel',endPan);
+    viewport.addEventListener('dblclick',event=>{
+      if(event.target.closest('.scn-node,.scn-canvas-hud,.scn-wire-menu'))return;
+      fitCamera();
+    });
+    viewport.addEventListener('wheel',event=>{
+      event.preventDefault();closeWireMenu();
+      const rect=viewport.getBoundingClientRect();
+      const mx=event.clientX-rect.left,my=event.clientY-rect.top;
+      const prevK=cam.k;
+      const factor=event.deltaY<0?1.1:0.9;
+      cam.k=Math.min(1.8,Math.max(0.35,prevK*factor));
+      cam.x=mx-(mx-cam.x)*(cam.k/prevK);
+      cam.y=my-(my-cam.y)*(cam.k/prevK);
+      applyCamera();
+    },{passive:false});
+
+    // Floating Zoom / Pan / Fit HUD (Figma / Linear pattern)
+    const hud=make('div','scn-canvas-hud');
+    const zoomStep=mult=>{
+      const vw=viewport.clientWidth||760,vh=viewport.clientHeight||560,prevK=cam.k;
+      cam.k=Math.min(1.8,Math.max(0.35,prevK*mult));
+      cam.x=vw/2-(vw/2-cam.x)*(cam.k/prevK);
+      cam.y=vh/2-(vh/2-cam.y)*(cam.k/prevK);
+      applyCamera();
+    };
+    const btnOut=toolButton('−',()=>zoomStep(0.85));btnOut.title='Уменьшить';
+    const btnReset=make('button');btnReset.type='button';btnReset.title='Сбросить масштаб 100%';btnReset.append(zoomReadout);
+    btnReset.addEventListener('click',()=>{cam.k=1;applyCamera();});
+    const btnIn=toolButton('+',()=>zoomStep(1.18));btnIn.title='Увеличить';
+    const btnFit=toolButton('Вписать',fitCamera);btnFit.title='Вписать весь пайплайн в экран';
+    hud.append(btnOut,btnReset,btnIn,btnFit);
+
+    viewport.append(layer,hud);
+    requestAnimationFrame(()=>{
+      redrawEdges();
+      if(scenariosState.cameraFitNeeded){scenariosState.cameraFitNeeded=false;fitCamera();}
+      else applyCamera();
+    });
+    return viewport;
   }
   function renderScenarioListView(ed){
     const def=ed.draft,steps=list(def.steps),box=make('div','scn-list-view');
@@ -3016,8 +3372,14 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       return box;
     }
     scenariosState.selectedStepId=step.id;
+    const stepIndex=steps.indexOf(step),stepById=new Map(steps.map(s=>[s.id,s])),stepNumById=new Map(steps.map((s,i)=>[s.id,i+1]));
+    const ancestors=scenarioAncestors(steps,step.id);
     const role=scenarioStepRole(step.type),guide=SCN_STEP_GUIDE[step.type]||SCN_STEP_GUIDE.instruction;
-    box.append(make('h3','',prettyStepLabel(step)));
+    const headRow=make('div','scn-run-top');
+    const titleWrap=make('div','scn-node-head-left');
+    titleWrap.append(make('span','scn-node-num','#'+(stepIndex+1)),make('h3','',prettyStepLabel(step)));
+    headRow.append(titleWrap,make('code','scn-card-id',step.id));
+    box.append(headRow);
 
     const typeSel=make('select');
     for(const item of SCN_STEP_TYPES)typeSel.add(new Option(item.label,item.id));
@@ -3027,7 +3389,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       const nextRole=scenarioStepRole(step.type);
       if(nextRole!=='agent'){delete step.executor;delete step.outputs;delete step.checks;delete step.retry;delete step.hints;delete step.continue_on_failure;}
       if(nextRole==='richi')delete step.matrix;
-      ed.dirty=true;renderScenarios();
+      ed.dirty=true;scenariosState.lintResult=null;renderScenarios();
     });
     box.append(ruleField('Тип шага',typeSel));
 
@@ -3058,31 +3420,84 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       box.append(subWrap);
     }
 
-    // Human-readable data-insert fold (replaces raw technical chips wall)
+    // Live Variable Pills Preview (n8n / Dify pattern: resolves {{steps.x.summary}} into interactive badges with canvas cross-highlighting)
+    const FIELD_LABELS={summary:'Итог',answer:'Ответ',data:'Данные',status:'Статус',stdout:'Вывод',stderr:'Ошибки',exit_code:'Код выхода'};
+    const CTX_LABELS={'project.path':'Папка проекта','project.id':'ID проекта','project.name':'Имя проекта','now.date':'Текущая дата','now.iso':'Текущее время','run.id':'ID запуска'};
+    const buildLivePreview=(targetEl,opts={})=>{
+      const boxEl=make('div','scn-live-preview');boxEl.hidden=true;
+      const update=()=>{
+        const parts=scenarioParseTokens(targetEl.value);
+        if(!parts.some(pt=>pt.type==='token')){boxEl.hidden=true;return;}
+        boxEl.hidden=false;boxEl.replaceChildren();
+        boxEl.append(make('span','scn-live-preview-label','Подстановки (наведите для подсветки на графе, нажмите для перехода)'));
+        const content=make('div');
+        for(const pt of parts){
+          if(pt.type==='text'){content.append(document.createTextNode(pt.value));continue;}
+          const pill=make('button','scn-var-pill');pill.type='button';pill.title=pt.raw;
+          const badShell=opts.requireShell&&!/(^|\|\s*)shell\s*$/.test(pt.filter);
+          if(pt.root==='steps'){
+            const src=stepById.get(pt.target),num=stepNumById.get(pt.target);
+            const ok=Boolean(src&&ancestors.has(pt.target))&&!badShell;
+            if(!ok)pill.classList.add('bad');
+            else pill.classList.add('role-'+scenarioStepRole(src.type));
+            const fld=FIELD_LABELS[pt.field]||pt.field||'данные';
+            pill.textContent=src
+              ?('← #'+num+' '+cut(prettyStepLabel(src),22)+' · '+fld+(ancestors.has(pt.target)?'':' ⚠ не связан')+(badShell?' ⚠ нужен | shell':''))
+              :('⚠ неизвестный шаг «'+pt.target+'»');
+            if(src){
+              pill.addEventListener('mouseenter',()=>highlightScenarioNode(src.id,true,step.id));
+              pill.addEventListener('mouseleave',()=>highlightScenarioNode(src.id,false,step.id));
+              pill.addEventListener('click',()=>{highlightScenarioNode(src.id,false,step.id);scenariosState.selectedStepId=src.id;renderScenarios();});
+            }
+          }else if(pt.root==='inputs'){
+            const spec=def.inputs&&def.inputs[pt.target];
+            const badSec=opts.forbidSecret&&spec?.type==='secret';
+            if(!spec||badSec||badShell)pill.classList.add('bad');
+            pill.textContent=spec
+              ?('Параметр · '+(spec.title||pt.target)+(badSec?' ⚠ секрет запрещён':'')+(badShell?' ⚠ нужен | shell':''))
+              :('⚠ неизвестный параметр «'+pt.target+'»');
+          }else{
+            if(badShell)pill.classList.add('bad');
+            pill.textContent=(CTX_LABELS[pt.path]||pt.path)+(badShell?' ⚠ нужен | shell':'');
+          }
+          content.append(pill);
+        }
+        boxEl.append(content);
+      };
+      targetEl.addEventListener('input',update);
+      update();
+      return boxEl;
+    };
+
+    // Human-readable data-insert helpers + n8n-style Incoming Data pane
     const insertToken=(textarea,token)=>{
+      if(!textarea)return;
       const start=textarea.selectionStart??textarea.value.length,end=textarea.selectionEnd??textarea.value.length;
       textarea.value=textarea.value.slice(0,start)+token+textarea.value.slice(end);
       textarea.selectionStart=textarea.selectionEnd=start+token.length;
       textarea.dispatchEvent(new Event('input'));textarea.focus();
     };
+    let activePromptEl=null;
+    const incomingSlot=make('div');
+    box.append(incomingSlot);
+
     const renderDataInsertFold=(targetEl,shellPipe=false,allowSecret=true)=>{
       const fold=make('details','tools-fold');
       fold.append(make('summary','','Вставить результат предыдущего шага или контекст'));
       const inner=make('div');inner.style.display='grid';inner.style.gap='6px';inner.style.marginTop='8px';
-      inner.append(make('div','rule-field-hint','Нажмите кнопку — в текст вставится подстановка, которую агент сам заполнит реальными данными при запуске.'));
+      inner.append(make('div','rule-field-hint','Нажмите кнопку — в текст вставится подстановка, а выше она сразу отобразится понятной плашкой.'));
       const chips=make('div','scn-chips');
       const wrap=expr=>'{{'+expr+(shellPipe?' | shell':'')+'}}';
-      const stepById=new Map(steps.map(s=>[s.id,s]));
-      for(const anc of scenarioAncestors(steps,step.id)){
+      for(const anc of ancestors){
         const ancStep=stepById.get(anc);if(!ancStep)continue;
-        const ancName=cut(prettyStepLabel(ancStep),28);
-        if(ancStep.type==='gate'){
-          chips.append(toolButton('Ответ «'+ancName+'»',()=>insertToken(targetEl,wrap('steps.'+anc+'.answer')),'scn-example-btn'));
-        }else if(ancStep.matrix){
-          chips.append(toolButton('Данные «'+ancName+'»',()=>insertToken(targetEl,wrap('steps.'+anc+'.data')),'scn-example-btn'));
-        }else{
-          chips.append(toolButton('Итог «'+ancName+'»',()=>insertToken(targetEl,wrap('steps.'+anc+'.summary')),'scn-example-btn'));
-        }
+        const ancNum=stepNumById.get(anc);
+        const ancName='#'+ancNum+' '+cut(prettyStepLabel(ancStep),22);
+        const fld=ancStep.type==='gate'?'answer':(ancStep.matrix?'data':'summary');
+        const lbl=(ancStep.type==='gate'?'Ответ ':ancStep.matrix?'Данные ':'Итог ')+ancName;
+        const b=toolButton(lbl,()=>insertToken(targetEl,wrap('steps.'+anc+'.'+fld)),'scn-example-btn');
+        b.addEventListener('mouseenter',()=>highlightScenarioNode(anc,true,step.id));
+        b.addEventListener('mouseleave',()=>highlightScenarioNode(anc,false,step.id));
+        chips.append(b);
       }
       for(const [name,spec] of Object.entries(def.inputs||{})){
         if(!allowSecret&&spec?.type==='secret')continue;
@@ -3108,7 +3523,9 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     if(step.type==='instruction'){
       const ta=make('textarea');ta.value=p.text||'';ta.placeholder='Напишите простым языком, что должен сделать агент на этом шаге…';
       ta.addEventListener('input',()=>{p.text=ta.value;ed.dirty=true;});
+      activePromptEl=ta;
       const f=ruleField('Что сделать агенту',ta);
+      f.append(buildLivePreview(ta));
       const ex=renderExampleButtons(ta,guide.examples);if(ex)f.append(ex);
       f.append(renderDataInsertFold(ta,false));box.append(f);
     }else if(step.type==='skill'){
@@ -3125,13 +3542,17 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       }
       const ta=make('textarea');ta.value=p.instruction||'';ta.placeholder='Дополнительные указания к запуску скилла (необязательно)…';
       ta.addEventListener('input',()=>{p.instruction=ta.value;ed.dirty=true;});
+      activePromptEl=ta;
       const f=ruleField('Дополнительная инструкция к скиллу',ta);
+      f.append(buildLivePreview(ta));
       const ex=renderExampleButtons(ta,guide.examples);if(ex)f.append(ex);
       f.append(renderDataInsertFold(ta,false));box.append(f);
     }else if(step.type==='command'){
       const ta=make('textarea');ta.style.fontFamily='ui-monospace,SFMono-Regular,monospace';ta.value=p.command||'';ta.placeholder='Например: pytest -q или npm test';
       ta.addEventListener('input',()=>{p.command=ta.value;ed.dirty=true;});
+      activePromptEl=ta;
       const f=ruleField('Консольная команда',ta,'Если используете подстановки {{...}}, они автоматически экранируются через | shell.');
+      f.append(buildLivePreview(ta,{requireShell:true}));
       const ex=renderExampleButtons(ta,guide.examples);if(ex)f.append(ex);
       f.append(renderDataInsertFold(ta,true));box.append(f);
       const cwd=make('input');cwd.type='text';cwd.value=p.cwd||'';cwd.placeholder='По умолчанию — корень проекта';
@@ -3147,7 +3568,9 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     }else if(step.type==='gate'){
       const ta=make('textarea');ta.value=p.question||'';ta.placeholder='Например: Принимаем изменения и переходим к финальному шагу?';
       ta.addEventListener('input',()=>{p.question=ta.value;ed.dirty=true;});
+      activePromptEl=ta;
       const f=ruleField('Текст вопроса пользователю',ta);
+      f.append(buildLivePreview(ta,{forbidSecret:true}));
       const ex=renderExampleButtons(ta,guide.examples);if(ex)f.append(ex);
       f.append(renderDataInsertFold(ta,false,false));box.append(f);
       // Interactive gate options builder
@@ -3228,6 +3651,34 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       box.append(ruleField('Максимум записей (1–50)',lim));
     }else if(step.type==='condition'){
       box.append(renderConditionHelper(def,steps,step,p.expr||'',val=>{p.expr=val;ed.dirty=true;}));
+    }
+
+    // Populate n8n-style Incoming Data pane (shows connected upstream steps with hover cross-highlight & 1-click insert)
+    const directNeeds=list(step.needs).filter(id=>stepById.has(id));
+    if(directNeeds.length){
+      const inc=make('div','scn-incoming');
+      inc.append(make('div','scn-incoming-head','Входящие данные от предыдущих шагов'));
+      for(const nid of directNeeds){
+        const src=stepById.get(nid),num=stepNumById.get(nid);
+        const row=make('div','scn-incoming-row');
+        const info=make('div','scn-node-head-left');
+        const jumpBtn=make('button','scn-var-pill role-'+scenarioStepRole(src.type));jumpBtn.type='button';
+        jumpBtn.textContent='#'+num+' '+cut(prettyStepLabel(src),24);
+        jumpBtn.title='Перейти к шагу '+src.id;
+        jumpBtn.addEventListener('click',()=>{highlightScenarioNode(src.id,false,step.id);scenariosState.selectedStepId=src.id;renderScenarios();});
+        info.append(jumpBtn);
+        row.append(info);
+        if(activePromptEl){
+          const fld=src.type==='gate'?'answer':(src.matrix?'data':'summary');
+          const lbl=src.type==='gate'?'+ Ответ':(src.matrix?'+ Данные':'+ Итог');
+          const token='{{steps.'+src.id+'.'+fld+(step.type==='command'?' | shell':'')+'}}';
+          row.append(toolButton(lbl,()=>insertToken(activePromptEl,token),'scn-example-btn'));
+        }
+        row.addEventListener('mouseenter',()=>highlightScenarioNode(src.id,true,step.id));
+        row.addEventListener('mouseleave',()=>highlightScenarioNode(src.id,false,step.id));
+        inc.append(row);
+      }
+      incomingSlot.append(inc);
     }
 
     // Clear, clickable step dependencies (human titles + separate downstream list so nothing looks broken!)
@@ -3353,11 +3804,50 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     left.append(toolButton('← К списку',closeScenarioEditor,'small'));
     left.append(make('span','scn-editor-title',(ed.mode==='add'?'Новый сценарий':'Конструктор: '+def.id)+(ed.dirty?' · есть несохранённые изменения':'')));
     const right=make('div','scn-editor-bar-right');
+    right.append(toolButton('✓ Проверить',()=>{
+      const skillNames=rulesState.skills?list(rulesState.skills.skills).map(s=>s.name):null;
+      scenariosState.lintResult=scenarioLintDraft(def,skillNames);
+      announce(scenariosState.lintResult.ok?'Проверка пайплайна: ошибок не найдено':'Проверка пайплайна: найдены замечания ('+scenariosState.lintResult.issues.length+')');
+      renderScenarios();
+    },'small'));
     right.append(toolButton(scenariosState.showJson?'Скрыть JSON':'JSON',()=>{scenariosState.showJson=!scenariosState.showJson;renderScenarios();},'small'));
-    const saveBtn=toolButton(scenariosState.busy?'Сохраняем…':rulesState.editing?'Сохранить сценарий':'Показать команду сохранения',saveScenarioDraft,'primary');
+    const saveBtn=toolButton(scenariosState.busy?'Сохраняем…':rulesState.editing?'Сохранить сценарий':'Показать команду сохранения',saveScenarioDraft,'scn-btn-primary');
     saveBtn.disabled=scenariosState.busy;
     right.append(saveBtn);
     head.append(left,right);wrap.append(head);
+
+    if(scenariosState.lintResult){
+      const lr=scenariosState.lintResult;
+      const errCount=lr.issues.filter(i=>i.severity==='err').length;
+      const warnCount=lr.issues.filter(i=>i.severity==='warn').length;
+      const sev=errCount?'err':(warnCount?'warn':'ok');
+      const lBar=make('div','scn-lint-bar '+sev);
+      const lTop=make('div','scn-run-top');
+      lTop.append(make('strong','',sev==='ok'
+        ?'✓ Пайплайн проверен — битых ссылок, циклов и ошибок параметров не найдено.'
+        :'Проверка пайплайна: '+(errCount?errCount+' ошибок':'')+(errCount&&warnCount?' · ':'')+(warnCount?warnCount+' предупреждений':'')));
+      lTop.append(toolButton('Скрыть',()=>{scenariosState.lintResult=null;renderScenarios();},'small'));
+      lBar.append(lTop);
+      if(lr.issues.length){
+        const lList=make('div','scn-lint-list');
+        const stepNumMap=new Map(list(def.steps).map((s,i)=>[s.id,i+1]));
+        const stepObjMap=new Map(list(def.steps).map(s=>[s.id,s]));
+        for(const issue of lr.issues){
+          const item=make('button','scn-lint-item');item.type='button';
+          item.append(make('span','scn-node-lint '+issue.severity,issue.severity==='err'?'✕':'!'));
+          const prefix=issue.stepId&&stepObjMap.has(issue.stepId)?('#'+stepNumMap.get(issue.stepId)+' '+cut(prettyStepLabel(stepObjMap.get(issue.stepId)),24)+': '):'';
+          item.append(make('span','',prefix+issue.message));
+          if(issue.stepId){
+            item.addEventListener('mouseenter',()=>highlightScenarioNode(issue.stepId,true));
+            item.addEventListener('mouseleave',()=>highlightScenarioNode(issue.stepId,false));
+            item.addEventListener('click',()=>{scenariosState.selectedStepId=issue.stepId;renderScenarios();});
+          }
+          lList.append(item);
+        }
+        lBar.append(lList);
+      }
+      wrap.append(lBar);
+    }
 
     if(scenariosState.saveError){
       const err=make('div','rule-error',scenariosState.saveError);err.setAttribute('role','alert');wrap.append(err);
@@ -3495,15 +3985,15 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     },'small primary');
     const layoutBtn=toolButton('Авто-раскладка',()=>{
       if(!def.layout)def.layout={};
-      def.layout.positions=scenarioAutoLayout(def.steps);ed.dirty=true;renderScenarios();
+      def.layout.positions=scenarioAutoLayout(def.steps);ed.dirty=true;scenariosState.cameraFitNeeded=true;renderScenarios();
     },'small');
     sRight.append(addStepSel,addStepBtn,layoutBtn);
     stageHead.append(sLeft,sRight);stage.append(stageHead);
     if(scenariosState.viewMode==='graph')stage.append(renderScenarioCanvas(ed));
     else stage.append(renderScenarioListView(ed));
     const stageFoot=make('div','scn-stage-head');
-    stageFoot.append(make('span','tools-inline-note',scenariosState.viewMode==='graph'
-      ?'Заголовок узла — перетащить · правый порт → левый порт другого шага — соединить (needs) · клик по линии — удалить связь.'
+    stageFoot.append(make('span','rule-field-hint',scenariosState.viewMode==='graph'
+      ?'Колесо мыши — масштаб · перетащите фон — панорама · правый порт в пустое место — создать связанный шаг · клик по линии — удалить связь.'
       :'Перетаскивайте строки или используйте ↑ / ↓, чтобы менять порядок шагов.'));
     stage.append(stageFoot);
 
@@ -3644,9 +4134,78 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         detail.append(gateBox);
       }
 
+      // Live 2D Execution Graph Overlay (status-colored nodes + click-to-scroll to step detail)
+      const renderRunBlueprintGraph=(runObj,container)=>{
+        const defSteps=list(runObj.definition_steps).length
+          ?list(runObj.definition_steps)
+          :[...new Map(list(runObj.steps).map(s=>[s.id,{id:s.id,title:s.title||s.id,type:s.type,needs:[]}])).values()];
+        if(!defSteps.length)return null;
+        const autoPos=scenarioAutoLayout(defSteps),savedPos=runObj.layout?.positions||{};
+        const pos={};
+        for(const ds of defSteps){
+          const sp=savedPos[ds.id];
+          pos[ds.id]=sp&&Number.isFinite(Number(sp.x))&&Number.isFinite(Number(sp.y))
+            ?{x:Math.round(Number(sp.x)),y:Math.round(Number(sp.y))}
+            :(autoPos[ds.id]||{x:SCN_PAD,y:SCN_PAD});
+        }
+        const byStepId=new Map();
+        for(const rs of list(runObj.steps)){
+          if(!byStepId.has(rs.id))byStepId.set(rs.id,[]);
+          byStepId.get(rs.id).push(rs);
+        }
+        const rank={failed:6,blocked:5,waiting_human:4,claimed:3,running:3,ready:2,done:1,skipped:0,pending:-1};
+        const aggStatus=rows=>{
+          if(!rows.length)return 'pending';
+          return rows.reduce((best,cur)=>(rank[cur.status]??-1)>(rank[best]??-1)?cur.status:best,rows[0].status);
+        };
+        const graphBox=make('div','scn-run-graph');
+        let maxX=520,maxY=260;
+        for(const ds of defSteps){
+          const p=pos[ds.id];
+          if(p.x+240>maxX)maxX=p.x+240;
+          if(p.y+110>maxY)maxY=p.y+110;
+        }
+        const surface=make('div');surface.style.position='relative';surface.style.width=maxX+'px';surface.style.height=maxY+'px';
+        const svgEl=makeSvg('svg',{class:'scn-edges-svg',width:String(maxX),height:String(maxY)});
+        for(const ds of defSteps){
+          const b=pos[ds.id];
+          for(const dep of list(ds.needs)){
+            const a=pos[dep];if(!a)continue;
+            const d=scenarioEdgePath(a.x+210,a.y+36,b.x,b.y+36);
+            svgEl.append(makeSvg('path',{class:'scn-edge-path',d}));
+          }
+        }
+        surface.append(svgEl);
+        defSteps.forEach((ds,idx)=>{
+          const p=pos[ds.id],rows=byStepId.get(ds.id)||[],st=aggStatus(rows);
+          const node=make('div','scn-run-node st-'+st);
+          node.style.left=p.x+'px';node.style.top=p.y+'px';
+          const top=make('div','scn-run-top');
+          const numWrap=make('span','scn-node-head-left');
+          numWrap.append(make('span','scn-node-num','#'+(idx+1)));
+          if(st==='claimed'||st==='running')numWrap.append(make('span','scn-run-pulse'));
+          const stText=rows.length>1?rows.filter(x=>x.status==='done'||x.status==='skipped').length+'/'+rows.length:(SCN_STATUS_LABEL[st]||st);
+          top.append(numWrap,make('span','scn-status st-'+st,stText));
+          node.append(top,make('div','scn-node-title',cut(prettyStepLabel(ds),34)));
+          node.addEventListener('click',()=>{
+            const target=container.querySelector('.scn-step-row[data-step-id="'+ds.id+'"]');
+            if(target){target.scrollIntoView({behavior:'smooth',block:'nearest'});target.style.outline='2px solid var(--accent)';setTimeout(()=>{target.style.outline='';},1200);}
+          });
+          surface.append(node);
+        });
+        graphBox.append(surface);
+        return graphBox;
+      };
+      const runGraph=renderRunBlueprintGraph(r,detail);
+      if(runGraph){
+        toolSection(detail,'Карта выполнения',list(r.definition_steps).length||list(r.steps).length);
+        detail.append(runGraph);
+      }
+
       toolSection(detail,'Шаги выполнения',list(r.steps).length);
       for(const step of list(r.steps)){
         const row=make('div','scn-step-row st-'+step.status);
+        row.dataset.stepId=step.id;
         const sTop=make('div','scn-run-top');
         sTop.append(make('strong','',(step.title||step.id)+' '),make('span','scn-status st-'+step.status,SCN_STATUS_LABEL[step.status]||step.status));
         const sMeta=make('div','rule-meta');

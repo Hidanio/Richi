@@ -630,7 +630,20 @@ def _scenario_run_worker(database, run_id):
             if row is not None and row[0]:
                 definition = json.loads(row[0])
                 run_data["scenario_title"] = definition.get("title") or run_data["scenario_id"]
-                by_id = {step["id"]: step for step in definition.get("steps", []) if isinstance(step, dict)}
+                def_steps = [step for step in definition.get("steps", []) if isinstance(step, dict)]
+                run_data["definition_steps"] = [
+                    {
+                        "id": step.get("id", ""),
+                        "title": step.get("title") or step.get("id", ""),
+                        "type": step.get("type", "instruction"),
+                        "needs": list(step.get("needs") or []),
+                        "subagent": bool((step.get("hints") or {}).get("subagent")),
+                    }
+                    for step in def_steps
+                ]
+                if isinstance(definition.get("layout"), dict):
+                    run_data["layout"] = definition["layout"]
+                by_id = {step["id"]: step for step in def_steps if "id" in step}
                 for step in run_data.get("steps", []):
                     spec = by_id.get(step.get("id"))
                     if not spec:
