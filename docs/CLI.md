@@ -157,6 +157,9 @@ The map's **Rules** tab shows them and, in a page opened by `richi map`, adds
 and edits them with templates and a list of installed skills: one skill for every agent, or
 one per agent when they differ.
 
+For repeatable multi-step workflows (`richi scenario list`, `plan`, `run`, `next`, `report`),
+see [scenarios](SCENARIOS.md) and [the scenario guide](../skills/richi/references/SCENARIOS.md).
+
 The skill catalog lists sources for the built-in Claude Code, Codex, Cursor and
 Antigravity profiles, including clients that have yet to be connected. You can switch their skill sources,
 add skill folders or describe another agent. These settings apply to every workspace.

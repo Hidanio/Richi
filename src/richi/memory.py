@@ -974,10 +974,11 @@ def run(args, cli=None):
     storage_apply = (args.command == "storage" and args.action == "optimize"
                      and args.apply)
     building_index = args.command == "search-index" and args.action == "build"
-    from . import rules
+    from . import rules, scenario_commands
     writing_rules = rules.writes(args)
+    writing_scenarios = scenario_commands.writes(args)
     project_path = getattr(args, "project_path", None)
-    writing = args.command in {"init", "migrate"} or getattr(args, "action", None) in {"put", "upsert"} or source_attach or adding_project or applying_scan or storage_apply or building_index or writing_rules
+    writing = args.command in {"init", "migrate"} or getattr(args, "action", None) in {"put", "upsert"} or source_attach or adding_project or applying_scan or storage_apply or building_index or writing_rules or writing_scenarios
     conn = connect(database, create=args.command == "init", readonly=not writing)
     try:
         if args.command == "init":
@@ -999,11 +1000,12 @@ def run(args, cli=None):
             return storage.run(conn, args, sys.modules[__name__], database)
         writing = getattr(args, "action", None) in {"put", "upsert"}
         items = payload(args.json) if writing else None
-        # Like a payload, a rule change is read before the store is locked: it may wait for stdin.
+        # Like a payload, a rule or scenario change is read before the store is locked: it may wait for stdin.
         rule_request = rules.read_request(args, sys.modules[__name__]) if writing_rules else None
+        scenario_request = scenario_commands.read_request(args, sys.modules[__name__]) if args.command == "scenario" else None
         checked_project = unmatched_path = None
         infer_rule_scope = args.command == "rules" and args.action in {"show", "check"} and args.project is None
-        with transaction(conn, write=writing or source_attach or adding_project or applying_scan or building_index or writing_rules):
+        with transaction(conn, write=writing or source_attach or adding_project or applying_scan or building_index or writing_rules or writing_scenarios):
             if project_path is not None:
                 from .projects import ensure_project_context
                 try:
@@ -1029,6 +1031,10 @@ def run(args, cli=None):
                 return rules.run(conn, args, sys.modules[__name__], workspace=settings.workspace,
                                  checked_project=checked_project, unmatched_path=unmatched_path,
                                  request=rule_request)
+            if args.command == "scenario":
+                return scenario_commands.run(conn, args, sys.modules[__name__], database,
+                                             workspace=settings.workspace, checked_project=checked_project,
+                                             project_path=project_path, request=scenario_request)
             if scanning:
                 from .projects import project_scan
                 result = project_scan(conn, args.path, apply=args.apply, max_depth=args.max_depth)
