@@ -11,7 +11,7 @@ curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Ri
 ```
 
 Для локального Cursor Agent нужен Richi 1.2.0 или новее, для Antigravity —
-релиз после 1.2.1. Чтобы проверить текущий стабильный установщик, замените
+1.2.2 или новее. Чтобы проверить текущий стабильный установщик, замените
 `--agent codex --yes` в команде выше на `--help`. Если в списке агентов есть
 `cursor` или `antigravity`, выполните команду с `--agent cursor --yes` или
 `--agent antigravity --yes`. Если нужного агента пока нет,
@@ -263,8 +263,8 @@ python3 -I richi-installer.pyz --yes --wheel richi-X.Y.Z-py3-none-any.whl --mani
 В Richi 1.0.1 подключайте Codex через `richi setup --yes` и проверяйте его
 состояние через `richi setup --status`. Этот launcher выпущен до появления
 меню агентов и параметра `--agent`. Для Claude Code нужен Richi 1.1.0 или новее,
-для локального Cursor Agent — 1.2.0 или новее, для Antigravity — релиз после
-1.2.1. Когда выйдет стабильный релиз
+для локального Cursor Agent — 1.2.0 или новее, для Antigravity — 1.2.2 или
+новее. Когда выйдет стабильный релиз
 с поддержкой нужного клиента, обновите старую установку командой `richi update apply`.
 Перед подключением проверьте, что клиент есть в списке `richi setup --help`.
 Список определяет установленный launcher, в том числе при включённом dev.
