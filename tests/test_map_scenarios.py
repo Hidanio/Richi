@@ -529,6 +529,24 @@ assert.equal(badRes.byStep.s1.severity, 'err');
 assert.equal(badRes.byStep.s2.severity, 'err');
 assert.equal(badRes.byStep.s3.severity, 'err');
 assert.equal(badRes.byStep.s4.severity, 'warn');
+
+// Declarative incoming token toggle (prevents accidental duplicate spamming!)
+const tok = '{{steps.self_review.summary}}';
+assert.equal(scenarioHasToken('Compare {{ steps.self_review.summary }} now', tok), true);
+assert.equal(scenarioHasToken('Compare nothing yet', tok), false);
+const added = scenarioToggleToken('Review findings:', tok);
+assert.equal(added.active, true);
+assert.equal(added.value, 'Review findings: {{steps.self_review.summary}}');
+const removed = scenarioToggleToken(added.value, tok);
+assert.equal(removed.active, false);
+assert.equal(removed.value, 'Review findings:');
+const removedParen = scenarioToggleToken('Compare ({{steps.self_review.summary}}) and code.', tok);
+assert.equal(removedParen.active, false);
+assert.equal(removedParen.value, 'Compare and code.');
+
+// Draft baseline dirty comparison
+assert.equal(scenarioDraftChanged({id: 'a', steps: []}, {id: 'a', steps: []}), false);
+assert.equal(scenarioDraftChanged({id: 'a', steps: [{id: 'x'}]}, {id: 'a', steps: []}), true);
 """)
 
 

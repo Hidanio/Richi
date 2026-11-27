@@ -191,7 +191,7 @@ implemented, merged и released — разные состояния. Отсут�
 | Операция | Руководство |
 |---|---|
 | Загрузить, добавить, изменить или удалить постоянные правила пользователя | [RULES.ru.md](references/RULES.ru.md) |
-| Планировать, запускать, продолжать или настраивать сценарии агентов | [SCENARIOS.ru.md](references/SCENARIOS.ru.md) |
+| Создавать, редактировать, планировать, запускать и продолжать сценарии агентов | [SCENARIOS.ru.md](references/SCENARIOS.ru.md) |
 | Найти кандидатов, затем прочитать несколько точных записей | [RETRIEVAL_TOOLS.ru.md](references/RETRIEVAL_TOOLS.ru.md) |
 | Соседи и связи известного узла | [NEIGHBORS.ru.md](references/NEIGHBORS.ru.md) |
 | Определения с областью применения или неоднозначные aliases | [ENCYCLOPEDIA.ru.md](references/ENCYCLOPEDIA.ru.md) |

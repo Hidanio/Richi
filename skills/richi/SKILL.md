@@ -176,7 +176,7 @@ only when its specific operation or contract is needed.
 | Operation | Reference |
 |---|---|
 | Load, add, change or remove the user's standing rules | [RULES.md](references/RULES.md) |
-| Plan, run, resume or manage multi-step agent scenarios | [SCENARIOS.md](references/SCENARIOS.md) |
+| Create, edit, plan, run, resume or manage multi-step agent scenarios | [SCENARIOS.md](references/SCENARIOS.md) |
 | Find candidates, then read several exact records | [RETRIEVAL_TOOLS.md](references/RETRIEVAL_TOOLS.md) |
 | Neighbors/links of a known node | [NEIGHBORS.md](references/NEIGHBORS.md) |
 | Scoped definitions or ambiguous aliases | [ENCYCLOPEDIA.md](references/ENCYCLOPEDIA.md) |
