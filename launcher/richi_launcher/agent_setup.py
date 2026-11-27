@@ -79,6 +79,50 @@ def _profile_name(state, name, fallback=LEGACY_NAME):
     return name
 
 
+def _skill_rules(text):
+    return _skill_name(text) == SKILL_NAME and "--with-rules" in text
+
+
+def _installed_rules(site, fallback):
+    skill = Path(site) / "richi_launcher/agent_skill/SKILL.md"
+    try:
+        if skill.is_file() and skill.stat().st_size <= files.MAX_FILE:
+            text = skill.read_text(encoding="utf-8")
+            if _skill_name(text) is not None:
+                return _skill_rules(text)
+    except (OSError, UnicodeError):
+        pass
+    return fallback
+
+
+def _block_digest(command, agent, name, rules):
+    block = _block(command, agent, name, rules=rules)
+    wrap = getattr(agent_adapters.get(agent), "instruction_file", None)
+    return files.digest(wrap(block) if wrap else block)
+
+
+def _managed_rules(records):
+    modes = set()
+    for agent, record in records.items():
+        if Path(record["skill"]).name != SKILL_NAME:
+            return False
+        for candidate in (True, False):
+            if record.get("block_sha256") == _block_digest(record["command"], agent, SKILL_NAME, candidate):
+                modes.add(candidate)
+    return modes.pop() if len(modes) == 1 else False
+
+
+def _profile_rules(state, name, fallback=False):
+    """Retain pre-rules startup instructions while the rollback target predates --with-rules."""
+    if name != SKILL_NAME:
+        return False
+    active = _installed_rules(state["generations"][state["current"]]["site"], fallback)
+    previous = state.get("previous")
+    if active and previous:
+        return _installed_rules(state["generations"][previous]["site"], fallback)
+    return active
+
+
 def _source(value):
     """Normalize a development checkout path stored for skill links."""
     if isinstance(value, os.PathLike):
@@ -249,9 +293,10 @@ def _manifest_op(ctx, records):
     return files.change(path, after, before=before)
 
 
-def _block(command, agent="codex", name=SKILL_NAME):
+def _block(command, agent="codex", name=SKILL_NAME, *, rules=True):
     # The stable absolute launcher also works in desktop apps without shell PATH.
     cli = shlex.quote(str(command))
+    use_rules = rules and name == SKILL_NAME
     text = """## Richi project memory
 
 Use the `{name}` skill for project continuity in this local {agent} profile.
@@ -273,10 +318,10 @@ workspaces without a request. Memory authorization does not authorize external
 messages, deployment, or unrelated changes.
 """.format(cli=cli, name=name, agent=agent_adapters.get(agent).LABEL,
            startup=("At startup, resume and compaction, run `richi chat current --with-rules PATH` and `richi workspace list`."
-                    if name == SKILL_NAME else "At each new chat, run `richi chat current` and `richi workspace list`."),
+                    if use_rules else "At each new chat, run `richi chat current` and `richi workspace list`."),
            binding=("Use `richi chat bind NAME --with-rules PATH` or `richi chat bind --current --with-rules PATH` and reuse the choice."
-                    if name == SKILL_NAME else "Bind that choice and reuse it.")).encode("utf-8")
-    if name == SKILL_NAME:
+                    if use_rules else "Bind that choice and reuse it.")).encode("utf-8")
+    if use_rules:
         text += b"""With --with-rules, pass the repository path for project work and omit PATH for workspace-wide work.
 Follow rules_context.rules. After a load error or on older versions, load them
 with `richi --project-path PATH rules show` or `richi rules show` before acting.
@@ -367,6 +412,7 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     # Setup adds or repairs one agent. Only an installation-wide transition
     # can change every existing profile's discovery path and instruction block.
     name = _managed_name(records) or _profile_name(state, name)
+    rules = _profile_rules(state, name, _managed_rules(records))
     current = records.get(agent)
     home = Path.home().resolve()
     adapter = agent_adapters.get(agent)
@@ -393,7 +439,7 @@ def plan(ctx, *, replace_skill=False, no_path=False, agent="codex"):
     command_op = files.change(command, {"kind": "link", "target": str(executable)})
     if command_op["before"]["kind"] != "absent" and command_op["before"] != command_op["after"]:
         raise ConfigError("Another command owns " + str(command) + "; it was not overwritten")
-    block, instruction_op = _instruction_operation(adapter, agent, command, instructions, name, current)
+    block, instruction_op = _instruction_operation(adapter, agent, command, instructions, name, current, rules=rules)
     ops = adapter_ops + skill_ops + [command_op, instruction_op]
     path_block = PATH_START + ("\nexport PATH=" + shlex.quote(str(command.parent)) + ':"$PATH"\n').encode() + PATH_END
     profiles = current.get("profiles", []) if current else [] if no_path else [str(p) for p in _shell_profiles()]
@@ -455,8 +501,8 @@ def _skill_operations(record, skill, link, *, replace_skill=False, before=None, 
     return [op, *ops]
 
 
-def _instruction_operation(adapter, agent, command, instructions, name, current):
-    block = _block(command, agent, name)
+def _instruction_operation(adapter, agent, command, instructions, name, current, *, rules=True):
+    block = _block(command, agent, name, rules=rules)
     expected = current.get("block_sha256") if current else None
     instruction_file = getattr(adapter, "instruction_file", None)
     if instruction_file is None:
@@ -478,19 +524,23 @@ def _check_skill_change(agent, records, skill, link, replace_skill=False):
                   check_alternates=observer == agent and (replace_skill or current is None))
 
 
-def _move_profile(agent, records, skill, link, before, foreign, alternate):
+def _move_profile(agent, records, skill, link, before, foreign, alternate, *, rules=True):
     """Journal the discovery path and the rule naming it together."""
     record = records[agent]
     _check_skill_change(agent, records, skill, link)
     operations = _alternate_operations(alternate, False)
     operations.extend(_skill_operations(record, skill, link, before=before))
-    if str(skill) == record["skill"]:
+    expected = _block_digest(record["command"], agent, skill.name, rules)
+    if str(skill) == record["skill"] and record.get("block_sha256") == expected:
         return {}, operations
-    if skill.name == SKILL_NAME:
+    if str(skill) != record["skill"] and skill.name == SKILL_NAME:
         _check_foreign_paths(agent, record, foreign, alternate)
     block, rule = _instruction_operation(
-        agent_adapters.get(agent), agent, record["command"], record["instructions"], skill.name, record)
-    return {"skill": str(skill), "block_sha256": files.digest(block)}, [*operations, rule]
+        agent_adapters.get(agent), agent, record["command"], record["instructions"], skill.name, record, rules=rules)
+    updates = {"block_sha256": files.digest(block)}
+    if str(skill) != record["skill"]:
+        updates["skill"] = str(skill)
+    return updates, [*operations, rule]
 
 
 def _verify_skill(record):
@@ -630,20 +680,25 @@ def rename_conflicts():
 def rules_setup_notices():
     """A frozen updater may have retained the previous managed instruction block."""
     try:
-        records = _records(_context())
+        import richi_bootstrap
+        ctx = richi_bootstrap.context()
+        records = _records(ctx)
+        if not records:
+            return []
+        state_path = Path(ctx["root"]) / "state.json"
+        state = (richi_bootstrap.read_state(ctx) if state_path.exists()
+                 else {"current": "seed", "previous": None, "generations": {"seed": {"site": ctx["site"]}}})
     except (ImportError, ValueError, OSError, RuntimeError, KeyError, TypeError):
         return []
     notices = []
+    fallback = _managed_rules(records)
     for agent, record in records.items():
         name = Path(record["skill"]).name
-        if name != SKILL_NAME:
-            # This block is deliberately frozen during the rename rollback window.
+        if not _profile_rules(state, name, fallback):
+            # This block is deliberately frozen during the rollback window.
             # The bundled skill already carries the current startup procedure.
             continue
-        block = _block(record["command"], agent, name)
-        wrap = getattr(agent_adapters.get(agent), "instruction_file", None)
-        expected = files.digest(wrap(block) if wrap else block)
-        if record.get("block_sha256") != expected:
+        if record.get("block_sha256") != _block_digest(record["command"], agent, name, True):
             notices.append({"agent": agent, "next_command": "richi setup --agent " + agent + " --yes",
                             "message": "Show the user the setup command to refresh this agent's startup instructions. "
                                        "Load standing rules for this chat after binding with rules show."})
@@ -659,12 +714,14 @@ def activation_operations(ctx, state):
         raise ConfigError("The selected release cannot maintain agent setup; activation was cancelled")
     agent_adapters.require_supported(site, records)
     target, hashes, name = bundle(site)
+    fallback_rules = _managed_rules(records)
     name = _profile_name(state, name, _managed_name(records) or LEGACY_NAME)
     # Keep links on the checkout only if the activated release maintains them;
     # a missing checkout falls back to the release skill instead of blocking.
     dev_capable = _dev_capable(site)
     if dev_capable:
         name = _dev_profile_name(name, {record.get("dev_source") for record in records.values()})
+    rules = _profile_rules(state, name, fallback_rules)
     foreign = _foreign_skills(records, _rename_candidates(records, name))
     registered = _registered_paths(records)
     ops = []
@@ -676,7 +733,7 @@ def activation_operations(ctx, state):
         skill = Path(record["skill"]).with_name(name)
         link, source, _ = _desired_link(target, record.get("dev_source") if dev_capable else None, name)
         alternate = _alternate_skill_paths(agent, record, registered)
-        profile, profile_ops = _move_profile(agent, records, skill, link, before, foreign, alternate)
+        profile, profile_ops = _move_profile(agent, records, skill, link, before, foreign, alternate, rules=rules)
         ops.extend(profile_ops)
         records[agent] = dict(record, skill_target=str(target), skill_hashes=hashes, generation=state["current"], **profile)
         records[agent].pop("dev_source", None)
@@ -691,7 +748,9 @@ def _switch_operations(ctx, state, source):
     records = _records(ctx)
     site = Path(state["generations"][state["current"]]["site"])
     release, _, name = bundle(site)
+    fallback_rules = _managed_rules(records)
     name = _dev_profile_name(_profile_name(state, name, _managed_name(records) or LEGACY_NAME), (source,))
+    rules = _profile_rules(state, name, fallback_rules)
     link, dev_source, reason = _desired_link(release, source, name)
     foreign = _foreign_skills(records, _rename_candidates(records, name))
     registered = _registered_paths(records)
@@ -705,7 +764,8 @@ def _switch_operations(ctx, state, source):
         try:
             if str(skill) != record["skill"]:
                 alternate = _alternate_skill_paths(agent, record, registered)
-                profile, profile_ops = _move_profile(agent, records, skill, link, _verify_skill(record), foreign, alternate)
+                profile, profile_ops = _move_profile(
+                    agent, records, skill, link, _verify_skill(record), foreign, alternate, rules=rules)
                 updated.update(profile)
                 ops.extend(profile_ops)
                 changed = True

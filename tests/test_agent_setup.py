@@ -96,6 +96,39 @@ class AgentSetupTests(AgentSetupFixture, unittest.TestCase):
         self.assertIn(b"richi --project-path PATH rules check branch-name NAME", path.read_bytes())
         self.assertEqual(agent_setup.rules_setup_notices(), [])
 
+    def test_pre_rules_branded_rollback_window_keeps_status_configured_until_next_update(self):
+        # Simulate v1.2.1 (branded richi skill, pre-rules instructions) -> v1.2.2 -> v1.2.3.
+        pre_rules_skill = "---\nname: richi\ndescription: Richi 1.2.1\n---\n# Richi\n"
+        (self.site / "richi_launcher/agent_skill/SKILL.md").write_text(pre_rules_skill, encoding="utf-8")
+        configured = self.configure()
+        instructions = Path(configured["instructions"])
+        self.assertNotIn(b"--with-rules", instructions.read_bytes())
+        self.assertIn(b"`richi` skill", instructions.read_bytes())
+
+        first = self.next_state()
+        with patch.object(installation, "_collect", return_value={}):
+            installation._activate(self.ctx, first, "updated")
+        # While previous is v1.2.1, instructions stay rollback-compatible and status is configured.
+        self.assertEqual(agent_setup.command(["--status"])["status"], "configured")
+        self.assertEqual(agent_setup.command(["--status"])["changes"], [])
+        self.assertEqual(agent_setup.rules_setup_notices(), [])
+        self.assertNotIn(b"--with-rules", instructions.read_bytes())
+
+        # Once both current and previous support --with-rules, activation upgrades the block.
+        generation = "v0.3.0-test"
+        prefix = self.root / "versions" / generation
+        site = prefix / "site"
+        self.package(site, "0.3.0")
+        first["generations"][generation] = {"kind": "release", "version": "0.3.0",
+                                            "prefix": str(prefix), "site": str(site)}
+        first["previous"], first["current"] = first["current"], generation
+        with patch.object(installation, "_collect", return_value={}):
+            installation._activate(self.ctx, first, "updated")
+        self.assertIn(b"chat current --with-rules PATH", instructions.read_bytes())
+        self.assertEqual(agent_setup.command(["--status"])["status"], "configured")
+        self.assertEqual(agent_setup.command(["--status"])["changes"], [])
+        self.assertEqual(agent_setup.rules_setup_notices(), [])
+
     def test_preserves_exact_user_bytes_and_repeated_setup_is_idempotent(self):
         instructions = self.home / ".codex/AGENTS.md"
         instructions.parent.mkdir()
