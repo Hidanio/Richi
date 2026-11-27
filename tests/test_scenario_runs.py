@@ -1,10 +1,12 @@
 """Scenario runs: scheduler, leases, matrix aggregation, report validation, secrets, C3/C4/K1/C2 and task entries."""
 from datetime import datetime, timedelta, timezone
+import json
 import os
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 from richi import memory, rules, scenario_format, scenario_runs, scenarios
 
@@ -51,7 +53,7 @@ class ScenarioRunsTests(unittest.TestCase):
             run = scenario_runs.start_run(
                 self.conn, memory, self.db, "review",
                 project_id="demo", project_path=self.repo,
-                raw_inputs=["branch=feature_auth", "angles=security,tests"],
+                raw_inputs=["branch=auth-boundary", "angles=security,tests"],
                 author=self.chat_a, now_override=self.t0,
             )
         run_id = run["run_id"]
@@ -60,10 +62,16 @@ class ScenarioRunsTests(unittest.TestCase):
         keys = [step["key"] for step in run["steps"]]
         self.assertEqual(keys, ["context", "angle.0", "angle.1", "merge", "approve"])
         self.assertEqual(run["steps"][0]["status"], "done")
+        # R2-J01: memory.brief actually reads res["results"] and finds the seeded decision:auth-boundary!
+        self.assertIn("Auth boundary", run["steps"][0]["summary"])
+        ctx_row = self.conn.execute(
+            "SELECT result_json FROM scenario_steps WHERE run_id = ? AND step_key = 'context'", (run_id,)
+        ).fetchone()
+        self.assertIn("entry:decision:auth-boundary", json.loads(ctx_row["result_json"])["data"]["refs"])
         # Task entry created in "scenario-run" category.
         task = memory.entry_get(self.conn, run["task_entry_id"])
         self.assertEqual(task["kind"], "task")
-        self.assertEqual(task["title"], "Review: feature_auth")
+        self.assertEqual(task["title"], "Review: auth-boundary")
         self.assertIn("scenario-run", task["tags"])
         self.assertEqual(task["work_state"], "in_progress")
 
@@ -220,11 +228,21 @@ class ScenarioRunsTests(unittest.TestCase):
         with memory.transaction(self.conn):
             r_bad = scenario_runs.start_run(self.conn, memory, self.db, "cmd-check",
                                             project_id="demo", project_path=self.repo, author=self.chat_a)
-        with self.assertRaises(memory.MemoryError) as caught_cwd:
-            with memory.transaction(self.conn):
-                scenario_runs.next_step(self.conn, memory, self.db, r_bad["run_id"], claim=True,
-                                        project_path=self.repo, author=self.chat_a)
-        self.assertEqual(caught_cwd.exception.code, "step_blocked")
+        # R2-J02: next_step returns blocked_step JSON instead of raising (so blocked state commits!).
+        with memory.transaction(self.conn):
+            blocked_res = scenario_runs.next_step(self.conn, memory, self.db, r_bad["run_id"], claim=True,
+                                                  project_path=self.repo, author=self.chat_a)
+        self.assertIsNone(blocked_res["step"])
+        self.assertEqual(blocked_res["blocked_step"]["key"], "run_cmd")
+        st_blocked = scenario_runs.run_status(self.conn, memory, r_bad["run_id"])
+        self.assertEqual(st_blocked["status"], "waiting")
+        self.assertEqual(st_blocked["steps"][0]["status"], "blocked")
+        events = [e["action"] for e in scenarios.log(self.conn, run_id=r_bad["run_id"], entries=20)["entries"]]
+        self.assertIn("step_blocked", events)
+        # Retry can recover the persisted blocked step!
+        with memory.transaction(self.conn):
+            scenario_runs.retry_step(self.conn, memory, self.db, r_bad["run_id"], "run_cmd", author=self.chat_a)
+        self.assertEqual(scenario_runs.run_status(self.conn, memory, r_bad["run_id"])["status"], "running")
 
         # Valid subdir: substituted_values shown, symlink file_exists and invalid git rev rejected, real file+rev accepted.
         (self.repo / "sub").mkdir()
@@ -313,6 +331,309 @@ class ScenarioRunsTests(unittest.TestCase):
             scenario_runs.skip_step(self.conn, memory, self.db, rid, "a", "not needed", author=self.chat_a)
             scenario_runs.set_run_state(self.conn, memory, self.db, rid, "cancel", author=self.chat_a)
             self.assertEqual(scenario_runs.run_status(self.conn, memory, rid)["status"], "cancelled")
+
+    def test_memory_recall_returns_results_r2_j01(self):
+        self.add_scenario({
+            "format": "richi-scenario", "format_version": 1, "id": "recall-scn", "title": "Recall",
+            "steps": [
+                {"id": "rec", "type": "memory.recall",
+                 "params": {"query": "session tokens", "kinds": ["decision"], "limit": 5}},
+                {"id": "use", "type": "instruction", "params": {"text": "Found: {{steps.rec.summary}}"}},
+            ],
+        })
+        with memory.transaction(self.conn):
+            run = scenario_runs.start_run(self.conn, memory, self.db, "recall-scn",
+                                          project_id="demo", project_path=self.repo, author=self.chat_a)
+        self.assertIn("Auth boundary", run["steps"][0]["summary"])
+        rec_row = self.conn.execute(
+            "SELECT result_json FROM scenario_steps WHERE run_id = ? AND step_key = 'rec'", (run["run_id"],)
+        ).fetchone()
+        self.assertIn("entry:decision:auth-boundary", json.loads(rec_row["result_json"])["data"]["refs"])
+
+    def test_evidence_git_hardening_and_cwd_without_project_path_r2_j03_j09_j30(self):
+        # Create a second repo whose HEAD should NOT spoof demo repo via GIT_DIR.
+        other_repo = self.root / "other_repo"
+        other_repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=other_repo, check=True)
+        subprocess.run(["git", "config", "user.email", "t@example.test"], cwd=other_repo, check=True)
+        subprocess.run(["git", "config", "user.name", "T"], cwd=other_repo, check=True)
+        (other_repo / "other.txt").write_text("x\n", encoding="utf-8")
+        subprocess.run(["git", "add", "other.txt"], cwd=other_repo, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "other"], cwd=other_repo, check=True)
+        other_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=other_repo, text=True).strip()
+
+        self.add_scenario({
+            "format": "richi-scenario", "format_version": 1, "id": "git-hard", "title": "Git hard",
+            "inputs": {"dir": {"type": "string", "default": "sub"}},
+            "steps": [{
+                "id": "s1", "type": "command",
+                "params": {"command": "echo ok", "cwd": "{{inputs.dir}}", "expect_exit": 0},
+                "checks": [{"kind": "exit_code", "expect": 0}, {"kind": "evidence_git"}],
+            }],
+        })
+        # R2-J09: runtime cwd="../outside" blocks even when project_path is None!
+        with memory.transaction(self.conn):
+            r_trav = scenario_runs.start_run(self.conn, memory, self.db, "git-hard",
+                                             raw_inputs=["dir=../outside"], author=self.chat_a)
+            blocked = scenario_runs.next_step(self.conn, memory, self.db, r_trav["run_id"], claim=True,
+                                              project_path=None, author=self.chat_a)
+        self.assertEqual(blocked["blocked_step"]["key"], "s1")
+
+        # R2-J03 & R2-J30: evidence_git without project_path rejected; second item checked; GIT_DIR ignored; no dup exit_code reason.
+        with memory.transaction(self.conn):
+            r = scenario_runs.start_run(self.conn, memory, self.db, "git-hard",
+                                        project_id="demo", raw_inputs=["dir=sub"], author=self.chat_a)
+            scenario_runs.next_step(self.conn, memory, self.db, r["run_id"], claim=True,
+                                    project_path=None, author=self.chat_a)
+            no_path = scenario_runs.report_step(
+                self.conn, memory, self.db, r["run_id"], "s1",
+                {"status": "done", "summary": "ok", "exit_code": 1,
+                 "evidence": [{"type": "git", "revision": self.head_sha}]},
+                project_path=None, author=self.chat_a,
+            )
+        self.assertEqual(no_path["status"], "rejected")
+        self.assertTrue(any("--project-path" in reason for reason in no_path["reasons"]))
+        # R2-J30: only ONE exit_code failure reason despite both expect_exit=0 and checks[exit_code=0].
+        exit_reasons = [reason for reason in no_path["reasons"] if "exit_code" in reason]
+        self.assertEqual(len(exit_reasons), 1)
+
+        # Second git evidence item invalid + NUL byte rejected without crashing; GIT_DIR spoofing blocked.
+        with mock.patch.dict(os.environ, {"GIT_DIR": str(other_repo / ".git")}):
+            with memory.transaction(self.conn):
+                multi_bad = scenario_runs.report_step(
+                    self.conn, memory, self.db, r["run_id"], "s1",
+                    {"status": "done", "summary": "ok", "exit_code": 0,
+                     "evidence": [{"type": "git", "revision": self.head_sha},
+                                  {"type": "git", "revision": other_sha},
+                                  {"type": "git", "revision": "HEAD\x00bad"}]},
+                    project_path=self.repo, author=self.chat_a,
+                )
+        self.assertEqual(multi_bad["status"], "rejected")
+        self.assertTrue(any(other_sha in reason for reason in multi_bad["reasons"]))
+        self.assertTrue(any("invalid git revision syntax" in reason for reason in multi_bad["reasons"]))
+
+    def test_lease_isolation_anonymous_vs_chat_and_expiry_on_report_r2_j05(self):
+        anon = rules.Author(None, None)
+        self.add_scenario({
+            "format": "richi-scenario", "format_version": 1, "id": "lease-iso", "title": "Lease",
+            "steps": [{"id": "s1", "type": "instruction", "params": {"text": "work"}}],
+        })
+        with memory.transaction(self.conn):
+            r = scenario_runs.start_run(self.conn, memory, self.db, "lease-iso", author=self.chat_a, now_override=self.t0)
+            rid = r["run_id"]
+            scenario_runs.next_step(self.conn, memory, self.db, rid, claim=True, author=self.chat_a, now_override=self.t0)
+        # Anonymous caller CANNOT report or release chat_a's claimed step!
+        with self.assertRaises(memory.MemoryError) as c1:
+            with memory.transaction(self.conn):
+                scenario_runs.report_step(self.conn, memory, self.db, rid, "s1",
+                                          {"status": "done", "summary": "hijack"}, author=anon, now_override=self.t0)
+        self.assertEqual(c1.exception.code, "conflict")
+        with self.assertRaises(memory.MemoryError) as c2:
+            with memory.transaction(self.conn):
+                scenario_runs.release_step(self.conn, memory, rid, "s1", author=anon, now_override=self.t0)
+        self.assertEqual(c2.exception.code, "conflict")
+        # Rejected report renews lease_until!
+        with memory.transaction(self.conn):
+            rej = scenario_runs.report_step(self.conn, memory, self.db, rid, "s1",
+                                            {"status": "done", "summary": ""}, author=self.chat_a,
+                                            now_override=self.t0 + timedelta(minutes=20))
+        self.assertEqual(rej["status"], "rejected")
+        self.assertGreater(rej["lease_until"], (self.t0 + timedelta(minutes=45)).strftime("%Y-%m-%dT%H:%M:%S"))
+        # After lease expires (31m after renewal), report_step rejects with invalid_state!
+        with self.assertRaises(memory.MemoryError) as c3:
+            with memory.transaction(self.conn):
+                scenario_runs.report_step(self.conn, memory, self.db, rid, "s1",
+                                          {"status": "done", "summary": "too late"}, author=self.chat_a,
+                                          now_override=self.t0 + timedelta(minutes=55))
+        self.assertEqual(c3.exception.code, "invalid_state")
+        # Now anonymous can claim, and chat_a cannot steal anonymous's claim!
+        with memory.transaction(self.conn):
+            scenario_runs.claim_step(self.conn, memory, self.db, rid, "s1",
+                                     author=anon, now_override=self.t0 + timedelta(minutes=56))
+        with self.assertRaises(memory.MemoryError) as c4:
+            with memory.transaction(self.conn):
+                scenario_runs.report_step(self.conn, memory, self.db, rid, "s1",
+                                          {"status": "done", "summary": "steal"}, author=self.chat_a,
+                                          now_override=self.t0 + timedelta(minutes=57))
+        self.assertEqual(c4.exception.code, "conflict")
+
+    def test_lifecycle_guards_checklist_retry_max_cas_and_deleted_task_r2_j11_j12_j13_j22_j25(self):
+        self.add_scenario({
+            "format": "richi-scenario", "format_version": 1, "id": "life", "title": "Life",
+            "steps": [
+                {"id": "par", "type": "instruction", "matrix": {"k": ["one", "two"]},
+                 "params": {"text": "work {{matrix.k}}"}, "retry": {"max": 1}},
+                {"id": "gate_nc", "type": "gate",
+                 "params": {"question": "Ok?", "options": ["yes", "no"], "allow_comment": False}},
+                {"id": "chk", "type": "checklist",
+                 "params": {"items": [{"text": "Req item", "required": True}, {"text": "Opt item"}]}},
+            ],
+        })
+        with memory.transaction(self.conn):
+            r = scenario_runs.start_run(self.conn, memory, self.db, "life",
+                                        project_id="demo", author=self.chat_a, now_override=self.t0)
+            rid = r["run_id"]
+        # R2-J22: wrong expected_revision rejected with conflict.
+        with self.assertRaises(memory.MemoryError) as c_rev:
+            with memory.transaction(self.conn):
+                scenario_runs.claim_step(self.conn, memory, self.db, rid, "par.0",
+                                         author=self.chat_a, expected_revision=999)
+        self.assertEqual(c_rev.exception.code, "conflict")
+        # R2-J11: single chat claims BOTH parallel matrix instances and gets full rendered payloads!
+        with memory.transaction(self.conn):
+            c0 = scenario_runs.claim_step(self.conn, memory, self.db, rid, "par.0", author=self.chat_a)
+            c1 = scenario_runs.claim_step(self.conn, memory, self.db, rid, "par.1", author=self.chat_a)
+        self.assertEqual(c0["step"]["text"], "work one")
+        self.assertEqual(c1["step"]["text"], "work two")
+        # R2-J11: next_step with step_key selects par.1 directly.
+        with memory.transaction(self.conn):
+            n1 = scenario_runs.next_step(self.conn, memory, self.db, rid, step_key="par.1", author=self.chat_a)
+        self.assertEqual(n1["step"]["key"], "par.1")
+        # R2-J13: pause rejects release, skip, retry.
+        with memory.transaction(self.conn):
+            scenario_runs.set_run_state(self.conn, memory, self.db, rid, "pause", author=self.chat_a)
+        for fn in (
+            lambda: scenario_runs.release_step(self.conn, memory, rid, "par.0", author=self.chat_a),
+            lambda: scenario_runs.skip_step(self.conn, memory, self.db, rid, "par.0", "skip", author=self.chat_a),
+            lambda: scenario_runs.retry_step(self.conn, memory, self.db, rid, "par.0", author=self.chat_a),
+        ):
+            with self.assertRaises(memory.MemoryError) as caught_p:
+                with memory.transaction(self.conn):
+                    fn()
+            self.assertEqual(caught_p.exception.code, "invalid_state")
+        with memory.transaction(self.conn):
+            scenario_runs.set_run_state(self.conn, memory, self.db, rid, "resume", author=self.chat_a)
+        # R2-J13: failing par.0 marks run failed AND clears par.1's claimed lease!
+        with memory.transaction(self.conn):
+            scenario_runs.report_step(self.conn, memory, self.db, rid, "par.0",
+                                      {"status": "failed", "summary": "err1"}, author=self.chat_a)
+        st_fail = scenario_runs.run_status(self.conn, memory, rid)
+        self.assertEqual(st_fail["status"], "failed")
+        par1_st = next(s for s in st_fail["steps"] if s["key"] == "par.1")
+        self.assertEqual(par1_st["status"], "ready")
+        self.assertIsNone(par1_st.get("claimed_by"))
+        # Retry 1 succeeds (retry.max == 1 allows 2 total attempts); failing again blocks 2nd retry (retry_limit)!
+        with memory.transaction(self.conn):
+            scenario_runs.retry_step(self.conn, memory, self.db, rid, "par.0", author=self.chat_a)
+            scenario_runs.claim_step(self.conn, memory, self.db, rid, "par.0", author=self.chat_a)
+            scenario_runs.report_step(self.conn, memory, self.db, rid, "par.0",
+                                      {"status": "failed", "summary": "err2"}, author=self.chat_a)
+        with self.assertRaises(memory.MemoryError) as c_lim:
+            with memory.transaction(self.conn):
+                scenario_runs.retry_step(self.conn, memory, self.db, rid, "par.0", author=self.chat_a)
+        self.assertEqual(c_lim.exception.code, "retry_limit")
+        # Skip par.0 recovers failed run and syncs task entry back to in_progress!
+        with memory.transaction(self.conn):
+            scenario_runs.skip_step(self.conn, memory, self.db, rid, "par.0", "waived", author=self.chat_a)
+        self.assertEqual(memory.entry_get(self.conn, r["task_entry_id"])["work_state"], "in_progress")
+        # Complete par.1 -> gate_nc waiting_human.
+        with memory.transaction(self.conn):
+            scenario_runs.claim_step(self.conn, memory, self.db, rid, "par.1", author=self.chat_a)
+            scenario_runs.report_step(self.conn, memory, self.db, rid, "par.1",
+                                      {"status": "done", "summary": "done"}, author=self.chat_a)
+        # R2-J25: allow_comment: False rejects comment.
+        with self.assertRaises(memory.MemoryError) as c_cmt:
+            with memory.transaction(self.conn):
+                scenario_runs.answer_step(self.conn, memory, self.db, rid, "gate_nc", "yes",
+                                          comment="nope", author=self.chat_a)
+        self.assertEqual(c_cmt.exception.code, "invalid_answer")
+        with memory.transaction(self.conn):
+            scenario_runs.answer_step(self.conn, memory, self.db, rid, "gate_nc", "yes", author=self.chat_a)
+        # R2-J13: checklist rejects missing required item and unknown item; accepts required item by index or text.
+        for bad_ans in ("1", "unknown", ""):
+            with self.assertRaises(memory.MemoryError) as c_chk:
+                with memory.transaction(self.conn):
+                    scenario_runs.answer_step(self.conn, memory, self.db, rid, "chk", bad_ans, author=self.chat_a)
+            self.assertEqual(c_chk.exception.code, "invalid_answer")
+        # R2-J12: missing/deleted task entry must not crash final transition!
+        with memory.transaction(self.conn):
+            self.conn.execute("UPDATE scenario_runs SET task_entry_id = 'task:missing-entry' WHERE id = ?", (rid,))
+        with memory.transaction(self.conn):
+            fin = scenario_runs.answer_step(self.conn, memory, self.db, rid, "chk", "Req item,1", author=self.chat_a)
+        self.assertEqual(fin["run_status"], "done")
+
+    def test_continue_on_failure_context_reason_nul_secret_edge_cases_and_run_id_r2_j14_j16_j17_j19_j24_j28(self):
+        # R2-J16: non-matrix continue_on_failure preserves result_json in downstream steps context!
+        # R2-J19: literal '<secret>' in normal input works in run_title; empty secret is falsey; unknown --secret fails!
+        self.add_scenario({
+            "format": "richi-scenario", "format_version": 1, "id": "a_b", "title": "AB",
+            "run_title": "Tag {{inputs.label}}",
+            "inputs": {
+                "label": {"type": "string", "default": "<secret>"},
+                "tok": {"type": "secret"},
+            },
+            "steps": [
+                {"id": "fail_cmd", "type": "command", "continue_on_failure": True,
+                 "params": {"command": "false", "expect_exit": 0}},
+                {"id": "skip_if_empty_sec", "type": "instruction", "if": "inputs.tok",
+                 "params": {"text": "secret was set"}},
+                {"id": "after", "type": "skill",
+                 "params": {"skill": {"default": "nonexistent-skill-xyz"},
+                            "instruction": "Prev={{steps.fail_cmd.summary}} code={{steps.fail_cmd.exit_code}}"}},
+            ],
+        })
+        self.add_scenario({
+            "format": "richi-scenario", "format_version": 1, "id": "azb", "title": "AZB",
+            "steps": [{"id": "s1", "type": "instruction", "params": {"text": "ok"}}],
+        })
+        with memory.transaction(self.conn):
+            r1 = scenario_runs.start_run(self.conn, memory, self.db, "a_b",
+                                         raw_inputs=["label=<secret>", "tok="], author=self.chat_a, now_override=self.t0)
+            r2 = scenario_runs.start_run(self.conn, memory, self.db, "azb",
+                                         author=self.chat_a, now_override=self.t0)
+        # R2-J14: a_b and azb both get -0001 cleanly without LIKE wildcard collision!
+        self.assertTrue(r1["run_id"].endswith("-0001"))
+        self.assertTrue(r2["run_id"].endswith("-0001"))
+        # R2-J19: literal "<secret>" preserved in run_title!
+        self.assertEqual(memory.entry_get(self.conn, r1["task_entry_id"])["title"], "Tag <secret>")
+        # R2-J17 & R2-J24: non-string reason and NUL byte in report rejected cleanly!
+        with memory.transaction(self.conn):
+            scenario_runs.next_step(self.conn, memory, self.db, r1["run_id"], claim=True, author=self.chat_a)
+            bad_reason = scenario_runs.report_step(
+                self.conn, memory, self.db, r1["run_id"], "fail_cmd",
+                {"status": "failed", "summary": "err", "reason": {"nested": 1}}, author=self.chat_a,
+            )
+            bad_nul = scenario_runs.report_step(
+                self.conn, memory, self.db, r1["run_id"], "fail_cmd",
+                {"status": "failed", "summary": "bad\x00sum", "reason": "ok"}, author=self.chat_a,
+            )
+        self.assertEqual(bad_reason["status"], "rejected")
+        self.assertEqual(bad_nul["status"], "rejected")
+        # Accept failed step -> skip_if_empty_sec skipped (empty secret falsey!) -> after renders fail_cmd result + skill_warning!
+        with memory.transaction(self.conn):
+            scenario_runs.report_step(
+                self.conn, memory, self.db, r1["run_id"], "fail_cmd",
+                {"status": "failed", "summary": "cmd failed", "exit_code": 2}, author=self.chat_a,
+            )
+            with mock.patch("richi.scenarios.installed_skills", return_value=set()):
+                nxt = scenario_runs.next_step(self.conn, memory, self.db, r1["run_id"], claim=True, author=self.chat_a)
+        self.assertEqual(nxt["step"]["key"], "after")
+        self.assertEqual(nxt["step"]["instruction"], "Prev=cmd failed code=2")
+        self.assertIn("skill_warning", nxt["step"])
+        # Unknown --secret key rejected with invalid_input!
+        with self.assertRaises(memory.MemoryError) as c_sec:
+            with memory.transaction(self.conn):
+                scenario_runs.next_step(self.conn, memory, self.db, r1["run_id"],
+                                        author=self.chat_a, secrets_runtime={"bogus": "val"})
+        self.assertEqual(c_sec.exception.code, "invalid_input")
+        # R2-J14 & R2-J31: sequence rollover past 9999 and pre-existing entry guard.
+        with memory.transaction(self.conn):
+            day = self.t0.strftime("%Y%m%d")
+            self.conn.execute(
+                "INSERT INTO scenario_runs(id, scenario_id, scope, scenario_version, scenario_sha256, definition_json, "
+                "inputs_json, status, created_at, updated_at) VALUES (?, 'azb', 'global', 1, 'abc', '{}', '{}', 'done', ?, ?)",
+                ("run-azb-%s-9999" % day, "2026-11-27T10:00:00Z", "2026-11-27T10:00:00Z"),
+            )
+            memory.entry_put(self.conn, {
+                "id": "task:scenario-run-azb-%s-10000" % day, "kind": "task", "title": "Pre-existing",
+                "summary": "occupies 10000", "project_ids": ["demo"], "knowledge_state": "confirmed",
+                "sources": [{"reference": "synthetic:occ"}], "expected_updated_at": None,
+            })
+            r3 = scenario_runs.start_run(self.conn, memory, self.db, "azb", author=self.chat_a, now_override=self.t0)
+        self.assertEqual(r3["run_id"], "run-azb-%s-10001" % day)
+        # R2-J27: list_runs rejects unknown project_id.
+        with self.assertRaisesRegex(memory.MemoryError, "Unknown project"):
+            scenario_runs.list_runs(self.conn, memory, project_id="nonexistent-proj")
 
 
 if __name__ == "__main__":

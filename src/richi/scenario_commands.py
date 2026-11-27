@@ -82,15 +82,19 @@ def add_commands(commands, api):
     next_cmd = actions.add_parser("next", help="Get the next ready step of a run (and optionally claim it)")
     next_cmd.add_argument("run_id", metavar="RUN", help="Run ID from scenario run or scenario runs")
     next_cmd.add_argument("--claim", action="store_true", help="Claim the returned agent step with a 30-minute lease")
+    next_cmd.add_argument("--step", dest="step_key", metavar="STEP",
+                          help="Inspect or claim one specific actionable step (useful for parallel fan-out)")
     next_cmd.add_argument("--agent", metavar="ID", type=_argument_agent,
                           help="Agent ID filtering pinned steps and skills (default: detected from shell)")
     next_cmd.add_argument("--secret", dest="secrets", action="append", metavar="KEY=VALUE",
                           help="Runtime-only secret input for rendering this step (never stored)")
 
-    claim_cmd = actions.add_parser("claim", help="Claim a specific ready agent step with a 30-minute lease")
+    claim_cmd = actions.add_parser("claim", help="Claim a specific ready agent step and return its rendered payload")
     claim_cmd.add_argument("run_id", metavar="RUN", help="Run ID")
     claim_cmd.add_argument("step_key", metavar="STEP", help="Step key, such as angle.0 or merge")
     claim_cmd.add_argument("--agent", metavar="ID", type=_argument_agent, help="Agent ID (default: detected from shell)")
+    claim_cmd.add_argument("--secret", dest="secrets", action="append", metavar="KEY=VALUE",
+                           help="Runtime-only secret input for rendering this step (never stored)")
 
     release_cmd = actions.add_parser("release", help="Release a step lease held by this chat")
     release_cmd.add_argument("run_id", metavar="RUN", help="Run ID")
@@ -132,8 +136,9 @@ def add_commands(commands, api):
 
     runs_cmd = actions.add_parser("runs", help="List scenario runs in this workspace")
     runs_cmd.add_argument("--active", action="store_true", help="Only running, waiting or paused runs")
-    runs_cmd.add_argument("--chat", dest="filter_chat", metavar="ID", help="Only runs created or claimed by this chat")
-    runs_cmd.add_argument("--mine", action="store_true", help="Only runs belonging to the current chat identity")
+    chat_group = runs_cmd.add_mutually_exclusive_group()
+    chat_group.add_argument("--chat", dest="filter_chat", metavar="ID", help="Only runs created or claimed by this chat")
+    chat_group.add_argument("--mine", action="store_true", help="Only runs belonging to the current chat identity")
     runs_cmd.add_argument("--project", metavar="ID", help="Only runs of this registered project")
     runs_cmd.add_argument("--scenario", metavar="ID", type=_argument_id, help="Only runs of this scenario ID")
     runs_cmd.add_argument("--limit", type=api.limit, default=20, help="Maximum runs to list, 1-200 (default: %(default)s)")
@@ -162,19 +167,46 @@ def read_request(args, api):
     return None
 
 
+def preflight(conn, args, api, *, request=None, project_path=None):
+    """Run read-only filesystem/git report checks completely outside SQLite transactions (R2-J03)."""
+    if args.command != "scenario" or args.action != "report" or request is None:
+        return None
+    prepared = None
+    if project_path is not None:
+        from .projects import checkout_root, ensure_project_match
+        with api.transaction(conn, write=False):
+            matched = ensure_project_match(conn, project_path)
+            checked_project = matched["project"]["id"]
+            effective_root = checkout_root(matched, project_path)
+            prepared = scenario_runs.prepare_report_preflight(
+                conn, api, args.run_id, args.step_key, request,
+                checked_project=checked_project, project_path=effective_root,
+            )
+    else:
+        with api.transaction(conn, write=False):
+            prepared = scenario_runs.prepare_report_preflight(
+                conn, api, args.run_id, args.step_key, request,
+                checked_project=None, project_path=None,
+            )
+    return scenario_runs.run_report_preflight_io(prepared)
+
+
 def _parse_secrets(raw_pairs, api):
     if not raw_pairs:
         return None
     result = {}
     for pair in raw_pairs:
         if "=" not in pair:
-            raise api.MemoryError("secret must have the form KEY=VALUE")
+            err = api.MemoryError("secret must have the form KEY=VALUE")
+            err.code = "invalid_input"
+            raise err
         key, val = pair.split("=", 1)
         result[key] = val
     return result
 
 
-def run(conn, args, api, database, *, workspace=None, checked_project=None, project_path=None, request=None):
+def run(conn, args, api, database, *, workspace=None, checked_project=None, project_path=None,
+        request=None, preflight_io=None):
     action = args.action
     settings = agents.read_settings()
     author = rules.current_author(entries=settings.entries)
@@ -182,10 +214,10 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
     if action == "templates":
         return scenarios.list_templates()
     if action == "list":
-        project = args.project if args.project is not None else (None if args.global_scope else None)
-        return scenarios.listing(conn, api, workspace=workspace, global_scope=args.global_scope, project=project)
+        return scenarios.listing(conn, api, workspace=workspace, global_scope=args.global_scope, project=args.project)
     if action == "show":
-        scope = "builtin" if args.builtin else ("global" if args.global_scope else ("project" if args.project else None))
+        # R2-J21: --project resolves project-first and falls back to global/builtin as documented.
+        scope = "builtin" if args.builtin else ("global" if args.global_scope else None)
         project_id = args.project if args.project is not None else checked_project
         return scenarios.show(conn, api, args.id, project_id=project_id, scope=scope, agent=args.agent)
     if action == "copy":
@@ -207,33 +239,45 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
                                        inputs_json=request, author=author)
     if action == "next":
         secrets_runtime = _parse_secrets(args.secrets, api)
-        return scenario_runs.next_step(conn, api, database, args.run_id, claim=args.claim,
-                                       project_path=project_path, agent=args.agent, author=author,
-                                       secrets_runtime=secrets_runtime)
+        return scenario_runs.next_step(conn, api, database, args.run_id, claim=args.claim, step_key=args.step_key,
+                                       checked_project=checked_project, project_path=project_path,
+                                       agent=args.agent, author=author, secrets_runtime=secrets_runtime)
     if action == "claim":
+        secrets_runtime = _parse_secrets(args.secrets, api)
         return scenario_runs.claim_step(conn, api, database, args.run_id, args.step_key,
-                                        project_path=project_path, agent=args.agent, author=author)
+                                        checked_project=checked_project, project_path=project_path,
+                                        agent=args.agent, author=author, secrets_runtime=secrets_runtime)
     if action == "release":
-        return scenario_runs.release_step(conn, api, args.run_id, args.step_key, author=author)
+        return scenario_runs.release_step(conn, api, args.run_id, args.step_key,
+                                          checked_project=checked_project, author=author)
     if action == "report":
         return scenario_runs.report_step(conn, api, database, args.run_id, args.step_key, request,
-                                         project_path=project_path, author=author)
+                                         checked_project=checked_project, project_path=project_path,
+                                         author=author, preflight_io=preflight_io)
     if action == "answer":
         return scenario_runs.answer_step(conn, api, database, args.run_id, args.step_key, args.value,
-                                         comment=args.comment, project_path=project_path, author=author)
+                                         comment=args.comment, checked_project=checked_project,
+                                         project_path=project_path, author=author)
     if action == "skip":
         return scenario_runs.skip_step(conn, api, database, args.run_id, args.step_key, args.reason,
-                                       project_path=project_path, author=author)
+                                       checked_project=checked_project, project_path=project_path, author=author)
     if action == "retry":
         return scenario_runs.retry_step(conn, api, database, args.run_id, args.step_key,
-                                        project_path=project_path, author=author)
+                                        checked_project=checked_project, project_path=project_path, author=author)
     if action in ("pause", "resume", "cancel"):
         return scenario_runs.set_run_state(conn, api, database, args.run_id, action,
-                                           project_path=project_path, author=author)
+                                           checked_project=checked_project, project_path=project_path, author=author)
     if action == "status":
-        return scenario_runs.run_status(conn, api, args.run_id)
+        return scenario_runs.run_status(conn, api, args.run_id, checked_project=checked_project)
     if action == "runs":
-        chat_filter = author.by if args.mine else args.filter_chat
+        if args.mine:
+            if not author.by:
+                err = api.MemoryError("--mine requires a chat identity (--chat or RICHI_CHAT_ID)")
+                err.code = "usage_error"
+                raise err
+            chat_filter = author.by
+        else:
+            chat_filter = args.filter_chat
         project_id = args.project if args.project is not None else checked_project
         return scenario_runs.list_runs(conn, api, active=args.active, chat=chat_filter,
                                        project_id=project_id, scenario_id=args.scenario, limit=args.limit)

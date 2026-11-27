@@ -153,6 +153,107 @@ class ScenariosStoreTests(unittest.TestCase):
                                         checked_project="alpha", author=self.author)
         self.assertEqual(caught.exception.code, "project_mismatch")
 
+    def test_colon_project_ids_and_scenario_ids_do_not_corrupt_or_collide_r2_j06(self):
+        with memory.transaction(self.conn):
+            memory.project_put(self.conn, {"id": "org:svc", "name": "Org Svc"})
+            memory.project_put(self.conn, {"id": "a", "name": "A"})
+            memory.project_put(self.conn, {"id": "a:b", "name": "AB"})
+            s1 = scenarios.copy_template(self.conn, memory, "review", new_id="ops:deploy",
+                                         scope="project", project_id="org:svc",
+                                         checked_project="org:svc", author=self.author)["scenario"]
+            s2 = scenarios.copy_template(self.conn, memory, "review", new_id="b:c",
+                                         scope="project", project_id="a",
+                                         checked_project="a", author=self.author)["scenario"]
+            s3 = scenarios.copy_template(self.conn, memory, "review", new_id="c",
+                                         scope="project", project_id="a:b",
+                                         checked_project="a:b", author=self.author)["scenario"]
+        self.assertEqual((s1["project_id"], s1["id"]), ("org:svc", "ops:deploy"))
+        self.assertEqual((s2["project_id"], s2["id"]), ("a", "b:c"))
+        self.assertEqual((s3["project_id"], s3["id"]), ("a:b", "c"))
+        listed = scenarios.listing(self.conn, memory)
+        self.assertEqual(listed.get("invalid_scenarios", []), [])
+        self.assertEqual({(s["project_id"], s["id"]) for s in listed["scenarios"]},
+                         {("org:svc", "ops:deploy"), ("a", "b:c"), ("a:b", "c")})
+        self.assertEqual(scenarios.resolve(self.conn, "ops:deploy", "org:svc")["id"], "ops:deploy")
+        self.assertEqual(scenarios.resolve(self.conn, "b:c", "a")["project_id"], "a")
+        self.assertEqual(scenarios.resolve(self.conn, "c", "a:b")["project_id"], "a:b")
+
+    def test_read_json_input_bounds_and_large_report_r2_j07(self):
+        big_file = Path(self.temp.name) / "big-report.json"
+        big_file.write_text(json.dumps({"status": "done", "summary": "x" * 300_000}), encoding="utf-8")
+        parsed = scenarios.read_json_input(str(big_file), memory, limit=1024 * 1024)
+        self.assertEqual(len(parsed["summary"]), 300_000)
+        with self.assertRaises(memory.MemoryError) as caught:
+            scenarios.read_json_input(str(big_file), memory, limit=256 * 1024)
+        self.assertEqual(caught.exception.code, "limit")
+        bad_utf8 = Path(self.temp.name) / "bad-utf8.json"
+        bad_utf8.write_bytes(b"\xff\xfe")
+        with self.assertRaises(memory.MemoryError) as caught_utf8:
+            scenarios.read_json_input(str(bad_utf8), memory, limit=1024)
+        self.assertEqual(caught_utf8.exception.code, "invalid_json")
+
+    def test_v4_log_has_before_after_without_metadata_dual_write_r2_j15(self):
+        with memory.transaction(self.conn):
+            created = scenarios.copy_template(self.conn, memory, "review", new_id="log-check",
+                                              scope="global", author=self.author)["scenario"]
+        meta_logs = self.conn.execute(
+            "SELECT key FROM metadata WHERE key >= 'scenario-log:' AND key < 'scenario-log;'"
+        ).fetchall()
+        self.assertEqual(meta_logs, [])
+        journal = scenarios.log(self.conn, scenario_id="log-check", entries=10)
+        self.assertEqual(len(journal["entries"]), 1)
+        entry = journal["entries"][0]
+        self.assertEqual(entry["action"], "scenario_created")
+        self.assertEqual(entry["detail"]["after"]["id"], "log-check")
+        self.assertIsNone(entry["detail"]["before"])
+        self.assertEqual(entry["detail"]["scope"], "global")
+
+    def test_corrupt_nan_surrogate_quarantined_and_copy_preserves_error_codes_r2_j24_j26(self):
+        with memory.transaction(self.conn):
+            self.conn.execute(
+                "INSERT INTO metadata(key, value) VALUES (?, ?)",
+                ("scenario:global:nan-row",
+                 '{"id": "nan-row", "scope": "global", "project_id": null, "version": 1, '
+                 '"created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z", '
+                 '"definition": {"format": "richi-scenario", "format_version": 1, "id": "nan-row", '
+                 '"title": "T", "steps": [{"id": "s", "type": "instruction", "params": {"text": "x"}}], '
+                 '"layout": {"x": NaN}}}'),
+            )
+            self.conn.execute(
+                "INSERT INTO metadata(key, value) VALUES (?, ?)",
+                ("scenario:global:future-copy", json.dumps({
+                    "id": "future-copy", "scope": "global", "project_id": None, "version": 1,
+                    "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
+                    "definition": {"format": "richi-scenario", "format_version": 99},
+                })),
+            )
+        listed = scenarios.listing(self.conn, memory)
+        invalid_keys = {item["key"] for item in listed["invalid_scenarios"]}
+        self.assertIn("scenario:global:nan-row", invalid_keys)
+        with self.assertRaises(memory.MemoryError) as caught_future:
+            with memory.transaction(self.conn):
+                scenarios.copy_template(self.conn, memory, "future-copy", scope="global", author=self.author)
+        self.assertEqual(caught_future.exception.code, "unsupported_scenario")
+        with self.assertRaises(memory.MemoryError) as caught_bad:
+            with memory.transaction(self.conn):
+                scenarios.copy_template(self.conn, memory, "nan-row", scope="global", author=self.author)
+        self.assertEqual(caught_bad.exception.code, "invalid_scenario")
+
+    def test_show_and_plan_reject_unknown_project_and_empty_secret_stays_empty_r2_j19_j27(self):
+        with self.assertRaisesRegex(memory.MemoryError, "Unknown project"):
+            scenarios.show(self.conn, memory, "review", project_id="does-not-exist")
+        with self.assertRaisesRegex(memory.MemoryError, "Unknown project"):
+            scenarios.plan(self.conn, memory, "review", project_id="does-not-exist")
+        defn = {
+            "format": "richi-scenario", "format_version": 1, "id": "sec-empty", "title": "Sec Empty",
+            "inputs": {"tok": {"type": "secret"}},
+            "steps": [{"id": "s1", "type": "instruction", "params": {"text": "hi"}}],
+        }
+        _, redacted_empty, _, _ = scenarios.resolve_inputs(defn, {"tok": ""})
+        self.assertEqual(redacted_empty["tok"], "")
+        _, redacted_set, _, _ = scenarios.resolve_inputs(defn, {"tok": "abc"})
+        self.assertEqual(redacted_set["tok"], "<secret>")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -42,7 +42,7 @@
       "type": "memory.brief",
       "title": "Load prior memory for the diff",
       "params": {
-        "question": "Decisions, risks and known issues relevant to diff {{inputs.base}}...{{inputs.branch}}",
+        "question": "{{inputs.branch}}",
         "limit": 12
       }
     },

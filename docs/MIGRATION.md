@@ -123,7 +123,7 @@ to return to installed code; restoring an older database copy is unnecessary.
 Richi continues reading existing knowledge, including previously recorded `git:`
 references.
 If `check` reports an unknown schema, preserve the database and investigate the
-version it reports. To upgrade schema 1 or 2 to schema 3, run
+version it reports. To upgrade an older schema (1, 2 or 3) to the current schema (4), run
 `richi migrate` on the intended workspace. It backs up the store before upgrading it. See the
 [graph reference](../skills/richi/references/GRAPH.md).
 

@@ -346,8 +346,10 @@ def initialize(conn, path):
         if existing:
             raise MemoryError("Refusing to initialize a nonempty database with an unknown schema")
         execute_script(conn, (BASE / "schema.sql").read_text(encoding="utf-8"))
-        execute_script(conn, (BASE / "graph_schema.sql").read_text(encoding="utf-8"))
-        execute_script(conn, (BASE / "scenario_schema.sql").read_text(encoding="utf-8"))
+        if SCHEMA >= 2:
+            execute_script(conn, (BASE / "graph_schema.sql").read_text(encoding="utf-8"))
+        if SCHEMA >= 4:
+            execute_script(conn, (BASE / "scenario_schema.sql").read_text(encoding="utf-8"))
         measurements.index_inline_sources(conn)
         conn.execute("SAVEPOINT optional_fts")
         try:
@@ -1003,13 +1005,20 @@ def run(args, cli=None):
         # Like a payload, a rule or scenario change is read before the store is locked: it may wait for stdin.
         rule_request = rules.read_request(args, sys.modules[__name__]) if writing_rules else None
         scenario_request = scenario_commands.read_request(args, sys.modules[__name__]) if args.command == "scenario" else None
-        checked_project = unmatched_path = None
+        scenario_preflight = (
+            scenario_commands.preflight(conn, args, sys.modules[__name__],
+                                        request=scenario_request, project_path=project_path)
+            if args.command == "scenario" else None
+        )
+        checked_project = checked_root = unmatched_path = None
         infer_rule_scope = args.command == "rules" and args.action in {"show", "check"} and args.project is None
         with transaction(conn, write=writing or source_attach or adding_project or applying_scan or building_index or writing_rules or writing_scenarios):
             if project_path is not None:
-                from .projects import ensure_project_context
+                from .projects import checkout_root, ensure_project_match
                 try:
-                    project = ensure_project_context(conn, project_path, expected_id=getattr(args, "project", None))
+                    matched = ensure_project_match(conn, project_path, expected_id=getattr(args, "project", None))
+                    project = matched["project"]
+                    checked_root = checkout_root(matched, project_path)
                 except MemoryError as exc:
                     # The user's global rules bind an agent in any repository, so loading
                     # them does not depend on this one being registered.
@@ -1034,7 +1043,8 @@ def run(args, cli=None):
             if args.command == "scenario":
                 return scenario_commands.run(conn, args, sys.modules[__name__], database,
                                              workspace=settings.workspace, checked_project=checked_project,
-                                             project_path=project_path, request=scenario_request)
+                                             project_path=checked_root if checked_root is not None else project_path,
+                                             request=scenario_request, preflight_io=scenario_preflight)
             if scanning:
                 from .projects import project_scan
                 result = project_scan(conn, args.path, apply=args.apply, max_depth=args.max_depth)

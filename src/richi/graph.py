@@ -53,6 +53,48 @@ def _migrate_entities_v3(conn, api):
         conn.execute(row[0])
 
 
+def _backfill_scenario_log_v4(conn):
+    """Preserve any pre-v4 scenario-log:* metadata rows in scenario_events during migration."""
+    rows = conn.execute(
+        "SELECT CAST(value AS BLOB) FROM metadata WHERE 1=1 AND key >= 'scenario-log:' AND key < 'scenario-log;' "
+        "ORDER BY key ASC"
+    ).fetchall()
+    for (raw,) in rows:
+        if isinstance(raw, bytes):
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+        elif isinstance(raw, str):
+            text = raw
+        else:
+            continue
+        try:
+            entry = json.loads(text)
+        except (ValueError, RecursionError):
+            continue
+        if not isinstance(entry, dict) or not isinstance(entry.get("at"), str):
+            continue
+        action = entry.get("action")
+        if not isinstance(action, str) or not action:
+            continue
+        if not action.startswith("scenario_"):
+            action = "scenario_" + action
+        detail = {
+            "scope": entry.get("scope"),
+            "project_id": entry.get("project_id"),
+            "before": entry.get("before"),
+            "after": entry.get("after"),
+        }
+        conn.execute(
+            "INSERT INTO scenario_events(at, scenario_id, run_id, step_key, action, chat, agent, detail_json) "
+            "VALUES (?, ?, NULL, NULL, ?, ?, ?, ?)",
+            (entry["at"], entry.get("id"), action, entry.get("by"), entry.get("agent"),
+             json.dumps(detail, ensure_ascii=False, sort_keys=True, separators=(",", ":"))),
+        )
+    conn.execute("DELETE FROM metadata WHERE 1=1 AND key >= 'scenario-log:' AND key < 'scenario-log;'")
+
+
 def _migratable(conn, api):
     """The store's schema version if it can be migrated or already is current;
     stores that migrate would refuse raise before anything is written."""
@@ -102,6 +144,7 @@ def migrate(conn, path, api):
                 api.execute_script(conn, (api.BASE / "scenario_schema.sql").read_text(encoding="utf-8"))
             else:
                 api.execute_script(conn, (api.BASE / "scenario_schema.sql").read_text(encoding="utf-8"))
+            _backfill_scenario_log_v4(conn)
             if conn.execute("PRAGMA foreign_key_check").fetchone():
                 raise api.MemoryError("Migration foreign key check failed")
             if [row[0] for row in conn.execute("PRAGMA integrity_check")] != ["ok"]:

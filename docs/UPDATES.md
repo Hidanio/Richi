@@ -86,8 +86,8 @@ one on 1.0.1, therefore reaches the latest protocol-1 release with one
 `richi update apply` (or automatic installation), however many releases it
 skipped. Maintainers: see the [release contract](RELEASING.md#protocol-1-release-contract).
 
-The current runtime supports database schemas 1, 2 and 3. New stores are created
-at schema 3; existing stores need an explicit migration for tool cards. See
+The current runtime supports database schemas 1, 2, 3 and 4. New stores are created
+at schema 4; existing stores need an explicit migration for tool cards (schema 3+) and scenario runs (schema 4). See
 [graph migration](../skills/richi/references/GRAPH.md).
 
 <a id="forward-only"></a>

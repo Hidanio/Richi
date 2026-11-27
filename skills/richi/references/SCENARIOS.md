@@ -66,10 +66,11 @@ Loop while `scenario next RUN --claim` returns an agent step:
    `status: "rejected"`, fix the listed `reasons` and report again; a rejected
    report never closes the step.
 
-For parallel steps or explicit lease handoff:
+For parallel steps or explicit lease handoff (`claim` returns the full rendered step payload and accepts `--secret`, and `next` accepts `--step`):
 
 ```sh
 richi --compact-json scenario claim run-review-20261127-0001 angle.1
+richi --compact-json scenario next run-review-20261127-0001 --step angle.1 --claim
 richi --compact-json scenario release run-review-20261127-0001 angle.1
 ```
 

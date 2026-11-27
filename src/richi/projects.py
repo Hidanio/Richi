@@ -269,6 +269,11 @@ def project_check(conn, path, project_id=None):
 
 def ensure_project_context(conn, path, expected_id=None):
     """Return the matched project row, or reject a missing/ambiguous context."""
+    return ensure_project_match(conn, path, expected_id)["project"]
+
+
+def ensure_project_match(conn, path, expected_id=None):
+    """Return the full matched project_check() result (including checkout root), or reject."""
     result = project_check(conn, path, expected_id)
     if result["status"] != "matched" or result["errors"]:
         detail = result["errors"][0]["error"] if result["errors"] else result["status"]
@@ -276,7 +281,21 @@ def ensure_project_context(conn, path, expected_id=None):
         if result["status"] == "unregistered" and not result["errors"]:
             error.code = "project_unregistered"
         raise error
-    return result["project"]
+    return result
+
+
+def checkout_root(match, fallback_path=None):
+    """Effective checkout/worktree root directory from a matched project_check() result."""
+    repo = match.get("repository") or {}
+    if repo.get("repo_path"):
+        return Path(repo["repo_path"])
+    project_repo = (match.get("project") or {}).get("repo_path")
+    if project_repo:
+        return Path(project_repo)
+    if fallback_path is not None:
+        candidate = Path(fallback_path).expanduser().resolve()
+        return candidate if candidate.is_dir() else candidate.parent
+    return None
 
 
 def project_scan(conn, root, apply=False, max_depth=3):

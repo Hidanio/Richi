@@ -127,6 +127,10 @@ class ScenarioFormatTests(unittest.TestCase):
             scenario_format.parse('{"a": "\ud800"}')
         with self.assertRaisesRegex(FormatError, "larger than"):
             scenario_format.parse('{"a": "' + "x" * scenario_format.MAX_BYTES + '"}')
+        # Custom max_bytes allows larger payloads (e.g. 1 MB reports).
+        big_report = '{"summary": "' + "x" * (scenario_format.MAX_BYTES + 1024) + '"}'
+        parsed = scenario_format.parse(big_report, max_bytes=1024 * 1024, what="JSON input")
+        self.assertEqual(len(parsed["summary"]), scenario_format.MAX_BYTES + 1024)
 
     def test_newer_format_version_is_checked_before_unknown_top_fields(self):
         newer = {"format": "richi-scenario", "format_version": 2, "on_failure": {}}
@@ -232,10 +236,14 @@ class ScenarioFormatTests(unittest.TestCase):
                            "control or bidirectional")
         self.assertRejects(lambda d: d["steps"][4]["params"].update(cwd="{{steps.context.summary}}"),
                            "cwd cannot read step results")
-        # cwd does NOT require | shell.
+        # cwd does NOT require | shell, but rejects traversal, absolute paths, and backslashes (R2-J09).
         ok = review()
         ok["steps"][4]["params"]["cwd"] = "packages/{{inputs.branch}}"
         scenario_format.normalize(ok)
+        for bad_cwd in ("/etc", "../outside", "a/../b", "a\\b", "C:sub", ".", "a//b"):
+            with self.subTest(bad_cwd=bad_cwd):
+                self.assertRejects(lambda d, c=bad_cwd: d["steps"][4]["params"].update(cwd=c),
+                                   "relative POSIX|path segments")
 
     def test_steps_and_checks(self):
         def step(index, **fields):

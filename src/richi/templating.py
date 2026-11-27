@@ -355,6 +355,8 @@ def _expression(text, offset, roots):
         least, most = FILTERS[name[1]]
         if not least <= len(args) <= most:
             raise TemplateError("filter %s takes %s" % (name[1], _arity(least, most)), offset + name[2])
+        if name[1] == "join" and args and not isinstance(args[0], str):
+            raise TemplateError("filter join takes a quoted string", offset + name[2])
         filters.append((name[1], tuple(args)))
     scanner.take("end", what="'|' or '}}'")
     return Expression(path, tuple(filters))
@@ -396,6 +398,8 @@ def _apply(expression, context):
         elif name == "join":
             if not isinstance(value, list):
                 raise ValueError("join needs a list at " + expression.path.text)
+            if args and not isinstance(args[0], str):
+                raise ValueError("join separator must be text at " + expression.path.text)
             value = (args[0] if args else ", ").join(_text(item) for item in value)
         elif name == "first":
             value = value[0] if isinstance(value, list) and value else None

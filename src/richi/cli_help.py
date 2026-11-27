@@ -717,14 +717,17 @@ DETAILS = {
                   ("With JSON inputs", "richi scenario run review --inputs-json inputs.json"))),
     "scenario next": dict(about="""
         Returns the next ready or already-claimed step for this agent/chat,
-        rendering templates and resolving skills. With --claim, acquires or
-        renews a 30-minute lease on the returned agent step. Pass --secret
-        KEY=VALUE when a step needs a runtime-only secret input.""",
+        rendering templates and resolving skills. Pass --step STEP to target a
+        specific parallel step. With --claim, acquires or renews a 30-minute
+        lease on the returned agent step. Pass --secret KEY=VALUE when a step
+        needs a runtime-only secret input.""",
         examples=(("", "richi scenario next run-review-20261127-0001 --claim"),
                   ("With explicit agent", "richi scenario next run-review-20261127-0001 --agent codex"))),
     "scenario claim": dict(about="""
         Claims one specific ready agent step for this chat with a 30-minute
-        lease, preventing another chat from working on the same step at once.""",
+        lease and returns its rendered step payload, preventing another chat
+        from working on the same step at once. Pass --secret KEY=VALUE when
+        the claimed step needs a runtime-only secret input.""",
         examples=(("", "richi scenario claim run-review-20261127-0001 angle.0"),)),
     "scenario release": dict(about="""
         Releases a step lease held by this chat so another chat can claim it.""",
@@ -867,7 +870,7 @@ DETAILS = {
         examples=(("", "richi search-index build"), ("Then confirm coverage", "richi search-index status"))),
     "migrate": dict(about="""
         Writes a verified copy of the store to backups/ beside it, then upgrades
-        schema 1 or 2 to the current schema in one transaction, keeping records,
+        schema 1, 2 or 3 to the current schema in one transaction, keeping records,
         links, history and indexes. Before upgrading, migrate checks integrity and foreign keys.
         The result names the copy. On the current schema it returns existing;
         run richi check for a full integrity and foreign key check.

@@ -184,32 +184,32 @@ def _unique(pairs):
     return result
 
 
-def parse(text):
-    """The definition in JSON text, before validation: one object, no duplicate keys."""
+def parse(text, *, max_bytes=MAX_BYTES, what="a definition"):
+    """The JSON object in text, before validation: one object, no duplicate keys, bounded size."""
     if isinstance(text, bytes):
         try:
             text = text.decode("utf-8")
         except UnicodeDecodeError as exc:
-            raise FormatError("a definition must be UTF-8 text") from exc
+            raise FormatError(what + " must be UTF-8 text") from exc
     elif not isinstance(text, str):
-        raise FormatError("a definition must be UTF-8 text")
+        raise FormatError(what + " must be UTF-8 text")
     try:
         encoded = text.encode("utf-8")
     except UnicodeEncodeError as exc:
-        raise FormatError("a definition must be UTF-8 text") from exc
-    if len(encoded) > MAX_BYTES:
-        raise FormatError("a definition is larger than %d bytes" % MAX_BYTES)
+        raise FormatError(what + " must be UTF-8 text") from exc
+    if len(encoded) > max_bytes:
+        raise FormatError("%s is larger than %d bytes" % (what, max_bytes))
     try:
         value = json.loads(text, object_pairs_hook=_unique, parse_int=_short_integer,
                            parse_float=_float, parse_constant=_constant)
     except FormatError:
         raise
     except RecursionError as exc:
-        raise FormatError("a definition is nested too deeply") from exc
+        raise FormatError(what + " is nested too deeply") from exc
     except ValueError as exc:
         raise FormatError("not valid JSON: " + str(exc)) from exc
     if not isinstance(value, dict):
-        raise FormatError("a definition must be a JSON object")
+        raise FormatError(what + " must be a JSON object")
     return value
 
 
@@ -437,7 +437,8 @@ def _params(step, here, found):
         text("instruction", "exec_param", required=False)
     elif kind == "command":
         text("command", "command", line=True, limit=4000, empty=False, strict_format=True)
-        text("cwd", "cwd", required=False, line=True, limit=1000, empty=False, strict_format=True)
+        if "cwd" in params:
+            _project_path(params["cwd"], where + ".cwd", found, field_kind="cwd")
         if "expect_exit" in params:
             _integer(params["expect_exit"], where + ".expect_exit", 0, 255)
         if "tail_lines" in params:
@@ -576,7 +577,7 @@ def _data_path(value, where):
         raise FormatError("must be a dotted path of lowercase names, such as findings", where)
 
 
-def _project_path(value, where, found):
+def _project_path(value, where, found, *, field_kind="stored_param"):
     """A relative POSIX file path inside the project (optionally templated); PR 3 enforces symlink containment."""
     parsed = _template(value, where, MAX_PROJECT_PATH, line=True, empty=False, strict_format=True)
     if value.startswith("/") or "\\" in value or re.match(r"[A-Za-z]:", value):
@@ -584,7 +585,7 @@ def _project_path(value, where, found):
     segments = value.split("/")
     if any(segment in ("", ".", "..") for segment in segments):
         raise FormatError("must not contain empty, '.' or '..' path segments", where)
-    found.append((where, "stored_param", parsed))
+    found.append((where, field_kind, parsed))
 
 
 def _matrix(value, where, found):

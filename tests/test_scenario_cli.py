@@ -34,7 +34,8 @@ class ScenarioCliTests(unittest.TestCase):
     def cli(self, *args, chat="claude:chat-1", stdin_text=None, ok=True):
         out, err = io.StringIO(), io.StringIO()
         env = cli_environment(self.root)
-        env["RICHI_CHAT_ID"] = chat
+        if chat is not None:
+            env["RICHI_CHAT_ID"] = chat
         argv = ["--db", str(self.db), "--compact-json"] + list(args)
         with mock.patch.dict(os.environ, env, clear=True), redirect_stdout(out), redirect_stderr(err):
             if stdin_text is not None:
@@ -43,7 +44,7 @@ class ScenarioCliTests(unittest.TestCase):
             else:
                 code = memory.main(argv)
         raw = out.getvalue() if code == 0 else err.getvalue()
-        payload = json.loads(raw)
+        payload = json.loads(raw) if raw.strip().startswith("{") else {"raw": raw}
         if ok:
             self.assertEqual(code, 0, raw)
         else:
@@ -141,6 +142,62 @@ class ScenarioCliTests(unittest.TestCase):
         started2 = self.cli("scenario", "run", "mini")
         self.cli("scenario", "cancel", started2["run_id"])
         self.assertEqual(self.cli("scenario", "status", started2["run_id"])["status"], "cancelled")
+
+    def test_cross_project_guard_subdir_project_path_large_report_mine_and_show_fallback(self):
+        # Register a second repo `other`.
+        other = self.root / "other"
+        other.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=other, check=True)
+        subprocess.run(["git", "config", "user.email", "t@example.test"], cwd=other, check=True)
+        subprocess.run(["git", "config", "user.name", "T"], cwd=other, check=True)
+        (other / "x.txt").write_text("x\n", encoding="utf-8")
+        subprocess.run(["git", "add", "x.txt"], cwd=other, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "init"], cwd=other, check=True)
+        self.cli("project", "add", str(other), "--id", "other", "--name", "Other")
+        head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.repo, text=True).strip()
+
+        # R2-J21: scenario show --project falls back to built-in template.
+        shown = self.cli("scenario", "show", "review", "--project", "service")
+        self.assertEqual(shown["scope"], "builtin")
+
+        # R2-J20: scenario runs --mine without chat ID fails clearly; --mine --chat rejected by parser.
+        err_mine = self.cli("scenario", "runs", "--mine", chat=None, ok=False)
+        self.assertEqual(err_mine.get("code"), "usage_error")
+        self.cli("scenario", "runs", "--mine", "--chat", "claude:chat-1", ok=False)
+
+        # R2-J10 & R2-J07 & R2-J04: subdir and file --project-path resolve to repo root;
+        # >256 KB report succeeds; mismatched --project-path is rejected!
+        subdir = self.repo / "pkg"
+        subdir.mkdir()
+        (subdir / "mod.py").write_text("x = 1\n", encoding="utf-8")
+        defn = {
+            "format": "richi-scenario", "format_version": 1, "id": "sub-check", "title": "Sub check",
+            "steps": [{
+                "id": "s1", "type": "instruction",
+                "params": {"text": "Root={{project.path}}"},
+                "checks": [{"kind": "file_exists", "path": "app.py"}, {"kind": "evidence_git"}],
+            }],
+        }
+        self.cli("scenario", "apply", "--json", "-",
+                 stdin_text=json.dumps({"action": "add", "scope": "project", "project": "service", "definition": defn}))
+        started = self.cli("--project-path", str(subdir), "scenario", "run", "sub-check")
+        rid = started["run_id"]
+        # Cross-project --project-path rejected on next/status/report (R2-J04).
+        mismatch = self.cli("--project-path", str(other), "scenario", "next", rid, "--claim", ok=False)
+        self.assertEqual(mismatch.get("code"), "project_mismatch")
+        # File path inside repo resolves to repo root (R2-J10).
+        nxt = self.cli("--project-path", str(subdir / "mod.py"), "scenario", "next", rid, "--claim")
+        self.assertEqual(nxt["step"]["text"], "Root=" + str(self.repo.resolve()))
+        # >256 KB report (300 KB) accepted with preflight file_exists + evidence_git from file --project-path!
+        big_report = {
+            "status": "done", "summary": "big ok",
+            "data": {"blob": "z" * 300_000},
+            "evidence": [{"type": "git", "revision": head_sha}],
+        }
+        acc = self.cli("--project-path", str(subdir / "mod.py"), "scenario", "report", rid, "s1",
+                       "--json", "-", stdin_text=json.dumps(big_report))
+        self.assertEqual(acc["status"], "accepted")
+        self.assertEqual(acc["run_status"], "done")
 
 
 if __name__ == "__main__":

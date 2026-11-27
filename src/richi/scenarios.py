@@ -5,7 +5,7 @@ discovery and the graph never return them. Each stored definition is one row in
 the store's `metadata` table:
 
 * global (workspace-wide): `scenario:global:<id>`
-* project-scoped:          `scenario:project:<project_id>:<id>`
+* project-scoped:          `scenario:project:<len(project_id)>:<project_id>:<id>`
 
 Keeping definitions in `metadata` means backups and workspace copies include
 them automatically, and older Richi versions ignore them. A row written for a
@@ -62,7 +62,7 @@ def storage_key(scope, scenario_id, project_id=None):
     if scope == "global":
         return GLOBAL_PREFIX + scenario_id
     if scope == "project" and project_id:
-        return PROJECT_PREFIX + project_id + ":" + scenario_id
+        return "%s%d:%s:%s" % (PROJECT_PREFIX, len(project_id), project_id, scenario_id)
     raise ValueError("scope must be global or project with project_id")
 
 
@@ -73,8 +73,15 @@ def _parse_key(key):
         return ("global", None, identifier) if identifier else None
     if key.startswith(PROJECT_PREFIX):
         rest = key[len(PROJECT_PREFIX):]
-        project_id, separator, identifier = rest.partition(":")
-        return ("project", project_id, identifier) if separator and project_id and identifier else None
+        length_str, sep, tail = rest.partition(":")
+        if not sep or not length_str.isdigit():
+            return None
+        length = int(length_str)
+        if length < 1 or len(tail) <= length + 1 or tail[length] != ":":
+            return None
+        project_id = tail[:length]
+        identifier = tail[length + 1:]
+        return ("project", project_id, identifier) if identifier else None
     return None
 
 
@@ -103,23 +110,28 @@ def _stored_version(raw):
     return recovery_version(raw)
 
 
+def _optional_utf8_text(value, name):
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("stored scenario %s must be text" % name)
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ValueError("stored scenario %s is not UTF-8 text" % name) from exc
+    return value
+
+
 def _decode(key, raw):
     """Decode one stored scenario row. Raises UnsupportedVersion or ValueError."""
     text = _text_of(raw)
     if text is None:
         raise ValueError("stored scenario is not UTF-8 text")
-    if len(text.encode("utf-8")) > MAX_STORED:
-        raise ValueError("stored scenario is larger than %d bytes" % MAX_STORED)
     parsed_key = _parse_key(key)
     if parsed_key is None:
         raise ValueError("stored scenario key is malformed")
     key_scope, key_project, key_id = parsed_key
-    try:
-        record = json.loads(text)
-    except (ValueError, RecursionError) as exc:
-        raise ValueError("stored scenario is not valid JSON") from exc
-    if not isinstance(record, dict):
-        raise ValueError("stored scenario must be a JSON object")
+    record = scenario_format.parse(text, max_bytes=MAX_STORED, what="stored scenario")
     if record.get("id") != key_id or record.get("scope") != key_scope or record.get("project_id") != key_project:
         raise ValueError("stored scenario scope or ID does not match its key")
     raw_def = record.get("definition")
@@ -141,11 +153,11 @@ def _decode(key, raw):
         "version": version,
         "sha256": scenario_format.digest(definition),
         "definition": definition,
-        "source": record.get("source"),
-        "changed_by": record.get("changed_by"),
-        "changed_by_agent": record.get("changed_by_agent"),
-        "created_at": created_at,
-        "updated_at": updated_at,
+        "source": _optional_utf8_text(record.get("source"), "source"),
+        "changed_by": _optional_utf8_text(record.get("changed_by"), "changed_by"),
+        "changed_by_agent": _optional_utf8_text(record.get("changed_by_agent"), "changed_by_agent"),
+        "created_at": _optional_utf8_text(created_at, "created_at"),
+        "updated_at": _optional_utf8_text(updated_at, "updated_at"),
     }
 
 
@@ -289,17 +301,24 @@ def skill_for(skill_spec, agent_id):
     return skill_spec.get("default")
 
 
-def _installed_skills(agent_id, settings=None):
+def installed_skills(agent_id, settings=None):
     if not agent_id:
         return None
     try:
         data = skill_catalog.catalog(registry=settings.entries if settings else None)
     except Exception:
         return None
-    agent_info = (data.get("agents") or {}).get(agent_id)
-    if not isinstance(agent_info, dict):
+    totals = data.get("totals")
+    if not isinstance(totals, dict) or agent_id not in totals:
         return None
-    return {item.get("name") for item in agent_info.get("skills") or [] if isinstance(item, dict) and item.get("name")}
+    return {
+        item.get("name")
+        for item in data.get("skills") or []
+        if isinstance(item, dict) and item.get("name") and agent_id in (item.get("agents") or [])
+    }
+
+
+_installed_skills = installed_skills
 
 
 def _resolve_agent(explicit_agent, settings=None):
@@ -310,6 +329,8 @@ def _resolve_agent(explicit_agent, settings=None):
 
 
 def show(conn, api, scenario_id, *, project_id=None, scope=None, agent=None):
+    if project_id is not None:
+        api.require_project(conn, project_id)
     settings = agents.read_settings()
     try:
         record = resolve(conn, scenario_id, project_id, scope=scope)
@@ -392,7 +413,10 @@ def resolve_inputs(definition, provided):
         if name in provided:
             val = scenario_format.check_input(name, spec, provided[name])
             values[name] = val
-            redacted[name] = "<secret>" if name in secrets else val
+            if name in secrets:
+                redacted[name] = "<secret>" if val else ""
+            else:
+                redacted[name] = val
         elif "default" in spec:
             values[name] = spec["default"]
             redacted[name] = spec["default"]
@@ -423,6 +447,8 @@ def _topological_steps(steps):
 def plan(conn, api, scenario_id, *, project_id=None, project_path=None, scope=None, agent=None,
          raw_inputs=None, inputs_json=None):
     """Dry-run preview: resolve skills, inputs, run_title and step plan without writing."""
+    if project_id is not None:
+        api.require_project(conn, project_id)
     settings = agents.read_settings()
     try:
         record = resolve(conn, scenario_id, project_id, scope=scope)
@@ -524,8 +550,24 @@ def _has_events_table(conn):
 
 
 def _record_log(conn, at, action, scope, project_id, scenario_id, before, after, author):
-    scope_key = "global:" + scenario_id if scope == "global" else "project:%s:%s" % (project_id, scenario_id)
     action_name = action if action.startswith("scenario_") else "scenario_" + action
+    before_summary = _summary(before) if before else None
+    after_summary = _summary(after) if after else None
+    if _has_events_table(conn):
+        detail = {
+            "scope": scope,
+            "project_id": project_id,
+            "before": before_summary,
+            "after": after_summary,
+        }
+        conn.execute(
+            "INSERT INTO scenario_events(at, scenario_id, run_id, step_key, action, chat, agent, detail_json) "
+            "VALUES (?, ?, NULL, NULL, ?, ?, ?, ?)",
+            (at, scenario_id, action_name, author.by, author.agent,
+             json.dumps(detail, ensure_ascii=False, sort_keys=True, separators=(",", ":"))),
+        )
+        return
+    scope_key = "global:" + scenario_id if scope == "global" else "project:%d:%s:%s" % (len(project_id), project_id, scenario_id)
     entry = {
         "at": at,
         "id": scenario_id,
@@ -534,8 +576,8 @@ def _record_log(conn, at, action, scope, project_id, scenario_id, before, after,
         "action": action_name,
         "by": author.by,
         "agent": author.agent,
-        "before": _summary(before) if before else None,
-        "after": _summary(after) if after else None,
+        "before": before_summary,
+        "after": after_summary,
     }
     conn.execute(
         "INSERT INTO metadata(key, value) VALUES (?, ?)",
@@ -547,17 +589,6 @@ def _record_log(conn, at, action, scope, project_id, scenario_id, before, after,
         "ORDER BY key DESC LIMIT ?)",
         (MAX_LOG,),
     )
-    if _has_events_table(conn):
-        detail = {"scope": scope, "project_id": project_id,
-                  "before_version": before["version"] if before else None,
-                  "after_version": after["version"] if after else None,
-                  "sha256": after["sha256"] if after else None}
-        conn.execute(
-            "INSERT INTO scenario_events(at, scenario_id, run_id, step_key, action, chat, agent, detail_json) "
-            "VALUES (?, ?, NULL, NULL, ?, ?, ?, ?)",
-            (at, scenario_id, "scenario_" + action, author.by, author.agent,
-             json.dumps(detail, ensure_ascii=False, sort_keys=True, separators=(",", ":"))),
-        )
 
 
 def log(conn, *, scenario_id=None, run_id=None, entries=20):
@@ -608,20 +639,50 @@ def log(conn, *, scenario_id=None, run_id=None, entries=20):
             if len(found) == entries:
                 more = True
                 break
-            found.append(entry)
+            action = entry.get("action") or ""
+            if action and not action.startswith("scenario_"):
+                action = "scenario_" + action
+            found.append({
+                "event_id": None,
+                "at": entry.get("at"),
+                "scenario_id": entry.get("id"),
+                "run_id": None,
+                "step_key": None,
+                "action": action,
+                "by": entry.get("by"),
+                "agent": entry.get("agent"),
+                "detail": {
+                    "scope": entry.get("scope"),
+                    "project_id": entry.get("project_id"),
+                    "before": entry.get("before"),
+                    "after": entry.get("after"),
+                },
+            })
     return {"view": "scenario-log", "source": "metadata", "entries": found, "more": more, "kept": MAX_LOG}
 
 
 def read_json_input(path_arg, api, limit=MAX_CHANGE):
-    """Read a JSON object from a file path or '-' (stdin) before acquiring a write lock."""
+    """Read a bounded JSON object from a file path or '-' (stdin) before acquiring a write lock."""
     try:
-        raw = sys.stdin.read(limit + 1) if path_arg == "-" else Path(path_arg).read_text(encoding="utf-8")
+        if path_arg == "-":
+            raw_text = sys.stdin.read(limit + 1)
+            try:
+                raw_bytes = raw_text.encode("utf-8")
+            except UnicodeEncodeError as exc:
+                raise _failure(api, "JSON input must be UTF-8 text", "invalid_json") from exc
+        else:
+            with Path(path_arg).expanduser().open("rb") as handle:
+                raw_bytes = handle.read(limit + 1)
     except OSError as exc:
         raise _failure(api, "Cannot read JSON file: " + str(exc), "usage_error") from exc
-    if len(raw.encode("utf-8")) > limit:
+    if len(raw_bytes) > limit:
         raise _failure(api, "JSON input is larger than %d bytes" % limit, "limit")
     try:
-        data = scenario_format.parse(raw)
+        raw_text = raw_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise _failure(api, "JSON input must be UTF-8 text", "invalid_json") from exc
+    try:
+        data = scenario_format.parse(raw_text, max_bytes=limit, what="JSON input")
     except scenario_format.FormatError as exc:
         raise _failure(api, str(exc), "invalid_json") from exc
     return data
@@ -771,7 +832,12 @@ def change(conn, request, api, *, checked_project=None, author=None):
 def copy_template(conn, api, template_id, *, new_id=None, scope="global", project_id=None,
                   checked_project=None, author=None):
     """Copy a built-in template (or stored scenario) into workspace or project scope."""
-    source = resolve(conn, template_id, checked_project or project_id)
+    try:
+        source = resolve(conn, template_id, checked_project or project_id)
+    except scenario_format.UnsupportedVersion as exc:
+        raise _failure(api, str(exc), "unsupported_scenario") from exc
+    except ValueError as exc:
+        raise _failure(api, str(exc), "invalid_scenario") from exc
     if source is None:
         raise api.NotFoundError("Unknown scenario or template: " + template_id + "; see scenario templates")
     definition = json.loads(json.dumps(source["definition"]))

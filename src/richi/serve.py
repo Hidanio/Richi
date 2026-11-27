@@ -39,7 +39,7 @@ from richi_launcher.config import resolve_settings, ConfigError
 from richi_launcher.runtime import (LAUNCHER_ROOT, bootstrap_command, current_runtime, preflight,
                                     resolve_runtime, runtime_command, lease_fds)
 from .memory import Parser, MemoryError
-from . import agent_commands, map_access, rules, skill_catalog
+from . import agent_commands, map_access, memory, rules, skill_catalog
 
 
 BASE = Path(__file__).resolve().parent
@@ -969,7 +969,7 @@ def source_fingerprint(package=None):
     package = Path(package) if package is not None else BASE
     digest = hashlib.sha256()
     for path in sorted(package.rglob("*")):
-        if path.suffix in {".py", ".sql"} and path.is_file():
+        if path.suffix in {".py", ".sql", ".json"} and path.is_file():
             digest.update(str(path.relative_to(package)).encode("utf-8"))
             digest.update(b"\0")
             digest.update(path.read_bytes())
@@ -1180,8 +1180,8 @@ def _main(argv=None):
     schema = database_schema(database)
     if schema is None:
         parser.error("Cannot read the database: " + str(database))
-    if schema not in (2, 3, 4):
-        parser.error("The map requires schema 2 or 3; run richi migrate, which backs up the store first")
+    if schema not in memory.SUPPORTED_VERSIONS or schema < 2:
+        parser.error("The map requires schema 2 or newer; run richi migrate, which backs up the store first")
     # Taken before anything copies the environment: no child may see them.
     listener = inherited_listener(args.port)
     restarted = os.environ.pop(RESTARTED_ENV, None) == "1"

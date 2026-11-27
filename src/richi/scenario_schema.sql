@@ -55,8 +55,10 @@ CREATE TABLE scenario_events (
 
 CREATE INDEX idx_scenario_runs_status_project ON scenario_runs(status, project_id);
 CREATE INDEX idx_scenario_runs_chat ON scenario_runs(created_by_chat);
-CREATE INDEX idx_scenario_runs_scenario ON scenario_runs(scenario_id, created_at);
+CREATE INDEX idx_scenario_runs_scenario ON scenario_runs(scenario_id, project_id, status, created_at);
 CREATE INDEX idx_scenario_steps_run_status ON scenario_steps(run_id, status);
+CREATE INDEX idx_scenario_steps_claimed_chat ON scenario_steps(claimed_by_chat, status) WHERE claimed_by_chat IS NOT NULL;
+CREATE INDEX idx_scenario_steps_executor_agent ON scenario_steps(status, executor_agent) WHERE executor_agent IS NOT NULL;
 CREATE INDEX idx_scenario_events_at ON scenario_events(at DESC, id DESC);
 CREATE INDEX idx_scenario_events_run ON scenario_events(run_id, id DESC);
 CREATE INDEX idx_scenario_events_scenario ON scenario_events(scenario_id, id DESC);

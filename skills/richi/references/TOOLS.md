@@ -5,7 +5,7 @@ English | [Русский](TOOLS.ru.md)
 Use this procedure for linters, test clients, profiling utilities and other
 tools whose practical use should be reusable across tasks and projects. Follow
 the bound workspace and repository guard in [SKILL.md](../SKILL.md). Tool cards
-use `entity.kind: tool` and require schema 3; migration is explicit, as described
+use `entity.kind: tool` and require schema 3 or newer; migration is explicit, as described
 in [GRAPH.md](GRAPH.md). Reading or selecting a runtime never migrates a store.
 
 ## Choose the record

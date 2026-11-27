@@ -69,10 +69,11 @@ richi --compact-json --project-path /path/to/service scenario report run-review-
    `status: "rejected"`, исправь указанные `reasons` и отправь отчёт снова:
    отклонённый отчёт не закрывает этап.
 
-Для параллельных этапов и явной передачи аренды:
+Для параллельных этапов и явной передачи аренды (`claim` возвращает полный отрендеренный payload этапа и принимает `--secret`, а `next` принимает `--step`):
 
 ```sh
 richi --compact-json scenario claim run-review-20261127-0001 angle.1
+richi --compact-json scenario next run-review-20261127-0001 --step angle.1 --claim
 richi --compact-json scenario release run-review-20261127-0001 angle.1
 ```
 

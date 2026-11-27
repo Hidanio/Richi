@@ -124,12 +124,21 @@ class TemplateTests(unittest.TestCase):
             "{{inputs.branch extra}}": "expected '|' or '}}'",
             "{{inputs.branch | default('x)}}": "unterminated string",
             "{{inputs.branch | default('\\q')}}": "unknown escape",
+            "{{inputs.angles | join(123)}}": "filter join takes a quoted string",
+            "{{inputs.angles | join(true)}}": "filter join takes a quoted string",
+            "{{inputs.angles | join(null)}}": "filter join takes a quoted string",
             "{{__import__('os')}}": "unknown name",
             "{{inputs.a; rm}}": "unexpected character ';'",
         }
         for text, message in cases.items():
             with self.subTest(text=text), self.assertRaisesRegex(TemplateError, message):
                 templating.parse_template(text)
+        fake_expr = templating.Expression(
+            path=templating.Path(("inputs", "angles"), "inputs.angles"),
+            filters=(("join", (123,)),),
+        )
+        with self.assertRaisesRegex(ValueError, "join separator must be text"):
+            templating._apply(fake_expr, CONTEXT)
         with self.assertRaises(TemplateError) as caught:
             templating.parse_template("ok {{ inputs.x | nope }}")
         self.assertEqual(caught.exception.position, 17)

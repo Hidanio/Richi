@@ -35,30 +35,32 @@ richi check
 `migrate` first writes a verified copy of the store to `backups/` beside the
 database, named after the schema the copy has (`memory-schema2-<time>.sqlite3`),
 and reports its path as `backup`. Without the copy it changes nothing. Then it
-migrates schema 1 or 2 to schema 3 in one transaction.
+migrates schema 1, 2 or 3 to schema 4 in one transaction.
 From schema 1 it adds the graph tables, indexes, triggers and references to
 existing projects/entries. From schema 2 it expands the entity-kind constraint
-to allow `tool`. IDs, payloads, history, graph links and existing search indexes
+to allow `tool`. From schema 3 (or earlier) it adds `scenario_runs`,
+`scenario_steps` and `scenario_events` and backfills pre-migration scenario
+definition logs. IDs, payloads, history, graph links and existing search indexes
 are preserved. Integrity and foreign keys are checked before and after the
 change. An error rolls back the transaction and names the retained copy.
 Unknown versions are rejected before any copy is made; repeating the command on
-schema 3 returns `existing` and makes no copy. Run `richi check` to check integrity and foreign keys on the current schema.
+schema 4 returns `existing` and makes no copy. Run `richi check` to check integrity and foreign keys on the current schema.
 
-The current runtime reads/writes schemas 1, 2 and 3. Graph operations require
-schema 2 or 3; writing a `tool` requires schema 3. New `init` stores use schema 3.
-An existing schema 1/2 store is not silently upgraded by init, reads, dev mode or
+The current runtime reads/writes schemas 1, 2, 3 and 4. Graph operations require
+schema 2+; writing a `tool` requires schema 3+; scenario runs require schema 4. New `init` stores use schema 4.
+An existing schema 1/2/3 store is not silently upgraded by init, reads, dev mode or
 package updates. To rehearse, migrate a copy made by `richi backup` through
 `--db`. Migration takes SQLite's write lock; concurrent writers wait within
 their timeout.
 
-Stores upgrade forward only. Older runtimes may not support schema 3, and
+Stores upgrade forward only. Older runtimes may not support schema 4, and
 switching runtime back does not downgrade the database. The way back is the copy
 `migrate` made, which the current runtime still reads; records written after the
 migration are not in it. Putting it back is the human's decision and procedure:
 [UPDATES.md](https://github.com/Hidanio/Richi/blob/main/docs/UPDATES.md#forward-only).
 
 `schema.sql` contains the shared core; `graph_schema.sql` contains the graph
-extension for new stores. Use the CLI migration for existing stores, never run
+extension and `scenario_schema.sql` contains the scenario run tables for new stores. Use the CLI migration for existing stores, never run
 these SQL files manually over them. The map's JSON wire format remains schema 2;
 that version is independent of SQLite's `user_version`.
 

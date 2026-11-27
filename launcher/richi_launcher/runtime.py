@@ -53,7 +53,7 @@ def describe_runtime(package, mode="release", source=None):
         # Distinguish builds even if a local wheel reuses a version number.
         try:
             for path in sorted(package.rglob("*")):
-                if path.is_file() and path.suffix in {".py", ".sql", ".html"}:
+                if path.is_file() and path.suffix in {".py", ".sql", ".html", ".json"}:
                     digest.update(str(path.relative_to(package)).encode())
                     digest.update(b"\0")
                     digest.update(path.read_bytes())
