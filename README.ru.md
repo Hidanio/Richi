@@ -47,7 +47,7 @@ curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Ri
 ```
 
 Для локального Cursor Agent нужен Richi 1.2.0 или новее, для Antigravity —
-релиз после 1.2.1. Чтобы проверить текущий стабильный установщик, замените
+1.2.2 или новее. Чтобы проверить текущий стабильный установщик, замените
 `--agent codex --yes` в команде выше на `--help`. Если в списке агентов есть
 `cursor` или `antigravity`, выполните команду с `--agent cursor --yes` или
 `--agent antigravity --yes`. Если нужного агента в опубликованном установщике
