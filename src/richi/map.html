@@ -346,6 +346,25 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 .scn-var-pill.role-richi{background:#3698881e;color:var(--record);border-color:var(--record)}
 .scn-var-pill.role-human{background:#ba874022;color:var(--entity);border-color:var(--entity)}
 .scn-var-pill.bad{background:#b4464d20;color:var(--danger);border-color:var(--danger)}
+.scn-rich-wrap{position:relative;border:1px solid var(--line);border-radius:9px;background:var(--panel);transition:border-color .14s,box-shadow .14s}
+.scn-rich-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.scn-rich-editor{min-height:112px;max-height:280px;overflow-y:auto;padding:10px 12px;font-size:13px;line-height:1.72;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;outline:none}
+.scn-rich-editor.mono{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;min-height:66px}
+.scn-rich-editor.is-empty::before{content:attr(data-placeholder);color:var(--muted);pointer-events:none}
+.scn-inline-pill{display:inline-flex;align-items:center;gap:4px;padding:1px 4px 1px 8px;margin:0 2px;border-radius:999px;font-family:system-ui,-apple-system,sans-serif;font-size:11.5px;font-weight:600;line-height:1.45;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);vertical-align:baseline;user-select:none;cursor:pointer}
+.scn-inline-pill.role-richi{background:#3698881e;color:var(--record);border-color:var(--record)}
+.scn-inline-pill.role-human{background:#ba874022;color:var(--entity);border-color:var(--entity)}
+.scn-inline-pill.bad{background:#b4464d20;color:var(--danger);border-color:var(--danger)}
+.scn-inline-pill-x{border:0;background:transparent;color:currentColor;font-size:13px;line-height:1;padding:0 4px;border-radius:999px;cursor:pointer;opacity:.72}
+.scn-inline-pill-x:hover{opacity:1;background:#0001}
+.scn-rich-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:6px 10px;border-top:1px solid var(--line);background:var(--panel-soft);border-radius:0 0 8px 8px}
+.scn-rich-bar span{font-size:11.5px;color:var(--muted)}
+.scn-mention-menu{position:absolute;left:6px;right:6px;top:calc(100% + 5px);z-index:50;background:var(--panel);border:1.5px solid var(--accent);border-radius:11px;box-shadow:0 16px 38px #1823342c;padding:6px;max-height:250px;overflow-y:auto;display:grid;gap:2px}
+.scn-mention-head{font-size:10.5px;font-weight:650;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:4px 8px}
+.scn-mention-item{border:0;background:transparent;text-align:left;padding:7px 9px;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12.5px;color:var(--ink)}
+.scn-mention-item:hover,.scn-mention-item.active{background:var(--accent-soft);color:var(--accent)}
+.scn-mention-item small{font-size:11px;color:var(--muted);flex:none}
+.scn-json-modal-ta{width:100%;min-height:320px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;line-height:1.55;border:1px solid var(--line);border-radius:9px;background:var(--panel-soft);color:var(--ink);padding:11px;resize:vertical}
 .scn-run-graph{position:relative;height:300px;border:1px solid var(--line);border-radius:12px;background:radial-gradient(circle,var(--grid) 1px,transparent 1px) 0 0/18px 18px var(--panel-soft);overflow:auto}
 .scn-run-node{position:absolute;width:210px;border:1.5px solid var(--line);border-radius:11px;background:var(--panel);padding:9px 11px;display:grid;gap:4px;cursor:pointer;transition:border-color .14s,box-shadow .14s}
 .scn-run-node:hover{box-shadow:0 6px 18px #18233418}
@@ -3563,16 +3582,36 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       box.append(subWrap);
     }
 
-    // Live Variable Pills Preview (n8n / Dify pattern: resolves {{steps.x.summary}} into interactive badges with canvas cross-highlighting)
+    // Rich Inline Pill Prompt Editor (Notion / Dify / Linear UX: users NEVER see or type raw {{steps.x.summary}}!)
     const FIELD_LABELS={summary:'Итог',answer:'Ответ',data:'Данные',status:'Статус',stdout:'Вывод',stderr:'Ошибки',exit_code:'Код выхода'};
     const CTX_LABELS={'project.path':'Папка проекта','project.id':'ID проекта','project.name':'Имя проекта','now.date':'Текущая дата','now.iso':'Текущее время','run.id':'ID запуска'};
+    const buildMentionItems=(opts={})=>{
+      const items=[],wrap=expr=>'{{'+expr+(opts.requireShell?' | shell':'')+'}}';
+      const directSet=new Set(list(step.needs));
+      const orderedAnc=[...list(step.needs).filter(id=>ancestors.has(id)),...[...ancestors].filter(id=>!directSet.has(id))];
+      for(const anc of orderedAnc){
+        const src=stepById.get(anc);if(!src)continue;
+        const num=stepNumById.get(anc),fld=src.type==='gate'?'answer':(src.matrix?'data':'summary');
+        const tag=src.type==='gate'?'Ответ человека':(src.matrix?'Данные матрицы':'Итог шага');
+        items.push({group:'Предыдущие шаги',label:'#'+num+' '+cut(prettyStepLabel(src),32),tag,token:wrap('steps.'+anc+'.'+fld),stepId:anc,search:normalized(num+' '+prettyStepLabel(src)+' '+anc+' '+tag)});
+      }
+      for(const [name,spec] of Object.entries(def.inputs||{})){
+        if(opts.forbidSecret&&spec?.type==='secret')continue;
+        items.push({group:'Параметры запуска',label:spec?.title||name,tag:'Параметр',token:wrap('inputs.'+name),stepId:'',search:normalized((spec?.title||'')+' '+name+' параметр')});
+      }
+      items.push(
+        {group:'Контекст',label:'Папка проекта',tag:'Контекст',token:wrap('project.path'),stepId:'',search:'папка проекта path project'},
+        {group:'Контекст',label:'Текущая дата',tag:'Контекст',token:wrap('now.date'),stepId:'',search:'текущая дата date now'},
+      );
+      return items;
+    };
     const buildLivePreview=(targetEl,opts={})=>{
       const boxEl=make('div','scn-live-preview');boxEl.hidden=true;
       const update=()=>{
         const parts=scenarioParseTokens(targetEl.value);
         if(!parts.some(pt=>pt.type==='token')){boxEl.hidden=true;return;}
         boxEl.hidden=false;boxEl.replaceChildren();
-        boxEl.append(make('span','scn-live-preview-label','Подстановки (наведите для подсветки на графе, нажмите для перехода)'));
+        boxEl.append(make('span','scn-live-preview-label','Подстановки'));
         const content=make('div');
         for(const pt of parts){
           if(pt.type==='text'){content.append(document.createTextNode(pt.value));continue;}
@@ -3581,83 +3620,265 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
           if(pt.root==='steps'){
             const src=stepById.get(pt.target),num=stepNumById.get(pt.target);
             const ok=Boolean(src&&ancestors.has(pt.target))&&!badShell;
-            if(!ok)pill.classList.add('bad');
-            else pill.classList.add('role-'+scenarioStepRole(src.type));
-            const fld=FIELD_LABELS[pt.field]||pt.field||'данные';
-            pill.textContent=src
-              ?('← #'+num+' '+cut(prettyStepLabel(src),22)+' · '+fld+(ancestors.has(pt.target)?'':' ⚠ не связан')+(badShell?' ⚠ нужен | shell':''))
-              :('⚠ неизвестный шаг «'+pt.target+'»');
-            if(src){
-              pill.addEventListener('mouseenter',()=>highlightScenarioNode(src.id,true,step.id));
-              pill.addEventListener('mouseleave',()=>highlightScenarioNode(src.id,false,step.id));
-              pill.addEventListener('click',()=>{highlightScenarioNode(src.id,false,step.id);scenariosState.selectedStepId=src.id;renderScenarios();});
-            }
+            if(!ok)pill.classList.add('bad');else pill.classList.add('role-'+scenarioStepRole(src.type));
+            pill.textContent=src?('← #'+num+' '+cut(prettyStepLabel(src),22)+' · '+(FIELD_LABELS[pt.field]||pt.field||'данные')):('⚠ шаг «'+pt.target+'»');
           }else if(pt.root==='inputs'){
             const spec=def.inputs&&def.inputs[pt.target];
-            const badSec=opts.forbidSecret&&spec?.type==='secret';
-            if(!spec||badSec||badShell)pill.classList.add('bad');
-            pill.textContent=spec
-              ?('Параметр · '+(spec.title||pt.target)+(badSec?' ⚠ секрет запрещён':'')+(badShell?' ⚠ нужен | shell':''))
-              :('⚠ неизвестный параметр «'+pt.target+'»');
+            if(!spec||(opts.forbidSecret&&spec?.type==='secret')||badShell)pill.classList.add('bad');
+            pill.textContent=spec?('Параметр · '+(spec.title||pt.target)):('⚠ параметр «'+pt.target+'»');
           }else{
             if(badShell)pill.classList.add('bad');
-            pill.textContent=(CTX_LABELS[pt.path]||pt.path)+(badShell?' ⚠ нужен | shell':'');
+            pill.textContent=CTX_LABELS[pt.path]||pt.path;
           }
           content.append(pill);
         }
         boxEl.append(content);
       };
-      targetEl.addEventListener('input',update);
-      update();
+      targetEl.addEventListener('input',update);update();
       return boxEl;
     };
+    const createRichPromptEditor=(initialValue,opts={},onChange)=>{
+      const wrap=make('div','scn-rich-wrap');
+      const editor=make('div','scn-rich-editor'+(opts.mono?' mono':''));
+      editor.contentEditable='true';editor.spellcheck=!opts.mono;
+      editor.setAttribute('role','textbox');editor.setAttribute('aria-multiline','true');
+      editor.dataset.placeholder=opts.placeholder||'';
+      const listeners=[];
+      let savedRange=null,mentionEl=null,mentionState=null,undoCaptured=false;
 
-    // Human-readable data-insert helpers + n8n-style Incoming Data pane
-    const insertToken=(textarea,token)=>{
-      if(!textarea)return;
-      pushScenarioUndo(ed);
-      const start=textarea.selectionStart??textarea.value.length,end=textarea.selectionEnd??textarea.value.length;
-      textarea.value=textarea.value.slice(0,start)+token+textarea.value.slice(end);
-      textarea.selectionStart=textarea.selectionEnd=start+token.length;
-      textarea.dispatchEvent(new Event('input'));textarea.focus();
+      const makeInlinePill=pt=>{
+        const pill=make('span','scn-inline-pill');
+        pill.contentEditable='false';pill.dataset.token=pt.raw;pill.title='Подстановка: '+pt.raw+' (нажмите, чтобы перейти к шагу)';
+        const badShell=opts.requireShell&&!/(^|\|\s*)shell\s*$/.test(pt.filter);
+        let text='',srcStep=null;
+        if(pt.root==='steps'){
+          srcStep=stepById.get(pt.target)||null;
+          const num=stepNumById.get(pt.target);
+          const ok=Boolean(srcStep&&ancestors.has(pt.target))&&!badShell;
+          if(!ok)pill.classList.add('bad');else pill.classList.add('role-'+scenarioStepRole(srcStep.type));
+          const fld=FIELD_LABELS[pt.field]||pt.field||'данные';
+          text=srcStep
+            ?('← #'+num+' '+cut(prettyStepLabel(srcStep),24)+' · '+fld+(ancestors.has(pt.target)?'':' ⚠ не связан')+(badShell?' ⚠ | shell':''))
+            :('⚠ неизвестный шаг «'+pt.target+'»');
+        }else if(pt.root==='inputs'){
+          const spec=def.inputs&&def.inputs[pt.target];
+          const badSec=opts.forbidSecret&&spec?.type==='secret';
+          if(!spec||badSec||badShell)pill.classList.add('bad');
+          text=spec?('Параметр · '+(spec.title||pt.target)+(badSec?' ⚠ секрет':'')):('⚠ параметр «'+pt.target+'»');
+        }else{
+          if(badShell)pill.classList.add('bad');
+          text=(CTX_LABELS[pt.path]||pt.path)+(badShell?' ⚠ | shell':'');
+        }
+        const lbl=make('span','',text);
+        if(srcStep){
+          pill.addEventListener('mouseenter',()=>highlightScenarioNode(srcStep.id,true,step.id));
+          pill.addEventListener('mouseleave',()=>highlightScenarioNode(srcStep.id,false,step.id));
+          lbl.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();highlightScenarioNode(srcStep.id,false,step.id);scenariosState.selectedStepId=srcStep.id;renderScenarios();});
+        }
+        const xBtn=make('button','scn-inline-pill-x','×');xBtn.type='button';xBtn.title='Убрать подстановку';xBtn.setAttribute('aria-label','Убрать подстановку');
+        xBtn.addEventListener('mousedown',e=>{e.preventDefault();e.stopPropagation();});
+        xBtn.addEventListener('click',e=>{
+          e.preventDefault();e.stopPropagation();
+          pushScenarioUndo(ed);
+          if(srcStep)highlightScenarioNode(srcStep.id,false,step.id);
+          pill.remove();emitChange();editor.focus();
+        });
+        pill.append(lbl,xBtn);
+        return pill;
+      };
+      const buildNodesFromText=text=>{
+        const frag=document.createDocumentFragment();
+        for(const pt of scenarioParseTokens(text)){
+          if(pt.type==='token'){frag.append(makeInlinePill(pt));continue;}
+          const lines=pt.value.split('\n');
+          lines.forEach((ln,i)=>{
+            if(i>0)frag.append(make('br'));
+            if(ln)frag.append(document.createTextNode(ln));
+          });
+        }
+        return frag;
+      };
+      const serializeNode=node=>{
+        let out='';
+        for(const ch of node.childNodes){
+          if(ch.nodeType===3){out+=ch.nodeValue.replace(/\u200B/g,'');}
+          else if(ch.nodeType===1){
+            if(ch.dataset&&ch.dataset.token){out+=ch.dataset.token;}
+            else if(ch.tagName==='BR'){if(!ch.dataset.sentinel)out+='\n';}
+            else{
+              const inner=serializeNode(ch);
+              if(out&&!out.endsWith('\n')&&(ch.tagName==='DIV'||ch.tagName==='P'))out+='\n';
+              out+=inner;
+            }
+          }
+        }
+        return out;
+      };
+      const getValue=()=>serializeNode(editor);
+      const syncEmpty=()=>{editor.classList.toggle('is-empty',!getValue().length);};
+      const emitChange=()=>{
+        const val=getValue();syncEmpty();
+        onChange(val);markScenarioDirty(ed);
+        listeners.forEach(fn=>fn(val));
+      };
+      const setValue=(text,silent=false)=>{
+        editor.replaceChildren(buildNodesFromText(text));
+        syncEmpty();
+        if(!silent){onChange(text);markScenarioDirty(ed);listeners.forEach(fn=>fn(text));}
+      };
+
+      const closeMention=()=>{if(mentionEl){mentionEl.remove();mentionEl=null;}mentionState=null;};
+      const saveSelection=()=>{
+        const sel=window.getSelection();
+        if(sel&&sel.rangeCount&&editor.contains(sel.anchorNode))savedRange=sel.getRangeAt(0).cloneRange();
+      };
+      const placeCaretAfter=node=>{
+        const sel=window.getSelection();if(!sel)return;
+        const r=document.createRange();r.setStartAfter(node);r.collapse(true);
+        sel.removeAllRanges();sel.addRange(r);savedRange=r.cloneRange();
+      };
+      const insertPillToken=(token,replaceRange=null)=>{
+        pushScenarioUndo(ed);
+        editor.focus();
+        const sel=window.getSelection();
+        let range=replaceRange||savedRange;
+        if(!range||!editor.contains(range.startContainer)){
+          range=document.createRange();range.selectNodeContents(editor);range.collapse(false);
+        }
+        range.deleteContents();
+        const pt=scenarioParseTokens(token).find(x=>x.type==='token');
+        if(pt){
+          const pill=makeInlinePill(pt),sp=document.createTextNode(' ');
+          range.insertNode(sp);range.insertNode(pill);
+          placeCaretAfter(sp);
+        }
+        closeMention();emitChange();
+      };
+      const openMentionMenu=(query='',replaceRange=null)=>{
+        const all=buildMentionItems(opts);
+        const q=normalized(query);
+        const matched=q?all.filter(it=>it.search.includes(q)):all;
+        closeMention();
+        const menu=make('div','scn-mention-menu');
+        mentionState={items:matched,activeIndex:0,replaceRange};
+        if(!matched.length){
+          menu.append(make('div','scn-mention-head','Ничего не найдено — соедините этот шаг стрелкой с нужным шагом'));
+        }else{
+          let lastGroup='';
+          matched.forEach((it,idx)=>{
+            if(it.group!==lastGroup){lastGroup=it.group;menu.append(make('div','scn-mention-head',it.group));}
+            const btn=make('button','scn-mention-item'+(idx===0?' active':''));btn.type='button';
+            btn.append(make('span','',it.label),make('small','',it.tag));
+            btn.addEventListener('mousedown',e=>{e.preventDefault();});
+            btn.addEventListener('mouseenter',()=>{
+              mentionState.activeIndex=idx;
+              menu.querySelectorAll('.scn-mention-item').forEach((b,i)=>b.classList.toggle('active',i===idx));
+              if(it.stepId)highlightScenarioNode(it.stepId,true,step.id);
+            });
+            btn.addEventListener('mouseleave',()=>{if(it.stepId)highlightScenarioNode(it.stepId,false,step.id);});
+            btn.addEventListener('click',()=>{if(it.stepId)highlightScenarioNode(it.stepId,false,step.id);insertPillToken(it.token,replaceRange);});
+            menu.append(btn);
+          });
+        }
+        wrap.append(menu);mentionEl=menu;
+      };
+      const checkMentionTrigger=()=>{
+        const sel=window.getSelection();
+        if(!sel||!sel.isCollapsed||!sel.rangeCount||!editor.contains(sel.anchorNode)){closeMention();return;}
+        const node=sel.anchorNode,offset=sel.anchorOffset;
+        if(node.nodeType!==3){closeMention();return;}
+        const before=node.nodeValue.slice(0,offset);
+        const m=before.match(/(?:^|[\s([{"'])([@/])([^\s@/]{0,24})$/);
+        if(!m){closeMention();return;}
+        const triggerStart=offset-m[1].length-m[2].length;
+        const r=document.createRange();r.setStart(node,triggerStart);r.setEnd(node,offset);
+        openMentionMenu(m[2],r);
+      };
+
+      editor.addEventListener('focus',()=>{undoCaptured=false;});
+      editor.addEventListener('beforeinput',()=>{if(!undoCaptured){pushScenarioUndo(ed);undoCaptured=true;}});
+      editor.addEventListener('keyup',()=>{saveSelection();});
+      editor.addEventListener('mouseup',saveSelection);
+      editor.addEventListener('input',()=>{saveSelection();emitChange();checkMentionTrigger();});
+      editor.addEventListener('keydown',e=>{
+        if(mentionState&&mentionEl){
+          const btns=[...mentionEl.querySelectorAll('.scn-mention-item')];
+          if(e.key==='ArrowDown'&&btns.length){
+            e.preventDefault();mentionState.activeIndex=(mentionState.activeIndex+1)%btns.length;
+            btns.forEach((b,i)=>b.classList.toggle('active',i===mentionState.activeIndex));btns[mentionState.activeIndex]?.scrollIntoView({block:'nearest'});return;
+          }
+          if(e.key==='ArrowUp'&&btns.length){
+            e.preventDefault();mentionState.activeIndex=(mentionState.activeIndex-1+btns.length)%btns.length;
+            btns.forEach((b,i)=>b.classList.toggle('active',i===mentionState.activeIndex));btns[mentionState.activeIndex]?.scrollIntoView({block:'nearest'});return;
+          }
+          if((e.key==='Enter'||e.key==='Tab')&&mentionState.items[mentionState.activeIndex]){
+            e.preventDefault();const picked=mentionState.items[mentionState.activeIndex];
+            insertPillToken(picked.token,mentionState.replaceRange);return;
+          }
+          if(e.key==='Escape'){e.preventDefault();closeMention();return;}
+        }
+        if(e.key==='Enter'&&!e.shiftKey&&!mentionEl){
+          e.preventDefault();
+          const sel=window.getSelection();if(!sel||!sel.rangeCount)return;
+          const r=sel.getRangeAt(0);r.deleteContents();
+          const br=make('br');r.insertNode(br);
+          if(!br.nextSibling){const sent=make('br');sent.dataset.sentinel='1';br.after(sent);}
+          placeCaretAfter(br);emitChange();
+        }
+      });
+      editor.addEventListener('paste',e=>{
+        e.preventDefault();
+        const plain=e.clipboardData?.getData('text/plain')||'';if(!plain)return;
+        pushScenarioUndo(ed);
+        const sel=window.getSelection();if(!sel||!sel.rangeCount)return;
+        const r=sel.getRangeAt(0);r.deleteContents();
+        const frag=buildNodesFromText(plain),last=frag.lastChild;
+        r.insertNode(frag);if(last)placeCaretAfter(last);
+        emitChange();
+      });
+      editor.addEventListener('blur',()=>{setTimeout(()=>{if(!wrap.contains(document.activeElement))closeMention();},160);});
+
+      const bar=make('div','scn-rich-bar');
+      bar.append(make('span','',ancestors.size?'Наберите @ или нажмите кнопку справа, чтобы сослаться на шаг':'Наберите @ чтобы вставить контекст (папку проекта, дату)'));
+      const insertBtn=toolButton('+ Вставить шаг / данные ▾',e=>{
+        e.stopPropagation();
+        if(mentionEl){closeMention();return;}
+        openMentionMenu('',savedRange);
+      },'scn-example-btn');
+      insertBtn.addEventListener('mousedown',e=>{e.preventDefault();saveSelection();});
+      bar.append(insertBtn);
+      wrap.append(editor,bar);
+      setValue(initialValue||'',true);
+
+      return {
+        el:wrap,
+        getValue,
+        setValue,
+        toggleToken(token){
+          pushScenarioUndo(ed);
+          const res=scenarioToggleToken(getValue(),token);
+          setValue(res.value);
+          return res.active;
+        },
+        onInput(fn){listeners.push(fn);},
+        focus(){editor.focus();},
+      };
     };
-    let activePromptEl=null;
+
+    let activePrompt=null;
     const incomingSlot=make('div');
     box.append(incomingSlot);
 
-    const renderDataInsertFold=(targetEl,shellPipe=false,allowSecret=true)=>{
-      const fold=make('details','tools-fold');
-      fold.append(make('summary','','Вставить результат предыдущего шага или контекст'));
-      const inner=make('div');inner.style.display='grid';inner.style.gap='6px';inner.style.marginTop='8px';
-      inner.append(make('div','rule-field-hint','Нажмите кнопку — в текст вставится подстановка, а выше она сразу отобразится понятной плашкой.'));
-      const chips=make('div','scn-chips');
-      const wrap=expr=>'{{'+expr+(shellPipe?' | shell':'')+'}}';
-      for(const anc of ancestors){
-        const ancStep=stepById.get(anc);if(!ancStep)continue;
-        const ancNum=stepNumById.get(anc);
-        const ancName='#'+ancNum+' '+cut(prettyStepLabel(ancStep),22);
-        const fld=ancStep.type==='gate'?'answer':(ancStep.matrix?'data':'summary');
-        const lbl=(ancStep.type==='gate'?'Ответ ':ancStep.matrix?'Данные ':'Итог ')+ancName;
-        const b=toolButton(lbl,()=>insertToken(targetEl,wrap('steps.'+anc+'.'+fld)),'scn-example-btn');
-        b.addEventListener('mouseenter',()=>highlightScenarioNode(anc,true,step.id));
-        b.addEventListener('mouseleave',()=>highlightScenarioNode(anc,false,step.id));
-        chips.append(b);
-      }
-      for(const [name,spec] of Object.entries(def.inputs||{})){
-        if(!allowSecret&&spec?.type==='secret')continue;
-        chips.append(toolButton('Параметр «'+(spec?.title||name)+'»',()=>insertToken(targetEl,wrap('inputs.'+name)),'scn-example-btn'));
-      }
-      chips.append(toolButton('Папка проекта',()=>insertToken(targetEl,wrap('project.path')),'scn-example-btn'));
-      chips.append(toolButton('Текущая дата',()=>insertToken(targetEl,wrap('now.date')),'scn-example-btn'));
-      inner.append(chips);fold.append(inner);
-      return fold;
-    };
-    const renderExampleButtons=(targetEl,examples)=>{
+    const renderExampleButtons=(target,examples)=>{
       if(!list(examples).length)return null;
       const row=make('div','scn-examples');
       row.append(make('span','rule-field-hint','Примеры:'));
       for(const [label,text] of examples){
-        row.append(toolButton(label,()=>{pushScenarioUndo(ed);targetEl.value=text;targetEl.dispatchEvent(new Event('input'));targetEl.focus();},'scn-example-btn'));
+        row.append(toolButton(label,()=>{
+          pushScenarioUndo(ed);
+          if(typeof target.setValue==='function'){target.setValue(text);target.focus();}
+          else{target.value=text;target.dispatchEvent(new Event('input'));target.focus();}
+        },'scn-example-btn'));
       }
       return row;
     };
@@ -3665,14 +3886,11 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     if(!step.params||typeof step.params!=='object')step.params=scenarioDefaultParams(step.type);
     const p=step.params;
     if(step.type==='instruction'){
-      const ta=make('textarea');ta.value=p.text||'';ta.placeholder='Напишите простым языком, что должен сделать агент на этом шаге…';
-      bindTextUndo(ta);
-      ta.addEventListener('input',()=>{p.text=ta.value;markScenarioDirty(ed);});
-      activePromptEl=ta;
-      const f=ruleField('Что сделать агенту',ta);
-      f.append(buildLivePreview(ta));
-      const ex=renderExampleButtons(ta,guide.examples);if(ex)f.append(ex);
-      f.append(renderDataInsertFold(ta,false));box.append(f);
+      const rich=createRichPromptEditor(p.text||'',{placeholder:'Напишите простым языком, что должен сделать агент на этом шаге…'},val=>{p.text=val;});
+      activePrompt=rich;
+      const f=ruleField('Что сделать агенту',rich.el);
+      const ex=renderExampleButtons(rich,guide.examples);if(ex)f.append(ex);
+      box.append(f);
     }else if(step.type==='skill'){
       if(!p.skill||typeof p.skill!=='object'||Array.isArray(p.skill))p.skill={default:typeof p.skill==='string'?p.skill:''};
       const picker=renderSearchableSkillPicker(typeof p.skill.default==='string'?p.skill.default:'',val=>{
@@ -3686,23 +3904,17 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         const clearPa=toolButton('Сбросить per-agent',()=>{pushScenarioUndo(ed);delete p.skill.per_agent;markScenarioDirty(ed);renderScenarios();},'small');
         box.append(paNote,clearPa);
       }
-      const ta=make('textarea');ta.value=p.instruction||'';ta.placeholder='Дополнительные указания к запуску скилла (необязательно)…';
-      bindTextUndo(ta);
-      ta.addEventListener('input',()=>{p.instruction=ta.value;markScenarioDirty(ed);});
-      activePromptEl=ta;
-      const f=ruleField('Дополнительная инструкция к скиллу',ta);
-      f.append(buildLivePreview(ta));
-      const ex=renderExampleButtons(ta,guide.examples);if(ex)f.append(ex);
-      f.append(renderDataInsertFold(ta,false));box.append(f);
+      const rich=createRichPromptEditor(p.instruction||'',{placeholder:'Дополнительные указания к запуску скилла (необязательно)…'},val=>{p.instruction=val;});
+      activePrompt=rich;
+      const f=ruleField('Дополнительная инструкция к скиллу',rich.el);
+      const ex=renderExampleButtons(rich,guide.examples);if(ex)f.append(ex);
+      box.append(f);
     }else if(step.type==='command'){
-      const ta=make('textarea');ta.style.fontFamily='ui-monospace,SFMono-Regular,monospace';ta.value=p.command||'';ta.placeholder='Например: pytest -q или npm test';
-      bindTextUndo(ta);
-      ta.addEventListener('input',()=>{p.command=ta.value;markScenarioDirty(ed);});
-      activePromptEl=ta;
-      const f=ruleField('Консольная команда',ta,'Если используете подстановки {{...}}, они автоматически экранируются через | shell.');
-      f.append(buildLivePreview(ta,{requireShell:true}));
-      const ex=renderExampleButtons(ta,guide.examples);if(ex)f.append(ex);
-      f.append(renderDataInsertFold(ta,true));box.append(f);
+      const rich=createRichPromptEditor(p.command||'',{mono:true,requireShell:true,placeholder:'Например: pytest -q или npm test'},val=>{p.command=val;});
+      activePrompt=rich;
+      const f=ruleField('Консольная команда',rich.el,'Все вставленные плашки автоматически безопасно экранируются для shell.');
+      const ex=renderExampleButtons(rich,guide.examples);if(ex)f.append(ex);
+      box.append(f);
       const cwd=make('input');cwd.type='text';cwd.value=p.cwd||'';cwd.placeholder='По умолчанию — корень проекта';
       bindTextUndo(cwd);
       cwd.addEventListener('input',()=>{p.cwd=cwd.value;markScenarioDirty(ed);});
@@ -3715,14 +3927,11 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       row.append(ruleField('Ожидаемый код выхода',exp),ruleField('Сколько последних строк лога сохранить',tail));
       box.append(row);
     }else if(step.type==='gate'){
-      const ta=make('textarea');ta.value=p.question||'';ta.placeholder='Например: Принимаем изменения и переходим к финальному шагу?';
-      bindTextUndo(ta);
-      ta.addEventListener('input',()=>{p.question=ta.value;markScenarioDirty(ed);});
-      activePromptEl=ta;
-      const f=ruleField('Текст вопроса пользователю',ta);
-      f.append(buildLivePreview(ta,{forbidSecret:true}));
-      const ex=renderExampleButtons(ta,guide.examples);if(ex)f.append(ex);
-      f.append(renderDataInsertFold(ta,false,false));box.append(f);
+      const rich=createRichPromptEditor(p.question||'',{forbidSecret:true,placeholder:'Например: Принимаем изменения и переходим к финальному шагу?'},val=>{p.question=val;});
+      activePrompt=rich;
+      const f=ruleField('Текст вопроса пользователю',rich.el);
+      const ex=renderExampleButtons(rich,guide.examples);if(ex)f.append(ex);
+      box.append(f);
       // Interactive gate options builder
       if(!Array.isArray(p.options))p.options=[];
       const optWrap=make('div','rule-field');
@@ -3828,23 +4037,19 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         jumpBtn.addEventListener('click',()=>{highlightScenarioNode(src.id,false,step.id);scenariosState.selectedStepId=src.id;renderScenarios();});
         info.append(jumpBtn);
         row.append(info);
-        if(activePromptEl){
+        if(activePrompt){
           const fld=src.type==='gate'?'answer':(src.matrix?'data':'summary');
           const noun=src.type==='gate'?'ответ':(src.matrix?'данные':'итог');
           const token='{{steps.'+src.id+'.'+fld+(step.type==='command'?' | shell':'')+'}}';
           const toggleBtn=make('button','scn-example-btn scn-incoming-btn');toggleBtn.type='button';
           const syncBtn=()=>{
-            const has=scenarioHasToken(activePromptEl.value,token);
+            const has=scenarioHasToken(activePrompt.getValue(),token);
             toggleBtn.classList.toggle('active',has);
             toggleBtn.textContent=has?'✓ В тексте · убрать':'+ Вставить '+noun;
-            toggleBtn.title=has?'Подстановка '+token+' уже есть в тексте — нажмите, чтобы убрать':'Вставить '+token+' в текст задания';
+            toggleBtn.title=has?'Уже добавлено плашкой в текст — нажмите, чтобы убрать':'Вставить плашку «#'+num+' '+prettyStepLabel(src)+'» в текст задания';
           };
           toggleBtn.addEventListener('click',()=>{
-            pushScenarioUndo(ed);
-            const curPos=activePromptEl.selectionStart;
-            const res=scenarioToggleToken(activePromptEl.value,token,curPos);
-            activePromptEl.value=res.value;
-            activePromptEl.dispatchEvent(new Event('input'));
+            activePrompt.toggleToken(token);
             syncBtn();
           });
           syncBtn();toggleUpdaters.push(syncBtn);
@@ -3854,8 +4059,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         row.addEventListener('mouseleave',()=>highlightScenarioNode(src.id,false,step.id));
         inc.append(row);
       }
-      if(activePromptEl&&toggleUpdaters.length){
-        activePromptEl.addEventListener('input',()=>toggleUpdaters.forEach(fn=>fn()));
+      if(activePrompt&&toggleUpdaters.length){
+        activePrompt.onInput(()=>toggleUpdaters.forEach(fn=>fn()));
       }
       incomingSlot.append(inc);
     }
@@ -3978,6 +4183,39 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     box.append(foot);
     return box;
   }
+  function openScenarioJsonDialog(ed){
+    const def=ed.draft;
+    const panel=ruleDialog('{ } Код сценария (JSON)',def.id||'Черновик');
+    const {dialog,body,foot}=panel;
+    body.append(make('p','rule-field-hint','Техническое описание сценария в формате JSON — удобно для экспорта, передачи агенту в чат или массовой правки. В обычной работе на холсте открывать его не обязательно.'));
+    const ta=make('textarea','scn-json-modal-ta');
+    ta.spellcheck=false;ta.value=JSON.stringify(scenarioNormalizeDraft(def),null,2);
+    const copyRow=make('div','rule-actions');
+    const copyBtn=toolButton('Скопировать JSON',async()=>{
+      try{await navigator.clipboard.writeText(ta.value);copyBtn.textContent='Скопировано ✓';setTimeout(()=>copyBtn.textContent='Скопировать JSON',1500);}
+      catch{copyBtn.textContent='Выделите текст';}
+    },'small');
+    copyRow.append(copyBtn);
+    const jErr=make('div','rule-field-hint');jErr.style.color='var(--danger)';
+    body.append(copyRow,ta,jErr);
+    foot.append(toolButton('Закрыть',()=>dialog.close()));
+    foot.append(toolButton('Применить на холст',()=>{
+      try{
+        const parsed=JSON.parse(ta.value);
+        if(!parsed||typeof parsed!=='object'||Array.isArray(parsed)||!Array.isArray(parsed.steps)||!parsed.steps.every(s=>s&&typeof s==='object'&&!Array.isArray(s))){
+          throw new Error('Ожидается объект определения со списком объектов steps.');
+        }
+        const normalizedDef=scenarioNormalizeDraft(parsed);
+        if(ed.mode==='update')normalizedDef.id=ed.original.id;
+        ensureDraftPositions(normalizedDef);
+        pushScenarioUndo(ed);
+        ed.draft=normalizedDef;
+        if(!list(ed.draft.steps).some(s=>s.id===scenariosState.selectedStepId))scenariosState.selectedStepId=ed.draft.steps[0]?.id||'';
+        markScenarioDirty(ed);dialog.close();announce('JSON применён на холст');renderScenarios();
+      }catch(e){jErr.textContent='Ошибка JSON: '+e.message;}
+    },'scn-btn-primary'));
+    dialog.showModal();
+  }
   function renderScenarioEditor(root){
     const ed=scenariosState.editing,def=ed.draft;
     const wrap=make('div','scn-editor');
@@ -3997,7 +4235,9 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       announce(scenariosState.lintResult.ok?'Проверка пайплайна: ошибок не найдено':'Проверка пайплайна: найдены замечания ('+scenariosState.lintResult.issues.length+')');
       renderScenarios();
     },'small'));
-    right.append(toolButton(scenariosState.showJson?'Скрыть JSON':'JSON',()=>{scenariosState.showJson=!scenariosState.showJson;renderScenarios();},'small'));
+    const jsonBtn=toolButton('{ } Код JSON',()=>openScenarioJsonDialog(ed),'small');
+    jsonBtn.title='Открыть исходный код сценария в JSON для экспорта или ручной правки';
+    right.append(jsonBtn);
     if(ed.mode==='update'&&!ed.dirty&&ed.original){
       right.append(toolButton('Запустить в чате',()=>openScenarioRunModal(ed.original),'small'));
     }
@@ -4206,31 +4446,6 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 
     builder.append(stage,renderStepInspector(ed));
     wrap.append(builder);
-
-    // Optional JSON editor
-    if(scenariosState.showJson){
-      const jBox=make('div','scn-json-box');
-      const ta=make('textarea');ta.value=JSON.stringify(scenarioNormalizeDraft(def),null,2);
-      const jErr=make('div','rule-field-hint');jErr.style.color='var(--danger)';
-      const jBar=make('div','rule-actions');jBar.style.marginTop='8px';
-      jBar.append(toolButton('Применить JSON на холст',()=>{
-        try{
-          const parsed=JSON.parse(ta.value);
-          if(!parsed||typeof parsed!=='object'||Array.isArray(parsed)||!Array.isArray(parsed.steps)||!parsed.steps.every(s=>s&&typeof s==='object'&&!Array.isArray(s))){
-            throw new Error('Ожидается объект определения со списком объектов steps.');
-          }
-          const normalizedDef=scenarioNormalizeDraft(parsed);
-          if(ed.mode==='update')normalizedDef.id=ed.original.id;
-          ensureDraftPositions(normalizedDef);
-          pushScenarioUndo(ed);
-          ed.draft=normalizedDef;
-          if(!list(ed.draft.steps).some(s=>s.id===scenariosState.selectedStepId))scenariosState.selectedStepId=ed.draft.steps[0]?.id||'';
-          markScenarioDirty(ed);jErr.textContent='';renderScenarios();
-        }catch(e){jErr.textContent='Ошибка JSON: '+e.message;}
-      },'small primary'));
-      jBox.append(make('div','field-label','Определение сценария (JSON)'),ta,jErr,jBar);
-      wrap.append(jBox);
-    }
     root.append(wrap);
   }
   function renderScenarioRuns(root){
@@ -4541,7 +4756,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   window.addEventListener('keydown',event=>{
     if((event.metaKey||event.ctrlKey)&&!event.shiftKey&&event.key.toLowerCase()==='z'&&state.mode==='scenarios'&&scenariosState.editing){
       const tag=document.activeElement?.tagName;
-      if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;
+      if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||document.activeElement?.isContentEditable)return;
       if(scenariosState.editing.undoStack.length){event.preventDefault();undoScenarioEdit();}
     }
   });
