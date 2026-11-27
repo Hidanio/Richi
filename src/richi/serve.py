@@ -39,7 +39,7 @@ from richi_launcher.config import resolve_settings, ConfigError
 from richi_launcher.runtime import (LAUNCHER_ROOT, bootstrap_command, current_runtime, preflight,
                                     resolve_runtime, runtime_command, lease_fds)
 from .memory import Parser, MemoryError
-from . import agent_commands, map_access, memory, rules, skill_catalog
+from . import agent_commands, map_access, memory, rules, scenario_format, scenario_runs, scenarios, skill_catalog
 
 
 BASE = Path(__file__).resolve().parent
@@ -93,7 +93,7 @@ def handoff_supported():
 # default action of that signal would terminate it.
 CAPABILITIES = (["git_source_viewer", "legacy_git_source_viewer", "standalone_runtime",
                  "runtime_selection", "runtime_reload", "workspace_selection", "tool_catalog", "rules_editor",
-                 "agents_editor"]
+                 "agents_editor", "scenarios_editor"]
                 + ([maps.HANDOFF_CAPABILITY] if handoff_supported() else []))
 
 
@@ -148,20 +148,26 @@ GIT_WORKER_OUTPUT_LIMIT = 450000
 GRAPH_WORKER_TIMEOUT = 20
 GRAPH_WORKER_OUTPUT_LIMIT = 32 * 1024 * 1024
 RULES_BODY_LIMIT = 64 * 1024
+SCENARIOS_BODY_LIMIT = scenarios.MAX_CHANGE + 16 * 1024
 RULES_WORKER_TIMEOUT = 20
 RULES_WORKER_OUTPUT_LIMIT = 1024 * 1024
+SCENARIOS_LIST_OUTPUT_LIMIT = 8 * 1024 * 1024
 # Reading the whole workspace can legitimately be much larger than applying one change.
 RULES_LIST_OUTPUT_LIMIT = GRAPH_WORKER_OUTPUT_LIMIT
 # Error codes of a refused change and the HTTP status the map answers with; any other code is 400.
-CHANGE_ERROR_STATUS = {"not_found": 404, "conflict": 409, "exists": 409, "settings": 409, "busy": 503}
+CHANGE_ERROR_STATUS = {
+    "not_found": 404, "conflict": 409, "exists": 409, "settings": 409, "busy": 503,
+    "invalid_state": 409, "schema_upgrade_required": 409,
+}
 # How long a request waits for its turn: reading for another reading, a change for another change.
 TURN_TIMEOUT = RULES_WORKER_TIMEOUT + 5
 RULES_SOURCE = "richi map"
-CHANGES_ONLY = "The map changes only standing rules and agent settings"
+CHANGES_ONLY = "The map changes only standing rules, scenarios and agent settings"
 # What a page that may not edit is told about agent settings that cannot be used: the full text names the file.
 SETTINGS_PROBLEM = "The agent settings cannot be used now"
 # No change the page sends nests deeper; a deeper body is refused before anything else reads it.
 BODY_DEPTH = 16
+SCENARIOS_BODY_DEPTH = scenario_format.MAX_DEPTH + 4
 # parse_change's answer for a body it refused, apart from any JSON value (null included).
 INVALID = object()
 
@@ -592,6 +598,122 @@ def _run_rules_request(database, operation, runtime, config_file=None, workspace
     return 200, payload
 
 
+def scenarios_change(body):
+    """The change object `scenario apply` receives from the map UI (stripped source, ASCII-safe JSON)."""
+    if isinstance(body, dict):
+        body = {key: value for key, value in body.items() if key != "source"}
+        if body.get("action") == "add":
+            body["source"] = RULES_SOURCE
+    return json.dumps(body).encode("ascii")
+
+
+def _scenarios_list_worker(database, workspace):
+    """Private map read of scenario definitions, templates, runs and unified journal."""
+    try:
+        with closing(memory.connect(Path(database), readonly=True)) as conn, memory.transaction(conn, write=False):
+            memory.backend(conn)
+            payload = scenarios.map_snapshot(conn, memory, workspace=workspace)
+    except (OSError, sqlite3.Error, memory.MemoryError) as exc:
+        print(json.dumps({"code": "busy" if memory._store_busy(exc) else "unavailable"}), file=sys.stderr)
+        return 1
+    sys.stdout.buffer.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    return 0
+
+
+def _scenario_run_worker(database, run_id):
+    """Private map read of one run's detailed step state and event journal."""
+    try:
+        with closing(memory.connect(Path(database), readonly=True)) as conn, memory.transaction(conn, write=False):
+            memory.backend(conn)
+            run_data = scenario_runs.run_status(conn, memory, run_id)
+            row = conn.execute("SELECT definition_json FROM scenario_runs WHERE id = ?", (run_id,)).fetchone()
+            if row is not None and row[0]:
+                definition = json.loads(row[0])
+                run_data["scenario_title"] = definition.get("title") or run_data["scenario_id"]
+                by_id = {step["id"]: step for step in definition.get("steps", []) if isinstance(step, dict)}
+                for step in run_data.get("steps", []):
+                    spec = by_id.get(step.get("id"))
+                    if not spec:
+                        continue
+                    step["title"] = spec.get("title") or step["id"]
+                    params = spec.get("params") or {}
+                    if spec.get("type") == "gate":
+                        step["gate"] = {
+                            "question": params.get("question", ""),
+                            "options": list(params.get("options") or []),
+                            "allow_comment": params.get("allow_comment") is not False,
+                        }
+                    elif spec.get("type") == "checklist":
+                        step["checklist"] = {"items": list(params.get("items") or [])}
+            events = scenarios.log(conn, run_id=run_id, entries=100)
+            payload = {"run": run_data, "log": events["entries"], "log_more": events["more"]}
+    except memory.NotFoundError as exc:
+        print(json.dumps({"error": str(exc), "code": "not_found"}), file=sys.stderr)
+        return 1
+    except memory.MemoryError as exc:
+        code = getattr(exc, "code", None) or ("busy" if memory._store_busy(exc) else "unavailable")
+        if code in ("busy", "unavailable"):
+            print(json.dumps({"code": code}), file=sys.stderr)
+        else:
+            print(json.dumps({"error": str(exc), "code": code}), file=sys.stderr)
+        return 1
+    except (OSError, sqlite3.Error) as exc:
+        print(json.dumps({"code": "busy" if memory._store_busy(exc) else "unavailable"}), file=sys.stderr)
+        return 1
+    sys.stdout.buffer.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    return 0
+
+
+def _run_scenarios_request(database, mode, runtime, config_file=None, workspace=None, config_required=False,
+                           *, run_id=None, stdin=None):
+    """Run a scenario list/run-detail/apply worker for the map."""
+    environment = worker_environment(config_file, workspace, config_required)
+    if stdin is not None:
+        environment["RICHI_RULES_ACTOR"] = RULES_SOURCE
+    if mode == "list":
+        arguments = ["_scenarios_list", str(database), workspace or ""]
+        action = "serve"
+        maximum = SCENARIOS_LIST_OUTPUT_LIMIT
+    elif mode == "run":
+        arguments = ["_scenario_run", str(database), run_id]
+        action = "serve"
+        maximum = SCENARIOS_LIST_OUTPUT_LIMIT
+    else:
+        arguments = ["--compact-json", *config_arguments(config_file, config_required), "--db", str(database),
+                     "scenario", "apply", "--json", "-"]
+        action = "cli"
+        maximum = RULES_WORKER_OUTPUT_LIMIT
+    try:
+        process = subprocess.Popen(
+            runtime_command(runtime, arguments, action=action),
+            stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            pass_fds=lease_fds(), env=environment)
+        status, output, error = _read_worker_output(
+            process, label="Scenarios command", timeout=RULES_WORKER_TIMEOUT, maximum=maximum, request=stdin)
+    except (TimeoutError, subprocess.TimeoutExpired):
+        return 503, {"error": "The scenarios command timed out", "code": "timeout"}
+    except WorkerOutputLimit as exc:
+        return 503, {"error": str(exc), "code": "output_limit"}
+    except (OSError, ValueError) as exc:
+        return 503, {"error": str(exc)[:1000], "code": "unavailable"}
+    try:
+        payload = json.loads((error if status else output).decode("utf-8"))
+    except (ValueError, UnicodeError):
+        payload = None
+    if not isinstance(payload, dict):
+        return 503, {"error": "The scenarios command failed; run richi check", "code": "unavailable"}
+    if status:
+        if payload.get("code") == "busy":
+            return 503, {"error": "The store is busy", "code": "busy"}
+        if payload.get("code") == "unavailable" or mode == "list":
+            return 503, {"error": "Scenarios could not be read; run richi check", "code": "unavailable"}
+        if "error" not in payload:
+            return 503, {"error": "The scenarios command failed; run richi check", "code": "unavailable"}
+        return CHANGE_ERROR_STATUS.get(payload.get("code"), 400), payload
+    return 200, payload
+
+
 def compatible_health(health, database, runtime=None, config_file=None):
     return (isinstance(health, dict) and health.get("application") == "project-memory-map"
             and health.get("database") == str(database) and health.get("api_version") == API_VERSION
@@ -620,6 +742,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
     # Readings take turns among themselves and changes among themselves. Any client of the port
     # may read, so a change, which only the user's page makes, never waits behind readings.
     rules_read_lock, rules_lock = threading.Lock(), threading.Lock()
+    scenarios_read_lock, scenarios_lock = threading.Lock(), threading.Lock()
     agents_read_lock, agents_lock = threading.Lock(), threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
@@ -667,7 +790,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
         def require_edit_key(self):
             editing = self.edit_key()
             if editing is False:
-                self.send_data(403, {"error": "Open the map with richi map to change rules or agents here",
+                self.send_data(403, {"error": "Open the map with richi map to change rules, scenarios or agents here",
                                      "code": "not_editing"})
             return editing is True
 
@@ -753,6 +876,39 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                     if not editing and isinstance(payload.get("agent_settings_problem"), dict):
                         payload["agent_settings_problem"]["error"] = SETTINGS_PROBLEM
                 return self.send_data(status, payload)
+            if url.path == "/api/scenarios" and not url.query:
+                editing = self.edit_key()
+                if editing is None:
+                    return None
+                if not scenarios_read_lock.acquire(timeout=TURN_TIMEOUT):
+                    return self.send_data(503, {"error": "Scenarios are being read; try again", "code": "busy"})
+                try:
+                    status, payload = _run_scenarios_request(database, "list", runtime, config_file, workspace,
+                                                             config_required)
+                finally:
+                    scenarios_read_lock.release()
+                if status == 200:
+                    payload["editing"] = editing
+                return self.send_data(status, payload)
+            if url.path == "/api/scenario-run":
+                try:
+                    if len(url.query) > 256:
+                        return self.send_data(414, {"error": "Query exceeds the size limit"})
+                    params = parse_qs(url.query, keep_blank_values=True, strict_parsing=True, max_num_fields=1) if url.query else {}
+                except ValueError:
+                    return self.send_data(400, {"error": "Invalid query"})
+                run_id = params.get("id", [None])[0]
+                if (set(params) != {"id"} or len(params["id"]) != 1 or not run_id
+                        or len(run_id) > 120 or any(ord(c) < 32 or ord(c) == 127 for c in run_id)):
+                    return self.send_data(400, {"error": "Pass a valid run id"})
+                if not scenarios_read_lock.acquire(timeout=TURN_TIMEOUT):
+                    return self.send_data(503, {"error": "Scenarios are being read; try again", "code": "busy"})
+                try:
+                    status, payload = _run_scenarios_request(database, "run", runtime, config_file, workspace,
+                                                             config_required, run_id=run_id)
+                finally:
+                    scenarios_read_lock.release()
+                return self.send_data(status, payload)
             if url.path in {"/api/agents", "/api/skills"} and not url.query:
                 editing = self.edit_key() if url.path == "/api/agents" else False
                 if editing is None:
@@ -805,13 +961,13 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
         def do_HEAD(self):
             return self.answer(self.get)
 
-        def read_change(self):
+        def read_change(self, max_bytes=RULES_BODY_LIMIT):
             """The body of a same-origin change request as bytes, or None after answering it."""
             port = self.server.server_address[1]
             if (not self.allowed_origin()
                     or self.headers.get("Origin") not in {"http://127.0.0.1:%d" % port, "http://localhost:%d" % port}
                     or self.headers.get("Sec-Fetch-Site") not in (None, "same-origin")):
-                self.send_data(403, {"error": "Only same-origin pages of this map may change rules or agents"})
+                self.send_data(403, {"error": "Only same-origin pages of this map may change rules, scenarios or agents"})
                 return None
             if self.headers.get_content_type() != "application/json":
                 self.send_data(415, {"error": "Send application/json"})
@@ -820,12 +976,12 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 length = int(self.headers.get("Content-Length", ""))
             except ValueError:
                 length = -1
-            if not 0 <= length <= RULES_BODY_LIMIT:
-                self.send_data(413, {"error": "The request body must have a length of at most %d bytes" % RULES_BODY_LIMIT})
+            if not 0 <= length <= max_bytes:
+                self.send_data(413, {"error": "The request body must have a length of at most %d bytes" % max_bytes})
                 return None
             return self.rfile.read(length)
 
-        def parse_change(self, raw):
+        def parse_change(self, raw, max_depth=BODY_DEPTH):
             """The JSON value of a request body, or INVALID after answering 400; reached only by an entitled request."""
             try:
                 value = json.loads(raw.decode("utf-8"))
@@ -833,7 +989,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 # RecursionError: brackets nested deeper than the parser goes.
                 value = INVALID
             # Some Pythons parse brackets far deeper than they can write back; no change nests that deep.
-            if value is INVALID or not _shallow(value, BODY_DEPTH):
+            if value is INVALID or not _shallow(value, max_depth):
                 self.send_data(400, {"error": "Invalid JSON", "code": "invalid_request"})
                 return INVALID
             return value
@@ -843,9 +999,10 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
 
         def post(self):
             path = urlsplit(self.path)
-            if path.path not in {"/api/session", "/api/rules", "/api/agents"} or path.query:
+            if path.path not in {"/api/session", "/api/rules", "/api/agents", "/api/scenarios"} or path.query:
                 return self.send_data(405, {"error": CHANGES_ONLY})
-            raw = self.read_change()
+            scenario_request = path.path == "/api/scenarios"
+            raw = self.read_change(max_bytes=SCENARIOS_BODY_LIMIT if scenario_request else RULES_BODY_LIMIT)
             if raw is None:
                 return None
             if path.path == "/api/session":
@@ -865,18 +1022,22 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 return self.send_data(200, {"secret": value})
             if not self.require_edit_key():
                 return None
-            body = self.parse_change(raw)
+            body = self.parse_change(raw, max_depth=SCENARIOS_BODY_DEPTH if scenario_request else BODY_DEPTH)
             if body is INVALID:
                 return None
             agent_request = path.path == "/api/agents"
-            if not agent_request:
+            if scenario_request:
+                change = scenarios_change(body)
+                if len(change) > scenarios.MAX_CHANGE:
+                    return self.send_data(413, {"error": "The scenario change is too large", "code": "limit"})
+            elif not agent_request:
                 change = rules_change(body)
                 if len(change) > rules.MAX_CHANGE:
                     # Escaping non-ASCII text can exceed what the rules command reads.
                     return self.send_data(413, {"error": "The rule change is too large", "code": "limit"})
-            lock = agents_lock if agent_request else rules_lock
+            lock = agents_lock if agent_request else (scenarios_lock if scenario_request else rules_lock)
             if not lock.acquire(timeout=TURN_TIMEOUT):
-                subject = "change of the agents" if agent_request else "rule change"
+                subject = "change of the agents" if agent_request else ("scenario change" if scenario_request else "rule change")
                 return self.send_data(503, {"error": "Another " + subject + " is in progress; try again", "code": "busy"})
             try:
                 # The page may have lost its editing session while waiting behind another save.
@@ -884,6 +1045,9 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                     return None
                 if agent_request:
                     status, payload = agent_change(body)
+                elif scenario_request:
+                    status, payload = _run_scenarios_request(database, "apply", runtime,
+                                                             config_file, workspace, config_required, stdin=change)
                 else:
                     status, payload = _run_rules_request(database, ["rules", "apply", "--json", "-"], runtime,
                                                          config_file, workspace, config_required, stdin=change)
@@ -1342,6 +1506,10 @@ def main(argv=None):
     try:
         if argv and argv[0] == "_rules_list" and len(argv) == 3:
             return _rules_list_worker(argv[1], argv[2] or None)
+        if argv and argv[0] == "_scenarios_list" and len(argv) == 3:
+            return _scenarios_list_worker(argv[1], argv[2] or None)
+        if argv and argv[0] == "_scenario_run" and len(argv) == 3:
+            return _scenario_run_worker(argv[1], argv[2])
         return _main(argv) or 0
     except (MemoryError, OSError, ValueError, RuntimeError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)

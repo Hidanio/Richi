@@ -29,6 +29,14 @@ by Richi memory and verified step reports.
 5. **Built-in Review template.** Richi ships a synthetic `review` template
    (`memory.brief` → parallel `skill` angles → `instruction` merge → human
    `gate`) usable out of the box or copied with `scenario copy`.
+6. **Visual Scenarios tab in `richi map`.** Open `richi map` and switch to the
+   **Scenarios** (`Сценарии`) tab to browse definitions and built-in templates,
+   build or edit pipelines visually (drag-and-drop steps, wire `needs` ports on
+   a 2D graph or reorder in a list, inspect all 8 step kinds with skill and
+   template pickers, save directly with the map edit key or copy a
+   `richi scenario apply` command), inspect runs and jump to their `task` nodes
+   on the map (waiting human gates are read-only in the UI and show a copyable
+   `richi scenario answer` command for chat), and browse the unified event log.
 
 ## Quick example
 
@@ -51,8 +59,10 @@ For the full agent command contract, see
   Richi-side continuation counting.
 - **M3**: process memory (`compare` against prior run baselines, `memory.record`,
   prior run findings in `memory.brief`).
-- **M4**: Scenarios tab in `richi map` (library, drag-and-drop list editor with
-  wiring, inspector, run view, journal).
+- **M4 (included)**: Scenarios tab in `richi map` (definitions library, visual
+  drag-and-drop & port-wiring pipeline builder + reorderable list view,
+  step inspector, runs timeline with task jump & read-only gate commands, and
+  unified journal).
 - **M5–M9**: presets & gallery, repository export/import with trust-by-hash,
   free Blueprints-style canvas over the same explicit graph format,
   retrospectives, cross-agent handoff, forks and triggers.

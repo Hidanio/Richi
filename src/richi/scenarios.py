@@ -899,3 +899,58 @@ def copy_template(conn, api, template_id, *, new_id=None, scope="global", projec
     if scope == "project":
         request["project"] = project_id or checked_project
     return change(conn, request, api, checked_project=checked_project, author=author)
+
+
+def map_snapshot(conn, api, workspace=None, *, run_limit=50, log_limit=100):
+    """Complete read-only snapshot for the map's Scenarios tab (definitions, templates, runs, log)."""
+    from . import scenario_runs
+
+    schema_version = conn.execute("PRAGMA user_version").fetchone()[0]
+    projects = [{"id": row[0], "name": row[1]} for row in conn.execute(
+        "SELECT id, name FROM projects ORDER BY name, id")]
+    stored, invalid, unsupported = scan(conn)
+    stored_ids = {item["id"] for item in stored}
+
+    builtins = []
+    for record in builtin_templates().values():
+        entry = dict(record)
+        entry["builtin"] = True
+        entry["shadowed"] = record["id"] in stored_ids
+        builtins.append(entry)
+    builtins.sort(key=lambda item: item["id"])
+
+    runs = []
+    if schema_version >= 4:
+        runs = scenario_runs.list_runs(conn, api, limit=run_limit)["runs"]
+        if runs:
+            run_ids = [item["id"] for item in runs]
+            placeholders = ",".join("?" for _ in run_ids)
+            counts_by_run = {}
+            for row in conn.execute(
+                "SELECT run_id, status, count(*) FROM scenario_steps "
+                "WHERE run_id IN (" + placeholders + ") GROUP BY run_id, status",
+                run_ids,
+            ):
+                bucket = counts_by_run.setdefault(row[0], {"total": 0})
+                bucket[row[1]] = row[2]
+                bucket["total"] += row[2]
+            for item in runs:
+                counts = counts_by_run.get(item["id"], {"total": 0})
+                item["step_counts"] = counts
+
+    journal = log(conn, entries=log_limit)
+    return {
+        "view": "scenario-map",
+        "workspace": workspace,
+        "schema_version": schema_version,
+        "projects": projects,
+        "scenarios": stored,
+        "builtin_templates": builtins,
+        "invalid_scenarios": invalid,
+        "unsupported_scenarios": unsupported,
+        "runs": runs,
+        "log": journal["entries"],
+        "log_more": journal["more"],
+        "log_source": journal["source"],
+        "limit_bytes": scenario_format.MAX_BYTES,
+    }

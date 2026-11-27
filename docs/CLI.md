@@ -159,6 +159,7 @@ one per agent when they differ.
 
 For repeatable multi-step workflows (`richi scenario list`, `plan`, `run`, `next`, `report`),
 see [scenarios](SCENARIOS.md) and [the scenario guide](../skills/richi/references/SCENARIOS.md).
+The map's **Scenarios** tab provides a visual drag-and-drop pipeline builder, run monitor, and unified event log.
 
 The skill catalog lists sources for the built-in Claude Code, Codex, Cursor and
 Antigravity profiles, including clients that have yet to be connected. You can switch their skill sources,

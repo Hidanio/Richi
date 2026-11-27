@@ -162,6 +162,7 @@ richi --project-path /path/to/service-example recall 'локальный кеш'
 
 Повторяемые многошаговые процедуры (`richi scenario list`, `plan`, `run`, `next`, `report`)
 описаны в [сценариях](SCENARIOS.ru.md) и [руководстве по сценариям](../skills/richi/references/SCENARIOS.ru.md).
+Вкладка **«Сценарии»** карты открывает визуальный drag-and-drop конструктор пайплайнов, просмотр запусков и общий журнал событий.
 
 Каталог скиллов показывает источники для встроенных профилей Claude Code,
 Codex, Cursor и Antigravity, в том числе до подключения клиента. Вы можете переключать их источники скиллов,

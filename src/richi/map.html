@@ -215,6 +215,93 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 .rule-confirm{font-size:13px;line-height:1.7}
 .rule-quote{margin:0;border-left:3px solid var(--line);padding:6px 0 6px 12px;color:var(--muted);font-size:12px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
 @media(max-width:760px){.rules-totals{width:100%}.rules-totals>*{flex:1;min-width:0}.rule-templates{grid-template-columns:minmax(0,1fr)}.rule-dialog{width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:11px}.rule-dialog-body,.rule-dialog-head,.rule-dialog-foot{padding-left:16px;padding-right:16px}.rule-agent-skill{grid-template-columns:minmax(0,1fr);gap:4px}.rule-agent-name{line-height:1.4}.agents-layout{grid-template-columns:minmax(0,1fr)}.agent-detail{padding:16px}.agent-source{grid-template-columns:auto minmax(0,1fr) auto;row-gap:4px}.agent-source-count{grid-column:2}}
+.scn-subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.scn-subtab{border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.scn-subtab[aria-pressed=true]{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+.scn-flow{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:4px 0}
+.scn-step-pill{font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid var(--line);background:var(--panel-soft);color:var(--ink);display:inline-flex;align-items:center;gap:5px;max-width:100%;overflow-wrap:anywhere}
+.scn-step-pill.role-richi{border-color:var(--record);color:var(--record)}
+.scn-step-pill.role-human{border-color:var(--entity);color:var(--entity)}
+.scn-step-pill.role-agent{border-color:var(--accent)}
+.scn-flow-arrow{color:var(--muted);font-size:11px}
+.scn-editor{display:grid;gap:16px}
+.scn-editor-bar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:13px 16px;border:1px solid var(--line);border-radius:13px;background:var(--panel)}
+.scn-editor-bar-left,.scn-editor-bar-right{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.scn-editor-title{font-size:16px;font-weight:650}
+.scn-meta-card{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:16px 18px;display:grid;gap:12px}
+.scn-meta-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.scn-inputs-list{display:grid;gap:8px;margin-top:6px}
+.scn-input-row{display:grid;grid-template-columns:minmax(100px,1fr) 120px minmax(110px,1fr) minmax(120px,1.2fr) auto auto;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel-soft)}
+.scn-input-row input[type=text],.scn-input-row select{height:33px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);padding:4px 8px;font-size:12px;width:100%;min-width:0}
+.scn-builder{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(300px,410px);gap:16px;align-items:start}
+.scn-stage{border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.scn-stage-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px 15px;border-bottom:1px solid var(--line);background:var(--panel-soft)}
+.scn-stage-head-left,.scn-stage-head-right{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.scn-canvas-scroll{position:relative;overflow:auto;height:540px;background:radial-gradient(circle,var(--grid) 1px,transparent 1px) 0 0/22px 22px var(--panel-soft);user-select:none}
+.scn-canvas-surface{position:relative;min-width:100%;min-height:100%}
+.scn-edges-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.scn-edge-path{fill:none;stroke:var(--edge);stroke-width:2;transition:stroke .12s}
+.scn-edge-hit{fill:none;stroke:transparent;stroke-width:14;pointer-events:stroke;cursor:pointer}
+.scn-edge-group:hover .scn-edge-path{stroke:var(--danger);stroke-width:2.8}
+.scn-edge-preview{fill:none;stroke:var(--accent);stroke-width:2.2;stroke-dasharray:6 4;pointer-events:none}
+.scn-node{position:absolute;width:224px;border:1.5px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 4px 14px #1823340f;transition:border-color .12s,box-shadow .12s}
+.scn-node.role-richi{border-left:4px solid var(--record)}
+.scn-node.role-human{border-left:4px solid var(--entity)}
+.scn-node.role-agent{border-left:4px solid var(--accent)}
+.scn-node.selected{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),0 8px 20px #18233418}
+.scn-node.dragging{opacity:.92;z-index:20;box-shadow:0 12px 28px #18233428}
+.scn-node.drop-target{border-color:var(--record);box-shadow:0 0 0 3px var(--accent-soft)}
+.scn-node-head{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 11px 6px;border-bottom:1px solid var(--line);cursor:grab;border-radius:10px 10px 0 0;background:var(--panel-soft)}
+.scn-node-head:active{cursor:grabbing}
+.scn-node-type{font-size:10px;font-weight:650;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.scn-node-body{padding:9px 11px 10px;cursor:pointer;display:grid;gap:4px}
+.scn-node-title{font-size:13px;font-weight:650;line-height:1.35;overflow-wrap:anywhere}
+.scn-node-id{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.scn-node-badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
+.scn-node-badge{font-size:10px;padding:1px 6px;border-radius:999px;background:var(--panel-soft);border:1px solid var(--line);color:var(--muted)}
+.scn-port{position:absolute;top:50%;transform:translateY(-50%);width:15px;height:15px;border-radius:50%;border:2px solid var(--accent);background:var(--panel);padding:0;display:grid;place-items:center;cursor:crosshair;z-index:5;transition:transform .12s,background .12s}
+.scn-port:hover,.scn-port.active{transform:translateY(-50%) scale(1.25);background:var(--accent)}
+.scn-port-in{left:-8px;border-color:var(--record)}
+.scn-port-in:hover,.scn-port-in.active{background:var(--record)}
+.scn-port-out{right:-8px}
+.scn-list-view{padding:14px;display:grid;gap:9px;max-height:540px;overflow:auto}
+.scn-list-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px 13px;border:1px solid var(--line);border-radius:11px;background:var(--panel);cursor:pointer}
+.scn-list-row.selected{border-color:var(--accent);background:var(--accent-soft)}
+.scn-list-row.drag-over{border-top:3px solid var(--accent)}
+.scn-drag-handle{cursor:grab;color:var(--muted);font-size:16px;padding:0 4px}
+.scn-inspector{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:18px;display:grid;gap:13px;min-width:0}
+.scn-inspector h3{font-size:15px;letter-spacing:-.2px}
+.scn-inspector .rule-field textarea{min-height:92px}
+.scn-chips{display:flex;flex-wrap:wrap;gap:5px}
+.scn-chip-btn{font-size:11px;padding:3px 8px;border-radius:999px;font-family:ui-monospace,SFMono-Regular,monospace}
+.scn-needs-grid{display:flex;flex-wrap:wrap;gap:7px}
+.scn-needs-item{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel-soft);font-size:12px;cursor:pointer}
+.scn-needs-item input{margin:0;accent-color:var(--accent)}
+.scn-json-box{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:14px}
+.scn-json-box textarea{width:100%;min-height:240px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;line-height:1.55;border:1px solid var(--line);border-radius:8px;background:var(--panel-soft);color:var(--ink);padding:10px;resize:vertical}
+.scn-runs-layout{display:grid;grid-template-columns:minmax(280px,420px) minmax(0,1fr);gap:18px;align-items:start}
+.scn-runs-list{display:grid;gap:10px}
+.scn-run-card{text-align:left;padding:14px 16px;border-radius:12px;background:var(--panel);display:grid;gap:7px;width:100%}
+.scn-run-card[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}
+.scn-run-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.scn-status{font-size:11px;font-weight:650;padding:2px 8px;border-radius:999px;border:1px solid var(--line);background:var(--panel-soft);color:var(--muted)}
+.scn-status.st-done{color:var(--record);border-color:var(--record)}
+.scn-status.st-running,.scn-status.st-claimed{color:var(--accent);border-color:var(--accent)}
+.scn-status.st-waiting,.scn-status.st-waiting_human,.scn-status.st-paused,.scn-status.st-blocked{color:var(--entity);border-color:var(--entity)}
+.scn-status.st-failed,.scn-status.st-cancelled{color:var(--danger);border-color:var(--danger)}
+.scn-progress{height:5px;border-radius:4px;background:var(--panel-soft);border:1px solid var(--line);overflow:hidden}
+.scn-progress i{display:block;height:100%;background:var(--record);border-radius:4px}
+.scn-run-detail{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:20px;display:grid;gap:14px;min-width:0}
+.scn-step-row{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--panel-soft);display:grid;gap:6px}
+.scn-step-row.st-waiting_human{border-left:4px solid var(--entity)}
+.scn-step-row.st-done{border-left:4px solid var(--record)}
+.scn-step-row.st-failed,.scn-step-row.st-blocked{border-left:4px solid var(--danger)}
+.scn-step-row.st-claimed{border-left:4px solid var(--accent)}
+.scn-log-list{display:grid;gap:8px}
+.scn-log-row{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:11px 14px;display:grid;gap:4px;font-size:12px}
+.scn-log-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.scn-log-row pre{margin:4px 0 0;font-family:ui-monospace,SFMono-Regular,monospace;font-size:11px;background:var(--panel-soft);border:1px solid var(--line);border-radius:7px;padding:8px;overflow:auto;max-height:160px}
+@media(max-width:1100px){.scn-builder,.scn-runs-layout{grid-template-columns:minmax(0,1fr)}.scn-input-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -227,6 +314,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     <button class="mode-tab" id="map-tab" type="button" role="tab" aria-selected="true" aria-controls="canvas">Карта</button>
     <button class="mode-tab" id="encyclopedia-tab" type="button" role="tab" aria-selected="false" aria-controls="encyclopedia" tabindex="-1">Энциклопедия</button>
     <button class="mode-tab" id="tools-tab" type="button" role="tab" aria-selected="false" aria-controls="tool-catalog" tabindex="-1">Инструменты</button>
+    <button class="mode-tab" id="scenarios-tab" type="button" role="tab" aria-selected="false" aria-controls="scenarios-panel" tabindex="-1">Сценарии</button>
     <button class="mode-tab" id="rules-tab" type="button" role="tab" aria-selected="false" aria-controls="rules-panel" tabindex="-1">Правила</button>
     <button class="mode-tab" id="agents-tab" type="button" role="tab" aria-selected="false" aria-controls="agents-panel" tabindex="-1">Агенты</button>
   </div>
@@ -253,6 +341,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       <div id="concepts"></div>
     </section>
     <section class="tools" id="tool-catalog" role="tabpanel" aria-labelledby="tools-tab" hidden><div class="tools-inner" id="tools-content"></div></section>
+    <section class="tools rules scenarios" id="scenarios-panel" role="tabpanel" aria-labelledby="scenarios-tab" hidden><div class="tools-inner" id="scenarios-content"></div></section>
     <section class="tools rules" id="rules-panel" role="tabpanel" aria-labelledby="rules-tab" hidden><div class="tools-inner" id="rules-content"></div></section>
     <section class="tools rules agents" id="agents-panel" role="tabpanel" aria-labelledby="agents-tab" hidden><div class="tools-inner" id="agents-content"></div></section>
     <aside class="sidebar" id="sidebar" aria-label="Карточка выбранного объекта"><div class="sidebar-heading"><span id="detail-label">Как читать карту</span><button class="icon" id="close-details" type="button" title="Свернуть карточку" aria-label="Свернуть карточку">×</button></div><div class="detail" id="detail"></div></aside>
@@ -504,6 +593,10 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   }
   function renderProjectOptions(){
     const select=$('project-filter');select.replaceChildren(new Option('Все проекты',''));
+    if(state.mode==='scenarios'){
+      select.replaceChildren(new Option('Все области',''),new Option('Глобальные','global'),new Option('Встроенные шаблоны','builtin'));for(const [id,name] of scenarioProjectNames())select.add(new Option('Проект · '+name,'project:'+id));
+      if(scenariosState.scope&&![...select.options].some(option=>option.value===scenariosState.scope))scenariosState.scope='';select.value=scenariosState.scope;return;
+    }
     if(state.mode==='rules'){
       select.replaceChildren(new Option('Все области',''),new Option('Глобальные','global'));for(const [id,name] of ruleProjectNames())select.add(new Option('Проект · '+name,'project:'+id));
       if(rulesState.scope&&![...select.options].some(option=>option.value===rulesState.scope))rulesState.scope='';select.value=rulesState.scope;return;
@@ -566,6 +659,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   function zoom(factor,x,y){const rect=svg.getBoundingClientRect();const px=x ?? rect.width/2,py=y ?? rect.height/2;const old=state.camera,k=Math.min(4,Math.max(.06,old.k*factor));state.camera={k,x:px-(px-old.x)*k/old.k,y:py-(py-old.y)*k/old.k};applyCamera();}
   function hideSearch(){$('search-results').hidden=true;$('search').setAttribute('aria-expanded','false');}
   function runSearch(){
+    if(state.mode==='scenarios'){scenariosState.query=$('search').value;hideSearch();if(!scenariosState.editing)renderScenarios();return;}
     if(state.mode==='rules'){rulesState.query=$('search').value;hideSearch();renderRules();return;}
     if(state.mode==='agents'){agentsState.query=$('search').value;hideSearch();renderAgents();return;}
     if(state.mode==='tools'){state.toolQuery=$('search').value;state.toolId='';state.toolProject='';closeToolRecord();writeToolsLocation();hideSearch();renderTools();return;}
@@ -765,48 +859,50 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   }
   function applyToolsLocation(){
     if(location.hash==='#tools'||location.hash.startsWith('#tools?')){const params=new URLSearchParams(location.hash.split('?')[1]||'');state.toolId=params.get('tool')||'';state.toolProject=params.get('project')||'';closeToolRecord();if(state.mode!=='tools')setMode('tools',false);else{renderTools();ensureToolDetail();}}
+    else if(location.hash==='#scenarios'){if(state.mode!=='scenarios')setMode('scenarios',false);}
     else if(location.hash==='#rules'){if(state.mode!=='rules')setMode('rules',false);}
     else if(location.hash==='#agents'){if(state.mode!=='agents')setMode('agents',false);}
-    else if(['tools','rules','agents'].includes(state.mode)&&['#map','#encyclopedia',''].includes(location.hash))setMode(location.hash==='#encyclopedia'?'encyclopedia':'map',false);
+    else if(['tools','scenarios','rules','agents'].includes(state.mode)&&['#map','#encyclopedia',''].includes(location.hash))setMode(location.hash==='#encyclopedia'?'encyclopedia':'map',false);
   }
   function setMode(mode,updateLocation=true){
     if(!viewModes.includes(mode)||mode===state.mode)return;
-    rulesState.outcome='';
-    const queryKey={map:'mapQuery',encyclopedia:'conceptQuery',tools:'toolQuery',rules:'ruleQuery',agents:'agentQuery'};state[queryKey[state.mode]]=$('search').value;state.mode=mode;const encyclopedia=mode==='encyclopedia',tools=mode==='tools',rules=mode==='rules',agents=mode==='agents';hideSearch();
-    $('canvas').hidden=mode!=='map';$('encyclopedia').hidden=!encyclopedia;$('tool-catalog').hidden=!tools;$('rules-panel').hidden=!rules;$('agents-panel').hidden=!agents;$('kind-filters').hidden=mode!=='map';document.querySelector('.switches').hidden=rules||agents;document.querySelector('.project-field').hidden=agents;$('main').classList.toggle('tools-mode',tools||rules||agents);$('main').classList.remove('tools-reading');
+    rulesState.outcome='';if(typeof scenariosState!=='undefined')scenariosState.outcome='';
+    const queryKey={map:'mapQuery',encyclopedia:'conceptQuery',tools:'toolQuery',scenarios:'scenarioQuery',rules:'ruleQuery',agents:'agentQuery'};state[queryKey[state.mode]]=$('search').value;state.mode=mode;const encyclopedia=mode==='encyclopedia',tools=mode==='tools',scenariosMode=mode==='scenarios',rules=mode==='rules',agents=mode==='agents';hideSearch();
+    $('canvas').hidden=mode!=='map';$('encyclopedia').hidden=!encyclopedia;$('tool-catalog').hidden=!tools;$('scenarios-panel').hidden=!scenariosMode;$('rules-panel').hidden=!rules;$('agents-panel').hidden=!agents;$('kind-filters').hidden=mode!=='map';document.querySelector('.switches').hidden=scenariosMode||rules||agents;document.querySelector('.project-field').hidden=agents;$('main').classList.toggle('tools-mode',tools||scenariosMode||rules||agents);$('main').classList.remove('tools-reading');
     for(const name of viewModes){const tab=$(name+'-tab');tab.setAttribute('aria-selected',String(name===mode));tab.tabIndex=name===mode?0:-1;}
-    $('search-label').textContent=agents?'Найти агента':rules?'Найти правило':tools?'Найти инструмент':encyclopedia?'Найти понятие':'Найти в памяти';$('project-label').textContent=rules?'Область':tools?'Применялся в проекте':encyclopedia?'Область применения':'Вокруг проекта';
-    $('search').placeholder=agents?'Имя, ID или папка…':rules?'ID, текст или скилл…':tools?'Название, назначение, тема…':encyclopedia?'Термин, синоним, определение…':'Проект, задача, решение, тег…';$('search').value=state[queryKey[mode]]||'';
-    $('view-hint').textContent=agents?'Агент → источники скиллов → правила':rules?'Агенты загружают правила в начале чата и после сжатия контекста':tools?'Инструмент → проект → задачи':encyclopedia?'Выберите определение, чтобы открыть полную карточку':'Перетаскивайте карту и узлы · колесо — масштаб';$('data-note').textContent=agents?agentsNote():rules?rulesNote():state.dataNote||'Локальная память · только чтение';renderProjectOptions();
+    $('search-label').textContent=agents?'Найти агента':scenariosMode?'Найти сценарий, запуск или событие':rules?'Найти правило':tools?'Найти инструмент':encyclopedia?'Найти понятие':'Найти в памяти';$('project-label').textContent=scenariosMode||rules?'Область':tools?'Применялся в проекте':encyclopedia?'Область применения':'Вокруг проекта';
+    $('search').placeholder=agents?'Имя, ID или папка…':scenariosMode?'ID, название, тег или шаг…':rules?'ID, текст или скилл…':tools?'Название, назначение, тема…':encyclopedia?'Термин, синоним, определение…':'Проект, задача, решение, тег…';$('search').value=state[queryKey[mode]]||'';
+    $('view-hint').textContent=agents?'Агент → источники скиллов → правила':scenariosMode?'Перетаскивайте шаги, соединяйте порты мышкой (needs), отслеживайте запуски и журнал':rules?'Агенты загружают правила в начале чата и после сжатия контекста':tools?'Инструмент → проект → задачи':encyclopedia?'Выберите определение, чтобы открыть полную карточку':'Перетаскивайте карту и узлы · колесо — масштаб';$('data-note').textContent=agents?agentsNote():scenariosMode?scenariosNote():rules?rulesNote():state.dataNote||'Локальная память · только чтение';renderProjectOptions();
     if(tools){closeToolRecord();renderTools();if((!state.toolsData||state.toolsFlags!==toolsFilterKey())&&(!state.toolsLoading||state.toolsRequestedFlags!==toolsFilterKey()))loadTools();ensureToolDetail();if(updateLocation)writeToolsLocation();}
+    else if(scenariosMode){closeToolRecord();scenariosState.query=$('search').value;renderScenarios();if(!scenariosState.loading)loadScenarios();if(!rulesState.skills&&!rulesState.skillsLoading)loadSkills();if(updateLocation&&location.hash!=='#scenarios')history.pushState(null,'','#scenarios');}
     else if(rules){closeToolRecord();rulesState.query=$('search').value;renderRules();if(!rulesState.loading)loadRules();if(updateLocation&&location.hash!=='#rules')history.pushState(null,'','#rules');}
     else if(agents){closeToolRecord();agentsState.query=$('search').value;renderAgents();if(!agentsState.loading)loadAgents();if(!rulesState.data&&!rulesState.loading)loadRules();if(updateLocation&&location.hash!=='#agents')history.pushState(null,'','#agents');}
     else{
-      if(updateLocation&&(location.hash.startsWith('#tools')||location.hash==='#rules'||location.hash==='#agents'))history.pushState(null,'','#'+mode);
+      if(updateLocation&&(location.hash.startsWith('#tools')||location.hash==='#scenarios'||location.hash==='#rules'||location.hash==='#agents'))history.pushState(null,'','#'+mode);
       if(encyclopedia){renderEncyclopedia();if(state.selection?.type==='node'&&kindFor(state.nodeMap.get(state.selection.id))==='concept')renderNodeDetail(state.nodeMap.get(state.selection.id));else{state.selection=null;showIntro();}}
       else{renderGraph(true);if(state.selection?.type==='node')renderNodeDetail(state.nodeMap.get(state.selection.id));else if(state.selection?.type==='edge')renderEdgeDetail(state.edgeMap.get(state.selection.id));else showIntro();}
     }
-    announce(agents?'Агенты и их скиллы':rules?'Правила агентов':tools?'Каталог инструментов':encyclopedia?'Энциклопедия понятий':'Карта знаний');
+    announce(agents?'Агенты и их скиллы':scenariosMode?'Сценарии и пайплайны':rules?'Правила агентов':tools?'Каталог инструментов':encyclopedia?'Энциклопедия понятий':'Карта знаний');
   }
 
   async function loadWorkspace(){
     const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),5000);
-    try{const response=await fetch('/api/health',{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('HTTP '+response.status);const health=await response.json();const name=typeof health.workspace==='string'&&health.workspace?health.workspace:'отдельная конфигурация';state.workspaceName=typeof health.workspace==='string'&&health.workspace?health.workspace:null;state.mapStore=list(health.store_arguments).filter(item=>typeof item==='string');if(state.mode==='rules')renderRules();$('workspace-name').textContent='Workspace: '+name;document.title='Карта знаний · '+name;}
+    try{const response=await fetch('/api/health',{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('HTTP '+response.status);const health=await response.json();const name=typeof health.workspace==='string'&&health.workspace?health.workspace:'отдельная конфигурация';state.workspaceName=typeof health.workspace==='string'&&health.workspace?health.workspace:null;state.mapStore=list(health.store_arguments).filter(item=>typeof item==='string');if(state.mode==='rules')renderRules();if(state.mode==='scenarios'&&!scenariosState.editing)renderScenarios();$('workspace-name').textContent='Workspace: '+name;document.title='Карта знаний · '+name;}
     catch(_error){$('workspace-name').textContent='Workspace: недоступен';}
     finally{clearTimeout(timeout);}
   }
 
   async function loadGraph(){
     // «Обновить» answers the note a save left (rulesState.outcome); the save's own reload keeps it.
-    rulesState.outcome='';
-    loadWorkspace();if(state.mode==='tools'&&(!state.toolsLoading||state.toolsRequestedFlags!==toolsFilterKey()))loadTools();if(state.mode==='rules'){loadRules();loadSkills();}if(state.mode==='agents'){loadAgents();loadRules();}
+    rulesState.outcome='';if(typeof scenariosState!=='undefined')scenariosState.outcome='';
+    loadWorkspace();if(state.mode==='tools'&&(!state.toolsLoading||state.toolsRequestedFlags!==toolsFilterKey()))loadTools();if(state.mode==='scenarios'){loadScenarios();loadSkills();}if(state.mode==='rules'){loadRules();loadSkills();}if(state.mode==='agents'){loadAgents();loadRules();}
     if($('git-dialog').open)closeGit();
     const request=++state.request;state.loading=true;$('refresh').disabled=true;$('refresh').textContent='Обновляем…';$('error-banner').hidden=true;if(!state.loaded)showMessage('Загружаем карту','Читаем актуальные знания из локальной памяти.');
     const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),20000);
     try{const params=new URLSearchParams({include_hypotheses:$('hypotheses').checked?'1':'0',include_superseded:$('superseded').checked?'1':'0'});const response=await fetch('/api/graph?'+params,{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('Сервер вернул HTTP '+response.status);const data=await response.json();if(!data||!Array.isArray(data.nodes)||!Array.isArray(data.edges))throw new Error('Неожиданный формат ответа сервера');if(request!==state.request)return;
       state.nodes=data.nodes.filter(n=>n&&typeof n.id==='string');state.nodeMap=new Map(state.nodes.map(n=>[n.id,n]));state.edges=data.edges.filter(e=>e&&typeof e.id==='string'&&state.nodeMap.has(e.from_ref)&&state.nodeMap.has(e.to_ref));state.edgeMap=new Map(state.edges.map(e=>[e.id,e]));state.adjacency=new Map(state.nodes.map(n=>[n.id,[]]));for(const edge of state.edges){state.adjacency.get(edge.from_ref).push(edge);if(edge.to_ref!==edge.from_ref)state.adjacency.get(edge.to_ref).push(edge);}state.kinds=new Set(state.nodes.map(kindFor));state.loaded=true;state.loading=false;state.truncated=Boolean(data.truncated);state.lastError='';if(state.conceptProject&&!state.nodeMap.has(state.conceptProject))state.conceptProject='';
       if(state.focus&&!state.nodeMap.has(state.focus))state.focus=null;if(state.selection&&!(state.selection.type==='node'?state.nodeMap:state.edgeMap).has(state.selection.id))state.selection=null;
-      $('updated-at').textContent='Снимок: '+dateText(data.generated_at);state.dataNote=data.truncated?'Локальная память · только чтение · ответ ограничен, показана часть данных':'Локальная память · только чтение';$('data-note').textContent=state.mode==='rules'?rulesNote():state.mode==='agents'?agentsNote():state.dataNote;renderFilters();renderProjectOptions();renderGraph(true);renderEncyclopedia();if(state.mode==='rules')renderRules();if(state.mode==='agents')renderAgents();if(state.mode==='tools'){renderTools();}else if(state.selection?.type==='node')renderNodeDetail(state.nodeMap.get(state.selection.id));else if(state.selection?.type==='edge')renderEdgeDetail(state.edgeMap.get(state.selection.id));else showIntro();if($('search').value&&state.mode!=='tools')runSearch();announce(`Загружено ${state.nodes.length} узлов и ${state.edges.length} связей`);
+      $('updated-at').textContent='Снимок: '+dateText(data.generated_at);state.dataNote=data.truncated?'Локальная память · только чтение · ответ ограничен, показана часть данных':'Локальная память · только чтение';$('data-note').textContent=state.mode==='scenarios'?scenariosNote():state.mode==='rules'?rulesNote():state.mode==='agents'?agentsNote():state.dataNote;renderFilters();renderProjectOptions();renderGraph(true);renderEncyclopedia();if(state.mode==='scenarios'&&!scenariosState.editing)renderScenarios();if(state.mode==='rules')renderRules();if(state.mode==='agents')renderAgents();if(state.mode==='tools'){renderTools();}else if(state.selection?.type==='node')renderNodeDetail(state.nodeMap.get(state.selection.id));else if(state.selection?.type==='edge')renderEdgeDetail(state.edgeMap.get(state.selection.id));else showIntro();if($('search').value&&state.mode!=='tools')runSearch();announce(`Загружено ${state.nodes.length} узлов и ${state.edges.length} связей`);
     }catch(error){if(request!==state.request)return;state.loading=false;const detail=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;state.lastError=detail;renderEncyclopedia();if(state.loaded){$('error-banner').textContent='Не удалось обновить: '+detail+' На карте остался предыдущий снимок.';$('error-banner').hidden=false;}else showMessage('Не удалось загрузить карту',detail+' Проверьте, что локальный сервер работает.','retry');announce('Не удалось загрузить карту');}
     finally{clearTimeout(timeout);if(request===state.request){state.loading=false;$('refresh').disabled=false;$('refresh').textContent='↻ Обновить';}}
   }
@@ -818,12 +914,12 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   svg.addEventListener('pointerup',endDrag);svg.addEventListener('pointercancel',endDrag);
   svg.addEventListener('wheel',event=>{event.preventDefault();const rect=svg.getBoundingClientRect();zoom(Math.exp(-event.deltaY*.0015),event.clientX-rect.left,event.clientY-rect.top);},{passive:false});
   $('zoom-in').addEventListener('click',()=>zoom(1.25));$('zoom-out').addEventListener('click',()=>zoom(.8));$('fit').addEventListener('click',fitGraph);$('reset').addEventListener('click',()=>resetView());$('refresh').addEventListener('click',loadGraph);$('hypotheses').addEventListener('change',loadGraph);$('superseded').addEventListener('change',loadGraph);$('message-action').addEventListener('click',()=>{$('message-action').dataset.action==='retry'?loadGraph():resetView();});
-  $('project-filter').addEventListener('change',event=>{if(state.mode==='rules'){rulesState.scope=event.target.value;renderRules();}else if(state.mode==='tools'){state.toolFilter=event.target.value;openTool('');}else if(state.mode==='encyclopedia'){state.conceptProject=event.target.value;renderEncyclopedia();}else{event.target.value?focusNode(event.target.value):resetView(false);}});document.querySelectorAll('[data-depth]').forEach(b=>b.addEventListener('click',()=>{state.depth=Number(b.dataset.depth);renderGraph(true);}));
+  $('project-filter').addEventListener('change',event=>{if(state.mode==='scenarios'){scenariosState.scope=event.target.value;if(!scenariosState.editing)renderScenarios();}else if(state.mode==='rules'){rulesState.scope=event.target.value;renderRules();}else if(state.mode==='tools'){state.toolFilter=event.target.value;openTool('');}else if(state.mode==='encyclopedia'){state.conceptProject=event.target.value;renderEncyclopedia();}else{event.target.value?focusNode(event.target.value):resetView(false);}});document.querySelectorAll('[data-depth]').forEach(b=>b.addEventListener('click',()=>{state.depth=Number(b.dataset.depth);renderGraph(true);}));
   $('search').addEventListener('input',runSearch);$('search').addEventListener('focus',()=>{if($('search').value&&state.mode!=='tools')runSearch();});$('search').addEventListener('keydown',event=>{if(event.key==='Escape'){hideSearch();return;}if(event.key==='ArrowDown'){event.preventDefault();$('search-results').querySelector('button')?.focus();}if(event.key==='Enter'&&state.mode==='tools'){$('tools-content').querySelector('[data-tool]')?.focus();}if(event.key==='Enter'&&state.mode==='encyclopedia'){$('concepts').querySelector('button')?.focus();}if(event.key==='Enter'&&state.mode==='map'){$('search-results').querySelector('button')?.click();}});$('search-results').addEventListener('keydown',event=>{const buttons=[...$('search-results').querySelectorAll('button')],index=buttons.indexOf(document.activeElement);if(event.key==='ArrowDown'){event.preventDefault();buttons[Math.min(index+1,buttons.length-1)]?.focus();}if(event.key==='ArrowUp'){event.preventDefault();index<=0?$('search').focus():buttons[index-1]?.focus();}if(event.key==='Escape'){hideSearch();$('search').focus();}});document.addEventListener('click',event=>{if(!event.target.closest('.search-wrap'))hideSearch();});
   $('close-details').addEventListener('click',()=>{if(state.mode==='tools'){closeToolRecord();$('tools-content').querySelector('.tool-detail-heading')?.focus({preventScroll:true});return;}state.sidebarOpen=false;$('main').classList.add('sidebar-closed');$('open-details').hidden=false;});$('open-details').addEventListener('click',openSidebar);
   let resizeTimer;new ResizeObserver(()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(state.loaded)fitGraph();},80);}).observe($('canvas'));
   // Standing rules (richi rules): the user's instructions agents load at the start of a chat.
-  const viewModes=['map','encyclopedia','tools','rules','agents'];
+  const viewModes=['map','encyclopedia','tools','scenarios','rules','agents'];
   const RULE_SECRET_KEY='richi-map-edit-secret',RULE_HEADER='X-Richi-Map-Secret',RULE_SOURCE='richi map';
   // rules-agents-pure: begin. No DOM here: tests/test_map_rules_ui.py runs these lines under Node.
   // Agents as the server last listed them (a rules, skills or agents answer). A rule may also
@@ -1154,7 +1250,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);
     try{const response=await fetch('/api/skills',{cache:'no-store',signal:controller.signal});const data=await response.json();if(!response.ok||!data||!Array.isArray(data.skills))throw new Error(data&&data.error||'HTTP '+response.status);setSkills(data,sequence);}
     catch(_error){setSkills({skills:[],unavailable:true},sequence);}
-    finally{clearTimeout(timeout);rulesState.skillsLoading=false;refreshRulePicker();if(state.mode==='rules')renderRules();if(state.mode==='agents')renderAgents();}
+    finally{clearTimeout(timeout);rulesState.skillsLoading=false;refreshRulePicker();if(state.mode==='scenarios'&&!scenariosState.editing)renderScenarios();if(state.mode==='rules')renderRules();if(state.mode==='agents')renderAgents();}
   }
   async function loadRules(){
     if(rulesController)rulesController.abort();const request=++rulesState.request,sequence=++agentSequence,sent=ruleSecret;rulesState.loading=true;rulesState.error='';renderRules();
@@ -1183,7 +1279,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     }catch{if(request===ticketRequest)rulesState.notice='unavailable';}
     finally{
       clearTimeout(timeout);
-      if(request===ticketRequest){if(state.mode==='rules'||rulesState.data)loadRules();if(state.mode==='agents'||agentsState.data)loadAgents();}
+      if(request===ticketRequest){if(typeof scenariosState!=='undefined'&&(state.mode==='scenarios'||scenariosState.data))loadScenarios();if(state.mode==='rules'||rulesState.data)loadRules();if(state.mode==='agents'||agentsState.data)loadAgents();}
     }
   }
   const sendRuleChange=change=>sendMapChange('/api/rules',change);
@@ -1214,7 +1310,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   }
   const keyed=(element,key)=>{element.dataset.focus=key;return element;};
   function restoreTabFocus(key){
-    if(state.mode==='rules')focusByKey($('rules-content'),key,'rule-add');
+    if(state.mode==='scenarios')focusByKey($('scenarios-content'),key,'scn-add');
+    else if(state.mode==='rules')focusByKey($('rules-content'),key,'rule-add');
     else if(state.mode==='agents')focusByKey($('agents-content'),key,'item:'+agentsState.selected,'add-agent');
   }
   let dialogInstance=0;
@@ -1806,6 +1903,1546 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const selected=shown.find(agent=>agent.id===agentsState.selected);
     if(selected)layout.append(renderAgentDetail(selected));
     root.append(layout);
+  }
+  // scenarios-pure: begin. No DOM here: tests/test_map_scenarios.py runs these lines under Node.
+  const SCN_ID_RE=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/;
+  const SCN_STEP_ID_RE=/^[a-z][a-z0-9_-]{0,47}$/;
+  const SCN_INPUT_NAME_RE=/^[a-z][a-z0-9_]{0,47}$/;
+  const SCN_NODE_W=224,SCN_NODE_H=98,SCN_COL_GAP=92,SCN_ROW_GAP=34,SCN_PAD=36;
+  const SCN_STEP_TYPES=[
+    {id:'instruction',label:'Инструкция',role:'agent',desc:'Свободная инструкция агенту'},
+    {id:'skill',label:'Скилл',role:'agent',desc:'Вызов скилла агента'},
+    {id:'command',label:'Команда',role:'agent',desc:'Запуск shell-команды (шаблоны через | shell)'},
+    {id:'gate',label:'Вопрос человеку',role:'human',desc:'Останавливает запуск до ответа в чате'},
+    {id:'checklist',label:'Чек-лист',role:'human',desc:'Контрольный список для подтверждения человеком'},
+    {id:'memory.recall',label:'Поиск в памяти',role:'richi',desc:'Автоматический поиск в Richi'},
+    {id:'memory.brief',label:'Сводка из памяти',role:'richi',desc:'Автоматическая сводка Richi по вопросу'},
+    {id:'condition',label:'Условие',role:'richi',desc:'Вычисление выражения для ветвления'},
+  ];
+  const SCN_STEP_META=Object.fromEntries(SCN_STEP_TYPES.map(item=>[item.id,item]));
+  const SCN_INPUT_TYPES=['string','text','number','boolean','select','multiselect','secret'];
+  const SCN_ENTRY_KINDS=['task','decision','fact','note','investigation','experiment','procedure'];
+
+  function scnShellQuote(value){
+    const text=String(value??'');
+    return /^[A-Za-z0-9_./:@%+=,-]+$/.test(text)?text:"'"+text.replace(/'/g,"'\"'\"'")+"'";
+  }
+  function scenarioStepRole(type){return SCN_STEP_META[type]?.role||'agent';}
+  function scenarioDefaultParams(type){
+    if(type==='skill')return {skill:{default:''},instruction:''};
+    if(type==='command')return {command:''};
+    if(type==='gate')return {question:'',options:['Да','Нет'],allow_comment:true};
+    if(type==='checklist')return {items:[{text:'Проверить результат',required:true}]};
+    if(type==='memory.recall')return {query:'',limit:10};
+    if(type==='memory.brief')return {question:'',limit:10};
+    if(type==='condition')return {expr:''};
+    return {text:''};
+  }
+  function scenarioAncestors(steps,stepId){
+    const byId=new Map((Array.isArray(steps)?steps:[]).map(step=>[step.id,step]));
+    const visited=new Set(),stack=Array.isArray(byId.get(stepId)?.needs)?[...byId.get(stepId).needs]:[];
+    while(stack.length){
+      const cur=stack.pop();
+      if(!cur||visited.has(cur))continue;
+      visited.add(cur);
+      const node=byId.get(cur);
+      if(node&&Array.isArray(node.needs))for(const dep of node.needs)if(!visited.has(dep))stack.push(dep);
+    }
+    return visited;
+  }
+  function scenarioWouldCycle(steps,fromId,toId){
+    if(!fromId||!toId||fromId===toId)return true;
+    return scenarioAncestors(steps,fromId).has(toId);
+  }
+  function scenarioAutoLayout(steps){
+    const items=Array.isArray(steps)?steps:[];
+    const byId=new Map(items.map(step=>[step.id,step]));
+    const inDeg=new Map(),children=new Map(),depth=new Map();
+    for(const step of items){inDeg.set(step.id,0);children.set(step.id,[]);depth.set(step.id,0);}
+    for(const step of items){
+      const seen=new Set();
+      for(const need of Array.isArray(step.needs)?step.needs:[]){
+        if(!byId.has(need)||need===step.id||seen.has(need))continue;
+        seen.add(need);
+        inDeg.set(step.id,inDeg.get(step.id)+1);
+        children.get(need).push(step.id);
+      }
+    }
+    const queue=[];
+    for(const step of items)if(inDeg.get(step.id)===0)queue.push(step.id);
+    const ordered=[];
+    while(queue.length){
+      const id=queue.shift();
+      ordered.push(id);
+      const d=depth.get(id);
+      for(const nxt of children.get(id)){
+        if(d+1>depth.get(nxt))depth.set(nxt,d+1);
+        const rem=inDeg.get(nxt)-1;
+        inDeg.set(nxt,rem);
+        if(rem===0)queue.push(nxt);
+      }
+    }
+    for(const step of items)if(!ordered.includes(step.id))ordered.push(step.id);
+    const cols=new Map();
+    for(const id of ordered){
+      const col=depth.get(id)||0;
+      if(!cols.has(col))cols.set(col,[]);
+      cols.get(col).push(id);
+    }
+    const positions={};
+    for(const [col,ids] of cols.entries()){
+      ids.forEach((id,row)=>{
+        positions[id]={x:SCN_PAD+col*(SCN_NODE_W+SCN_COL_GAP),y:SCN_PAD+row*(SCN_NODE_H+SCN_ROW_GAP)};
+      });
+    }
+    return positions;
+  }
+  function scenarioEdgePath(x1,y1,x2,y2){
+    const dx=Math.max(48,Math.abs(x2-x1)*0.48);
+    if(x2<x1-16){
+      const loopY=(y1+y2)/2+(y2>=y1?64:-64);
+      return `M${Math.round(x1)},${Math.round(y1)} C${Math.round(x1+72)},${Math.round(y1)} ${Math.round(x1+72)},${Math.round(loopY)} ${Math.round((x1+x2)/2)},${Math.round(loopY)} S${Math.round(x2-72)},${Math.round(y2)} ${Math.round(x2)},${Math.round(y2)}`;
+    }
+    return `M${Math.round(x1)},${Math.round(y1)} C${Math.round(x1+dx)},${Math.round(y1)} ${Math.round(x2-dx)},${Math.round(y2)} ${Math.round(x2)},${Math.round(y2)}`;
+  }
+  function scnInt(value){
+    if(typeof value==='number')return Number.isInteger(value)?value:null;
+    if(typeof value==='string'&&value.trim()!==''){const n=Number(value.trim());return Number.isInteger(n)?n:null;}
+    return null;
+  }
+  function scenarioNormalizeDraft(raw){
+    const src=raw&&typeof raw==='object'?raw:{};
+    const out={format:'richi-scenario',format_version:1,id:String(src.id||'').trim(),title:String(src.title||'').trim()};
+    if(String(src.description||'').trim())out.description=String(src.description).trim();
+    if(String(src.when_to_use||'').trim())out.when_to_use=String(src.when_to_use).trim();
+    if(String(src.run_title||'').trim())out.run_title=String(src.run_title).trim();
+    const tags=Array.isArray(src.tags)?src.tags.map(t=>String(t||'').trim()).filter(Boolean):[];
+    if(tags.length)out.tags=[...new Set(tags)];
+    const inputs={};
+    if(src.inputs&&typeof src.inputs==='object'&&!Array.isArray(src.inputs)){
+      for(const [rawName,spec] of Object.entries(src.inputs)){
+        const name=String(rawName||'').trim();
+        if(!name||!spec||typeof spec!=='object')continue;
+        const type=SCN_INPUT_TYPES.includes(spec.type)?spec.type:'string';
+        const clean={type};
+        if(String(spec.title||'').trim())clean.title=String(spec.title).trim();
+        if(String(spec.description||'').trim())clean.description=String(spec.description).trim();
+        if(spec.required)clean.required=true;
+        if(spec.picker)clean.picker=String(spec.picker);
+        if(type==='select'||type==='multiselect'){
+          const opts=Array.isArray(spec.options)?[...new Set(spec.options.map(v=>String(v||'').trim()).filter(Boolean))]:[];
+          if(opts.length)clean.options=opts;
+        }
+        if(spec.default!==undefined&&spec.default!==''&&type!=='secret'){
+          if(type==='number'){if(typeof spec.default==='number'&&Number.isFinite(spec.default))clean.default=spec.default;}
+          else if(type==='boolean'){if(typeof spec.default==='boolean')clean.default=spec.default;}
+          else if(type==='select'){if(Array.isArray(clean.options)&&clean.options.includes(spec.default))clean.default=spec.default;}
+          else if(type==='multiselect'){
+            if(Array.isArray(spec.default)&&Array.isArray(clean.options)){
+              const kept=[...new Set(spec.default.filter(v=>clean.options.includes(v)))];
+              if(kept.length)clean.default=kept;
+            }
+          }else{clean.default=spec.default;}
+        }
+        inputs[name]=clean;
+      }
+    }
+    if(Object.keys(inputs).length)out.inputs=inputs;
+    const rawSteps=Array.isArray(src.steps)?src.steps:[];
+    const stepIds=new Set(rawSteps.map(s=>String(s?.id||'').trim()).filter(Boolean));
+    out.steps=rawSteps.map((step,index)=>{
+      const type=SCN_STEP_META[step?.type]?step.type:'instruction';
+      const id=String(step?.id||'').trim();
+      const title=String(step?.title||'').trim()||id;
+      let needs;
+      if(step?.needs===undefined){
+        const prevId=index>0?String(rawSteps[index-1]?.id||'').trim():'';
+        needs=prevId&&prevId!==id&&stepIds.has(prevId)?[prevId]:[];
+      }else{
+        needs=Array.isArray(step.needs)?[...new Set(step.needs.map(n=>String(n||'').trim()).filter(n=>n&&n!==id&&stepIds.has(n)))]:[];
+      }
+      const p=step?.params&&typeof step.params==='object'?step.params:{};
+      let params={};
+      if(type==='instruction')params={text:String(p.text||'')};
+      else if(type==='skill'){
+        const rawSk=p.skill,sk={};
+        if(typeof rawSk==='string'&&rawSk.trim())sk.default=rawSk.trim();
+        else if(rawSk&&typeof rawSk==='object'&&!Array.isArray(rawSk)){
+          if(typeof rawSk.default==='string'&&rawSk.default.trim())sk.default=rawSk.default.trim();
+          if(rawSk.per_agent&&typeof rawSk.per_agent==='object'&&!Array.isArray(rawSk.per_agent)){
+            const pa={};
+            for(const [ak,av] of Object.entries(rawSk.per_agent))if(String(ak).trim()&&typeof av==='string'&&av.trim())pa[String(ak).trim()]=av.trim();
+            if(Object.keys(pa).length)sk.per_agent=pa;
+          }
+        }
+        params={skill:sk};
+        if(String(p.instruction||'').trim())params.instruction=String(p.instruction);
+      }else if(type==='command'){
+        params={command:String(p.command||'')};
+        if(String(p.cwd||'').trim())params.cwd=String(p.cwd).trim();
+        const expExit=scnInt(p.expect_exit),tailLines=scnInt(p.tail_lines);
+        if(expExit!==null)params.expect_exit=expExit;
+        if(tailLines!==null)params.tail_lines=tailLines;
+      }else if(type==='gate'){
+        params={question:String(p.question||'')};
+        const opts=Array.isArray(p.options)?[...new Set(p.options.map(v=>String(v||'').trim()).filter(Boolean))]:[];
+        if(opts.length)params.options=opts;
+        if(p.allow_comment!==undefined)params.allow_comment=Boolean(p.allow_comment);
+      }else if(type==='checklist'){
+        const items=Array.isArray(p.items)?p.items.map(it=>{
+          if(typeof it==='string'){const t=it.trim();return t?{text:t,required:true}:null;}
+          if(it&&typeof it==='object'){const t=String(it.text||'').trim();if(!t)return null;const o={text:t};if(typeof it.required==='boolean')o.required=it.required;return o;}
+          return null;
+        }).filter(Boolean):[];
+        params={items};
+      }else if(type==='memory.recall'){
+        params={query:String(p.query||'')};
+        const lim=scnInt(p.limit);
+        if(lim!==null)params.limit=lim;
+        const kinds=Array.isArray(p.kinds)?p.kinds.filter(k=>SCN_ENTRY_KINDS.includes(k)):[];
+        if(kinds.length)params.kinds=kinds;
+      }else if(type==='memory.brief'){
+        params={question:String(p.question||'')};
+        const lim=scnInt(p.limit);
+        if(lim!==null)params.limit=lim;
+      }else if(type==='condition'){
+        params={expr:String(p.expr||'')};
+      }
+      const cleanStep={id,type,title,needs,params};
+      if(String(step?.if||'').trim())cleanStep.if=String(step.if).trim();
+      const role=scenarioStepRole(type);
+      if(role==='agent'&&step?.continue_on_failure)cleanStep.continue_on_failure=true;
+      if(role==='agent'&&step?.executor&&typeof step.executor==='object'&&String(step.executor.agent||'').trim()){
+        cleanStep.executor={agent:String(step.executor.agent).trim()};
+      }
+      if((role==='agent'||role==='human')&&step?.matrix&&typeof step.matrix==='object'&&Object.keys(step.matrix).length)cleanStep.matrix=step.matrix;
+      if(role==='agent'&&step?.outputs&&typeof step.outputs==='object'&&Object.keys(step.outputs).length)cleanStep.outputs=step.outputs;
+      if(role==='agent'&&Array.isArray(step?.checks)&&step.checks.length)cleanStep.checks=step.checks;
+      const retryMax=role==='agent'&&step?.retry&&typeof step.retry==='object'?scnInt(step.retry.max):null;
+      if(retryMax!==null&&retryMax>0)cleanStep.retry={max:retryMax};
+      if(role==='agent'&&step?.hints&&typeof step.hints==='object'){
+        const hints={};
+        if(typeof step.hints.subagent==='boolean')hints.subagent=step.hints.subagent;
+        if(typeof step.hints.worktree==='boolean')hints.worktree=step.hints.worktree;
+        const tmin=scnInt(step.hints.timeout_minutes);
+        if(tmin!==null&&tmin>0)hints.timeout_minutes=tmin;
+        if(Object.keys(hints).length)cleanStep.hints=hints;
+      }
+      return cleanStep;
+    });
+    if(src.layout&&typeof src.layout==='object'&&src.layout.positions&&typeof src.layout.positions==='object'){
+      const positions={};
+      for(const step of out.steps){
+        const pos=src.layout.positions[step.id];
+        if(pos&&Number.isFinite(Number(pos.x))&&Number.isFinite(Number(pos.y))){
+          positions[step.id]={x:Math.round(Number(pos.x)),y:Math.round(Number(pos.y))};
+        }
+      }
+      if(Object.keys(positions).length)out.layout={positions};
+    }
+    return out;
+  }
+  function scenarioValidateDraft(def){
+    if(!def||typeof def!=='object')return 'Определение сценария должно быть объектом.';
+    if(!SCN_ID_RE.test(def.id||''))return 'ID сценария: 1–100 символов (латиница, цифры, «.», «_», «:», «-»), начиная с буквы или цифры.';
+    if(!String(def.title||'').trim())return 'Укажите название сценария.';
+    if(def.inputs&&typeof def.inputs==='object'){
+      for(const [name,spec] of Object.entries(def.inputs)){
+        if(!SCN_INPUT_NAME_RE.test(name))return 'Имя параметра «'+name+'»: строчная латиница, цифры и «_», начиная с буквы.';
+        if((spec.type==='select'||spec.type==='multiselect')&&(!Array.isArray(spec.options)||!spec.options.length)){
+          return 'Для параметра «'+name+'» типа '+spec.type+' укажите хотя бы один вариант.';
+        }
+      }
+    }
+    if(!Array.isArray(def.steps)||!def.steps.length)return 'Добавьте хотя бы один шаг в пайплайн.';
+    const seen=new Set();
+    for(const step of def.steps){
+      if(!SCN_STEP_ID_RE.test(step.id||''))return 'ID шага «'+(step.id||'')+'»: строчная латиница, цифры, «_» или «-», начиная с буквы.';
+      if(seen.has(step.id))return 'Повторяющийся ID шага: «'+step.id+'».';
+      seen.add(step.id);
+      if(!String(step.title||'').trim())return 'Укажите название шага «'+step.id+'».';
+      const p=step.params||{};
+      if(step.type==='instruction'&&!String(p.text||'').trim())return 'Шаг «'+step.id+'»: заполните текст инструкции.';
+      if(step.type==='skill'){
+        const sk=p.skill,hasDefault=Boolean(sk&&typeof sk==='object'&&typeof sk.default==='string'&&sk.default.trim());
+        const hasPer=Boolean(sk&&typeof sk==='object'&&sk.per_agent&&Object.keys(sk.per_agent).length);
+        if(!hasDefault&&!hasPer)return 'Шаг «'+step.id+'»: выберите или укажите скилл.';
+      }
+      if(step.type==='command'&&!String(p.command||'').trim())return 'Шаг «'+step.id+'»: укажите команду.';
+      if(step.type==='gate'){
+        if(!String(p.question||'').trim())return 'Шаг «'+step.id+'»: укажите вопрос человеку.';
+        if(Array.isArray(p.options)&&p.options.length&&(p.options.length<2||p.options.length>10))return 'Шаг «'+step.id+'»: если заданы варианты ответа, их должно быть от 2 до 10.';
+      }
+      if(step.type==='checklist'&&(!Array.isArray(p.items)||!p.items.length))return 'Шаг «'+step.id+'»: добавьте хотя бы один пункт чек-листа.';
+      if(step.type==='memory.recall'&&!String(p.query||'').trim())return 'Шаг «'+step.id+'»: укажите запрос для поиска в памяти.';
+      if(step.type==='memory.brief'&&!String(p.question||'').trim())return 'Шаг «'+step.id+'»: укажите вопрос для сводки.';
+      if(step.type==='condition'&&!String(p.expr||'').trim())return 'Шаг «'+step.id+'»: укажите условие.';
+    }
+    for(const step of def.steps){
+      for(const need of Array.isArray(step.needs)?step.needs:[]){
+        if(!seen.has(need))return 'Шаг «'+step.id+'» ссылается на несуществующий шаг «'+need+'».';
+        if(scenarioWouldCycle(def.steps,need,step.id))return 'В графе шагов обнаружен цикл с участием «'+step.id+'» и «'+need+'».';
+      }
+    }
+    return '';
+  }
+  function scenarioApplyCommand(request,storeArgs=[]){
+    const prefix=['richi',...((Array.isArray(storeArgs)?storeArgs:[]).map(scnShellQuote)),'scenario','apply','--json','-'].join(' ');
+    const payload=JSON.stringify(request,null,2);
+    let delim='RICHI_SCENARIO';
+    while(payload.includes(delim))delim+='_END';
+    return prefix+" <<'"+delim+"'\n"+payload+"\n"+delim;
+  }
+  function scenarioRunCommand(scenarioId,scope,projectId,inputValues={},storeArgs=[]){
+    const parts=['richi',...((Array.isArray(storeArgs)?storeArgs:[]).map(scnShellQuote)),'scenario','run',scnShellQuote(scenarioId)];
+    if(scope==='project'&&projectId)parts.push('--project',scnShellQuote(projectId));
+    for(const [k,v] of Object.entries(inputValues||{})){
+      if(v===undefined||v===null||v==='')continue;
+      const text=Array.isArray(v)?v.join(','):String(v);
+      parts.push('--input',scnShellQuote(k+'='+text));
+    }
+    return parts.join(' ');
+  }
+  function scenarioAnswerCommand(runId,stepKey,value,comment='',storeArgs=[]){
+    const parts=['richi',...((Array.isArray(storeArgs)?storeArgs:[]).map(scnShellQuote)),'scenario','answer',scnShellQuote(runId),scnShellQuote(stepKey)];
+    if(String(comment||'').trim())parts.push('--comment',scnShellQuote(String(comment).trim()));
+    const valStr=String(value??'');
+    if(valStr.startsWith('-'))parts.push('--');
+    parts.push(scnShellQuote(valStr));
+    return parts.join(' ');
+  }
+  // scenarios-pure: end.
+
+  const scenariosState={
+    data:null,loading:false,error:'',request:0,
+    subtab:'definitions',scope:'',query:'',
+    editing:null,selectedStepId:'',viewMode:'graph',showJson:false,metaOpen:false,advOpen:false,
+    canvasScroll:{left:0,top:0},
+    busy:false,saveError:'',outcome:'',commandText:'',
+    runFilter:'all',selectedRunId:'',runDetail:null,runDetailLoading:false,runDetailError:'',runDetailRequest:0,
+    logFilter:'all',
+  };
+  let scenariosController=null,scenarioRunController=null;
+
+  const SCN_STATUS_LABEL={
+    running:'Выполняется',waiting:'Ждёт ответа',paused:'На паузе',done:'Завершён',failed:'Ошибка',cancelled:'Отменён',
+    pending:'Ожидает',ready:'Готов',claimed:'В работе',waiting_human:'Ждёт ответа человека',skipped:'Пропущен',blocked:'Заблокирован',
+  };
+  const SCN_ROLE_LABEL={richi:'Richi',agent:'Агент',human:'Человек'};
+  const SCN_ACTION_LABEL={
+    scenario_created:'Создан сценарий',scenario_updated:'Обновлён сценарий',scenario_removed:'Удалён сценарий',
+    run_started:'Запуск стартовал',run_running:'Запуск в работе',run_waiting:'Ожидание ответа',run_done:'Запуск завершён',
+    run_failed:'Запуск с ошибкой',paused:'Пауза',resumed:'Возобновлён',cancelled:'Отменён',
+    claimed:'Шаг взят в работу',released:'Шаг освобождён',report_accepted:'Отчёт принят',report_rejected:'Отчёт отклонён',
+    step_done:'Авто-шаг выполнен',step_failed:'Шаг завершился с ошибкой',step_skipped:'Шаг пропущен',step_blocked:'Шаг заблокирован',
+    waiting_human:'Ожидание ответа человека',answered:'Ответ на вопрос',matrix_expanded:'Матрица развёрнута',
+    retried:'Повтор шага',lease_expired:'Истёк lease',
+  };
+  function scenariosNote(){
+    if(scenariosState.loading&&!scenariosState.data)return 'Загружаем сценарии…';
+    if(scenariosState.error&&!scenariosState.data)return 'Сценарии не загрузились';
+    const count=list(scenariosState.data?.scenarios).length,runs=list(scenariosState.data?.runs).length;
+    return (rulesState.editing?'Сценарии · редактирование':'Сценарии · режим команд')+' · '+count+' сохр. · '+runs+' запусков';
+  }
+  function scenarioProjectNames(){
+    const map=new Map();
+    for(const item of list(scenariosState.data?.projects))if(item&&typeof item.id==='string')map.set(item.id,item.name||item.id);
+    for(const node of state.nodes)if(groupFor(node)==='project'){const id=node.id.replace(/^project:/,'');if(!map.has(id))map.set(id,titleFor(node));}
+    return [...map.entries()].sort((a,b)=>a[1].localeCompare(b[1],'ru'));
+  }
+  function scenarioScopeText(item){
+    if(item.builtin||item.scope==='builtin')return 'Встроенный шаблон';
+    if(item.scope==='project'){
+      const found=scenarioProjectNames().find(([id])=>id===item.project_id);
+      return 'Проект · '+(found?found[1]:item.project_id);
+    }
+    return 'Глобальный';
+  }
+  async function loadScenarios(){
+    if(scenariosController)scenariosController.abort();
+    const request=++scenariosState.request,sent=ruleSecret;
+    scenariosState.loading=true;scenariosState.error='';
+    if(state.mode==='scenarios'&&!scenariosState.editing)renderScenarios();
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);scenariosController=controller;
+    try{
+      const response=await fetch('/api/scenarios',{cache:'no-store',headers:sent?{[RULE_HEADER]:sent}:{},signal:controller.signal});
+      let data=null;try{data=await response.json();}catch{data=null;}
+      if(!response.ok)throw new Error(data&&data.error||'Сервер вернул HTTP '+response.status);
+      if(!data||!Array.isArray(data.scenarios))throw new Error('Неожиданный формат ответа сервера');
+      if(request!==scenariosState.request)return;
+      if(sent!==ruleSecret){scenariosState.loading=false;loadScenarios();return;}
+      scenariosState.data=data;setMapEditing(data.editing===true,sent);
+      if(scenariosState.selectedRunId&&!list(data.runs).some(r=>r.id===scenariosState.selectedRunId)){
+        scenariosState.selectedRunId='';scenariosState.runDetail=null;
+      }
+      if(scenariosState.subtab==='runs'&&scenariosState.selectedRunId)loadScenarioRun(scenariosState.selectedRunId);
+    }catch(error){
+      if(request!==scenariosState.request)return;
+      scenariosState.error=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;
+    }finally{
+      clearTimeout(timeout);
+      if(request===scenariosState.request){
+        scenariosState.loading=false;scenariosController=null;
+        if(state.mode==='scenarios'){
+          $('data-note').textContent=scenariosNote();
+          if(!scenariosState.editing){renderProjectOptions();renderScenarios();}
+        }
+      }
+    }
+  }
+  async function loadScenarioRun(runId){
+    if(!runId)return;
+    if(scenarioRunController)scenarioRunController.abort();
+    const request=++scenariosState.runDetailRequest;
+    scenariosState.selectedRunId=runId;scenariosState.runDetailLoading=true;scenariosState.runDetailError='';
+    renderScenarios();
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);scenarioRunController=controller;
+    try{
+      const response=await fetch('/api/scenario-run?id='+encodeURIComponent(runId),{cache:'no-store',signal:controller.signal});
+      let data=null;try{data=await response.json();}catch{data=null;}
+      if(!response.ok)throw new Error(data&&data.error||'Сервер вернул HTTP '+response.status);
+      if(request!==scenariosState.runDetailRequest)return;
+      scenariosState.runDetail=data;
+    }catch(error){
+      if(request!==scenariosState.runDetailRequest)return;
+      scenariosState.runDetailError=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;
+    }finally{
+      clearTimeout(timeout);
+      if(request===scenariosState.runDetailRequest){scenariosState.runDetailLoading=false;scenarioRunController=null;if(state.mode==='scenarios')renderScenarios();}
+    }
+  }
+  const sendScenarioChange=change=>sendMapChange('/api/scenarios',change);
+  function scenarioClone(obj){return JSON.parse(JSON.stringify(obj));}
+  function ensureDraftPositions(def){
+    if(!def.layout||typeof def.layout!=='object')def.layout={};
+    if(!def.layout.positions||typeof def.layout.positions!=='object')def.layout.positions={};
+    const auto=scenarioAutoLayout(def.steps);
+    for(const step of list(def.steps)){
+      const p=def.layout.positions[step.id];
+      if(!p||!Number.isFinite(Number(p.x))||!Number.isFinite(Number(p.y)))def.layout.positions[step.id]=auto[step.id]||{x:SCN_PAD,y:SCN_PAD};
+    }
+    return def.layout.positions;
+  }
+  function uniqueScenarioId(base){
+    const existing=new Set(list(scenariosState.data?.scenarios).map(s=>s.id));
+    let id=base.replace(/[^A-Za-z0-9_.:-]+/g,'-').replace(/^[^A-Za-z0-9]+/,'')||'new-scenario';
+    id=id.slice(0,80);
+    if(!existing.has(id))return id;
+    for(let i=2;i<100;i++)if(!existing.has(id+'-'+i))return id+'-'+i;
+    return id+'-'+Date.now().toString(36).slice(-4);
+  }
+  function uniqueStepId(steps,prefix='step'){
+    const used=new Set(list(steps).map(s=>s.id));
+    let base=prefix.toLowerCase().replace(/[^a-z0-9_-]+/g,'_').replace(/^[^a-z]+/,'')||'step';
+    base=base.slice(0,36);
+    if(!used.has(base))return base;
+    for(let i=1;i<500;i++)if(!used.has(base+'_'+i))return base+'_'+i;
+    return 'step_'+Date.now().toString(36).slice(-4);
+  }
+  function openScenarioEditor(options={}){
+    const record=options.record||null,copyFrom=options.copyFrom||null;
+    const baseScope=record?record.scope:(scenariosState.scope.startsWith('project:')?'project':'global');
+    const baseProject=record?(record.project_id||''):(scenariosState.scope.startsWith('project:')?scenariosState.scope.slice(8):'');
+    let def;
+    if(record){
+      def=scenarioClone(record.definition);
+    }else if(copyFrom){
+      def=scenarioClone(copyFrom.definition);
+      def.id=uniqueScenarioId(copyFrom.id+'-custom');
+      def.title=(def.title||copyFrom.id)+' (копия)';
+    }else{
+      def={
+        format:'richi-scenario',format_version:1,
+        id:uniqueScenarioId('custom-pipeline'),title:'Новый сценарий',description:'',when_to_use:'',run_title:'',tags:[],
+        inputs:{topic:{type:'string',title:'Тема или задача',default:'overview',required:true}},
+        steps:[
+          {id:'gather_context',type:'memory.recall',title:'Найти контекст в памяти',needs:[],params:{query:'{{inputs.topic}}',limit:10}},
+          {id:'execute_task',type:'instruction',title:'Выполнить основную работу',needs:['gather_context'],params:{text:'Изучи найденный контекст по теме {{inputs.topic}}: {{steps.gather_context.summary}} и выполни задачу.'}},
+          {id:'human_confirm',type:'gate',title:'Подтверждение результата',needs:['execute_task'],params:{question:'Подтверждаете результат: {{steps.execute_task.summary}}?',options:['Подтвердить','Доработать'],allow_comment:true}},
+        ],
+      };
+    }
+    if(!def.inputs||typeof def.inputs!=='object')def.inputs={};
+    if(!Array.isArray(def.tags))def.tags=[];
+    ensureDraftPositions(def);
+    scenariosState.editing={
+      mode:record?'update':'add',
+      original:record,
+      scope:baseScope,
+      project_id:baseProject,
+      expected_updated_at:record?.updated_at||null,
+      draft:def,
+      dirty:false,
+    };
+    scenariosState.selectedStepId=def.steps[0]?.id||'';
+    scenariosState.saveError='';
+    scenariosState.commandText='';
+    scenariosState.showJson=false;
+    scenariosState.subtab='definitions';
+    renderScenarios();
+  }
+  function closeScenarioEditor(){
+    if(scenariosState.editing?.dirty&&!confirm('Закрыть редактор без сохранения изменений?'))return;
+    scenariosState.editing=null;scenariosState.selectedStepId='';scenariosState.saveError='';scenariosState.commandText='';
+    renderScenarios();
+  }
+  function openScenarioRunModal(item){
+    const def=item.definition||{};
+    const panel=ruleDialog('Команда запуска: '+(def.title||item.id),item.id+' · '+scenarioScopeText(item));
+    const {dialog,form,body,foot}=panel;
+    const values={};
+    const inputs=def.inputs&&typeof def.inputs==='object'?Object.entries(def.inputs):[];
+    if(!inputs.length){
+      body.append(make('p','tools-inline-note','У этого сценария нет входных параметров — можно запускать сразу.'));
+    }else{
+      for(const [name,spec] of inputs){
+        if(spec.type==='secret'){
+          const note=make('div','rule-readonly','Секретное поле ('+name+'): не вводите секреты в браузер и не сохраняйте в истории терминала — передайте значение в терминале/чате при запуске (--input '+name+'=...).');
+          body.append(ruleField((spec.title||name)+(spec.required?' *':'')+' ('+name+')',note,spec.description||''));
+          continue;
+        }
+        values[name]=spec.default!==undefined?spec.default:'';
+        let ctrl;
+        if(spec.type==='boolean'){
+          ctrl=make('select');ctrl.add(new Option('— не задано —',''));ctrl.add(new Option('true','true'));ctrl.add(new Option('false','false'));
+          ctrl.value=values[name]===''?'':String(values[name]);
+          ctrl.addEventListener('change',()=>{values[name]=ctrl.value;updateCmd();});
+        }else if(spec.type==='select'){
+          ctrl=make('select');ctrl.add(new Option('— выберите —',''));
+          for(const opt of list(spec.options))ctrl.add(new Option(opt,opt));
+          ctrl.value=String(values[name]||'');
+          ctrl.addEventListener('change',()=>{values[name]=ctrl.value;updateCmd();});
+        }else{
+          ctrl=make('input');ctrl.type='text';
+          ctrl.value=Array.isArray(values[name])?values[name].join(','):String(values[name]||'');
+          ctrl.placeholder=spec.type==='multiselect'?'значение1,значение2':'Введите значение…';
+          ctrl.addEventListener('input',()=>{values[name]=ctrl.value;updateCmd();});
+        }
+        body.append(ruleField((spec.title||name)+(spec.required?' *':'')+' ('+name+')',ctrl,spec.description||''));
+      }
+    }
+    const showCmd=ruleCommandBox(body,'Скопируйте команду и выполните в терминале или передайте агенту в чате (на схеме 4+).');
+    const updateCmd=()=>{
+      const scopeArg=item.builtin?null:item.scope;
+      const projArg=item.builtin?null:item.project_id;
+      showCmd(scenarioRunCommand(item.id,scopeArg,projArg,values,state.mapStore));
+    };
+    foot.append(toolButton('Закрыть',()=>dialog.close(),'primary'));
+    updateCmd();dialog.showModal();
+  }
+  function openScenarioRemoval(record){
+    const panel=ruleDialog('Удалить сценарий?',record.id+' · '+scenarioScopeText(record));
+    const {dialog,form,body,foot}=panel;
+    body.append(make('p','rule-confirm','Удалённый сценарий исчезнет из списка определений. Уже созданные запуски сохранят свою замороженную копию определения.'));
+    const problem=ruleProblem(body),showCmd=ruleCommandBox(body);
+    const cancel=toolButton('Отмена',()=>dialog.close());
+    const submit=make('button',rulesState.editing?'danger solid':'primary',rulesState.editing?'Удалить сценарий':'Показать команду');
+    submit.type='submit';foot.append(cancel,submit);
+    form.addEventListener('submit',async event=>{
+      event.preventDefault();problem('');
+      const request={action:'remove',id:record.id,scope:record.scope,expected_updated_at:record.updated_at};
+      if(record.scope==='project'&&record.project_id)request.project=record.project_id;
+      if(!rulesState.editing){showCmd(scenarioApplyCommand(request,state.mapStore));return;}
+      await saveFromForm(panel,submit,{
+        busy:'Удаляем…',
+        send:()=>sendScenarioChange(request),
+        explain:err=>editKeyProblem(err)||err.message,
+        problem,
+        saved:()=>{scenariosState.outcome='Сценарий «'+record.id+'» удалён.';announce('Сценарий удалён');loadScenarios();},
+        failed:async err=>{if(err.code==='conflict'){await loadScenarios();return 'Сценарий изменили, пока вы подтверждали удаление. Закройте окно и повторите.';}return '';},
+        lost:msg=>{scenariosState.error=msg;renderScenarios();},
+        commands:()=>{submit.className='primary';showCmd(scenarioApplyCommand(request,state.mapStore));renderScenarios();},
+        label:()=>{submit.textContent=rulesState.editing?'Удалить сценарий':'Показать команду';},
+      });
+    });
+    dialog.showModal();cancel.focus();
+  }
+  async function saveScenarioDraft(){
+    const ed=scenariosState.editing;if(!ed||scenariosState.busy)return;
+    scenariosState.saveError='';scenariosState.commandText='';
+    const def=scenarioNormalizeDraft(ed.draft);
+    const invalid=scenarioValidateDraft(def);
+    if(invalid){scenariosState.saveError=invalid;renderScenarios();return;}
+    if(ed.scope==='project'&&!ed.project_id){scenariosState.saveError='Выберите проект для проектного сценария.';renderScenarios();return;}
+    const request={action:ed.mode,scope:ed.scope,definition:def};
+    if(ed.scope==='project')request.project=ed.project_id;
+    if(ed.mode==='update'){request.id=ed.original.id;request.expected_updated_at=ed.expected_updated_at;}
+    if(!rulesState.editing){
+      scenariosState.commandText=scenarioApplyCommand(request,state.mapStore);
+      renderScenarios();return;
+    }
+    scenariosState.busy=true;renderScenarios();
+    try{
+      const answer=await sendScenarioChange(request);
+      const saved=answer?.scenario;
+      scenariosState.outcome=ed.mode==='add'?'Сценарий «'+def.id+'» создан.':'Сценарий «'+def.id+'» сохранён (v'+(saved?.version||'?')+').';
+      if(saved){
+        ed.mode='update';ed.original=saved;ed.expected_updated_at=saved.updated_at;
+        ed.draft=scenarioClone(saved.definition);ensureDraftPositions(ed.draft);ed.dirty=false;
+      }else{ed.dirty=false;}
+      announce(scenariosState.outcome);
+      await loadScenarios();
+    }catch(error){
+      const keyMsg=editKeyProblem(error);
+      if(keyMsg){
+        scenariosState.saveError=keyMsg;
+        scenariosState.commandText=scenarioApplyCommand(request,state.mapStore);
+      }else if(error.code==='conflict'&&ed.mode==='update'){
+        await loadScenarios();
+        const fresh=list(scenariosState.data?.scenarios).find(s=>s.id===ed.original.id&&s.scope===ed.scope&&s.project_id===(ed.project_id||null));
+        if(fresh){ed.original=fresh;ed.expected_updated_at=fresh.updated_at;scenariosState.saveError='Сценарий был изменён в другом месте (теперь v'+fresh.version+'). Проверьте изменения и нажмите «Сохранить» ещё раз, чтобы записать вашу версию поверх.';}
+        else scenariosState.saveError=error.message;
+      }else{
+        scenariosState.saveError=error.message||'Не удалось сохранить сценарий.';
+      }
+    }finally{
+      scenariosState.busy=false;
+      renderScenarios();
+    }
+  }
+  function renderStepFlowPreview(steps){
+    const row=make('div','scn-flow');
+    const items=list(steps);
+    items.slice(0,8).forEach((step,idx)=>{
+      if(idx)row.append(make('span','scn-flow-arrow','→'));
+      row.append(make('span','scn-step-pill role-'+scenarioStepRole(step.type),cut(step.title||step.id,28)));
+    });
+    if(items.length>8)row.append(make('span','scn-flow-arrow','… +'+(items.length-8)));
+    return row;
+  }
+  function renderScenarioCard(item){
+    const def=item.definition||{},card=make('article','rule-card');
+    const top=make('div','rule-card-top'),badges=make('div','badges');
+    badges.append(make('span','rule-scope',scenarioScopeText(item)));
+    if(item.version)badges.append(make('span','badge','v'+item.version));
+    if(item.shadowed)badges.append(make('span','badge hypothesis','Переопределён в workspace'));
+    const actions=make('div','rule-actions');
+    if(item.builtin){
+      actions.append(toolButton('Скопировать в редактор',()=>openScenarioEditor({copyFrom:item}),'small primary'));
+      actions.append(toolButton('Команда запуска',()=>openScenarioRunModal(item),'small'));
+    }else{
+      actions.append(toolButton('Конструктор',()=>openScenarioEditor({record:item}),'small primary'));
+      actions.append(toolButton('Запуск',()=>openScenarioRunModal(item),'small'));
+      actions.append(toolButton('Клон',()=>openScenarioEditor({copyFrom:item}),'small'));
+      actions.append(toolButton('Удалить',()=>openScenarioRemoval(item),'small danger'));
+    }
+    top.append(badges,actions);card.append(top);
+    const title=make('div','rule-text',def.title||item.id);title.style.fontWeight='650';card.append(title);
+    if(def.description)card.append(make('div','tools-inline-note',cut(def.description,240)));
+    if(def.when_to_use)card.append(make('div','tools-inline-note','Когда применять: '+cut(def.when_to_use,200)));
+    card.append(renderStepFlowPreview(def.steps));
+    const meta=make('div','rule-meta');
+    meta.append(make('code','',item.id),make('span','',plural(list(def.steps).length,['шаг','шага','шагов'])));
+    const inputCount=def.inputs&&typeof def.inputs==='object'?Object.keys(def.inputs).length:0;
+    if(inputCount)meta.append(make('span','',plural(inputCount,['параметр','параметра','параметров'])));
+    if(item.updated_at)meta.append(make('span','','Обновлён '+dateText(item.updated_at)));
+    if(item.changed_by)meta.append(make('span','',item.changed_by));
+    card.append(meta);
+    if(list(def.tags).length){
+      const tags=make('div','tag-list');list(def.tags).slice(0,6).forEach(t=>tags.append(make('span','tag',t)));card.append(tags);
+    }
+    return card;
+  }
+  function scenarioMatchesFilter(item){
+    if(scenariosState.scope==='global'&&(item.builtin||item.scope!=='global'))return false;
+    if(scenariosState.scope==='builtin'&&!item.builtin)return false;
+    if(scenariosState.scope.startsWith('project:')&&(item.builtin||item.scope!=='project'||item.project_id!==scenariosState.scope.slice(8)))return false;
+    const q=normalized(scenariosState.query);if(!q)return true;
+    const def=item.definition||{};
+    const hay=[item.id,def.title,def.description,def.when_to_use,...list(def.tags),...list(def.steps).flatMap(s=>[s.id,s.title,s.type])].map(normalized).join(' ');
+    return q.split(/\s+/).filter(Boolean).every(w=>hay.includes(w));
+  }
+  function renderScenarioCatalog(root){
+    const stored=list(scenariosState.data?.scenarios).filter(scenarioMatchesFilter);
+    const builtins=list(scenariosState.data?.builtin_templates).filter(scenarioMatchesFilter);
+    for(const inv of list(scenariosState.data?.invalid_scenarios))toolWarning(root,'Повреждённое определение сценария: '+(inv.id||inv.key)+' — '+(inv.error||'некорректный JSON'));
+    for(const uns of list(scenariosState.data?.unsupported_scenarios))toolWarning(root,'Сценарий «'+(uns.id||uns.key)+'» требует более новую версию формата Richi.');
+    const bar=make('div','rules-actions');
+    bar.append(make('div','tools-inline-note','Создавайте пайплайны шагов (инструкции, скиллы, команды, вопросы человеку, запросы к памяти) в визуальном конструкторе или клонируйте встроенные шаблоны.'));
+    bar.append(keyed(toolButton('+ Новый сценарий',()=>openScenarioEditor(),'primary'),'scn-add'));
+    root.append(bar);
+    toolSection(root,'Сохранённые сценарии',stored.length);
+    if(!stored.length){
+      const empty=make('div','tools-empty');
+      empty.append(ruleMark('rule'),make('h3','',list(scenariosState.data?.scenarios).length?'Подходящих сценариев нет':'Собственных сценариев пока нет'),make('p','',list(scenariosState.data?.scenarios).length?'Измените поиск или фильтр области.':'Создайте новый сценарий в визуальном конструкторе или скопируйте встроенный шаблон «review» ниже.'));
+      empty.append(toolButton('+ Создать сценарий',()=>openScenarioEditor(),'primary'));
+      root.append(empty);
+    }else{
+      const grid=make('div','rules-grid');stored.forEach(item=>grid.append(renderScenarioCard(item)));root.append(grid);
+    }
+    toolSection(root,'Встроенные шаблоны',builtins.length);
+    if(builtins.length){
+      const grid=make('div','rules-grid');builtins.forEach(item=>grid.append(renderScenarioCard(item)));root.append(grid);
+    }
+  }
+  function renameStepId(draft,oldId,newId){
+    if(!newId||oldId===newId||!SCN_STEP_ID_RE.test(newId))return false;
+    if(list(draft.steps).some(s=>s.id===newId))return false;
+    for(const step of list(draft.steps)){
+      if(step.id===oldId)step.id=newId;
+      if(Array.isArray(step.needs))step.needs=step.needs.map(n=>n===oldId?newId:n);
+    }
+    if(draft.layout?.positions&&draft.layout.positions[oldId]){
+      draft.layout.positions[newId]=draft.layout.positions[oldId];
+      delete draft.layout.positions[oldId];
+    }
+    if(scenariosState.selectedStepId===oldId)scenariosState.selectedStepId=newId;
+    return true;
+  }
+  function renderScenarioCanvas(ed){
+    const def=ed.draft,steps=list(def.steps),positions=ensureDraftPositions(def);
+    const scroll=make('div','scn-canvas-scroll'),surface=make('div','scn-canvas-surface');
+    let maxX=760,maxY=500;
+    for(const step of steps){
+      const p=positions[step.id]||{x:SCN_PAD,y:SCN_PAD};
+      if(p.x+SCN_NODE_W+140>maxX)maxX=p.x+SCN_NODE_W+140;
+      if(p.y+SCN_NODE_H+140>maxY)maxY=p.y+SCN_NODE_H+140;
+    }
+    surface.style.width=maxX+'px';surface.style.height=maxY+'px';
+    const svgEl=makeSvg('svg',{class:'scn-edges-svg',width:String(maxX),height:String(maxY)});
+    svgEl.style.color='var(--edge)';
+    const defsEl=makeSvg('defs'),marker=makeSvg('marker',{id:'scn-arrow',viewBox:'0 0 10 10',refX:'9',refY:'5',markerWidth:'7',markerHeight:'7',orient:'auto'});
+    marker.append(makeSvg('path',{d:'M 0 1.5 L 9 5 L 0 8.5 z',fill:'currentColor'}));
+    defsEl.append(marker);svgEl.append(defsEl);
+    const edgesGroup=makeSvg('g');svgEl.append(edgesGroup);
+    const previewPath=makeSvg('path',{class:'scn-edge-preview',d:''});svgEl.append(previewPath);
+    surface.append(svgEl);
+
+    const nodeEls=new Map();
+    const portCoords=(stepId,side)=>{
+      const p=positions[stepId]||{x:SCN_PAD,y:SCN_PAD},el=nodeEls.get(stepId);
+      const w=el?el.offsetWidth||SCN_NODE_W:SCN_NODE_W,h=el?el.offsetHeight||SCN_NODE_H:SCN_NODE_H;
+      return {x:side==='out'?p.x+w:p.x,y:p.y+h/2};
+    };
+    function redrawEdges(){
+      edgesGroup.replaceChildren();
+      for(const step of steps){
+        for(const dep of list(step.needs)){
+          if(!positions[dep])continue;
+          const a=portCoords(dep,'out'),b=portCoords(step.id,'in'),d=scenarioEdgePath(a.x,a.y,b.x,b.y);
+          const g=makeSvg('g',{class:'scn-edge-group'});
+          const title=makeSvg('title');title.textContent=dep+' → '+step.id+' (нажмите, чтобы удалить связь)';
+          const path=makeSvg('path',{class:'scn-edge-path',d,'marker-end':'url(#scn-arrow)'});
+          const hit=makeSvg('path',{class:'scn-edge-hit',d});
+          hit.addEventListener('click',event=>{
+            event.stopPropagation();
+            step.needs=list(step.needs).filter(n=>n!==dep);ed.dirty=true;
+            announce('Связь '+dep+' → '+step.id+' удалена');
+            renderScenarios();
+          });
+          g.append(title,path,hit);edgesGroup.append(g);
+        }
+      }
+    }
+
+    let wireState=null;
+    const stopWire=()=>{
+      if(!wireState)return;
+      wireState.fromPort.classList.remove('active');
+      for(const el of nodeEls.values())el.classList.remove('drop-target');
+      previewPath.setAttribute('d','');
+      wireState=null;
+    };
+
+    for(const step of steps){
+      const p=positions[step.id]||{x:SCN_PAD,y:SCN_PAD},role=scenarioStepRole(step.type);
+      const node=make('div','scn-node role-'+role+(scenariosState.selectedStepId===step.id?' selected':''));
+      node.dataset.stepId=step.id;node.style.left=p.x+'px';node.style.top=p.y+'px';
+      const head=make('div','scn-node-head');
+      head.append(make('span','scn-node-type',SCN_STEP_META[step.type]?.label||step.type),make('span','scn-node-badge',SCN_ROLE_LABEL[role]||role));
+      const body=make('div','scn-node-body');
+      body.append(make('div','scn-node-title',cut(step.title||step.id,46)),make('div','scn-node-id',step.id));
+      const badges=make('div','scn-node-badges');
+      if(step.type==='skill'&&step.params?.skill){
+        const rawSk=step.params.skill;
+        const sk=typeof rawSk==='string'?rawSk:(rawSk.default||(rawSk.per_agent?'per-agent ('+Object.keys(rawSk.per_agent).length+')':''));
+        if(sk)badges.append(make('span','scn-node-badge','skill: '+cut(sk,20)));
+      }
+      if(step.if)badges.append(make('span','scn-node-badge','if'));
+      if(step.matrix)badges.append(make('span','scn-node-badge','matrix'));
+      if(list(step.checks).length)badges.append(make('span','scn-node-badge','checks: '+step.checks.length));
+      if(list(step.needs).length)badges.append(make('span','scn-node-badge','needs: '+step.needs.length));
+      if(badges.childElementCount)body.append(badges);
+
+      const inPort=make('button','scn-port scn-port-in');inPort.type='button';inPort.title='Вход (зависимость needs): отпустите сюда линию от другого шага';inPort.setAttribute('aria-label','Входной порт шага '+step.id);
+      const outPort=make('button','scn-port scn-port-out');outPort.type='button';outPort.title='Выход: потяните к другому шагу, чтобы соединить (needs)';outPort.setAttribute('aria-label','Выходной порт шага '+step.id);
+
+      body.addEventListener('click',()=>{if(scenariosState.selectedStepId!==step.id){scenariosState.selectedStepId=step.id;renderScenarios();}});
+
+      // Drag node by header
+      let nodeDrag=null;
+      head.addEventListener('pointerdown',event=>{
+        if(event.button!==0)return;
+        event.stopPropagation();
+        nodeDrag={pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,origX:positions[step.id].x,origY:positions[step.id].y,moved:false};
+        head.setPointerCapture(event.pointerId);node.classList.add('dragging');
+      });
+      head.addEventListener('pointermove',event=>{
+        if(!nodeDrag||nodeDrag.pointerId!==event.pointerId)return;
+        const dx=event.clientX-nodeDrag.startX,dy=event.clientY-nodeDrag.startY;
+        if(Math.hypot(dx,dy)>3)nodeDrag.moved=true;
+        if(!nodeDrag.moved)return;
+        const nx=Math.max(12,Math.round(nodeDrag.origX+dx)),ny=Math.max(12,Math.round(nodeDrag.origY+dy));
+        positions[step.id]={x:nx,y:ny};node.style.left=nx+'px';node.style.top=ny+'px';
+        if(nx+SCN_NODE_W+140>maxX){maxX=nx+SCN_NODE_W+140;surface.style.width=maxX+'px';svgEl.setAttribute('width',String(maxX));}
+        if(ny+SCN_NODE_H+140>maxY){maxY=ny+SCN_NODE_H+140;surface.style.height=maxY+'px';svgEl.setAttribute('height',String(maxY));}
+        redrawEdges();
+      });
+      const finishNodeDrag=event=>{
+        if(!nodeDrag||nodeDrag.pointerId!==event.pointerId)return;
+        const moved=nodeDrag.moved;nodeDrag=null;node.classList.remove('dragging');
+        if(head.hasPointerCapture(event.pointerId))head.releasePointerCapture(event.pointerId);
+        if(moved){ed.dirty=true;}
+        else if(scenariosState.selectedStepId!==step.id){scenariosState.selectedStepId=step.id;renderScenarios();}
+      };
+      head.addEventListener('pointerup',finishNodeDrag);head.addEventListener('pointercancel',finishNodeDrag);
+
+      // Drag wire from output port to target node / input port
+      outPort.addEventListener('pointerdown',event=>{
+        if(event.button!==0)return;
+        event.stopPropagation();
+        const origin=portCoords(step.id,'out');
+        wireState={pointerId:event.pointerId,fromId:step.id,fromPort:outPort,origin};
+        outPort.classList.add('active');outPort.setPointerCapture(event.pointerId);
+        previewPath.setAttribute('d',scenarioEdgePath(origin.x,origin.y,origin.x+24,origin.y));
+      });
+      outPort.addEventListener('pointermove',event=>{
+        if(!wireState||wireState.pointerId!==event.pointerId)return;
+        const rect=surface.getBoundingClientRect();
+        const tx=event.clientX-rect.left,ty=event.clientY-rect.top;
+        previewPath.setAttribute('d',scenarioEdgePath(wireState.origin.x,wireState.origin.y,tx,ty));
+        const hitEl=document.elementFromPoint(event.clientX,event.clientY)?.closest?.('.scn-node');
+        for(const [sid,el] of nodeEls.entries()){
+          el.classList.toggle('drop-target',Boolean(hitEl&&hitEl.dataset.stepId===sid&&sid!==wireState.fromId&&!scenarioWouldCycle(steps,wireState.fromId,sid)));
+        }
+      });
+      const finishWire=event=>{
+        if(!wireState||wireState.pointerId!==event.pointerId)return;
+        const fromId=wireState.fromId;
+        if(outPort.hasPointerCapture(event.pointerId))outPort.releasePointerCapture(event.pointerId);
+        const hitEl=document.elementFromPoint(event.clientX,event.clientY)?.closest?.('.scn-node');
+        stopWire();
+        const targetId=hitEl?.dataset?.stepId;
+        if(!targetId||targetId===fromId)return;
+        if(scenarioWouldCycle(steps,fromId,targetId)){
+          scenariosState.saveError='Нельзя соединить «'+fromId+'» → «'+targetId+'»: получится цикл зависимостей.';
+          renderScenarios();return;
+        }
+        const target=steps.find(s=>s.id===targetId);
+        if(target){
+          if(!Array.isArray(target.needs))target.needs=[];
+          if(!target.needs.includes(fromId)){target.needs.push(fromId);ed.dirty=true;scenariosState.saveError='';announce('Соединены шаги '+fromId+' → '+targetId);renderScenarios();}
+        }
+      };
+      const cancelWire=event=>{
+        if(!wireState||wireState.pointerId!==event.pointerId)return;
+        if(outPort.hasPointerCapture(event.pointerId))outPort.releasePointerCapture(event.pointerId);
+        stopWire();
+      };
+      outPort.addEventListener('pointerup',finishWire);outPort.addEventListener('pointercancel',cancelWire);
+
+      node.append(head,body,inPort,outPort);
+      surface.append(node);nodeEls.set(step.id,node);
+    }
+    scroll.append(surface);
+    scroll.addEventListener('scroll',()=>{scenariosState.canvasScroll={left:scroll.scrollLeft,top:scroll.scrollTop};});
+    requestAnimationFrame(()=>{
+      scroll.scrollLeft=scenariosState.canvasScroll.left||0;
+      scroll.scrollTop=scenariosState.canvasScroll.top||0;
+      redrawEdges();
+    });
+    return scroll;
+  }
+  function renderScenarioListView(ed){
+    const def=ed.draft,steps=list(def.steps),box=make('div','scn-list-view');
+    let dragIndex=-1;
+    steps.forEach((step,index)=>{
+      const row=make('div','scn-list-row'+(scenariosState.selectedStepId===step.id?' selected':''));
+      row.draggable=true;
+      const handle=make('span','scn-drag-handle','⋮⋮');handle.title='Перетащите для изменения порядка';
+      const info=make('div');
+      info.append(make('div','scn-node-title',(index+1)+'. '+(step.title||step.id)));
+      info.append(make('div','scn-node-id',step.id+' · '+(SCN_STEP_META[step.type]?.label||step.type)+(list(step.needs).length?' · needs: '+step.needs.join(', '):' · стартовый шаг')));
+      const controls=make('div','rule-actions');
+      const up=toolButton('↑',e=>{e.stopPropagation();if(index>0){const [m]=def.steps.splice(index,1);def.steps.splice(index-1,0,m);ed.dirty=true;renderScenarios();}},'small');up.disabled=index===0;up.title='Поднять выше';
+      const dn=toolButton('↓',e=>{e.stopPropagation();if(index<steps.length-1){const [m]=def.steps.splice(index,1);def.steps.splice(index+1,0,m);ed.dirty=true;renderScenarios();}},'small');dn.disabled=index===steps.length-1;dn.title='Опустить ниже';
+      controls.append(up,dn);
+      row.append(handle,info,controls);
+      row.addEventListener('click',()=>{scenariosState.selectedStepId=step.id;renderScenarios();});
+      row.addEventListener('dragstart',e=>{dragIndex=index;e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',step.id);}catch{}});
+      row.addEventListener('dragover',e=>{e.preventDefault();row.classList.add('drag-over');});
+      row.addEventListener('dragleave',()=>row.classList.remove('drag-over'));
+      row.addEventListener('drop',e=>{
+        e.preventDefault();row.classList.remove('drag-over');
+        if(dragIndex<0||dragIndex===index)return;
+        const [moved]=def.steps.splice(dragIndex,1);def.steps.splice(index,0,moved);ed.dirty=true;dragIndex=-1;renderScenarios();
+      });
+      box.append(row);
+    });
+    if(!steps.length)box.append(make('div','tools-inline-note','В пайплайне пока нет шагов. Нажмите «+ Шаг» выше.'));
+    return box;
+  }
+  function renderStepInspector(ed){
+    const box=make('aside','scn-inspector'),def=ed.draft,steps=list(def.steps);
+    const step=steps.find(s=>s.id===scenariosState.selectedStepId)||steps[0]||null;
+    if(!step){
+      box.append(make('h3','','Инспектор шага'),make('p','tools-inline-note','Выберите шаг на холсте или добавьте новый, чтобы настроить его параметры, связи и проверки.'));
+      return box;
+    }
+    scenariosState.selectedStepId=step.id;
+    const role=scenarioStepRole(step.type);
+    box.append(make('h3','','Шаг: '+(step.title||step.id)));
+
+    const idInput=make('input');idInput.type='text';idInput.value=step.id;idInput.spellcheck=false;idInput.autocomplete='off';
+    const idError=make('div','rule-field-hint');idError.style.color='var(--danger)';
+    idInput.addEventListener('change',()=>{
+      const next=idInput.value.trim();
+      if(next===step.id){idError.textContent='';return;}
+      if(!renameStepId(def,step.id,next)){idError.textContent='Неверный или уже занятый ID (нужны a-z, 0-9, _, -).';idInput.value=step.id;return;}
+      ed.dirty=true;renderScenarios();
+    });
+    const idField=ruleField('ID шага',idInput,'Используется в шаблонах {{steps.<id>.summary}}.');idField.append(idError);
+    box.append(idField);
+
+    const typeSel=make('select');
+    for(const item of SCN_STEP_TYPES)typeSel.add(new Option(item.label+' ('+item.id+')',item.id));
+    typeSel.value=step.type;
+    typeSel.addEventListener('change',()=>{
+      step.type=typeSel.value;step.params=scenarioDefaultParams(step.type);
+      const nextRole=scenarioStepRole(step.type);
+      if(nextRole!=='agent'){delete step.executor;delete step.outputs;delete step.checks;delete step.retry;delete step.hints;delete step.continue_on_failure;}
+      if(nextRole==='richi')delete step.matrix;
+      ed.dirty=true;renderScenarios();
+    });
+    box.append(ruleField('Тип шага',typeSel,SCN_STEP_META[step.type]?.desc||''));
+
+    const titleInput=make('input');titleInput.type='text';titleInput.value=step.title||'';
+    titleInput.addEventListener('input',()=>{step.title=titleInput.value;ed.dirty=true;});
+    titleInput.addEventListener('change',()=>renderScenarios());
+    box.append(ruleField('Название шага',titleInput));
+
+    // Dependencies (needs) checkboxes synced with visual canvas
+    const needsWrap=make('div','rule-field');
+    needsWrap.append(make('span','field-label','Зависит от шагов (needs)'));
+    const needsGrid=make('div','scn-needs-grid');
+    const others=steps.filter(s=>s.id!==step.id);
+    if(!others.length){
+      needsGrid.append(make('span','tools-inline-note','Добавьте ещё шаги, чтобы задать связи.'));
+    }else{
+      for(const other of others){
+        const checked=list(step.needs).includes(other.id);
+        const wouldCycle=!checked&&scenarioWouldCycle(steps,other.id,step.id);
+        const lbl=make('label','scn-needs-item'),cb=make('input');
+        cb.type='checkbox';cb.checked=checked;cb.disabled=wouldCycle;
+        if(wouldCycle)lbl.title='Недоступно: создаст цикл зависимостей';
+        cb.addEventListener('change',()=>{
+          if(!Array.isArray(step.needs))step.needs=[];
+          if(cb.checked){if(!step.needs.includes(other.id))step.needs.push(other.id);}
+          else step.needs=step.needs.filter(n=>n!==other.id);
+          ed.dirty=true;renderScenarios();
+        });
+        lbl.append(cb,document.createTextNode(other.id));
+        needsGrid.append(lbl);
+      }
+    }
+    needsWrap.append(needsGrid,make('span','rule-field-hint','Связи также можно протягивать мышкой от правого порта шага к левому порту другого шага на графе.'));
+    box.append(needsWrap);
+
+    // Template variable quick-insert chips
+    const insertToken=(textarea,token)=>{
+      const start=textarea.selectionStart??textarea.value.length,end=textarea.selectionEnd??textarea.value.length;
+      textarea.value=textarea.value.slice(0,start)+token+textarea.value.slice(end);
+      textarea.selectionStart=textarea.selectionEnd=start+token.length;
+      textarea.dispatchEvent(new Event('input'));textarea.focus();
+    };
+    const renderTokenChips=(targetEl,shellPipe=false,allowSecret=true)=>{
+      const chips=make('div','scn-chips');
+      const wrap=expr=>'{{'+expr+(shellPipe?' | shell':'')+'}}';
+      const tokens=[];
+      for(const [name,spec] of Object.entries(def.inputs||{})){
+        if(!allowSecret&&spec?.type==='secret')continue;
+        tokens.push('inputs.'+name);
+      }
+      const stepById=new Map(steps.map(s=>[s.id,s]));
+      for(const anc of scenarioAncestors(steps,step.id)){
+        const ancStep=stepById.get(anc);
+        if(ancStep?.matrix)tokens.push('steps.'+anc+'.data','steps.'+anc+'.items');
+        else tokens.push('steps.'+anc+'.summary');
+      }
+      tokens.push('project.path','agent.id','now.date');
+      for(const tok of tokens.slice(0,10)){
+        chips.append(toolButton(wrap(tok),()=>insertToken(targetEl,wrap(tok)),'scn-chip-btn'));
+      }
+      return chips;
+    };
+
+    if(!step.params||typeof step.params!=='object')step.params=scenarioDefaultParams(step.type);
+    const p=step.params;
+    if(step.type==='instruction'){
+      const ta=make('textarea');ta.value=p.text||'';ta.placeholder='Опишите, что должен сделать агент…';
+      ta.addEventListener('input',()=>{p.text=ta.value;ed.dirty=true;});
+      const f=ruleField('Текст инструкции',ta,'Поддерживаются шаблоны {{inputs.*}} и {{steps.<предок>.summary}}.');
+      f.append(renderTokenChips(ta,false));box.append(f);
+    }else if(step.type==='skill'){
+      if(!p.skill||typeof p.skill!=='object'||Array.isArray(p.skill))p.skill={default:typeof p.skill==='string'?p.skill:''};
+      const picker=skillSelect(null,typeof p.skill.default==='string'?p.skill.default:'');
+      picker.element.addEventListener('skillchange',()=>{
+        const v=picker.value();if(v)p.skill.default=v;else delete p.skill.default;
+        ed.dirty=true;
+      });
+      box.append(ruleField('Скилл по умолчанию (default)',picker.element,null,picker.select));
+      if(p.skill.per_agent&&Object.keys(p.skill.per_agent).length){
+        const paNote=make('div','tools-inline-note','Переопределения по агентам (per_agent): '+Object.entries(p.skill.per_agent).map(([a,s])=>a+' → '+s).join(', '));
+        const clearPa=toolButton('Очистить per_agent',()=>{delete p.skill.per_agent;ed.dirty=true;renderScenarios();},'small');
+        box.append(paNote,clearPa);
+      }
+      const ta=make('textarea');ta.value=p.instruction||'';ta.placeholder='Дополнительные указания к вызову скилла (необязательно)…';
+      ta.addEventListener('input',()=>{p.instruction=ta.value;ed.dirty=true;});
+      const f=ruleField('Инструкция для скилла',ta);f.append(renderTokenChips(ta,false));box.append(f);
+    }else if(step.type==='command'){
+      const ta=make('textarea');ta.style.fontFamily='ui-monospace,SFMono-Regular,monospace';ta.value=p.command||'';ta.placeholder='git diff {{inputs.base | shell}}..HEAD';
+      ta.addEventListener('input',()=>{p.command=ta.value;ed.dirty=true;});
+      const f=ruleField('Команда (shell)',ta,'Каждая подстановка {{...}} в команде должна заканчиваться на | shell.');
+      f.append(renderTokenChips(ta,true));box.append(f);
+      const cwd=make('input');cwd.type='text';cwd.value=p.cwd||'';cwd.placeholder='Необязательно (относительно проекта)';
+      cwd.addEventListener('input',()=>{p.cwd=cwd.value;ed.dirty=true;});
+      box.append(ruleField('Рабочая папка (cwd)',cwd));
+      const row=make('div','rule-field-row');
+      const exp=make('input');exp.type='text';exp.value=p.expect_exit!==undefined?String(p.expect_exit):'';exp.placeholder='0';
+      exp.addEventListener('input',()=>{const v=scnInt(exp.value);if(exp.value.trim()==='')delete p.expect_exit;else if(v!==null)p.expect_exit=v;ed.dirty=true;});
+      const tail=make('input');tail.type='text';tail.value=p.tail_lines!==undefined?String(p.tail_lines):'';tail.placeholder='200';
+      tail.addEventListener('input',()=>{const v=scnInt(tail.value);if(tail.value.trim()==='')delete p.tail_lines;else if(v!==null)p.tail_lines=v;ed.dirty=true;});
+      row.append(ruleField('Ожидаемый код (expect_exit)',exp),ruleField('Строк вывода (tail_lines)',tail));
+      box.append(row);
+    }else if(step.type==='gate'){
+      const ta=make('textarea');ta.value=p.question||'';ta.placeholder='Вопрос пользователю в чате…';
+      ta.addEventListener('input',()=>{p.question=ta.value;ed.dirty=true;});
+      const f=ruleField('Вопрос человеку',ta,'Ответ вводится только в чате командой richi scenario answer.');f.append(renderTokenChips(ta,false,false));box.append(f);
+      const opts=make('textarea');opts.value=list(p.options).join('\n');opts.placeholder='Один вариант на строку (необязательно)';
+      opts.addEventListener('input',()=>{p.options=opts.value.split('\n').map(v=>v.trim()).filter(Boolean);ed.dirty=true;});
+      box.append(ruleField('Варианты ответа (по одному в строке)',opts));
+      const allowWrap=make('label','check-label'),cb=make('input');cb.type='checkbox';cb.checked=p.allow_comment!==false;
+      cb.addEventListener('change',()=>{p.allow_comment=cb.checked;ed.dirty=true;});
+      allowWrap.append(cb,document.createTextNode('Разрешить комментарий к ответу'));box.append(allowWrap);
+    }else if(step.type==='checklist'){
+      const items=make('textarea');
+      items.value=list(p.items).map(it=>typeof it==='string'?it:(it?.required===false?'? ':'')+(it?.text||'')).filter(Boolean).join('\n');
+      items.placeholder='По одному пункту на строку (префикс «? » — необязательный пункт)';
+      items.addEventListener('input',()=>{
+        p.items=items.value.split('\n').map(line=>line.trim()).filter(Boolean).map(line=>line.startsWith('? ')?{text:line.slice(2).trim(),required:false}:{text:line,required:true}).filter(it=>it.text);
+        ed.dirty=true;
+      });
+      box.append(ruleField('Пункты чек-листа (по одному в строке)',items,'Начните строку с «? », чтобы сделать пункт необязательным.'));
+    }else if(step.type==='memory.recall'){
+      const q=make('input');q.type='text';q.value=p.query||'';q.placeholder='Поисковый запрос в Richi…';
+      q.addEventListener('input',()=>{p.query=q.value;ed.dirty=true;});
+      box.append(ruleField('Запрос в память (query)',q));
+      const lim=make('input');lim.type='text';lim.value=p.limit!==undefined?String(p.limit):'10';
+      lim.addEventListener('input',()=>{const v=scnInt(lim.value);if(lim.value.trim()==='')delete p.limit;else if(v!==null)p.limit=v;ed.dirty=true;});
+      box.append(ruleField('Лимит результатов',lim));
+      const kindsWrap=make('div','rule-field');kindsWrap.append(make('span','field-label','Типы записей (необязательно)'));
+      const kg=make('div','scn-needs-grid');
+      for(const k of SCN_ENTRY_KINDS){
+        const lbl=make('label','scn-needs-item'),cb=make('input');cb.type='checkbox';cb.checked=list(p.kinds).includes(k);
+        cb.addEventListener('change',()=>{
+          const cur=new Set(list(p.kinds));if(cb.checked)cur.add(k);else cur.delete(k);p.kinds=[...cur];ed.dirty=true;
+        });
+        lbl.append(cb,document.createTextNode(k));kg.append(lbl);
+      }
+      kindsWrap.append(kg);box.append(kindsWrap);
+    }else if(step.type==='memory.brief'){
+      const q=make('input');q.type='text';q.value=p.question||'';q.placeholder='Вопрос для сводки из Richi…';
+      q.addEventListener('input',()=>{p.question=q.value;ed.dirty=true;});
+      box.append(ruleField('Вопрос (question)',q));
+      const lim=make('input');lim.type='text';lim.value=p.limit!==undefined?String(p.limit):'10';
+      lim.addEventListener('input',()=>{const v=scnInt(lim.value);if(lim.value.trim()==='')delete p.limit;else if(v!==null)p.limit=v;ed.dirty=true;});
+      box.append(ruleField('Лимит записей',lim));
+    }else if(step.type==='condition'){
+      const expr=make('input');expr.type='text';expr.style.fontFamily='ui-monospace,SFMono-Regular,monospace';expr.value=p.expr||'';expr.placeholder="inputs.mode == 'full'";
+      expr.addEventListener('input',()=>{p.expr=expr.value;ed.dirty=true;});
+      box.append(ruleField('Выражение условия (expr)',expr,'Операторы: ==, !=, <, <=, >, >=, in, and, or, not.'));
+    }
+
+    // Advanced step settings
+    const adv=make('details','tools-fold');adv.open=scenariosState.advOpen;adv.addEventListener('toggle',()=>{scenariosState.advOpen=adv.open;});adv.append(make('summary','','Условие if, повторы, проверки и матрица'));
+    const advBody=make('div');advBody.style.display='grid';advBody.style.gap='10px';advBody.style.marginTop='10px';
+    const ifInput=make('input');ifInput.type='text';ifInput.style.fontFamily='ui-monospace,SFMono-Regular,monospace';ifInput.value=step.if||'';ifInput.placeholder="steps.gate.answer == 'Да'";
+    ifInput.addEventListener('input',()=>{step.if=ifInput.value;ed.dirty=true;});
+    advBody.append(ruleField('Условие запуска (if)',ifInput));
+    if(role==='agent'){
+      const cofWrap=make('label','check-label'),cof=make('input');cof.type='checkbox';cof.checked=Boolean(step.continue_on_failure);
+      cof.addEventListener('change',()=>{step.continue_on_failure=cof.checked;ed.dirty=true;});
+      cofWrap.append(cof,document.createTextNode('Продолжать пайплайн при ошибке шага (continue_on_failure)'));
+      advBody.append(cofWrap);
+      const agSel=make('select');agSel.add(new Option('Любой агент',''));
+      for(const aid of knownAgentIds())agSel.add(new Option(agentName(aid)+' ('+aid+')',aid));
+      if(step.executor?.agent&&![...agSel.options].some(o=>o.value===step.executor.agent))agSel.add(new Option(step.executor.agent,step.executor.agent));
+      agSel.value=step.executor?.agent||'';
+      agSel.addEventListener('change',()=>{step.executor=agSel.value?{agent:agSel.value}:undefined;ed.dirty=true;});
+      advBody.append(ruleField('Закрепить агента (executor)',agSel));
+      const ret=make('input');ret.type='text';ret.value=step.retry?.max?String(step.retry.max):'';ret.placeholder='0–5';
+      ret.addEventListener('input',()=>{const n=scnInt(ret.value);if(ret.value.trim()==='')delete step.retry;else if(n!==null&&n>0)step.retry={max:n};else if(n===0)delete step.retry;ed.dirty=true;});
+      advBody.append(ruleField('Макс. повторов (retry.max)',ret));
+      const jsonField=(label,prop,placeholder)=>{
+        const ta=make('textarea');ta.style.minHeight='64px';ta.style.fontFamily='ui-monospace,SFMono-Regular,monospace';ta.style.fontSize='11px';
+        ta.value=step[prop]?JSON.stringify(step[prop],null,2):'';ta.placeholder=placeholder;
+        const err=make('div','rule-field-hint');err.style.color='var(--danger)';
+        ta.addEventListener('change',()=>{
+          const raw=ta.value.trim();if(!raw){delete step[prop];err.textContent='';ed.dirty=true;return;}
+          try{step[prop]=JSON.parse(raw);err.textContent='';ed.dirty=true;}
+          catch(e){err.textContent='Ошибка JSON: '+e.message;}
+        });
+        const f=ruleField(label,ta);f.append(err);advBody.append(f);
+      };
+      jsonField('Выходные поля (outputs JSON)','outputs','{"data": {"findings": {"type": "list", "required": true}}}');
+      jsonField('Проверки результата (checks JSON)','checks','[{"kind": "data_required", "path": "findings"}]');
+      jsonField('Матрица (matrix JSON)','matrix','{"target": ["a", "b"]}');
+    }else if(role==='human'){
+      const ta=make('textarea');ta.style.minHeight='64px';ta.style.fontFamily='ui-monospace,SFMono-Regular,monospace';ta.style.fontSize='11px';
+      ta.value=step.matrix?JSON.stringify(step.matrix,null,2):'';ta.placeholder='{"item": ["a", "b"]}';
+      const err=make('div','rule-field-hint');err.style.color='var(--danger)';
+      ta.addEventListener('change',()=>{
+        const raw=ta.value.trim();if(!raw){delete step.matrix;err.textContent='';ed.dirty=true;return;}
+        try{step.matrix=JSON.parse(raw);err.textContent='';ed.dirty=true;}
+        catch(e){err.textContent='Ошибка JSON: '+e.message;}
+      });
+      const f=ruleField('Матрица (matrix JSON)',ta);f.append(err);advBody.append(f);
+    }
+    adv.append(advBody);box.append(adv);
+
+    // Step footer actions
+    const foot=make('div','rule-actions');
+    foot.append(toolButton('Дублировать шаг',()=>{
+      const copy=scenarioClone(step);
+      copy.id=uniqueStepId(def.steps,step.id);
+      copy.title=(copy.title||step.id)+' (копия)';
+      def.steps.push(copy);
+      const pos=ensureDraftPositions(def)[step.id]||{x:SCN_PAD,y:SCN_PAD};
+      def.layout.positions[copy.id]={x:pos.x+40,y:pos.y+SCN_NODE_H+24};
+      scenariosState.selectedStepId=copy.id;ed.dirty=true;renderScenarios();
+    },'small'));
+    foot.append(toolButton('Удалить шаг',()=>{
+      if(def.steps.length<=1){scenariosState.saveError='В сценарии должен остаться хотя бы один шаг.';renderScenarios();return;}
+      def.steps=def.steps.filter(s=>s.id!==step.id);
+      for(const other of def.steps)if(Array.isArray(other.needs))other.needs=other.needs.filter(n=>n!==step.id);
+      if(def.layout?.positions)delete def.layout.positions[step.id];
+      scenariosState.selectedStepId=def.steps[0]?.id||'';ed.dirty=true;renderScenarios();
+    },'small danger'));
+    box.append(foot);
+    return box;
+  }
+  function renderScenarioEditor(root){
+    const ed=scenariosState.editing,def=ed.draft;
+    const wrap=make('div','scn-editor');
+    const head=make('div','scn-editor-bar');
+    const left=make('div','scn-editor-bar-left');
+    left.append(toolButton('← К списку',closeScenarioEditor,'small'));
+    left.append(make('span','scn-editor-title',(ed.mode==='add'?'Новый сценарий':'Конструктор: '+def.id)+(ed.dirty?' · есть несохранённые изменения':'')));
+    const right=make('div','scn-editor-bar-right');
+    right.append(toolButton(scenariosState.showJson?'Скрыть JSON':'JSON',()=>{scenariosState.showJson=!scenariosState.showJson;renderScenarios();},'small'));
+    const saveBtn=toolButton(scenariosState.busy?'Сохраняем…':rulesState.editing?'Сохранить сценарий':'Показать команду сохранения',saveScenarioDraft,'primary');
+    saveBtn.disabled=scenariosState.busy;
+    right.append(saveBtn);
+    head.append(left,right);wrap.append(head);
+
+    if(scenariosState.saveError){
+      const err=make('div','rule-error',scenariosState.saveError);err.setAttribute('role','alert');wrap.append(err);
+    }
+    if(scenariosState.commandText){
+      const showCmd=ruleCommandBox(wrap,'Скопируйте и выполните команду в терминале (или откройте карту командой richi map для прямого сохранения).');
+      showCmd(scenariosState.commandText);
+    }
+
+    // Metadata & inputs card
+    const metaCard=make('div','scn-meta-card'),metaGrid=make('div','scn-meta-grid');
+    const idInp=make('input');idInp.type='text';idInp.value=def.id||'';idInp.disabled=ed.mode==='update';idInp.spellcheck=false;idInp.placeholder='review-custom';
+    idInp.addEventListener('input',()=>{def.id=idInp.value.trim();ed.dirty=true;});
+    metaGrid.append(ruleField('ID сценария',idInp));
+    const titleInp=make('input');titleInp.type='text';titleInp.value=def.title||'';titleInp.placeholder='Название сценария';
+    titleInp.addEventListener('input',()=>{def.title=titleInp.value;ed.dirty=true;});
+    metaGrid.append(ruleField('Название',titleInp));
+    const scopeSel=make('select');scopeSel.disabled=ed.mode==='update';
+    scopeSel.add(new Option('Глобальный (весь workspace)','global'));
+    for(const [pid,pname] of scenarioProjectNames())scopeSel.add(new Option('Проект · '+pname,'project:'+pid));
+    scopeSel.value=ed.scope==='project'&&ed.project_id?'project:'+ed.project_id:'global';
+    scopeSel.addEventListener('change',()=>{
+      if(scopeSel.value.startsWith('project:')){ed.scope='project';ed.project_id=scopeSel.value.slice(8);}
+      else{ed.scope='global';ed.project_id='';}
+      ed.dirty=true;
+    });
+    metaGrid.append(ruleField('Область',scopeSel));
+    const runTitleInp=make('input');runTitleInp.type='text';runTitleInp.value=def.run_title||'';runTitleInp.placeholder='Напр.: Ревью {{inputs.branch}}';
+    runTitleInp.addEventListener('input',()=>{def.run_title=runTitleInp.value;ed.dirty=true;});
+    metaGrid.append(ruleField('Заголовок запуска (run_title)',runTitleInp));
+    metaCard.append(metaGrid);
+
+    const metaFold=make('details','tools-fold');metaFold.open=scenariosState.metaOpen;metaFold.addEventListener('toggle',()=>{scenariosState.metaOpen=metaFold.open;});
+    const inputCount=Object.keys(def.inputs||{}).length;
+    metaFold.append(make('summary','','Описание, теги и входные параметры ('+inputCount+')'));
+    const foldBody=make('div');foldBody.style.display='grid';foldBody.style.gap='10px';foldBody.style.marginTop='10px';
+    const descRow=make('div','scn-meta-grid');
+    const descInp=make('input');descInp.type='text';descInp.value=def.description||'';descInp.placeholder='Краткое описание сценария';
+    descInp.addEventListener('input',()=>{def.description=descInp.value;ed.dirty=true;});
+    const whenInp=make('input');whenInp.type='text';whenInp.value=def.when_to_use||'';whenInp.placeholder='Когда агент должен предлагать этот сценарий';
+    whenInp.addEventListener('input',()=>{def.when_to_use=whenInp.value;ed.dirty=true;});
+    const tagsInp=make('input');tagsInp.type='text';tagsInp.value=list(def.tags).join(', ');tagsInp.placeholder='review, security, deploy';
+    tagsInp.addEventListener('input',()=>{def.tags=tagsInp.value.split(',').map(v=>v.trim()).filter(Boolean);ed.dirty=true;});
+    descRow.append(ruleField('Описание',descInp),ruleField('Когда применять (when_to_use)',whenInp),ruleField('Теги (через запятую)',tagsInp));
+    foldBody.append(descRow);
+
+    // Inputs editor
+    const inputsBox=make('div','scn-inputs-list');
+    const inpEntries=Object.entries(def.inputs||{});
+    for(const [name,spec] of inpEntries){
+      const row=make('div','scn-input-row');
+      const nameIn=make('input');nameIn.type='text';nameIn.value=name;nameIn.placeholder='имя (a-z_)';nameIn.title='Имя параметра';
+      nameIn.addEventListener('change',()=>{
+        const next=nameIn.value.trim();if(!next||next===name||!SCN_INPUT_NAME_RE.test(next)||def.inputs[next]){nameIn.value=name;return;}
+        const rebuilt={};for(const [k,v] of Object.entries(def.inputs))rebuilt[k===name?next:k]=v;def.inputs=rebuilt;ed.dirty=true;renderScenarios();
+      });
+      const typeIn=make('select');SCN_INPUT_TYPES.forEach(t=>typeIn.add(new Option(t,t)));typeIn.value=spec.type||'string';
+      typeIn.addEventListener('change',()=>{
+        spec.type=typeIn.value;delete spec.default;
+        if(spec.type==='select'||spec.type==='multiselect'){if(!list(spec.options).length)spec.options=['вариант1','вариант2'];}
+        else delete spec.options;
+        ed.dirty=true;renderScenarios();
+      });
+      const titleIn=make('input');titleIn.type='text';titleIn.value=spec.title||'';titleIn.placeholder='Подпись поля';
+      titleIn.addEventListener('input',()=>{spec.title=titleIn.value;ed.dirty=true;});
+      const extraIn=make('input');extraIn.type='text';
+      if(spec.type==='select'||spec.type==='multiselect'){
+        extraIn.value=list(spec.options).join(', ');extraIn.placeholder='Варианты через запятую';
+        extraIn.addEventListener('input',()=>{
+          const opts=[...new Set(extraIn.value.split(',').map(v=>v.trim()).filter(Boolean))];
+          spec.options=opts;
+          if(spec.type==='select'&&spec.default!==undefined&&!opts.includes(spec.default))delete spec.default;
+          if(spec.type==='multiselect'&&Array.isArray(spec.default)){
+            const kept=spec.default.filter(v=>opts.includes(v));
+            if(kept.length)spec.default=kept;else delete spec.default;
+          }
+          ed.dirty=true;
+        });
+      }else if(spec.type==='secret'){
+        extraIn.value='';extraIn.disabled=true;extraIn.placeholder='Секрет без значения по умолчанию';
+      }else{
+        extraIn.value=spec.default!==undefined?String(spec.default):'';extraIn.placeholder='По умолчанию';
+        extraIn.addEventListener('input',()=>{
+          const v=extraIn.value;
+          if(v.trim()===''){delete spec.default;}
+          else if(spec.type==='boolean'){spec.default=v.trim().toLowerCase()==='true';}
+          else if(spec.type==='number'){const n=Number(v.trim());if(Number.isFinite(n))spec.default=n;else delete spec.default;}
+          else spec.default=v;
+          ed.dirty=true;
+        });
+      }
+      const reqLbl=make('label','check-label'),reqCb=make('input');reqCb.type='checkbox';reqCb.checked=Boolean(spec.required);
+      reqCb.addEventListener('change',()=>{spec.required=reqCb.checked;ed.dirty=true;});
+      reqLbl.append(reqCb,document.createTextNode('обяз.'));
+      const delBtn=toolButton('×',()=>{delete def.inputs[name];ed.dirty=true;renderScenarios();},'small danger');delBtn.title='Удалить параметр';
+      row.append(nameIn,typeIn,titleIn,extraIn,reqLbl,delBtn);
+      inputsBox.append(row);
+    }
+    foldBody.append(inputsBox);
+    const addInpRow=make('div');
+    addInpRow.append(toolButton('+ Добавить входной параметр',()=>{
+      if(!def.inputs)def.inputs={};
+      let n='param',i=1;while(def.inputs[n])n='param_'+(++i);
+      def.inputs[n]={type:'string',title:'',required:false};ed.dirty=true;scenariosState.metaOpen=true;renderScenarios();
+    },'small'));
+    foldBody.append(addInpRow);
+    metaFold.append(foldBody);metaCard.append(metaFold);
+    wrap.append(metaCard);
+
+    // Main 2-column visual pipeline builder
+    const builder=make('div','scn-builder');
+    const stage=make('div','scn-stage');
+    const stageHead=make('div','scn-stage-head'),sLeft=make('div','scn-stage-head-left'),sRight=make('div','scn-stage-head-right');
+    const gBtn=toolButton('Граф (drag & wire)',()=>{scenariosState.viewMode='graph';renderScenarios();},'small'+(scenariosState.viewMode==='graph'?' primary':''));
+    const lBtn=toolButton('Список (порядок)',()=>{scenariosState.viewMode='list';renderScenarios();},'small'+(scenariosState.viewMode==='list'?' primary':''));
+    sLeft.append(gBtn,lBtn);
+    const addStepSel=make('select');addStepSel.style.height='30px';addStepSel.style.fontSize='12px';addStepSel.style.borderRadius='8px';addStepSel.style.border='1px solid var(--line)';addStepSel.style.background='var(--panel)';addStepSel.style.color='var(--ink)';addStepSel.style.padding='0 8px';
+    SCN_STEP_TYPES.forEach(t=>addStepSel.add(new Option(t.label,t.id)));
+    const addStepBtn=toolButton('+ Шаг',()=>{
+      const type=addStepSel.value||'instruction';
+      const id=uniqueStepId(def.steps,type.replace('.','_'));
+      const sel=def.steps.find(s=>s.id===scenariosState.selectedStepId)||def.steps[def.steps.length-1];
+      const step={id,type,title:SCN_STEP_META[type]?.label||'Новый шаг',needs:sel?[sel.id]:[],params:scenarioDefaultParams(type)};
+      def.steps.push(step);
+      const posMap=ensureDraftPositions(def);
+      const anchor=sel&&posMap[sel.id]?posMap[sel.id]:{x:SCN_PAD,y:SCN_PAD};
+      posMap[id]={x:anchor.x+SCN_NODE_W+SCN_COL_GAP,y:anchor.y};
+      scenariosState.selectedStepId=id;ed.dirty=true;renderScenarios();
+    },'small primary');
+    const layoutBtn=toolButton('Авто-раскладка',()=>{
+      if(!def.layout)def.layout={};
+      def.layout.positions=scenarioAutoLayout(def.steps);ed.dirty=true;renderScenarios();
+    },'small');
+    sRight.append(addStepSel,addStepBtn,layoutBtn);
+    stageHead.append(sLeft,sRight);stage.append(stageHead);
+    if(scenariosState.viewMode==='graph')stage.append(renderScenarioCanvas(ed));
+    else stage.append(renderScenarioListView(ed));
+    const stageFoot=make('div','scn-stage-head');
+    stageFoot.append(make('span','tools-inline-note',scenariosState.viewMode==='graph'
+      ?'Заголовок узла — перетащить · правый порт → левый порт другого шага — соединить (needs) · клик по линии — удалить связь.'
+      :'Перетаскивайте строки или используйте ↑ / ↓, чтобы менять порядок шагов.'));
+    stage.append(stageFoot);
+
+    builder.append(stage,renderStepInspector(ed));
+    wrap.append(builder);
+
+    // Optional JSON editor
+    if(scenariosState.showJson){
+      const jBox=make('div','scn-json-box');
+      const ta=make('textarea');ta.value=JSON.stringify(scenarioNormalizeDraft(def),null,2);
+      const jErr=make('div','rule-field-hint');jErr.style.color='var(--danger)';
+      const jBar=make('div','rule-actions');jBar.style.marginTop='8px';
+      jBar.append(toolButton('Применить JSON на холст',()=>{
+        try{
+          const parsed=JSON.parse(ta.value);
+          if(!parsed||typeof parsed!=='object'||Array.isArray(parsed)||!Array.isArray(parsed.steps)||!parsed.steps.every(s=>s&&typeof s==='object'&&!Array.isArray(s))){
+            throw new Error('Ожидается объект определения со списком объектов steps.');
+          }
+          const normalizedDef=scenarioNormalizeDraft(parsed);
+          if(ed.mode==='update')normalizedDef.id=ed.original.id;
+          ensureDraftPositions(normalizedDef);
+          ed.draft=normalizedDef;
+          if(!list(ed.draft.steps).some(s=>s.id===scenariosState.selectedStepId))scenariosState.selectedStepId=ed.draft.steps[0]?.id||'';
+          ed.dirty=true;jErr.textContent='';renderScenarios();
+        }catch(e){jErr.textContent='Ошибка JSON: '+e.message;}
+      },'small primary'));
+      jBox.append(make('div','field-label','Определение сценария (JSON)'),ta,jErr,jBar);
+      wrap.append(jBox);
+    }
+    root.append(wrap);
+  }
+  function renderScenarioRuns(root){
+    const schemaVersion=Number(scenariosState.data?.schema_version)||0;
+    if(schemaVersion<4){
+      toolWarning(root,'В этом workspace схема хранилища v'+schemaVersion+'. Определения и конструктор уже работают, а таблица запусков появится после обновления схемы до v4 (команда richi migrate после резервной копии).');
+      return;
+    }
+    const allRuns=list(scenariosState.data?.runs);
+    const filters=[['all','Все'],['active','Активные'],['waiting','Ждут ответа'],['done','Завершённые'],['failed','Ошибка / отменены']];
+    const bar=make('div','scn-subtabs');
+    for(const [key,label] of filters){
+      const btn=toolButton(label,()=>{scenariosState.runFilter=key;renderScenarios();},'scn-subtab');
+      btn.setAttribute('aria-pressed',String(scenariosState.runFilter===key));bar.append(btn);
+    }
+    root.append(bar);
+    const q=normalized(scenariosState.query);
+    const filtered=allRuns.filter(run=>{
+      if(scenariosState.scope==='global'&&run.scope!=='global')return false;
+      if(scenariosState.scope.startsWith('project:')&&run.project_id!==scenariosState.scope.slice(8))return false;
+      if(scenariosState.runFilter==='active'&&!['running','waiting','paused'].includes(run.status))return false;
+      if(scenariosState.runFilter==='waiting'&&run.status!=='waiting')return false;
+      if(scenariosState.runFilter==='done'&&run.status!=='done')return false;
+      if(scenariosState.runFilter==='failed'&&!['failed','cancelled'].includes(run.status))return false;
+      if(!q)return true;
+      return [run.id,run.scenario_id,run.status,run.project_id,run.created_by_agent,run.task_entry_id].map(normalized).join(' ').includes(q);
+    });
+    if(!filtered.length){
+      const empty=make('div','tools-empty');
+      empty.append(ruleMark('rule'),make('h3','',allRuns.length?'Подходящих запусков нет':'Запущенных сценариев пока нет'),make('p','',allRuns.length?'Измените фильтр статуса или поиск.':'Запустите сценарий из чата агента командой richi scenario run <id> — он появится здесь и как задача «Запущенные сценарии» на карте.'));
+      root.append(empty);return;
+    }
+    if(!filtered.some(r=>r.id===scenariosState.selectedRunId)){
+      scenariosState.selectedRunId=filtered[0].id;
+      if(!scenariosState.runDetailLoading&&scenariosState.runDetail?.run?.run_id!==scenariosState.selectedRunId){
+        const targetId=scenariosState.selectedRunId;
+        queueMicrotask(()=>{if(scenariosState.selectedRunId===targetId&&scenariosState.runDetail?.run?.run_id!==targetId)loadScenarioRun(targetId);});
+      }
+    }
+    const layout=make('div','scn-runs-layout'),col=make('div','scn-runs-list');
+    for(const run of filtered){
+      const btn=toolButton('',()=>{loadScenarioRun(run.id);},'scn-run-card');
+      btn.setAttribute('aria-pressed',String(run.id===scenariosState.selectedRunId));
+      const top=make('div','scn-run-top');
+      top.append(make('strong','',run.scenario_id+' · v'+run.scenario_version),make('span','scn-status st-'+run.status,SCN_STATUS_LABEL[run.status]||run.status));
+      const counts=run.step_counts||{},total=counts.total||0,done=(counts.done||0)+(counts.skipped||0);
+      const prog=make('div','scn-progress'),fill=make('i');fill.style.width=(total?Math.round(done*100/total):0)+'%';prog.append(fill);
+      const meta=make('div','rule-meta');
+      meta.append(make('code','',run.id),make('span','',done+'/'+total+' шагов'));
+      if(run.updated_at)meta.append(make('span','',dateText(run.updated_at)));
+      btn.append(top,prog,meta);col.append(btn);
+    }
+    const detail=make('div','scn-run-detail');
+    if(scenariosState.runDetailLoading&&scenariosState.runDetail?.run?.run_id!==scenariosState.selectedRunId){
+      detail.append(make('p','tools-inline-note','Загружаем шаги и журнал запуска…'));
+    }else if(scenariosState.runDetailError){
+      detail.append(make('div','rule-error',scenariosState.runDetailError),toolButton('Повторить',()=>loadScenarioRun(scenariosState.selectedRunId),'small'));
+    }else if(scenariosState.runDetail?.run?.run_id===scenariosState.selectedRunId){
+      const r=scenariosState.runDetail.run;
+      const head=make('div','scn-run-top');
+      const titles=make('div');
+      titles.append(make('div','tools-eyebrow','Запуск сценария · '+r.scenario_id+' v'+r.scenario_version),make('h3','',r.scenario_title||r.scenario_id));
+      head.append(titles,make('span','scn-status st-'+r.status,SCN_STATUS_LABEL[r.status]||r.status));
+      detail.append(head);
+
+      const meta=make('div','rule-meta');
+      meta.append(make('code','',r.run_id),make('span','','rev '+r.revision),make('span','',r.scope==='project'?'Проект: '+r.project_id:'Глобальный'));
+      if(r.created_by_agent)meta.append(make('span','','Агент: '+r.created_by_agent));
+      if(r.updated_at)meta.append(make('span','','Обновлён '+dateText(r.updated_at)));
+      detail.append(meta);
+
+      const actRow=make('div','rule-actions');
+      const jumpNote=make('div','tools-inline-note');jumpNote.hidden=true;
+      if(r.task_entry_id){
+        const nodeId='entry:'+r.task_entry_id;
+        const jumpBtn=toolButton('Открыть задачу на карте',async()=>{
+          if(state.nodeMap.has(nodeId)){focusNode(nodeId);return;}
+          let changed=false;
+          if(!$('hypotheses').checked){$('hypotheses').checked=true;changed=true;}
+          if(r.status==='cancelled'&&!$('superseded').checked){$('superseded').checked=true;changed=true;}
+          if(changed){await loadGraph();}
+          if(state.nodeMap.has(nodeId)){focusNode(nodeId);}
+          else{jumpNote.textContent='Задача «'+r.task_entry_id+'» не найдена в текущем снимке карты.';jumpNote.hidden=false;}
+        },'small primary');
+        actRow.append(jumpBtn);
+      }
+      actRow.append(toolButton('↻ Обновить запуск',()=>loadScenarioRun(r.run_id),'small'));
+      detail.append(actRow,jumpNote);
+
+      const inputPairs=r.inputs&&typeof r.inputs==='object'?Object.entries(r.inputs):[];
+      if(inputPairs.length){
+        const inpBox=make('div','rule-meta');
+        inpBox.append(make('strong','','Параметры:'));
+        for(const [k,v] of inputPairs)inpBox.append(make('code','',k+'='+(typeof v==='object'?JSON.stringify(v):String(v))));
+        detail.append(inpBox);
+      }
+
+      // Waiting gates (strictly read-only in UI: answered only in chat)
+      const waitingSteps=list(r.steps).filter(s=>s.status==='waiting_human');
+      for(const ws of waitingSteps){
+        const gateBox=make('div','tools-warning');
+        gateBox.append(make('strong','','Ожидает ответа человека в чате: '+(ws.title||ws.key)+' ('+ws.key+')'));
+        if(ws.gate?.question)gateBox.append(make('p','',ws.gate.question));
+        if(list(ws.gate?.options).length)gateBox.append(make('div','tools-inline-note','Варианты: '+ws.gate.options.join(' · ')));
+        if(list(ws.checklist?.items).length)gateBox.append(make('div','tools-inline-note','Чек-лист: '+ws.checklist.items.map(it=>typeof it==='string'?it:(it?.text||'')).filter(Boolean).join(' · ')));
+        const sampleVal=list(ws.gate?.options)[0]||(ws.type==='checklist'?'done':'ok');
+        const showAnswerCmd=ruleCommandBox(gateBox,'Ответы на вопросы и чек-листы принимаются только в чате агента или терминале. Скопируйте команду:');
+        showAnswerCmd(scenarioAnswerCommand(r.run_id,ws.key,sampleVal,'',state.mapStore));
+        detail.append(gateBox);
+      }
+
+      toolSection(detail,'Шаги выполнения',list(r.steps).length);
+      for(const step of list(r.steps)){
+        const row=make('div','scn-step-row st-'+step.status);
+        const sTop=make('div','scn-run-top');
+        sTop.append(make('strong','',(step.title||step.id)+' '),make('span','scn-status st-'+step.status,SCN_STATUS_LABEL[step.status]||step.status));
+        const sMeta=make('div','rule-meta');
+        sMeta.append(make('code','',step.key),make('span','',SCN_STEP_META[step.type]?.label||step.type),make('span','',SCN_ROLE_LABEL[step.executor?.role]||step.executor?.role||''));
+        if(step.attempts)sMeta.append(make('span','','попыток: '+step.attempts));
+        if(step.claimed_by_chat)sMeta.append(make('span','','чат: '+cut(step.claimed_by_chat,36)));
+        row.append(sTop,sMeta);
+        if(step.summary)row.append(make('div','',step.summary));
+        if(step.answer!==undefined)row.append(make('div','tools-inline-note','Ответ: '+String(step.answer)));
+        if(step.reason)row.append(make('div','tools-inline-note','Причина: '+step.reason));
+        detail.append(row);
+      }
+
+      const runEvents=list(scenariosState.runDetail.log);
+      if(runEvents.length){
+        const evFold=make('details','tools-fold');evFold.append(make('summary','','События запуска ('+runEvents.length+')'));
+        const evList=make('div','scn-log-list');evList.style.marginTop='10px';
+        for(const ev of runEvents)evList.append(renderScenarioLogRow(ev));
+        evFold.append(evList);detail.append(evFold);
+      }
+    }
+    layout.append(col,detail);root.append(layout);
+  }
+  function renderScenarioLogRow(ev){
+    const row=make('div','scn-log-row'),head=make('div','scn-log-head');
+    const left=make('div','rule-meta');
+    left.append(make('strong','',SCN_ACTION_LABEL[ev.action]||ev.action||'событие'));
+    if(ev.scenario_id)left.append(make('code','',ev.scenario_id));
+    if(ev.run_id)left.append(make('code','',ev.run_id));
+    if(ev.step_key)left.append(make('code','',ev.step_key));
+    head.append(left,make('span','tools-inline-note',ev.at?dateText(ev.at):''));
+    row.append(head);
+    const meta=[];
+    if(ev.by)meta.push('кто: '+ev.by);
+    if(ev.agent)meta.push('агент: '+ev.agent);
+    if(meta.length)row.append(make('div','tools-inline-note',meta.join(' · ')));
+    if(ev.detail&&typeof ev.detail==='object'&&Object.keys(ev.detail).length){
+      const fold=make('details');fold.append(make('summary','','Детали'),make('pre','',JSON.stringify(ev.detail,null,2)));
+      row.append(fold);
+    }
+    return row;
+  }
+  function renderScenarioLog(root){
+    const entries=list(scenariosState.data?.log);
+    const bar=make('div','scn-subtabs');
+    for(const [key,label] of [['all','Все события'],['defs','Определения'],['runs','Запуски']]){
+      const btn=toolButton(label,()=>{scenariosState.logFilter=key;renderScenarios();},'scn-subtab');
+      btn.setAttribute('aria-pressed',String(scenariosState.logFilter===key));bar.append(btn);
+    }
+    root.append(bar);
+    const q=normalized(scenariosState.query);
+    const shown=entries.filter(ev=>{
+      const isRun=Boolean(ev.run_id);
+      if(scenariosState.logFilter==='defs'&&isRun)return false;
+      if(scenariosState.logFilter==='runs'&&!isRun)return false;
+      if(!q)return true;
+      return [ev.action,ev.scenario_id,ev.run_id,ev.step_key,ev.by,ev.agent,JSON.stringify(ev.detail||{})].map(normalized).join(' ').includes(q);
+    });
+    if(!shown.length){
+      const empty=make('div','tools-empty');
+      empty.append(ruleMark('rule'),make('h3','',entries.length?'Подходящих событий нет':'Журнал сценариев пока пуст'),make('p','','Здесь будут отображаться создания и изменения сценариев, а также все события запусков.'));
+      root.append(empty);return;
+    }
+    const listBox=make('div','scn-log-list');
+    shown.forEach(ev=>listBox.append(renderScenarioLogRow(ev)));
+    root.append(listBox);
+    if(scenariosState.data?.log_more)root.append(make('p','tools-inline-note','Показаны последние '+entries.length+' событий. Полный журнал доступен через richi scenario log.'));
+  }
+  function renderScenarios(){
+    const root=$('scenarios-content');root.replaceChildren();
+    $('scenarios-panel').setAttribute('aria-busy',String(scenariosState.loading));
+    if(state.mode==='scenarios')$('data-note').textContent=scenariosNote();
+    const heading=make('div','tools-heading rules-heading'),intro=make('div'),count=make('div','tools-total');
+    intro.append(make('div','tools-eyebrow','Повторяемые процедуры'),make('h2','','Сценарии'),make('p','tools-lead','Визуальный конструктор пайплайнов (drag-and-drop шагов и соединение портов needs), мониторинг активных запусков и общий журнал событий.'));
+    const totalDefs=list(scenariosState.data?.scenarios).length+list(scenariosState.data?.builtin_templates).length;
+    count.append(make('strong','',String(totalDefs)),make('span','',plural(totalDefs,['сценарий','сценария','сценариев'])));
+    heading.append(intro,count);root.append(heading);
+    if(!scenariosState.data){
+      const failed=Boolean(scenariosState.error)&&!scenariosState.loading,box=make('div','tools-empty');
+      box.append(ruleMark('rule'),make('h3','',failed?'Не удалось загрузить сценарии':'Загружаем сценарии'),make('p','',failed?scenariosState.error:'Читаем определения, встроенные шаблоны, запуски и журнал.'));
+      if(failed)box.append(toolButton('Повторить загрузку',()=>loadScenarios(),'primary'));
+      root.append(box);return;
+    }
+    if(scenariosState.error)toolWarning(root,'Не удалось обновить сценарии: '+scenariosState.error+' Показан предыдущий снимок.');
+    renderRuleMode(root,'Изменения сценариев сохраняются прямо в памяти workspace.');
+    if(scenariosState.outcome)toolWarning(root,scenariosState.outcome);
+
+    // Sub-tabs bar
+    const subtabs=make('div','scn-subtabs');
+    const runsList=list(scenariosState.data.runs),waitingCount=runsList.filter(r=>r.status==='waiting').length;
+    const tabs=[
+      ['definitions','Определения ('+list(scenariosState.data.scenarios).length+' + '+list(scenariosState.data.builtin_templates).length+')'],
+      ['runs','Запуски ('+runsList.length+(waitingCount?' · '+waitingCount+' ждут':'')+')'],
+      ['log','Журнал ('+list(scenariosState.data.log).length+(scenariosState.data.log_more?'+':'')+')'],
+    ];
+    for(const [key,label] of tabs){
+      const btn=toolButton(label,()=>{
+        if(scenariosState.editing&&key!=='definitions'){
+          if(scenariosState.editing.dirty&&!confirm('Выйти из редактора без сохранения?'))return;
+          scenariosState.editing=null;
+        }
+        scenariosState.subtab=key;renderScenarios();
+      },'scn-subtab');
+      btn.setAttribute('aria-pressed',String(scenariosState.subtab===key));
+      subtabs.append(btn);
+    }
+    root.append(subtabs);
+
+    if(scenariosState.subtab==='definitions'){
+      if(scenariosState.editing)renderScenarioEditor(root);
+      else renderScenarioCatalog(root);
+    }else if(scenariosState.subtab==='runs'){
+      renderScenarioRuns(root);
+    }else{
+      renderScenarioLog(root);
+    }
   }
   for(const mode of viewModes){const tab=$(mode+'-tab');tab.addEventListener('click',()=>setMode(mode));tab.addEventListener('keydown',event=>{
     if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const index=viewModes.indexOf(mode),next=event.key==='Home'?0:event.key==='End'?viewModes.length-1:(index+(event.key==='ArrowLeft'?-1:1)+viewModes.length)%viewModes.length;setMode(viewModes[next]);$(viewModes[next]+'-tab').focus();
