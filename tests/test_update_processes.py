@@ -19,12 +19,12 @@ from richi import launch_map, memory, serve
 from richi_launcher import cli, runtime, status, update
 from richi_launcher.config import ConfigError
 
-from cli_environment import free_port
+from cli_environment import SCRUBBED_AGENT_VARS, free_port
 
 
 def isolated_environment(root):
     environment = {key: value for key, value in os.environ.items()
-                   if not key.startswith("RICHI_") and key not in {"CODEX_THREAD_ID", "CURSOR_AGENT"}}
+                   if not key.startswith("RICHI_") and key not in SCRUBBED_AGENT_VARS}
     environment.update(HOME=str(root / "home"), XDG_CONFIG_HOME=str(root / "config"),
                        XDG_DATA_HOME=str(root / "data"))
     return environment
@@ -115,6 +115,15 @@ class UpdateCliRoutingTests(unittest.TestCase):
                 self.assertEqual(report["status"], expected)
                 self.assertEqual(report["can_apply"], can_apply)
         self.apply.assert_not_called()
+
+    def test_offer_review_never_prompts_in_agent_shells(self):
+        from richi_launcher import chats
+        tty_in = mock.Mock(isatty=lambda: True, readline=mock.Mock(side_effect=AssertionError("read from agent stdin")))
+        tty_err = mock.Mock(isatty=lambda: True)
+        with mock.patch.object(sys, "stdin", tty_in), mock.patch.object(sys, "stderr", tty_err):
+            for key in chats.CHAT_ID_VARS + chats.AGENT_SHELL_VARS:
+                with self.subTest(key=key), mock.patch.dict(os.environ, {key: "1"}, clear=True):
+                    self.assertFalse(update._offer_review(None))
 
     def test_check_does_not_offer_incompatible_or_replaced_releases(self):
         for field, value in (("python_min", [99, 0]), ("database_schemas", [2, 3]),

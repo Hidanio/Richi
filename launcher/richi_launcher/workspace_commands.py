@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 from .config import ConfigError, _path_text, resolve_settings, set_config_value
-from .chats import bind_chat, current_chat, reject_storage_overrides
+from .chats import PREFIXED_AGENTS, bind_chat, current_chat, reject_storage_overrides
 from .cli import Parser, _emit, _interactive, usage
 from .help_format import complete, document
 from .runtime import installed_runtime, resolve_runtime
@@ -252,10 +252,11 @@ def chat_parser():
         action.add_argument("--with-rules", nargs="?", const="", metavar="PATH",
                             help="Include this bound chat's standing rules, optionally for a repository path")
     document(parser, "Show or set the workspace bound to an agent chat.", """
-        Pass --chat ID to identify a chat explicitly. When CURSOR_AGENT is set,
-        workspace commands require the active client's explicit ID. In Cursor,
-        use the ID from its sessionStart hook. Other shells can use RICHI_CHAT_ID
-        or Codex's CODEX_THREAD_ID.
+        Pass --chat ID to identify a chat explicitly. When CURSOR_AGENT is set
+        or multiple agent environments conflict, commands require the active
+        client's --chat ID. In Cursor, use the ID from its sessionStart hook.
+        Other shells can use Antigravity's ANTIGRAVITY_CONVERSATION_ID (as
+        antigravity:<id>), RICHI_CHAT_ID or Codex's CODEX_THREAD_ID.
         The binding overrides the terminal default only for that chat.
         Until a chat is bound it cannot read or write knowledge. No
         agent chat may run richi use, bound or not, and a bound chat also rejects
@@ -290,8 +291,9 @@ def _include_rules(state, path):
     if path:
         args += ["--project-path", path]
     args += ["rules", "show"]
-    if chat.startswith("cursor:"):
-        args += ["--agent", "cursor"]
+    prefix = chat.split(":", 1)[0] if ":" in chat else None
+    if prefix in PREFIXED_AGENTS:
+        args += ["--agent", prefix]
     try:
         result = subprocess.run(bootstrap_command(args), capture_output=True, text=True, timeout=10,
                                 pass_fds=lease_fds())

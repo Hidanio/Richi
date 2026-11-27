@@ -134,12 +134,14 @@ class InstallerLifecycleTests(unittest.TestCase):
                 sys.executable, "-I", archive, "--agent", "cursor", "--yes", "--no-path", "--wheel", wheels["0.1.0"],
                 "--manifest", self.root / "0.1.0-manifest.json"]).stdout)
             console, python = home / ".local/bin/richi", Path(configured["prefix"]) / "bin/python"
-            for agent in ("codex", "claude"):
+            for agent in ("codex", "claude", "antigravity"):
                 self.run_process([console, "setup", "--agent", agent, "--yes", "--no-path"])
-            skills = [home / profile / "skills/richi" for profile in (".agents", ".claude", ".cursor")]
+            skills = [home / profile / "skills/richi"
+                      for profile in (".agents", ".claude", ".cursor", ".gemini/config")]
             protected = {path: path.read_bytes() for path in (
                 home / ".codex/AGENTS.md", home / ".claude/CLAUDE.md", home / ".claude/settings.json",
-                home / ".cursor/hooks.json", home / ".cursor/rules/richi-project-memory.mdc")}
+                home / ".cursor/hooks.json", home / ".cursor/rules/richi-project-memory.mdc",
+                home / ".gemini/config/rules/richi-project-memory.md")}
             # A synthetic Richi checkout: runtime sources and the canonical skill.
             checkout = self.root / "checkout"
             shutil.copytree(Path(lifecycle.richi.__file__).resolve().parent, checkout / "src/richi",
@@ -172,20 +174,22 @@ class InstallerLifecycleTests(unittest.TestCase):
             self.assertCountEqual(enabled["agent_skills"]["changes"], [str(skill) for skill in skills])
             self.assertEqual({os.readlink(skill) for skill in skills}, {dev_link})
             self.assertEqual(self.run_process([console, "--version"]).stdout.strip(), "Richi dev-checkout")
-            self.assertEqual(connections(), {agent: "configured" for agent in ("codex", "claude", "cursor")})
+            self.assertEqual(connections(), {agent: "configured" for agent in ("codex", "claude", "cursor", "antigravity")})
             foreign = home / ".agents/skills/personal/SKILL.md"
             foreign.parent.mkdir()
             foreign.write_text("---\nname: richi\ndescription: Personal skill\n---\n")
-            self.assertEqual(connections(), {"claude": "configured", "codex": "conflict", "cursor": "conflict"})
+            self.assertEqual(connections(), {"claude": "configured", "codex": "conflict",
+                                             "cursor": "conflict", "antigravity": "configured"})
             foreign.unlink()
             self.assertFalse(list(self.root.rglob("*.sqlite3")))
-            for agent in ("codex", "claude", "cursor"):
+            for agent in ("codex", "claude", "cursor", "antigravity"):
                 self.assertEqual((status(agent)["status"], status(agent)["skill_mode"]), ("configured", "dev"))
             offline = self.root / "offline.py"
             offline.write_text(lifecycle._OFFLINE_COMMAND)
             updated = json.loads(self.run_process([python, "-I", offline, feeds["0.2.0"], "update", "apply"]).stdout)
             self.assertEqual(updated["agent_skills"]["claude"]["mode"], "dev")
             self.assertEqual(updated["agent_skills"]["cursor"]["mode"], "dev")
+            self.assertEqual(updated["agent_skills"]["antigravity"]["mode"], "dev")
             self.assertEqual({os.readlink(skill) for skill in skills}, {dev_link})
             self.assertIn("v0.2.0", status("codex")["generation"])
             # The rollback target's manager (also dev-capable) keeps the checkout.
@@ -199,7 +203,7 @@ class InstallerLifecycleTests(unittest.TestCase):
             self.assertEqual((disabled["runtime"]["mode"], disabled["agent_skills"]["mode"]), ("release", "release"))
             self.assertEqual({os.readlink(skill) for skill in skills}, {release})
             self.assertEqual(self.run_process([console, "--version"]).stdout.strip(), "Richi 0.1.0")
-            for agent in ("codex", "claude", "cursor"):
+            for agent in ("codex", "claude", "cursor", "antigravity"):
                 self.assertEqual((status(agent)["status"], status(agent)["skill_mode"]), ("configured", "release"))
             for path, data in protected.items():
                 self.assertEqual(path.read_bytes(), data, str(path))

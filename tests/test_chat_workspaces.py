@@ -53,17 +53,57 @@ class ChatBindingTests(unittest.TestCase):
     def test_chat_id_precedence_validation_and_no_session_fallback(self):
         os.environ["CODEX_SESSION_ID"] = "generic-session"
         self.assertIsNone(chats.detect_chat())
+        os.environ["ANTIGRAVITY_CONVERSATION_ID"] = "agy-conv-1"
+        self.assertEqual(chats.detect_chat(), "antigravity:agy-conv-1")
+        os.environ["RICHI_CHAT_ID"] = "antigravity:agy-conv-1"
+        self.assertEqual(chats.detect_chat(), "antigravity:agy-conv-1")
+        for extra in ({"RICHI_CHAT_ID": "claude:parent"},
+                      {"CODEX_THREAD_ID": "codex-thread"},
+                      {"CLAUDECODE": "1"}):
+            with self.subTest(extra=extra), mock.patch.dict(os.environ, {"ANTIGRAVITY_CONVERSATION_ID": "agy-conv-1", **extra}, clear=True):
+                with self.assertRaises(chats.ChatError) as conflict:
+                    chats.detect_chat()
+                self.assertEqual(conflict.exception.details["code"], "chat_id_required")
+        with mock.patch.dict(os.environ, {"ANTIGRAVITY_CONVERSATION_ID": "", "RICHI_CHAT_ID": "claude:parent"}, clear=True):
+            with self.assertRaises(chats.ChatError) as bad_parent:
+                chats.detect_chat()
+            self.assertEqual(bad_parent.exception.details["code"], "chat_id_required")
+        del os.environ["ANTIGRAVITY_CONVERSATION_ID"]
+        del os.environ["RICHI_CHAT_ID"]
         os.environ["CODEX_THREAD_ID"] = "codex-thread"
         self.assertEqual(chats.detect_chat(), "codex-thread")
+        for extra in ({"ANTIGRAVITY_AGENT": "1"}, {"ANTIGRAVITY_AGENT": "1", "RICHI_CHAT_ID": "claude:parent"},
+                      {"CLAUDECODE": "1"}, {"RICHI_CHAT_ID": "claude:parent"},
+                      {"RICHI_CHAT_ID": "cursor:parent"}, {"RICHI_CHAT_ID": "antigravity:parent"}):
+            with self.subTest(extra=extra), mock.patch.dict(os.environ, extra):
+                with self.assertRaises(chats.ChatError) as missing_agy:
+                    chats.detect_chat()
+                self.assertEqual(missing_agy.exception.details["code"], "chat_id_required")
+                self.assertIn("Multiple agent chat environments", missing_agy.exception.details["error"])
+        with mock.patch.dict(os.environ, {"CURSOR_AGENT": "1", "ANTIGRAVITY_CONVERSATION_ID": "agy-conv-1"}, clear=True):
+            with self.assertRaises(chats.ChatError) as cursor_multi:
+                chats.detect_chat()
+            self.assertIn("Multiple agent chat environments", cursor_multi.exception.details["error"])
+        for cursor_only in ({"CURSOR_AGENT": "1"}, {"CURSOR_AGENT": "1", "RICHI_CHAT_ID": "cursor:hook"},
+                            {"CURSOR_AGENT": "1", "RICHI_CHAT_ID": ""}):
+            with self.subTest(cursor_only=cursor_only), mock.patch.dict(os.environ, cursor_only, clear=True):
+                with self.assertRaises(chats.ChatError) as cursor_err:
+                    chats.detect_chat()
+                self.assertIn("Cursor Agent shell", cursor_err.exception.details["error"])
+        with mock.patch.dict(os.environ, {"CLAUDECODE": "1"}, clear=True):
+            self.assertIsNone(chats.detect_chat())
         os.environ["RICHI_CHAT_ID"] = "client-thread"
         self.assertEqual(chats.detect_chat(), "client-thread")
         self.assertEqual(chats.detect_chat("explicit"), "explicit")
         for value in ("", "../escape", "with space", "a\n", "☃", "a" * 201):
             with self.subTest(value=value), self.assertRaises(chats.ChatError):
                 chats.detect_chat(value)
-        os.environ["RICHI_CHAT_ID"] = ""
-        with self.assertRaises(chats.ChatError):
-            chats.detect_chat()
+        for key, bad in (("RICHI_CHAT_ID", ""), ("ANTIGRAVITY_CONVERSATION_ID", ""),
+                         ("ANTIGRAVITY_CONVERSATION_ID", "bad id"), ("ANTIGRAVITY_CONVERSATION_ID", "a" * 190)):
+            with self.subTest(key=key, bad=bad), mock.patch.dict(os.environ, {key: bad}, clear=True):
+                with self.assertRaises(chats.ChatError) as invalid:
+                    chats.detect_chat()
+                self.assertEqual(invalid.exception.details["code"], "invalid_chat_id")
 
     def test_current_choice_is_saved_once_and_global_selection_cannot_redirect(self):
         workspaces.create_workspace("alpha")
@@ -218,6 +258,25 @@ class ChatCliTests(unittest.TestCase):
                                     chat="codex-new", ok=False)
             self.assertEqual(rejected["code"], "rule_violation")
             self.assertIn("EX-{number}_{description}", rejected["violations"][0]["message"])
+        agy_nested = {"ANTIGRAVITY_AGENT": "1", "ANTIGRAVITY_CONVERSATION_ID": "agy-new", "CLAUDECODE": "1"}
+        self.assertEqual(self.command("chat", "current", env=agy_nested, ok=False)["code"], "chat_id_required")
+        for chat_name, agent_name in (("antigravity:agy-new", "antigravity"), ("claude:nested-1", "claude")):
+            for args in (("bind", "default"), ("current",)):
+                res = self.command("--chat", chat_name, "chat", *args, "--with-rules", repo, env=agy_nested)
+                shown = res["rules_context"]
+                self.assertEqual((shown["workspace"], shown["agent"], shown["project"]), ("default", agent_name, "service"))
+                self.assertEqual({item["id"] for item in shown["rules"]}, {"branch-names", "workspace-rule"})
+                self.assertEqual(res["next_commands"][0],
+                                 "richi --chat " + chat_name + " rules show --agent " + agent_name)
+        self.assertEqual(self.command("--chat", "claude:no-env-file", "chat", "current")["next_commands"][0],
+                         "richi --chat claude:no-env-file chat bind --current")
+        (self.root / "home/.config/opencode/skills/custom-skill").mkdir(parents=True)
+        self.command("skill-sources", "add", "opencode", "--name", "OpenCode",
+                     "--skills", "~/.config/opencode/skills", "--variable", "OPENCODE=1")
+        agy_custom = {"ANTIGRAVITY_AGENT": "1", "ANTIGRAVITY_CONVERSATION_ID": "agy-custom-var", "OPENCODE": "1"}
+        for args in (("bind", "default"), ("current",)):
+            shown = self.command("chat", *args, "--with-rules", repo, env=agy_custom)["rules_context"]
+            self.assertEqual((shown["workspace"], shown["agent"], shown["project"]), ("default", "antigravity", "service"))
         global_rules = self.command("chat", "current", "--with-rules", chat="codex-new")["rules_context"]
         self.assertEqual([item["id"] for item in global_rules["rules"]], ["workspace-rule"])
         self.assertNotIn("rules_context", self.command("chat", "current", chat="codex-new"))
@@ -327,6 +386,22 @@ class ChatCliTests(unittest.TestCase):
         self.assertEqual(bound["next_commands"], [
             "richi --chat cursor:active rules show --agent cursor",
             "richi --chat cursor:active --project-path PATH rules show --agent cursor"])
+        agy_env = {"ANTIGRAVITY_AGENT": "1", "ANTIGRAVITY_CONVERSATION_ID": "conv-42"}
+        self.assertEqual(self.command("chat", "current", env=agy_env)["chat_id"], "antigravity:conv-42")
+        self.assertEqual(self.command("chat", "bind", "alpha", env=agy_env)["next_commands"],
+                         ["richi rules show", "richi --project-path PATH rules show"])
+        self.assertEqual(self.command("init", env={"ANTIGRAVITY_AGENT": "1"}, ok=False)["code"], "chat_id_required")
+        self.assertEqual(self.command("--chat", "antigravity:manual", "chat", "current",
+                                      env={"ANTIGRAVITY_AGENT": "1", "RICHI_CHAT_ID": "parent-chat"})["next_commands"][0],
+                         "richi --chat antigravity:manual chat bind --current")
+        self.assertEqual(self.command("--chat", "antigravity:manual", "chat", "current")["next_commands"][0],
+                         "richi --chat antigravity:manual chat bind --current")
+        self.assertEqual(self.command("--chat", "antigravity:conv-42", "chat", "current",
+                                      env={"ANTIGRAVITY_AGENT": "1", "ANTIGRAVITY_CONVERSATION_ID": "subagent-99"})["next_commands"][0],
+                         "richi --chat antigravity:conv-42 rules show --agent antigravity")
+        self.assertEqual(self.command("--chat", "antigravity:conv-42", "chat", "current",
+                                      env={"ANTIGRAVITY_CONVERSATION_ID": "conv-42", "CODEX_THREAD_ID": "t-1"})["next_commands"][0],
+                         "richi --chat antigravity:conv-42 rules show --agent antigravity")
         self.command("--chat", "generic", "chat", "bind", "alpha", chat="automatic", env=cursor)
         self.assertFalse(self.command("chat", "current", chat="automatic")["bound"])
         path = self.root / "shared repo"

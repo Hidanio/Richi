@@ -23,7 +23,11 @@ def cli(database, *args, payload=None, timeout=30):
          "--db", str(database), *args],
         input=None if payload is None else json.dumps(payload, ensure_ascii=False),
         capture_output=True, text=True, encoding="utf-8", timeout=timeout,
-        env={key: value for key, value in os.environ.items() if not key.startswith("RICHI_") and key not in {"CODEX_THREAD_ID", "CURSOR_AGENT"}},
+        env={key: value for key, value in os.environ.items()
+             if not key.startswith("RICHI_")
+             and key not in {"CLAUDECODE", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "CODEX_THREAD_ID",
+                             "CURSOR_AGENT", "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID",
+                             "ANTIGRAVITY_APP_DATA_DIR"}},
     )
     if result.returncode:
         raise ValueError(result.stderr.strip() or "Richi returned an error")

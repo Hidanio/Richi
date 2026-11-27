@@ -134,7 +134,8 @@ For punisher, it includes the global integrity check. Show repeats
 and variation; these measurements do not prove token savings or LLM quality.
 
 Scenarios use disposable stores and separate configuration; test
-processes do not inherit `RICHI_*`/`CODEX_THREAD_ID`. Production memory is not read,
+processes do not inherit `RICHI_*` or agent chat, shell and profile variables.
+Production memory is not read,
 and user runtimes and workspaces are not switched. Test isolation does not
 authorize bypassing chat binding for live memory. Archiving/cleanup is not implemented.
 

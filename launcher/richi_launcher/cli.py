@@ -489,16 +489,25 @@ def main(argv=None):
                 selectors = pin_chat(chat_id, selectors, metadata=True)
             return workspace_commands.workspace_command(tail, selectors, alias=command == "use",
                                                         compact_json=compact_json)
-        if asking:
+        # PROBE_ENV (maps.protocol): a map handing itself off checks that the
+        # entry point resolves its exact storage selection and runtime first.
+        probing = command == "--version" and os.environ.get("RICHI_MAP_PROBE") == "1"
+        if asking and not probing:
             return _runtime_help(chat_id is not None, selectors, command, tail)
         try:
             selectors = pin_chat(chat_id, selectors)
         except ChatError as exc:
-            if exc.details.get("code") == "chat_workspace_required":
+            if exc.details.get("code") == "chat_workspace_required" and not probing:
                 _typo(command)
             raise
         settings = resolve_settings(**selectors)
         selected = resolve_runtime(settings)
+        if probing:
+            execution = runtime_command(selected, [command] + tail)
+            environment = dict(os.environ)
+            environment.pop(ACTIVE_RUNTIME, None)
+            os.execve(execution[0], execution, environment)
+            return 0
         if command != "map" and "RICHI_INSTALLATION_GENERATION" in os.environ:
             # A frozen updater cannot hand off maps; the first command of the
             # new generation does, without waiting for them. richi map replaces
@@ -526,7 +535,8 @@ def main(argv=None):
         environment.pop("RICHI_DB", None)
         if command == "map":
             # Even an older runtime can relaunch a map with its pinned store.
-            environment.pop("CURSOR_AGENT", None)
+            for marker in ("CLAUDECODE", "CURSOR_AGENT", "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID"):
+                environment.pop(marker, None)
         if chat_id is not None:
             environment["RICHI_CHAT_ID"] = chat_id
         environment["RICHI_DATA_DIR"] = str(settings.data_dir)

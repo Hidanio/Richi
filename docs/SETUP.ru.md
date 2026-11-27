@@ -10,10 +10,11 @@
 curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh | sh -s -- --agent codex --yes
 ```
 
-Для локального Cursor Agent нужен Richi 1.2.0 или новее. Чтобы проверить
-текущий стабильный установщик, замените `--agent codex --yes` в команде выше
-на `--help`. Если в списке агентов есть `cursor`, выполните команду с
-`--agent cursor --yes`. Если `cursor` пока отсутствует,
+Для локального Cursor Agent нужен Richi 1.2.0 или новее, для Antigravity —
+релиз после 1.2.1. Чтобы проверить текущий стабильный установщик, замените
+`--agent codex --yes` в команде выше на `--help`. Если в списке агентов есть
+`cursor` или `antigravity`, выполните команду с `--agent cursor --yes` или
+`--agent antigravity --yes`. Если нужного агента пока нет,
 [установите Richi из исходников](INSTALLATION.ru.md).
 
 Нужны macOS или Linux, curl и Python 3.9+ с sqlite3, venv и ensurepip.
@@ -237,7 +238,9 @@ python3 -I richi-installer.pyz --yes --wheel richi-X.Y.Z-py3-none-any.whl --mani
 сохраните обе версии и согласуйте указанный путь перед повторной попыткой;
 автоматическое восстановление откажется перезаписывать такие изменения.
 
-Перед ручным удалением этой установки Richi выключите автоматические обновления. В Cursor
+Перед ручным удалением этой установки Richi выключите автоматические обновления.
+В Antigravity удалите отдельный файл правила
+`~/.gemini/config/rules/richi-project-memory.md`. В Cursor
 удалите запись Richi из `sessionStart` в `~/.cursor/hooks.json` и отдельные файлы
 `~/.cursor/richi/session_start.py` и `~/.cursor/rules/richi-project-memory.mdc`.
 В файле глобальных инструкций Codex или Claude Code удалите только блок
@@ -250,7 +253,7 @@ python3 -I richi-installer.pyz --yes --wheel richi-X.Y.Z-py3-none-any.whl --mani
 В этом релизе нет автоматического деинсталлятора; для удаления интеграции никогда
 не требуется удалять весь AGENTS.md.
 
-## Подключение Codex, Claude Code и Cursor
+## Подключение Codex, Claude Code, Cursor и Antigravity
 
 Если Richi уже установлен, начните с `richi agents --status` в терминале.
 Команда только показывает, каких клиентов поддерживает этот пакет, какие из них
@@ -260,10 +263,38 @@ python3 -I richi-installer.pyz --yes --wheel richi-X.Y.Z-py3-none-any.whl --mani
 В Richi 1.0.1 подключайте Codex через `richi setup --yes` и проверяйте его
 состояние через `richi setup --status`. Этот launcher выпущен до появления
 меню агентов и параметра `--agent`. Для Claude Code нужен Richi 1.1.0 или новее,
-для локального Cursor Agent — 1.2.0 или новее. Когда выйдет стабильный релиз
+для локального Cursor Agent — 1.2.0 или новее, для Antigravity — релиз после
+1.2.1. Когда выйдет стабильный релиз
 с поддержкой нужного клиента, обновите старую установку командой `richi update apply`.
 Перед подключением проверьте, что клиент есть в списке `richi setup --help`.
 Список определяет установленный launcher, в том числе при включённом dev.
+
+### Antigravity
+
+На macOS Richi также находит Antigravity в `/Applications` и `~/Applications`
+ещё до первого запуска, даже если команда клиента отсутствует в PATH.
+
+```sh
+richi setup --agent antigravity --dry-run
+richi setup --agent antigravity --yes
+richi setup --agent antigravity --status
+```
+
+Setup создаёт ссылку `~/.gemini/config/skills/richi` и устанавливает отдельное
+глобальное правило `~/.gemini/config/rules/richi-project-memory.md`
+(`trigger: always_on`), не затрагивая `~/.gemini/config/AGENTS.md` и `GEMINI.md`.
+Существующий пользовательский skill при передаче `--replace-skill` сохраняется в
+`~/.gemini/config/richi-skill-backups/`.
+
+Откройте новый чат Antigravity. Antigravity передаёт в оболочку
+`ANTIGRAVITY_CONVERSATION_ID` и `ANTIGRAVITY_AGENT=1`, и Richi определяет чат
+как `antigravity:<id>`. Выберите workspace один раз для каждого чата.
+Делегированные субагенты получают собственный ID, поэтому для работы с памятью
+родительский агент передаёт им `--chat antigravity:<id>`. Если песочница
+терминала Antigravity закрывает чтение вне рабочей папки — например,
+пользовательских каталогов Richi или основного `.git` связанного worktree, —
+разрешите доступ в настройках Antigravity или одобрите запуск `richi` вне
+песочницы.
 
 ### Локальный Cursor Agent
 
@@ -317,7 +348,7 @@ hook сообщает агенту явный `--chat`. Отключённые �
 Обновления и откаты переводят управляемые skills и скрипты сессий на выбранный
 пакет одной транзакцией. До активации Richi проверяет, что для каждого
 подключённого агента в релизе есть совместимый адаптер. Это касается и отката
-на пакет, выпущенный до появления адаптера Cursor. Изменения launcher требуют
+на пакет, выпущенный до появления адаптеров Cursor или Antigravity. Изменения launcher требуют
 установки нового пакета даже в режиме dev.
 
 ## Добавление другого агента в Richi
@@ -336,8 +367,8 @@ hook сообщает агенту явный `--chat`. Отключённые �
   skill. Здесь проверяются переопределения и профиль существующей настройки.
 - Если адаптеру нужен отдельный файл инструкций под управлением Richi, он может
   реализовать `instruction_file(block)`, который возвращает байты всего файла.
-  Так Cursor получает заголовок MDC для пользовательского правила. Richi проверяет
-  весь файл на локальные правки.
+  Так Cursor и Antigravity получают frontmatter для своих пользовательских правил.
+  Richi проверяет весь файл на локальные правки.
 - `setup_operations(ctx, profile, current, replace_skill)` и
   `activation_operations(ctx, record, site)` возвращают `(extra_metadata, operations)`.
   Формируйте операции через `setup_files`, без прямой записи. При активации,

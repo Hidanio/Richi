@@ -62,6 +62,7 @@ First steps with Richi
      richi setup --yes                     # Codex
      richi setup --agent claude --yes      # Claude Code
      richi setup --agent cursor --yes      # Cursor
+     richi setup --agent antigravity --yes # Antigravity
 
 2. Create the knowledge store of the current workspace (safe to repeat).
      richi init
@@ -207,8 +208,12 @@ selection (command-line options take precedence):
 
 agent chats:
   RICHI_CHAT_ID     stable chat identity for workspace binding; Claude Code
-                    setup provides it through its SessionStart hook
+                    setup provides it through its SessionStart hook, and
+                    CLAUDECODE=1 marks its shells
   CODEX_THREAD_ID   chat identity supplied by Codex
+  ANTIGRAVITY_CONVERSATION_ID
+                    chat identity supplied by Antigravity (used as
+                    antigravity:<id>); ANTIGRAVITY_AGENT marks its shells
   CURSOR_AGENT      marks a Cursor Agent shell. Use the sessionStart hook's
                     --chat cursor:<id> on every command.
   In a chat, RICHI_CONFIG, RICHI_DB and RICHI_DATA_DIR are rejected: the
@@ -657,7 +662,7 @@ DETAILS = {
         Richi knows which AI agents work on this computer and where each finds
         skills, so that a rule can name a skill for every agent or one per agent.
         You can switch skill sources and add folders for the built-in agents
-        (Claude Code, Codex and Cursor) or describe another agent. These settings
+        (Claude Code, Codex, Cursor and Antigravity) or describe another agent. These settings
         are yours and shared by every workspace. To connect Richi to an agent, see
         richi agents and richi setup.""",
         examples=(("Agents, their skill sources and skill counts", "richi skill-sources list"),

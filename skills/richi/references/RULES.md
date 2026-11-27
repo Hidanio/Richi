@@ -54,9 +54,9 @@ Agents are identified by IDs such as `claude` (Claude Code) and `codex`
 [AGENT_SKILLS.md](AGENT_SKILLS.md) tells how the user adds another one. When the agent
 is known, `agent` names it and each rule's `use_skill` is the skill this agent
 uses whenever the rule applies (null for none). Richi recognizes an agent by
-its chat identity (for example, `claude:…` or the `--chat cursor:<id>` supplied
-by Cursor's hook) and by its shell variables (`CLAUDECODE`, `CODEX_THREAD_ID`
-or `CURSOR_AGENT`). Every sign present must point to the same agent. One agent started from
+its chat identity (for example, `claude:…`, `antigravity:…` or the
+`--chat cursor:<id>` supplied by Cursor's hook) and by its shell variables
+(`CLAUDECODE`, `CODEX_THREAD_ID`, `CURSOR_AGENT` or `ANTIGRAVITY_AGENT`). Every sign present must point to the same agent. One agent started from
 another's terminal carries the signs of both, and Richi then names neither, so
 that no agent is given another's skill. When `agent` comes back null, run the
 command again with `--agent ID` and your own agent ID. Without an agent, a
@@ -207,7 +207,8 @@ every agent; when an agent lacks the chosen skill, it switches to one list per
 agent and suggests the skill with the same name after the plugin prefix. The
 lists come from where each known agent keeps skills: its skill directories,
 skills built into it and its plugins, for Claude Code also the claude.ai plugins
-the Claude app installed; a plugin skill is named `plugin:skill`, as the agents name it, and
+the Claude app installed; a plugin skill is named as the agent names it (such as
+`plugin:skill` in Claude Code, or unprefixed in Antigravity), and
 skills an agent only runs when the user invokes them are left out. The map
 accepts changes of rules and of agent settings
 ([AGENT_SKILLS.md](AGENT_SKILLS.md)), and only from such a page; knowledge stays

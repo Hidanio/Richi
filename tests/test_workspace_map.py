@@ -15,7 +15,7 @@ from urllib.parse import urlencode, urlsplit
 from richi import git_evidence, git_sources, memory, serve
 import richi_launcher
 
-from cli_environment import free_port, stop_test_map
+from cli_environment import SCRUBBED_AGENT_VARS, free_port, stop_test_map
 
 
 @unittest.skipIf(sys.platform == "win32", "Map launch/reload targets macOS and Linux")
@@ -34,7 +34,8 @@ class WorkspaceMapTests(unittest.TestCase):
         (self.checkout / "pyproject.toml").write_text('[project]\nname = "richi"\nversion = "0.1.0"\n')
         runner = "import sys;sys.path.insert(0,sys.argv[1]);from richi_launcher.cli import main;sys.exit(main(sys.argv[2:]))"
         self.command = [sys.executable, "-I", "-B", "-c", runner, str(self.installed)]
-        self.environment = {key: value for key, value in os.environ.items() if not key.startswith("RICHI_") and key not in {"CODEX_THREAD_ID", "CURSOR_AGENT"}}
+        self.environment = {key: value for key, value in os.environ.items()
+                            if not key.startswith("RICHI_") and key not in SCRUBBED_AGENT_VARS}
         self.environment.update(HOME=str(self.root / "home"), XDG_CONFIG_HOME=str(self.root / "config"),
                                 XDG_DATA_HOME=str(self.root / "data"))
         self.processes = []

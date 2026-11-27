@@ -75,7 +75,10 @@ class RulesTests(unittest.TestCase):
         self.addCleanup(environment.stop)
         # Agent shells identify the agent; rules show must not depend on the shell running the tests.
         for key in [key for key in os.environ if key.startswith("RICHI_")
-                    or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT", "XDG_CONFIG_HOME"}]:
+                    or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT",
+                               "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID",
+                               "ANTIGRAVITY_APP_DATA_DIR",
+                               "CLAUDE_CONFIG_DIR", "CODEX_HOME", "XDG_CONFIG_HOME"}]:
             del os.environ[key]
         agents.forget_settings()
         self.configs, self.repos = {}, {}
@@ -572,6 +575,9 @@ class RulesTests(unittest.TestCase):
         self.assertEqual(used(RICHI_CHAT_ID="cursor:chat-1")[:2],
                          ("cursor", {"mixed": "pr-description", "only": "pr-description",
                                      "review": "cursor-review", "same": "pr-description"}))
+        self.assertEqual(used(RICHI_CHAT_ID="antigravity:chat-1", ANTIGRAVITY_AGENT="1")[:2],
+                         ("antigravity", {"mixed": "pr-description", "only": "pr-description",
+                                          "review": None, "same": "pr-description"}))
         # Codex started from a Claude Code terminal carries both agents' signs: neither is named,
         # so no agent is told to use the other's skill.
         for environment in ({}, {"RICHI_CHAT_ID": "claude:chat-1", "CODEX_THREAD_ID": "thread-1"},

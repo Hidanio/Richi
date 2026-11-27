@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import signal
 import socket
 import sqlite3
@@ -34,8 +35,10 @@ def clean_environment(test, home):
     test.addCleanup(patch.stop)
     # Agent settings are the user's: a test must read them only from its disposable home.
     for key in [key for key in os.environ if key.startswith("RICHI_")
-                or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "BROWSER",
-                           "XDG_CONFIG_HOME"}]:
+                or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT",
+                           "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID",
+                           "ANTIGRAVITY_APP_DATA_DIR",
+                           "CLAUDE_CONFIG_DIR", "CODEX_HOME", "BROWSER", "XDG_CONFIG_HOME"}]:
         del os.environ[key]
     agents.forget_settings()
     test.addCleanup(agents.forget_settings)
@@ -123,14 +126,14 @@ class SkillCatalogTests(unittest.TestCase):
                 cut = skill_catalog.catalog({}, home)
                 listed = {agent["id"]: (agent["skills"], [source["skills"] for source in agent["sources"]][0])
                           for agent in agent_commands.listing({}, home)["agents"]}
-        totals = {"claude": 4, "codex": 3, "cursor": 6}
+        totals = {"claude": 4, "codex": 3, "cursor": 6, "antigravity": 0}
         self.assertEqual((len(full["skills"]), full["truncated"], full["totals"]), (6, False, totals))
         self.assertEqual(([skill["name"] for skill in cut["skills"]], cut["truncated"]), (["a1", "a2", "a3"], True))
         # The agent read second is not left with nothing: its skills are counted, and a skill that
         # made the list names every agent that has it.
         self.assertEqual(cut["totals"], totals)
         self.assertEqual(cut["skills"][0]["agents"], ["claude", "codex", "cursor"])
-        self.assertEqual(listed, {"claude": (4, 4), "codex": (3, 3), "cursor": (6, 0)})
+        self.assertEqual(listed, {"claude": (4, 4), "codex": (3, 3), "cursor": (6, 0), "antigravity": (0, 0)})
 
     def test_a_plugin_manifest_made_to_break_the_parser_is_passed_over(self):
         with tempfile.TemporaryDirectory(prefix="richi-skills-") as temporary:
@@ -191,7 +194,9 @@ class SkillCatalogTests(unittest.TestCase):
                          [("claude", "skills", True), ("claude", "plugins", False), ("claude", "plugins", False),
                           ("codex", "skills", True), ("codex", "skills", False), ("codex", "system", False),
                           ("codex", "plugins", False), ("cursor", "skills", True), ("cursor", "skills", True),
-                          ("cursor", "skills", False), ("cursor", "skills", False), ("cursor", "system", True)])
+                          ("cursor", "skills", False), ("cursor", "skills", False), ("cursor", "system", True),
+                          ("antigravity", "skills", False), ("antigravity", "system", False),
+                          ("antigravity", "plugins", False)])
         self.assertFalse(result["truncated"])
 
     def test_cursor_finds_nested_skills_once_in_its_enabled_user_roots(self):
@@ -210,7 +215,7 @@ class SkillCatalogTests(unittest.TestCase):
                 catalog = skill_catalog.catalog({}, home)
             self.assertEqual([(s["name"], s["agents"]) for s in catalog["skills"]],
                              [("manual", ["codex"]), ("release", ["codex", "cursor"]), ("triage", ["cursor"])])
-            self.assertEqual(catalog["totals"], {"claude": 0, "codex": 2, "cursor": 2})
+            self.assertEqual(catalog["totals"], {"claude": 0, "codex": 2, "cursor": 2, "antigravity": 0})
             self.assertFalse(catalog["truncated"])
             skill_file = (leaf / "SKILL.md").resolve()
             self.assertEqual(sum(call.args[0].resolve() == skill_file for call in reads.call_args_list), 2)
@@ -312,6 +317,169 @@ class SkillCatalogTests(unittest.TestCase):
                           "agents": ["claude"]})
         self.assertIn(("claude", "plugins", True),
                       [(entry["agent"], entry["kind"], entry["exists"]) for entry in result["roots"]])
+
+    def test_catalog_reads_antigravity_skills_builtin_and_jsonc_plugins(self):
+        with tempfile.TemporaryDirectory(prefix="richi-agy-skills-") as temporary:
+            home = Path(temporary)
+            cfg = home / ".gemini" / "config"
+            builtin = home / ".gemini" / "antigravity-ide" / "builtin" / "skills"
+            write_skill(cfg / "skills" / "deploy", "---\nname: deploy\ndescription: Deploys\n---\n")
+            write_skill(cfg / "skills" / "fallback-name", "---\n# comment-only header\n---\n")
+            write_skill(cfg / "skills" / "no-header", "Plain Markdown without frontmatter.\n")
+            write_skill(cfg / "skills" / "hr-spoof", "---\nPlain prose between rules.\n---\n")
+            write_skill(builtin / "agy-guide", "---\nname: antigravity-guide\ndescription: Guide\n---\n")
+            write_skill(builtin / "native_swarm", "---\nname: swarm\ndisable-model-invocation: true\n---\n")
+            plugins = cfg / "plugins"
+            # JSONC comments, UTF-8 BOM, URLs inside strings, and trailing commas are accepted in plugin.json.
+            (plugins / "dir-one").mkdir(parents=True)
+            (plugins / "dir-one" / "plugin.json").write_text(
+                '\ufeff{\n  // comment\n  "name": "team-kit", /* block */ "homepage": "https://example.com//ok,}",\n}\n',
+                encoding="utf-8")
+            write_skill(plugins / "dir-one" / "skills" / "triage", "---\nname: triage\n---\n")
+            write_skill(plugins / "dir-one" / "skills" / "manual",
+                        "---\nname: manual\ndisable-model-invocation: true\n---\n")
+            # A disabled plugin with the same name does not shadow an enabled one; a second enabled one is dropped.
+            (plugins / "00-disabled-dup").mkdir()
+            (plugins / "00-disabled-dup" / "plugin.json").write_text('{"name": "team-kit", "disabled": true}\n', encoding="utf-8")
+            write_skill(plugins / "00-disabled-dup" / "skills" / "ghost", "---\nname: ghost\n---\n")
+            (plugins / "zz-enabled-dup").mkdir()
+            (plugins / "zz-enabled-dup" / "plugin.json").write_text('{"name": "team-kit"}\n', encoding="utf-8")
+            write_skill(plugins / "zz-enabled-dup" / "skills" / "shadowed", "---\nname: shadowed\n---\n")
+            # Unstaged .claude-plugin/plugin.json is ignored at runtime.
+            (plugins / "raw-claude" / ".claude-plugin").mkdir(parents=True)
+            (plugins / "raw-claude" / ".claude-plugin" / "plugin.json").write_text('{"name": "raw"}\n', encoding="utf-8")
+            write_skill(plugins / "raw-claude" / "skills" / "raw-skill", "---\nname: raw-skill\n---\n")
+            # Omitted name defaults to the directory name; disabled plugins stay out unless config.json enables them.
+            (plugins / "unnamed").mkdir()
+            (plugins / "unnamed" / "plugin.json").write_text("{}\n", encoding="utf-8")
+            write_skill(plugins / "unnamed" / "skills" / "lint", "---\nname: lint\n---\n")
+            (plugins / "shipped-off").mkdir()
+            (plugins / "shipped-off" / "plugin.json").write_text('{"disabled": true}\n', encoding="utf-8")
+            write_skill(plugins / "shipped-off" / "skills" / "off", "---\nname: off\n---\n")
+            (plugins / "turned-on").mkdir()
+            (plugins / "turned-on" / "plugin.json").write_text('{"disabled": true}\n', encoding="utf-8")
+            write_skill(plugins / "turned-on" / "skills" / "on", "---\nname: on\n---\n")
+            (plugins / "turned-off").mkdir()
+            (plugins / "turned-off" / "plugin.json").write_text('{"name": "muted"}\n', encoding="utf-8")
+            write_skill(plugins / "turned-off" / "skills" / "hidden", "---\nname: hidden\n---\n")
+            (plugins / "broken").mkdir()
+            (plugins / "broken" / "plugin.json").write_text("/* unclosed comment", encoding="utf-8")
+            write_skill(plugins / "broken" / "skills" / "bad", "---\nname: bad\n---\n")
+            (plugins / "leading-comma").mkdir()
+            (plugins / "leading-comma" / "plugin.json").write_text("{,}\n", encoding="utf-8")
+            write_skill(plugins / "leading-comma" / "skills" / "invalid", "---\nname: invalid\n---\n")
+            (plugins / "nan-manifest").mkdir()
+            (plugins / "nan-manifest" / "plugin.json").write_text('{"name": "nan-pkg", "score": NaN}\n', encoding="utf-8")
+            write_skill(plugins / "nan-manifest" / "skills" / "nan-skill", "---\nname: nan-skill\n---\n")
+            (plugins / "inf-no-fallthrough" / ".antigravity-plugin").mkdir(parents=True)
+            (plugins / "inf-no-fallthrough" / ".antigravity-plugin" / "plugin.json").write_text(
+                '{"name": "inf-pkg", "limit": Infinity}\n', encoding="utf-8")
+            (plugins / "inf-no-fallthrough" / "plugin.json").write_text('{"name": "inf-fallback"}\n', encoding="utf-8")
+            write_skill(plugins / "inf-no-fallthrough" / "skills" / "inf-skill", "---\nname: inf-skill\n---\n")
+            # Manifest precedence: .antigravity-plugin/plugin.json > .gemini-plugin/plugin.json > plugin.json,
+            # with non-directory fallthrough and NO fallthrough when a higher-priority plugin.json is malformed.
+            (plugins / "prio-agy" / ".antigravity-plugin").mkdir(parents=True)
+            (plugins / "prio-agy" / ".antigravity-plugin" / "plugin.json").write_text('{"name": "agy-prio"}\n', encoding="utf-8")
+            (plugins / "prio-agy" / "plugin.json").write_text('{"name": "root-ignored", "disabled": true}\n', encoding="utf-8")
+            write_skill(plugins / "prio-agy" / "skills" / "prio-win", "---\nname: prio-win\n---\n")
+            (plugins / "prio-file").mkdir()
+            (plugins / "prio-file" / ".antigravity-plugin").write_text("not a directory\n", encoding="utf-8")
+            (plugins / "prio-file" / ".gemini-plugin").mkdir()
+            (plugins / "prio-file" / ".gemini-plugin" / "plugin.json").write_text('{"name": "gem-fallthrough"}\n', encoding="utf-8")
+            write_skill(plugins / "prio-file" / "skills" / "gem-win", "---\nname: gem-win\n---\n")
+            (plugins / "prio-no-fallthrough" / ".antigravity-plugin").mkdir(parents=True)
+            (plugins / "prio-no-fallthrough" / ".antigravity-plugin" / "plugin.json").write_text("{broken\n", encoding="utf-8")
+            (plugins / "prio-no-fallthrough" / "plugin.json").write_text('{"name": "must-not-load"}\n', encoding="utf-8")
+            write_skill(plugins / "prio-no-fallthrough" / "skills" / "blocked-fallthrough", "---\nname: blocked-fallthrough\n---\n")
+            # plugindir.Resolve: installDir @version matching, stale-copy superseding, case-folding, and @marketplace.
+            (plugins / "ver@1.0.0").mkdir()
+            (plugins / "ver@1.0.0" / "plugin.json").write_text("{}\n", encoding="utf-8")
+            write_skill(plugins / "ver@1.0.0" / "skills" / "stale-ver", "---\nname: stale-ver\n---\n")
+            (plugins / "ver@2.0.0").mkdir()
+            (plugins / "ver@2.0.0" / "plugin.json").write_text("{}\n", encoding="utf-8")
+            write_skill(plugins / "ver@2.0.0" / "skills" / "active-ver", "---\nname: active-ver\n---\n")
+            (plugins / "ver-off@3.0.0").mkdir()
+            (plugins / "ver-off@3.0.0" / "plugin.json").write_text("{}\n", encoding="utf-8")
+            write_skill(plugins / "ver-off@3.0.0" / "skills" / "muted-ver", "---\nname: muted-ver\n---\n")
+            (plugins / "case-off").mkdir()
+            (plugins / "case-off" / "plugin.json").write_text("{}\n", encoding="utf-8")
+            write_skill(plugins / "case-off" / "skills" / "case-muted", "---\nname: case-muted\n---\n")
+            (plugins / "sharp-ss").mkdir()
+            (plugins / "sharp-ss" / "plugin.json").write_text("{}\n", encoding="utf-8")
+            write_skill(plugins / "sharp-ss" / "skills" / "sharp-kept", "---\nname: sharp-kept\n---\n")
+            (plugins / "dotless-\u0131").mkdir()
+            (plugins / "dotless-\u0131" / "plugin.json").write_text("{}\n", encoding="utf-8")
+            write_skill(plugins / "dotless-\u0131" / "skills" / "dotless-kept", "---\nname: dotless-kept\n---\n")
+            (plugins / "mkt@store").mkdir()
+            (plugins / "mkt@store" / "plugin.json").write_text("{}\n", encoding="utf-8")
+            write_skill(plugins / "mkt@store" / "skills" / "mkt-kept", "---\nname: mkt-kept\n---\n")
+            # Strict '---' frontmatter fence: '...' closers are rejected, while '...' inside a >1 KiB YAML block is kept.
+            write_skill(cfg / "skills" / "dots-closer", "---\nname: dots-closer\n...\nBody\n")
+            write_skill(cfg / "skills" / "dots-in-yaml",
+                        "---\ndescription: |\n  intro\n  ...\n  " + ("x" * 1100) + "\nname: dots-in-yaml\n---\n")
+            # config.json is strict RFC 8259 JSON with optional UTF-8 BOM (not JSONC).
+            (cfg / "config.json").write_text(
+                "\ufeff{\n"
+                '  "plugins": {\n'
+                '    "turned-on": {"enabled": true},\n'
+                '    "turned-off": {"enabled": false},\n'
+                '    "ver": {"enabled": true, "installDir": "ver@2.0.0"},\n'
+                '    "ver-off": {"enabled": false, "installDir": "ver-off@3.0.0"},\n'
+                '    "Case-Off": {"enabled": false},\n'
+                '    "sharp-ß": {"enabled": false},\n'
+                '    "dotless-i": {"enabled": false},\n'
+                '    "mkt": {"enabled": false}\n'
+                "  }\n"
+                "}\n",
+                encoding="utf-8")
+            env = {"ANTIGRAVITY_APP_DATA_DIR": str(home / ".gemini" / "antigravity-ide")}
+            result = skill_catalog.catalog(env, home)
+            fallback_result = skill_catalog.catalog({}, home)
+            # JSONC comments/trailing commas, NaN, or duplicate installDir/install_dir in config.json fail closed.
+            for bad_config in ('// comment\n{"plugins": {"turned-on": {"enabled": true}}}\n',
+                               '{"plugins": {"turned-on": {"enabled": true,}}}\n',
+                               '{"plugins": {"turned-on": {"enabled": true}}, "extra": NaN}\n',
+                               '{"plugins": {"ver": {"installDir": "ver@2.0.0", "install_dir": "ver@2.0.0"}}}\n'):
+                (cfg / "config.json").write_text(bad_config, encoding="utf-8")
+                bad_names = {s["name"] for s in skill_catalog.catalog(env, home)["skills"]}
+                self.assertNotIn("on", bad_names)
+            # Seatbelt/corrupt config.json keeps rule_aliases working for unrelated plugins,
+            # and fails closed if any plugin (even disabled or duplicate-named) carries richi/project-memory.
+            branded = (Path(__file__).resolve().parents[1] / "skills/richi/SKILL.md").read_text(encoding="utf-8")
+            write_skill(cfg / "skills" / "richi", branded)
+            (cfg / "config.json").write_text("{broken jsonc", encoding="utf-8")
+            unrelated = skill_catalog.catalog(env, home, rule_aliases_only=True)
+            write_skill(plugins / "zz-enabled-dup" / "skills" / "richi", "---\nname: richi\n---\n")
+            ambiguous = skill_catalog.catalog(env, home, rule_aliases_only=True)
+            shutil.rmtree(plugins / "zz-enabled-dup" / "skills" / "richi")
+            # Seatbelt PermissionError on a plugin's manifest also runs the conservative richi scan.
+            (cfg / "config.json").write_text("{}\n", encoding="utf-8")
+            locked_plugin = plugins / "seatbelt-locked"
+            write_skill(locked_plugin / "skills" / "richi", "---\nname: richi\n---\n")
+            locked_manifest = locked_plugin / ".antigravity-plugin"
+            locked_manifest.mkdir(parents=True)
+            (locked_manifest / "plugin.json").write_text('{"name": "locked"}\n', encoding="utf-8")
+            read_regular = skill_catalog._read_regular
+            with unittest.mock.patch.object(
+                skill_catalog, "_read_regular",
+                side_effect=lambda p, *a, **kw: (_ for _ in ()).throw(PermissionError("denied"))
+                if Path(p) == locked_manifest / "plugin.json" else read_regular(p, *a, **kw),
+            ):
+                seatbelt_ambiguous = skill_catalog.catalog(env, home, rule_aliases_only=True)
+        skills = {skill["name"]: skill for skill in result["skills"]}
+        self.assertEqual(sorted(skills),
+                         ["active-ver", "antigravity-guide", "deploy", "dotless-kept", "dots-in-yaml", "fallback-name",
+                          "gem-win", "lint", "mkt-kept", "on", "prio-win", "sharp-kept", "triage"])
+        self.assertEqual(skills["antigravity-guide"]["kind"], "system")
+        self.assertEqual(skills["triage"]["kind"], "plugins")
+        self.assertTrue(all(skill["agents"] == ["antigravity"] for skill in skills.values()))
+        self.assertEqual(result["totals"]["antigravity"], 13)
+        self.assertEqual(fallback_result["totals"]["antigravity"], 13)
+        self.assertEqual(unrelated["rule_aliases"].get("antigravity"), {"project-memory": "richi"})
+        self.assertNotIn("antigravity", ambiguous["rule_aliases"])
+        self.assertIn(str(plugins / "zz-enabled-dup" / "skills" / "richi"), ambiguous["richi_paths"]["antigravity"])
+        self.assertNotIn("antigravity", seatbelt_ambiguous["rule_aliases"])
+        self.assertIn(str(locked_plugin / "skills" / "richi"), seatbelt_ambiguous["richi_paths"]["antigravity"])
 
 
 class MapAccessTests(unittest.TestCase):

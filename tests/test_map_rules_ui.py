@@ -40,8 +40,10 @@ class RulesPageLogicTests(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         for key in [key for key in os.environ if key.startswith("RICHI_")
-                    or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT", "CLAUDE_CONFIG_DIR", "CODEX_HOME",
-                               "XDG_CONFIG_HOME"}]:
+                    or key in {"CODEX_THREAD_ID", "CLAUDECODE", "CURSOR_AGENT",
+                               "ANTIGRAVITY_AGENT", "ANTIGRAVITY_CONVERSATION_ID",
+                               "ANTIGRAVITY_APP_DATA_DIR",
+                               "CLAUDE_CONFIG_DIR", "CODEX_HOME", "XDG_CONFIG_HOME"}]:
             del os.environ[key]
         agents.forget_settings()
         self.addCleanup(agents.forget_settings)
@@ -494,14 +496,16 @@ for(const explain of [ruleRefusal,agentRefusal]){
         previous = self.home / ".claude/skills/own/SKILL.md"
         previous.parent.mkdir(parents=True)
         previous.write_text("---\nname: project-memory\n---\n")
-        current = self.home / ".agents/skills/project-memory/SKILL.md"
-        current.parent.mkdir(parents=True)
-        current.write_bytes((Path(__file__).resolve().parents[1] / "skills/richi/SKILL.md").read_bytes())
+        skill_bytes = (Path(__file__).resolve().parents[1] / "skills/richi/SKILL.md").read_bytes()
+        for target in (".agents/skills/project-memory/SKILL.md", ".gemini/config/skills/richi/SKILL.md"):
+            current = self.home / target
+            current.parent.mkdir(parents=True)
+            current.write_bytes(skill_bytes)
         catalog = skill_catalog.catalog({}, self.home)
         self.evaluate("setSkills(" + json.dumps(catalog) + ",++agentSequence);" + r"""
 const rule={id:'legacy',skill:'project-memory'},ruleList=()=>[rule],skillsKnown=()=>true;
 const shown=ruleSkillSetting(rule,true);
-assert.deepEqual(shown.skills,{claude:'project-memory',codex:'richi',cursor:'project-memory'});
+assert.deepEqual(shown.skills,{claude:'project-memory',codex:'richi',cursor:'project-memory',antigravity:'richi'});
 assert.equal(ruleSkillSetting(rule).skill,'project-memory'); // the editor keeps the stored name
 for(const agent of knownAgentIds()){
   const [item]=agentRules({id:agent});assert.equal(item.missing,false);assert.equal(item.skill,shown.skills[agent]);

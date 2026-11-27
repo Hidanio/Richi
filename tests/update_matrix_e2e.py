@@ -486,8 +486,8 @@ def direct(source, candidate, home):
         assert "drops database schema support" in refused.stdout + refused.stderr, refused.stderr
         home.assert_map(home.map)
         home.verify(candidate)
-    if "claude" not in home.agents and "claude" in home.offered_agents():
-        claude_blocks_rollback(candidate, home)
+    if set(home.offered_agents()) - set(home.agents):
+        new_agents_block_rollback(candidate, home)
     home.stop_map()
 
 
@@ -515,8 +515,8 @@ def migrated_store(source, candidate, home):
     assert home.json("--workspace", "alpha", "check")["status"] == "ok"
 
 
-def claude_blocks_rollback(candidate, home):
-    """A source that cannot maintain Claude Code refuses the rollback once the candidate connected it."""
+def new_agents_block_rollback(candidate, home):
+    """A source that cannot maintain newly connected agents refuses the rollback."""
     home.connect_agents()
     settings = (home.profile / "settings.json").read_bytes()
     home.cli("update", "rollback", ok=False)

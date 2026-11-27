@@ -8,8 +8,8 @@ to each agent on this computer. A rule
 then names one skill for every agent or a different one per agent (see
 [RULES.md](RULES.md)), and `rules show` gives each agent its own.
 
-Richi defines the skill sources for its **built-in** agents Claude Code, Codex
-and Cursor. The user may **adjust** a built-in agent by switching off a skill
+Richi defines the skill sources for its **built-in** agents Claude Code, Codex,
+Cursor and Antigravity. The user may **adjust** a built-in agent by switching off a skill
 source or adding skill folders. The user may also **describe another agent**
 by its name, its skill folders and how to recognize it. These settings belong
 to the user and are shared by every workspace of this computer; they are not
@@ -25,16 +25,18 @@ richi --compact-json skill-sources list
 `rules show --agent ID`), `name`, `builtin`, `detected` (it looks installed for
 this user), `skills` (how many it can use) and `sources`. Richi gets `detected`
 from the installed launcher for agents it can connect. If an older launcher has
-no Cursor adapter, `connection` is null. Richi then checks Cursor’s own profile
-folders for detection and returns null if both of those sources are disabled.
+no adapter for a built-in agent (such as Cursor or Antigravity), `connection`
+is null. Richi then checks that agent's own built-in sources for detection and
+returns null if all of those sources are disabled.
 For a custom agent, Richi checks its enabled skill folders and returns null when
 all are disabled. A source has a `key`,
 its `path`, whether the folder `exists` (`denied` when this user may not read
 it; neither is checked for a source switched off), whether it is `enabled`,
 whether the user `added` it, and how many `skills` it gives. `chat_prefix` says
 whether the agent's chats are named `ID:…` in `RICHI_CHAT_ID`, which then also
-tells Richi who it is. Cursor's hook supplies `--chat cursor:<id>`. Codex's
-chat identity is its thread ID alone.
+tells Richi who it is. Cursor's hook supplies `--chat cursor:<id>`. Antigravity
+supplies `ANTIGRAVITY_CONVERSATION_ID`, which Richi uses as `antigravity:<id>`.
+Codex's chat identity is its thread ID alone.
 `updated_at` is the version of
 the user's settings for the agent, null when there are none. `presets` lists
 well-known agents that could be added, with the folder each reads. `problem` is
@@ -80,6 +82,13 @@ agent's own standing instructions.
 
 ## Adjust an agent
 
+Antigravity reads user skills in `~/.gemini/config/skills`, built-in skills in
+`~/.gemini/antigravity/builtin/skills` (or `antigravity-ide`, `antigravity-cli`
+or `$ANTIGRAVITY_APP_DATA_DIR/builtin/skills`) and enabled plugins in
+`~/.gemini/config/plugins`. It requires YAML frontmatter in `SKILL.md`. Extra
+paths in `skills.json` or `plugins.json` are not read automatically; add skill
+folders with `skill-sources update antigravity --add-skills FOLDER`.
+
 Cursor reads skills from `~/.cursor/skills`, `~/.agents/skills`, `~/.claude/skills`
 and `~/.codex/skills`. Its built-in skills are in `~/.cursor/skills-cursor`.
 Codex reads personal skills in `~/.agents/skills` and the `skills` directory
@@ -89,12 +98,12 @@ Richi also searches folders you add for these agents recursively. It examines up
 directory entries per root. A source marked `truncated` may contain more skills
 than its count shows.
 
-If you added `cursor` in an earlier version, the upgrade
-uses Cursor’s built-in name, detection and skill filtering. Your additional
+If you added `cursor` or `antigravity` in an earlier version, the upgrade
+uses the built-in name, detection and skill filtering. Your additional
 folders still appear, and a disabled folder stays disabled even if it is now a
 built-in source. Use the source key from `skill-sources list` to enable it.
 Richi leaves the saved settings file intact on upgrade. To restore the defaults,
-reset Cursor as described below.
+reset the agent as described below.
 
 ```sh
 richi --compact-json skill-sources update claude --disable claude-app --add-skills ~/work/team-skills

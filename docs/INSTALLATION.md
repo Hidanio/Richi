@@ -209,7 +209,7 @@ copied when a workspace is created.
 The current CLI settings are a suggestion for a new chat. After the user's
 answer, the agent saves the choice with `richi chat bind --current` or
 `richi chat bind NAME`. The chat keeps its workspace after the CLI selection
-changes. Codex IDs are detected automatically; other clients provide a stable
+changes. Codex and Antigravity IDs are detected automatically; other clients provide a stable
 `RICHI_CHAT_ID` or `--chat ID`. See the [workspace guide](WORKSPACES.md).
 
 <a id="выбор-хранилища"></a>
@@ -325,7 +325,7 @@ stop or replace them. Update whichever side is older (the installation with
 ## Agent integration
 
 After installing the package, run `richi agents --status` to see which
-clients it supports. Follow [setup for Codex, Claude Code and Cursor](SETUP.md)
+clients it supports. Follow [setup for Codex, Claude Code, Cursor and Antigravity](SETUP.md)
 to connect the client you use.
 
 For other agents, copy the complete `skills/richi`

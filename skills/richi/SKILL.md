@@ -39,7 +39,8 @@ standing rules, loaded with `rules show`.
    `-w NAME` may repeat the binding. `chat bind NAME --replace`
    requires the human's explicit workspace change. New/forked chats choose
    independently; delegates inherit the confirmed selection and provided identity.
-   Codex supplies `CODEX_THREAD_ID`. Claude Code's SessionStart hook sets
+   Codex supplies `CODEX_THREAD_ID`. Antigravity supplies `ANTIGRAVITY_CONVERSATION_ID`
+   (used as `antigravity:<id>`). Claude Code's SessionStart hook sets
    `RICHI_CHAT_ID` and gives an explicit `--chat ID` for shells that need it.
    Other integrations can supply a stable `--chat ID`.
 3. Run `richi config show` to resolve runtime and storage, then tell the human

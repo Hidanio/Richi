@@ -79,7 +79,8 @@ class SkillSource(NamedTuple):
     subdirectory; "nested-skills" also searches category subdirectories. "cache" is a plugin cache,
     <marketplace>/<plugin>/<version>/skills/<skill>; "claude-app" is the Claude
     app's <account>/<organization>/rpm/<plugin> with rpm/manifest.json, and
-    skills-plugin/<account>/<organization> with its manifest of enabled skills.
+    skills-plugin/<account>/<organization> with its manifest of enabled skills;
+    "antigravity-plugins" is <plugin>/plugin.json with config.json switches.
     """
     key: str
     kind: str
@@ -125,6 +126,8 @@ class Agent(NamedTuple):
     skill_path_settings: Optional[Callable] = None
     # Some clients follow skill directory links but require a regular SKILL.md entry.
     follows_skill_file_links: bool = True
+    # Some clients drop SKILL.md files that have no '---'-fenced YAML frontmatter block.
+    requires_frontmatter: bool = False
 
 
 def _home_variable(environ, home, variable, default):
@@ -163,6 +166,51 @@ def _cursor_sources(environ, home):
     return personal + [SkillSource("system", "system", "nested-skills", home / ".cursor/skills-cursor")]
 
 
+_ANTIGRAVITY_DIRS = ("antigravity", "antigravity-ide", "antigravity-cli")
+
+
+def _existing_dir(path):
+    try:
+        return stat.S_ISDIR(os.stat(path).st_mode)
+    except (OSError, ValueError):
+        return False
+
+
+def _safe_app_dir(path, home):
+    if not _existing_dir(path):
+        return False
+    try:
+        return Path(path).resolve() not in {Path("/"), Path(home).resolve()}
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
+def _antigravity_app_data(environ, home):
+    raw_app = (environ.get("ANTIGRAVITY_APP_DATA_DIR") or "").strip()
+    if raw_app.startswith("/") and valid_folder(raw_app):
+        try:
+            resolved_home = Path(home).resolve()
+            candidate = Path(raw_app).resolve()
+            if candidate not in {Path("/"), resolved_home}:
+                return Path(os.path.normpath(raw_app))
+        except (OSError, RuntimeError, ValueError):
+            pass
+    gemini = Path(home) / ".gemini"
+    candidates = [gemini / name for name in _ANTIGRAVITY_DIRS if _safe_app_dir(gemini / name, home)]
+    for candidate in candidates:
+        if _safe_app_dir(candidate / "builtin" / "skills", home):
+            return candidate
+    return candidates[0] if candidates else gemini / "antigravity"
+
+
+def _antigravity_sources(environ, home):
+    config = home / ".gemini" / "config"
+    app_data = _antigravity_app_data(environ, home)
+    return [SkillSource("skills", "skills", "skills", config / "skills"),
+            SkillSource("system", "system", "skills", app_data / "builtin" / "skills"),
+            SkillSource("plugins", "plugins", "antigravity-plugins", config / "plugins")]
+
+
 AGENTS = (
     Agent(id="claude", name="Claude Code", variables={"CLAUDECODE": "1"},
           invocation="front-matter", plugin_commands=True, sources=_claude_sources),
@@ -172,6 +220,9 @@ AGENTS = (
     Agent(id="cursor", name="Cursor", variables={"CURSOR_AGENT": None},
           invocation="front-matter", plugin_commands=False, sources=_cursor_sources, folder_layout="nested-skills",
           detection_sources=("cursor-skills", "system")),
+    Agent(id="antigravity", name="Antigravity", variables={"ANTIGRAVITY_AGENT": None},
+          invocation="front-matter", plugin_commands=False, sources=_antigravity_sources,
+          detection_sources=("skills", "system", "plugins"), requires_frontmatter=True),
 )
 
 # Other agents a user may add as their own, with the user-wide skill folder

@@ -64,7 +64,9 @@ The CLI's current workspace and a chat's workspace are separate settings.
 chat first asks whether to use the current CLI workspace or choose another one
 for that chat only.
 
-Codex supplies `CODEX_THREAD_ID`. Claude Code's SessionStart hook supplies
+Codex supplies `CODEX_THREAD_ID`. Antigravity supplies `ANTIGRAVITY_CONVERSATION_ID`
+(used as `antigravity:<id>`; pass `--chat antigravity:<id>` if another agent's
+chat or shell variables are also present). Claude Code's SessionStart hook supplies
 `RICHI_CHAT_ID` and an explicit `--chat` fallback. In local Cursor Agent,
 insert the exact `--chat cursor:<id>` from this chat's `sessionStart` hook after
 `richi` on every call, starting with the first two commands below. With `CURSOR_AGENT` set,
@@ -93,6 +95,12 @@ richi --chat task-123 project list
 # Only when the user explicitly asks to change this chat's workspace.
 richi --chat task-123 chat bind personal --replace
 ```
+
+In Antigravity scheduled `/automation` runs, each run receives a fresh
+`ANTIGRAVITY_CONVERSATION_ID` with no human at a prompt. Pre-bind a stable ID
+once in a terminal (for example `richi --chat antigravity:daily-triage chat bind work`)
+and pass `--chat antigravity:daily-triage` on every Richi call in the automation
+prompt.
 
 Outside Cursor Agent you can supply `RICHI_CHAT_ID`. Explicit `--chat` takes
 precedence. Until a choice is saved, a detected chat cannot read or write

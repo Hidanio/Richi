@@ -9,10 +9,12 @@ The example connects Codex. For Claude Code, replace `codex` with `claude`.
 curl -fsSL --proto '=https' --proto-redir '=https' https://github.com/Hidanio/Richi/releases/latest/download/install.sh | sh -s -- --agent codex --yes
 ```
 
-Local Cursor Agent requires Richi 1.2.0 or later. To check the latest stable
-installer, replace `--agent codex --yes` in the command above with `--help`.
-If the agent list includes `cursor`, run the command with `--agent cursor --yes`.
-If `cursor` is missing, [install Richi from source](INSTALLATION.md).
+Local Cursor Agent requires Richi 1.2.0 or later, and Antigravity requires a
+release after 1.2.1. To check the latest stable installer, replace
+`--agent codex --yes` in the command above with `--help`. If the agent list
+includes `cursor` or `antigravity`, run the command with `--agent cursor --yes`
+or `--agent antigravity --yes`. If your agent is missing,
+[install Richi from source](INSTALLATION.md).
 
 You need macOS or Linux, curl and Python 3.9+ with sqlite3, venv and ensurepip.
 On Debian/Ubuntu you may also need `python3-venv`. Git is required for repository history.
@@ -218,8 +220,9 @@ and installation generations intact for recovery. If files changed after a
 crash, back up both versions and reconcile the reported path before retrying;
 automatic recovery refuses to overwrite those edits.
 
-To remove this Richi installation manually, first disable automatic updates. For Cursor, remove the
-Richi `sessionStart` entry from `~/.cursor/hooks.json` and the dedicated
+To remove this Richi installation manually, first disable automatic updates. For
+Antigravity, remove the dedicated `~/.gemini/config/rules/richi-project-memory.md`
+rule file. For Cursor, remove the Richi `sessionStart` entry from `~/.cursor/hooks.json` and the dedicated
 `~/.cursor/richi/session_start.py` and `~/.cursor/rules/richi-project-memory.mdc`
 files. For Codex or Claude Code, remove only the `richi:project-memory` block
 from the reported global instruction file. For Claude Code also remove the Richi
@@ -230,7 +233,7 @@ backup. Then remove the dedicated environment and its installation metadata if
 unused. Keep workspace data. This release has no automatic uninstaller; removing
 the integration never requires deleting the whole AGENTS.md file.
 
-## Connecting Codex, Claude Code and Cursor
+## Connecting Codex, Claude Code, Cursor and Antigravity
 
 If Richi is already installed, start with `richi agents --status` in a terminal.
 This read-only command lists the clients this package supports, whether it
@@ -239,11 +242,37 @@ the interactive menu. Connect each client you want to use.
 
 On Richi 1.0.1, use `richi setup --yes` to connect Codex and `richi setup --status`
 to inspect it. That launcher predates the agents menu and the `--agent` option.
-Claude Code requires Richi 1.1.0 or later, and local Cursor Agent requires 1.2.0
-or later. Once a stable release supports your client, run `richi update apply`
+Claude Code requires Richi 1.1.0 or later, local Cursor Agent requires 1.2.0 or
+later, and Antigravity requires a release after 1.2.1. Once a stable release supports your client, run `richi update apply`
 on the older installation. Check that the client appears in `richi setup --help`
 before connecting it. The installed launcher supplies the agent choices even
 in dev mode.
+
+### Antigravity
+
+On macOS, Richi also finds Antigravity in `/Applications` and `~/Applications`
+before its first launch and without a shell command on PATH.
+
+```sh
+richi setup --agent antigravity --dry-run
+richi setup --agent antigravity --yes
+richi setup --agent antigravity --status
+```
+
+Setup links `~/.gemini/config/skills/richi` and installs the dedicated global
+rule `~/.gemini/config/rules/richi-project-memory.md` (`trigger: always_on`),
+leaving `~/.gemini/config/AGENTS.md` and `GEMINI.md` untouched. Existing custom
+skills are backed up under `~/.gemini/config/richi-skill-backups/` when
+`--replace-skill` is supplied.
+
+Open a new Antigravity chat. Antigravity passes `ANTIGRAVITY_CONVERSATION_ID`
+and `ANTIGRAVITY_AGENT=1` to command shells, and Richi identifies the chat as
+`antigravity:<id>`. Choose a workspace once per chat. Delegated subagents
+receive their own conversation IDs, so the parent agent passes
+`--chat antigravity:<id>` when delegating memory work. If Antigravity's
+terminal sandbox restricts files outside the workspace, such as Richi's user
+directories or a linked worktree's main `.git` directory, allow access in
+Antigravity settings or approve running `richi` outside the sandbox.
 
 ### Local Cursor Agent
 
@@ -295,8 +324,8 @@ and [SessionStart hooks](https://code.claude.com/docs/en/hooks#sessionstart).
 
 Managed skills and session scripts follow package updates and rollbacks together.
 Richi checks that each configured agent has a compatible adapter in the selected
-release before activation. This applies to Cursor when rolling back to a package
-that predates its adapter. Launcher changes require installing a new package,
+release before activation. This applies to Cursor and Antigravity when rolling back to a package
+that predates their adapters. Launcher changes require installing a new package,
 even with dev mode on.
 
 ## Adding another agent to Richi
@@ -315,8 +344,8 @@ Put agent-specific behavior in its module, following `codex_setup.py` or
 - `paths(current=None)` returns the profile, effective instruction file and
   skill path. Validate overrides and an existing record's profile here.
 - An optional `instruction_file(block)` returns the complete file as bytes when
-  an adapter owns a dedicated instruction file. Cursor uses this to add the MDC
-  frontmatter to its user rule. Richi checks the complete file for local edits.
+  an adapter owns a dedicated instruction file. Cursor and Antigravity use this
+  to add frontmatter to their user rules. Richi checks the complete file for local edits.
 - `setup_operations(ctx, profile, current, replace_skill)` and
   `activation_operations(ctx, record, site)` return `(extra_metadata, operations)`.
   Plan changes with `setup_files`; never write directly. The activation method

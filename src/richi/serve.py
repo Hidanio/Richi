@@ -910,6 +910,10 @@ def worker_environment(config_file=None, workspace=None, config_required=False):
     # it must not ask for a new choice or follow a later chat rebind.
     environment.pop("RICHI_CHAT_ID", None)
     environment.pop("CODEX_THREAD_ID", None)
+    environment.pop("CLAUDECODE", None)
+    environment.pop("CURSOR_AGENT", None)
+    environment.pop("ANTIGRAVITY_AGENT", None)
+    environment.pop("ANTIGRAVITY_CONVERSATION_ID", None)
     if config_file is not None:
         environment["RICHI_ACTIVE_CONFIG"] = str(config_file)
         if workspace is not None:

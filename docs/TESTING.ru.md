@@ -3,8 +3,8 @@
 [English](TESTING.md) | Русский
 
 Проверьте, сможет ли новый чат прочитать синтетическую заметку, которую
-сохранил другой чат в том же workspace. Понадобится локальный Codex, Claude Code
-или Cursor Agent на macOS или Linux.
+сохранил другой чат в том же workspace. Понадобится локальный Codex, Claude Code,
+Cursor Agent или Antigravity на macOS или Linux.
 
 ## Подготовьте выбранного агента
 
