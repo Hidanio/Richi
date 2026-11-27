@@ -368,6 +368,14 @@ class SkillCatalogTests(unittest.TestCase):
             (plugins / "leading-comma").mkdir()
             (plugins / "leading-comma" / "plugin.json").write_text("{,}\n", encoding="utf-8")
             write_skill(plugins / "leading-comma" / "skills" / "invalid", "---\nname: invalid\n---\n")
+            (plugins / "nan-manifest").mkdir()
+            (plugins / "nan-manifest" / "plugin.json").write_text('{"name": "nan-pkg", "score": NaN}\n', encoding="utf-8")
+            write_skill(plugins / "nan-manifest" / "skills" / "nan-skill", "---\nname: nan-skill\n---\n")
+            (plugins / "inf-no-fallthrough" / ".antigravity-plugin").mkdir(parents=True)
+            (plugins / "inf-no-fallthrough" / ".antigravity-plugin" / "plugin.json").write_text(
+                '{"name": "inf-pkg", "limit": Infinity}\n', encoding="utf-8")
+            (plugins / "inf-no-fallthrough" / "plugin.json").write_text('{"name": "inf-fallback"}\n', encoding="utf-8")
+            write_skill(plugins / "inf-no-fallthrough" / "skills" / "inf-skill", "---\nname: inf-skill\n---\n")
             # Manifest precedence: .antigravity-plugin/plugin.json > .gemini-plugin/plugin.json > plugin.json,
             # with non-directory fallthrough and NO fallthrough when a higher-priority plugin.json is malformed.
             (plugins / "prio-agy" / ".antigravity-plugin").mkdir(parents=True)
@@ -399,6 +407,9 @@ class SkillCatalogTests(unittest.TestCase):
             (plugins / "sharp-ss").mkdir()
             (plugins / "sharp-ss" / "plugin.json").write_text("{}\n", encoding="utf-8")
             write_skill(plugins / "sharp-ss" / "skills" / "sharp-kept", "---\nname: sharp-kept\n---\n")
+            (plugins / "dotless-\u0131").mkdir()
+            (plugins / "dotless-\u0131" / "plugin.json").write_text("{}\n", encoding="utf-8")
+            write_skill(plugins / "dotless-\u0131" / "skills" / "dotless-kept", "---\nname: dotless-kept\n---\n")
             (plugins / "mkt@store").mkdir()
             (plugins / "mkt@store" / "plugin.json").write_text("{}\n", encoding="utf-8")
             write_skill(plugins / "mkt@store" / "skills" / "mkt-kept", "---\nname: mkt-kept\n---\n")
@@ -416,12 +427,14 @@ class SkillCatalogTests(unittest.TestCase):
                 '    "ver-off": {"enabled": false, "installDir": "ver-off@3.0.0"},\n'
                 '    "Case-Off": {"enabled": false},\n'
                 '    "sharp-ß": {"enabled": false},\n'
+                '    "dotless-i": {"enabled": false},\n'
                 '    "mkt": {"enabled": false}\n'
                 "  }\n"
                 "}\n",
                 encoding="utf-8")
             env = {"ANTIGRAVITY_APP_DATA_DIR": str(home / ".gemini" / "antigravity-ide")}
             result = skill_catalog.catalog(env, home)
+            fallback_result = skill_catalog.catalog({}, home)
             # JSONC comments/trailing commas, NaN, or duplicate installDir/install_dir in config.json fail closed.
             for bad_config in ('// comment\n{"plugins": {"turned-on": {"enabled": true}}}\n',
                                '{"plugins": {"turned-on": {"enabled": true,}}}\n',
@@ -455,12 +468,13 @@ class SkillCatalogTests(unittest.TestCase):
                 seatbelt_ambiguous = skill_catalog.catalog(env, home, rule_aliases_only=True)
         skills = {skill["name"]: skill for skill in result["skills"]}
         self.assertEqual(sorted(skills),
-                         ["active-ver", "antigravity-guide", "deploy", "dots-in-yaml", "fallback-name",
+                         ["active-ver", "antigravity-guide", "deploy", "dotless-kept", "dots-in-yaml", "fallback-name",
                           "gem-win", "lint", "mkt-kept", "on", "prio-win", "sharp-kept", "triage"])
         self.assertEqual(skills["antigravity-guide"]["kind"], "system")
         self.assertEqual(skills["triage"]["kind"], "plugins")
         self.assertTrue(all(skill["agents"] == ["antigravity"] for skill in skills.values()))
-        self.assertEqual(result["totals"]["antigravity"], 12)
+        self.assertEqual(result["totals"]["antigravity"], 13)
+        self.assertEqual(fallback_result["totals"]["antigravity"], 13)
         self.assertEqual(unrelated["rule_aliases"].get("antigravity"), {"project-memory": "richi"})
         self.assertNotIn("antigravity", ambiguous["rule_aliases"])
         self.assertIn(str(plugins / "zz-enabled-dup" / "skills" / "richi"), ambiguous["richi_paths"]["antigravity"])

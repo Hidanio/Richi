@@ -15,7 +15,7 @@ _MAX_CHATS = 10000
 _STORAGE_ENV = ("RICHI_CONFIG", "RICHI_DB", "RICHI_DATA_DIR")
 CHAT_ID_VARS = ("RICHI_CHAT_ID", "CODEX_THREAD_ID", "ANTIGRAVITY_CONVERSATION_ID")
 AGENT_SHELL_VARS = ("CLAUDECODE", "CURSOR_AGENT", "ANTIGRAVITY_AGENT")
-_PREFIXED_AGENTS = ("cursor", "claude", "antigravity")
+PREFIXED_AGENTS = ("cursor", "claude", "antigravity")
 _MULTI_AGENT_MSG = ("Multiple agent chat environments detected; "
                     "pass --chat with the active client's conversation ID.")
 
@@ -149,7 +149,7 @@ def _next_commands(chat_id, bound):
     if not bound:
         return [cli + " chat bind --current", cli + " chat bind NAME"]
     prefix = chat_id.split(":", 1)[0] if chat_id is not None and ":" in chat_id else None
-    rules = "rules show --agent " + prefix if prefix in _PREFIXED_AGENTS and need_chat else "rules show"
+    rules = "rules show --agent " + prefix if prefix in PREFIXED_AGENTS and need_chat else "rules show"
     return [cli + " " + rules, cli + " --project-path PATH " + rules]
 
 

@@ -141,6 +141,7 @@ class RegistryTests(IsolatedHome):
         known_shell_vars = set(chats.CHAT_ID_VARS) | set(chats.AGENT_SHELL_VARS)
         for agent in agents.AGENTS:
             self.assertLessEqual(set(agent.variables), known_shell_vars, agent.id)
+        self.assertEqual(set(chats.PREFIXED_AGENTS), {agent.id for agent in agents.AGENTS if agent.chat_prefix})
 
     def test_settings_live_in_the_launchers_configuration_directory(self):
         self.assertEqual(agents.settings_path(), config._platform_dirs()[0] / agents.SETTINGS_FILE)
@@ -1081,6 +1082,19 @@ class ListingTests(IsolatedHome):
         for bad_app in ("/", "~", "~/.gemini/antigravity-ide", str(self.home), "relative/agy"):
             sources = {s.key: s.path for s in agents.AGENTS[3].sources({"ANTIGRAVITY_APP_DATA_DIR": bad_app}, self.home)}
             self.assertEqual(sources["system"], self.home / ".gemini" / "antigravity" / "builtin" / "skills")
+        # Two-pass app-data fallback prefers a surface with builtin/skills and rejects symlinks to / or home.
+        (self.home / ".gemini/antigravity").mkdir(parents=True)
+        (self.home / ".gemini/antigravity-ide").symlink_to(Path("/"))
+        (self.home / ".gemini/antigravity-cli").mkdir()
+        self.assertEqual({s.key: s.path for s in agents.AGENTS[3].sources({}, self.home)}["system"],
+                         self.home / ".gemini" / "antigravity" / "builtin" / "skills")
+        (self.home / ".gemini/antigravity-ide").unlink()
+        (self.home / ".gemini/antigravity-ide/builtin/skills").mkdir(parents=True)
+        self.assertEqual({s.key: s.path for s in agents.AGENTS[3].sources({}, self.home)}["system"],
+                         self.home / ".gemini" / "antigravity-ide" / "builtin" / "skills")
+        with mock.patch.object(agents.os, "stat", side_effect=PermissionError("denied")):
+            self.assertEqual({s.key: s.path for s in agents.AGENTS[3].sources({}, self.home)}["system"],
+                             self.home / ".gemini" / "antigravity" / "builtin" / "skills")
         self.assertEqual((listed["connections_problem"], listed["agents"][0]["connection"],
                           listed["agents"][0]["detected"]), (None, "configured", False))
 

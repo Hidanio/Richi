@@ -83,9 +83,10 @@ richi --compact-json skill-sources add gemini-cli --name "Gemini CLI" \
 ## Подстрой агента
 
 Antigravity читает скиллы пользователя из `~/.gemini/config/skills`, встроенные
-скиллы из `~/.gemini/antigravity/builtin/skills` (или `ANTIGRAVITY_APP_DATA_DIR/builtin/skills`,
-если `ANTIGRAVITY_APP_DATA_DIR` задаёт абсолютный путь `/...`, например у
-отдельного профиля IDE или CLI) и включённые плагины из `~/.gemini/config/plugins`
+скиллы из `~/.gemini/antigravity/builtin/skills` (с переходом к
+`antigravity-ide` или `antigravity-cli` в `~/.gemini`, либо из
+`ANTIGRAVITY_APP_DATA_DIR/builtin/skills`, если `ANTIGRAVITY_APP_DATA_DIR`
+задаёт абсолютный путь `/...`) и включённые плагины из `~/.gemini/config/plugins`
 (с учётом `disabled` в `plugin.json` и переключателей плагинов в
 `~/.gemini/config/config.json`). Дополнительные каталоги из `skills.json` и
 `plugins.json` автоматически не раскрываются; дополнительные каталоги со

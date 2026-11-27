@@ -270,6 +270,13 @@ class ChatCliTests(unittest.TestCase):
                                  "richi --chat " + chat_name + " rules show --agent " + agent_name)
         self.assertEqual(self.command("--chat", "claude:no-env-file", "chat", "current")["next_commands"][0],
                          "richi --chat claude:no-env-file chat bind --current")
+        (self.root / "home/.config/opencode/skills/custom-skill").mkdir(parents=True)
+        self.command("skill-sources", "add", "opencode", "--name", "OpenCode",
+                     "--skills", "~/.config/opencode/skills", "--variable", "OPENCODE=1")
+        agy_custom = {"ANTIGRAVITY_AGENT": "1", "ANTIGRAVITY_CONVERSATION_ID": "agy-custom-var", "OPENCODE": "1"}
+        for args in (("bind", "default"), ("current",)):
+            shown = self.command("chat", *args, "--with-rules", repo, env=agy_custom)["rules_context"]
+            self.assertEqual((shown["workspace"], shown["agent"], shown["project"]), ("default", "antigravity", "service"))
         global_rules = self.command("chat", "current", "--with-rules", chat="codex-new")["rules_context"]
         self.assertEqual([item["id"] for item in global_rules["rules"]], ["workspace-rule"])
         self.assertNotIn("rules_context", self.command("chat", "current", chat="codex-new"))

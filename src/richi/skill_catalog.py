@@ -298,6 +298,10 @@ def _no_constants(value):
     raise ValueError("invalid JSON constant: " + value)
 
 
+def _parse_strict_json(text):
+    return json.loads(text, parse_int=agents._short_integer, parse_constant=_no_constants)
+
+
 def _json_state(path, jsonc=False, *, strict_constants=False):
     """(parsed JSON value or None, True when absent or readable, False on read/parse failure)."""
     try:
@@ -307,7 +311,7 @@ def _json_state(path, jsonc=False, *, strict_constants=False):
         text = data.decode("utf-8-sig")
         raw = _strip_jsonc(text) if jsonc else text
         if strict_constants:
-            return json.loads(raw, parse_int=agents._short_integer, parse_constant=_no_constants), True
+            return _parse_strict_json(raw), True
         return agents.parse_json(raw), True
     except FileNotFoundError:
         return None, True
@@ -322,6 +326,8 @@ def _json(path, jsonc=False):
 
 
 def _fold_char(ch):
+    if ch == "\u0131":
+        return ch
     upper = ch.upper()
     upper = upper if len(upper) == 1 else ch
     lower = upper.lower()
@@ -439,7 +445,7 @@ def _antigravity_manifest(directory):
                 if len(data) > MAX_MANIFEST:
                     return None, unreadable
                 try:
-                    loaded = agents.parse_json(_strip_jsonc(data.decode("utf-8-sig")))
+                    loaded = _parse_strict_json(_strip_jsonc(data.decode("utf-8-sig")))
                 except (UnicodeError, ValueError, RecursionError):
                     return None, unreadable
                 return (loaded if isinstance(loaded, dict) else None), unreadable
@@ -484,7 +490,6 @@ def _antigravity_plugins(root, home, plugin_state=None):
     """(name, directory, None) of enabled Antigravity plugins under a plugin root."""
     config, config_ok = _json_state(home / ".gemini" / "config" / "config.json", strict_constants=True)
     switches, config_unknown = _antigravity_switches(config, config_ok)
-    user_plugins_root = root == home / ".gemini" / "config" / "plugins"
     seen = set()
     for directory in _children(root):
         manifest, manifest_unreadable = _antigravity_manifest(directory)
@@ -492,7 +497,7 @@ def _antigravity_plugins(root, home, plugin_state=None):
             _scan_ambiguous_antigravity_skills(directory, plugin_state)
         if manifest is None:
             continue
-        if not config_unknown and user_plugins_root:
+        if not config_unknown:
             resolved_name, active = _resolve_antigravity_plugin(directory.name, switches)
             if not active:
                 continue

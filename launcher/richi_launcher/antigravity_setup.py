@@ -23,6 +23,15 @@ def _is_dir(path):
         return False
 
 
+def _safe_app_dir(path, home):
+    if not _is_dir(path):
+        return False
+    try:
+        return path.resolve() not in {Path("/"), home}
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
 def _executable(path):
     try:
         return path.is_file() and os.access(path, os.X_OK)
@@ -40,14 +49,9 @@ def detected():
     if _is_dir(home / ".gemini/config"):
         return True
     raw_app = (os.environ.get("ANTIGRAVITY_APP_DATA_DIR") or "").strip()
-    if raw_app.startswith("/") and "\x00" not in raw_app:
-        try:
-            app_path = Path(raw_app).resolve()
-        except (OSError, RuntimeError, ValueError):
-            app_path = None
-        if app_path is not None and app_path not in {Path("/"), home} and _is_dir(app_path):
-            return True
-    if any(_is_dir(home / ".gemini" / name) for name in ("antigravity", "antigravity-cli", "antigravity-ide")):
+    if raw_app.startswith("/") and "\x00" not in raw_app and _safe_app_dir(Path(raw_app), home):
+        return True
+    if any(_safe_app_dir(home / ".gemini" / name, home) for name in ("antigravity", "antigravity-ide", "antigravity-cli")):
         return True
     if _executable(home / "Library/Application Support/Antigravity/bin/agy"):
         return True
@@ -80,9 +84,15 @@ never use an inherited ID from another agent. Each delegated subagent, workflow
 agent or swarm worker receives its own `ANTIGRAVITY_CONVERSATION_ID`: pass
 `--chat antigravity:<conversation_id>` when delegating memory work and use that
 caller-supplied `--chat` on every Richi call in the child, or skip Richi
-startup checks and binding when no memory task or `--chat` ID was delegated.
-If sandboxing blocks Richi's user storage, request unsandboxed execution rather
-than overriding `HOME`, storage options, or chat variables.
+startup checks and binding in that delegated child when no memory task or
+`--chat` ID was delegated. In unattended scheduled `/automation` runs (where no
+human can choose a workspace), use only a prompt-supplied pre-bound
+`--chat antigravity:<workflow>` on every Richi call, or skip Richi startup
+checks, binding, and memory access when none was supplied or unattended
+permissions auto-deny `richi`; never guess or auto-bind a workspace. If
+sandboxing blocks Richi's user storage, `~/.gemini/config`, or a linked
+worktree's main `.git` directory, request unsandboxed execution rather than
+overriding `HOME`, storage options, or chat variables.
 
 """ + block + b"\n"
     if len(content) > INSTRUCTION_LIMIT:

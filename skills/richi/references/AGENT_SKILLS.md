@@ -83,9 +83,10 @@ agent's own standing instructions.
 ## Adjust an agent
 
 Antigravity reads user skills from `~/.gemini/config/skills`, built-in skills
-from `~/.gemini/antigravity/builtin/skills` (or `ANTIGRAVITY_APP_DATA_DIR/builtin/skills`
-when `ANTIGRAVITY_APP_DATA_DIR` is an absolute `/...` path, such as for a
-standalone IDE or CLI surface) and enabled user plugins from
+from `~/.gemini/antigravity/builtin/skills` (falling back to `antigravity-ide`
+or `antigravity-cli` under `~/.gemini`, or using
+`ANTIGRAVITY_APP_DATA_DIR/builtin/skills` when `ANTIGRAVITY_APP_DATA_DIR` is an
+absolute `/...` path) and enabled user plugins from
 `~/.gemini/config/plugins` (respecting `disabled` in `plugin.json` and plugin
 switches in `~/.gemini/config/config.json`). Extra directories declared in
 `skills.json` or `plugins.json` are not expanded automatically; register extra

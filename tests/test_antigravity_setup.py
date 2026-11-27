@@ -55,6 +55,11 @@ class AntigravitySetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCas
             with patch.object(antigravity_setup.os, "environ",
                               dict(antigravity_setup.os.environ, ANTIGRAVITY_APP_DATA_DIR="/bad\x00path")):
                 self.assertFalse(antigravity_setup.detected())
+            for target in (Path("/"), self.home):
+                bad_link = self.home / ".gemini/antigravity-ide"
+                bad_link.symlink_to(target)
+                self.assertFalse(antigravity_setup.detected())
+                bad_link.unlink()
         with patch.object(antigravity_setup, "SYSTEM_APPLICATIONS", system), \
              patch.object(shutil, "which", side_effect=lambda name: "/usr/bin/antigravity" if name == "antigravity" else None):
             self.assertTrue(antigravity_setup.detected())
@@ -82,6 +87,8 @@ class AntigravitySetupTests(test_agent_setup.AgentSetupFixture, unittest.TestCas
         self.assertIn("antigravity:<conversation_id>", rule)
         self.assertIn("chat_id_required", rule)
         self.assertIn("swarm worker", rule)
+        self.assertIn("/automation", rule)
+        self.assertIn("worktree", rule)
         self.assertIn("unsandboxed execution", rule)
         self.assertIn("`richi` skill", rule)
         self.assertLessEqual(len(self.rule.read_bytes()), antigravity_setup.INSTRUCTION_LIMIT)

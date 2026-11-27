@@ -166,6 +166,25 @@ def _cursor_sources(environ, home):
     return personal + [SkillSource("system", "system", "nested-skills", home / ".cursor/skills-cursor")]
 
 
+_ANTIGRAVITY_DIRS = ("antigravity", "antigravity-ide", "antigravity-cli")
+
+
+def _existing_dir(path):
+    try:
+        return stat.S_ISDIR(os.stat(path).st_mode)
+    except (OSError, ValueError):
+        return False
+
+
+def _safe_app_dir(path, home):
+    if not _existing_dir(path):
+        return False
+    try:
+        return Path(path).resolve() not in {Path("/"), Path(home).resolve()}
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
 def _antigravity_app_data(environ, home):
     raw_app = (environ.get("ANTIGRAVITY_APP_DATA_DIR") or "").strip()
     if raw_app.startswith("/") and valid_folder(raw_app):
@@ -176,7 +195,12 @@ def _antigravity_app_data(environ, home):
                 return Path(os.path.normpath(raw_app))
         except (OSError, RuntimeError, ValueError):
             pass
-    return home / ".gemini" / "antigravity"
+    gemini = Path(home) / ".gemini"
+    candidates = [gemini / name for name in _ANTIGRAVITY_DIRS if _safe_app_dir(gemini / name, home)]
+    for candidate in candidates:
+        if _safe_app_dir(candidate / "builtin" / "skills", home):
+            return candidate
+    return candidates[0] if candidates else gemini / "antigravity"
 
 
 def _antigravity_sources(environ, home):

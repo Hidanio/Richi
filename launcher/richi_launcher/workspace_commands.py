@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 from .config import ConfigError, _path_text, resolve_settings, set_config_value
-from .chats import bind_chat, current_chat, needs_explicit_chat, reject_storage_overrides
+from .chats import PREFIXED_AGENTS, bind_chat, current_chat, reject_storage_overrides
 from .cli import Parser, _emit, _interactive, usage
 from .help_format import complete, document
 from .runtime import installed_runtime, resolve_runtime
@@ -291,7 +291,7 @@ def _include_rules(state, path):
         args += ["--project-path", path]
     args += ["rules", "show"]
     prefix = chat.split(":", 1)[0] if ":" in chat else None
-    if prefix in ("cursor", "claude", "antigravity") and needs_explicit_chat(chat):
+    if prefix in PREFIXED_AGENTS:
         args += ["--agent", prefix]
     try:
         result = subprocess.run(bootstrap_command(args), capture_output=True, text=True, timeout=10,
