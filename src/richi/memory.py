@@ -26,7 +26,7 @@ from . import decision_cards
 # Release contract (docs/RELEASING.md): SCHEMA stays a top-level int literal,
 # because bootstrap parses it for generations installed by 1.0.1, and support
 # is every schema from 1 to SCHEMA.
-SCHEMA = 3
+SCHEMA = 4
 SUPPORTED_VERSIONS = set(range(1, SCHEMA + 1))
 # Frozen at 2. Updaters up to 1.0.1 read memory.VERSION in a release's
 # self-check as its map wire schema and refuse the update unless it equals 2,
@@ -316,7 +316,7 @@ def _created_wal_files(conn, path, timeout):
 def backend(conn):
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     if version not in SUPPORTED_VERSIONS:
-        raise MemoryError("Unsupported schema version {}; this CLI supports 1, 2 and {}. No migration was attempted.".format(version, SCHEMA))
+        raise MemoryError("Unsupported schema version {}; this CLI supports 1 through {}. No migration was attempted.".format(version, SCHEMA))
     row = conn.execute("SELECT value FROM metadata WHERE 1=1 AND key = 'search_backend'").fetchone()
     if row is None or row[0] not in {"fts5", "scan"}:
         raise MemoryError("Missing or invalid search_backend metadata")
@@ -326,7 +326,7 @@ def backend(conn):
 def initialize(conn, path):
     # Validate before changing even the journal mode of an existing database.
     version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if version in {1, 2}:
+    if version in set(range(1, SCHEMA)):
         raise MemoryError("Existing schema {} requires an explicit migrate command, which backs up the store first".format(version))
     if version not in {0, SCHEMA}:
         backend(conn)
@@ -347,6 +347,7 @@ def initialize(conn, path):
             raise MemoryError("Refusing to initialize a nonempty database with an unknown schema")
         execute_script(conn, (BASE / "schema.sql").read_text(encoding="utf-8"))
         execute_script(conn, (BASE / "graph_schema.sql").read_text(encoding="utf-8"))
+        execute_script(conn, (BASE / "scenario_schema.sql").read_text(encoding="utf-8"))
         measurements.index_inline_sources(conn)
         conn.execute("SAVEPOINT optional_fts")
         try:

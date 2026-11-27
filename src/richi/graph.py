@@ -20,12 +20,12 @@ MAX_EDGES = 10000
 
 # The schema migrate produces; tests require it to equal memory.SCHEMA, so a
 # schema bump cannot ship without extending migrate.
-MIGRATION_TARGET = 3
+MIGRATION_TARGET = 4
 
 
 def require_v2(conn, api):
-    if conn.execute("PRAGMA user_version").fetchone()[0] not in {2, 3}:
-        raise api.MemoryError("Graph commands require schema 2 or 3; run richi migrate, which backs up the store first")
+    if conn.execute("PRAGMA user_version").fetchone()[0] not in {2, 3, 4}:
+        raise api.MemoryError("Graph commands require schema 2 or newer; run richi migrate, which backs up the store first")
 
 
 def _migrate_entities_v3(conn, api):
@@ -57,13 +57,13 @@ def _migratable(conn, api):
     """The store's schema version if it can be migrated or already is current;
     stores that migrate would refuse raise before anything is written."""
     version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if version not in {1, 2, 3}:
+    if version not in {1, 2, 3, 4}:
         raise api.MemoryError("Cannot migrate unknown schema version: " + str(version))
     api.backend(conn)
     if version == MIGRATION_TARGET:
         return version
     expected = {"projects", "entries", "entry_projects", "relations", "entry_history", "entry_events", "metadata"}
-    if version == 2:
+    if version in {2, 3}:
         expected.update({"entities", "graph_nodes", "graph_edges", "entity_history", "edge_history"})
     existing = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if not expected.issubset(existing):
@@ -96,8 +96,12 @@ def migrate(conn, path, api):
                 raise api.MemoryError("Cannot back up the store, so migration did not start and nothing changed: " + str(exc)) from exc
             if current == 1:
                 api.execute_script(conn, (api.BASE / "graph_schema.sql").read_text(encoding="utf-8"))
-            else:
+                api.execute_script(conn, (api.BASE / "scenario_schema.sql").read_text(encoding="utf-8"))
+            elif current == 2:
                 _migrate_entities_v3(conn, api)
+                api.execute_script(conn, (api.BASE / "scenario_schema.sql").read_text(encoding="utf-8"))
+            else:
+                api.execute_script(conn, (api.BASE / "scenario_schema.sql").read_text(encoding="utf-8"))
             if conn.execute("PRAGMA foreign_key_check").fetchone():
                 raise api.MemoryError("Migration foreign key check failed")
             if [row[0] for row in conn.execute("PRAGMA integrity_check")] != ["ok"]:
@@ -169,8 +173,8 @@ def put(conn, obj, kind, api):
         record.update(kind=api.enum(obj.get("kind"), "kind", ENTITY_KINDS),
                       title=api.string(obj.get("title"), "title"), summary=api.string(obj.get("summary"), "summary"),
                       tags=api.string_list(obj.get("tags", []), "tags"), aliases=api.string_list(obj.get("aliases", []), "aliases"))
-        if record["kind"] == "tool" and conn.execute("PRAGMA user_version").fetchone()[0] != 3:
-            raise api.MemoryError("Tool entities require schema 3; run richi migrate, which backs up the store first")
+        if record["kind"] == "tool" and conn.execute("PRAGMA user_version").fetchone()[0] < 3:
+            raise api.MemoryError("Tool entities require schema 3 or newer; run richi migrate, which backs up the store first")
         table, history_table = "entities", "entity_history"
     else:
         record.update(from_ref=ref(obj.get("from_ref"), api), to_ref=ref(obj.get("to_ref"), api),

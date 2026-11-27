@@ -11,6 +11,7 @@ from .output import rendered
 
 BASE_TABLES = ("projects", "entries", "entry_projects", "relations", "entry_history", "entry_events")
 GRAPH_TABLES = ("entities", "graph_nodes", "graph_edges", "entity_history", "edge_history")
+SCENARIO_TABLES = ("scenario_runs", "scenario_steps", "scenario_events")
 LOGICAL_COLUMNS = {
     "entries": ("title", "summary", "sources", "tags", "aliases"),
     "entities": ("title", "summary", "sources", "tags", "aliases"),
@@ -197,7 +198,7 @@ def _stats(conn, args, api, database):
                  for name in ("page_size", "page_count", "freelist_count")}
         report["database_pages"] = dict(pages, allocated_bytes=pages["page_size"] * pages["page_count"],
                                         free_page_bytes=pages["page_size"] * pages["freelist_count"])
-        tables = BASE_TABLES + (GRAPH_TABLES if version in (2, 3) else ())
+        tables = BASE_TABLES + (GRAPH_TABLES if version >= 2 else ()) + (SCENARIO_TABLES if version >= 4 else ())
         report["counts"] = {}
         try:
             for table in tables:

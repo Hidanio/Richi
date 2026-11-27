@@ -525,12 +525,13 @@ def _has_events_table(conn):
 
 def _record_log(conn, at, action, scope, project_id, scenario_id, before, after, author):
     scope_key = "global:" + scenario_id if scope == "global" else "project:%s:%s" % (project_id, scenario_id)
+    action_name = action if action.startswith("scenario_") else "scenario_" + action
     entry = {
         "at": at,
         "id": scenario_id,
         "scope": scope,
         "project_id": project_id,
-        "action": action,
+        "action": action_name,
         "by": author.by,
         "agent": author.agent,
         "before": _summary(before) if before else None,

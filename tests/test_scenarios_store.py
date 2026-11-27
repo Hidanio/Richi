@@ -100,7 +100,8 @@ class ScenariosStoreTests(unittest.TestCase):
         self.assertIsNone(scenarios.resolve(self.conn, "custom-review", include_builtin=False))
         # Log recorded created, updated, removed newest first.
         journal = scenarios.log(self.conn, scenario_id="custom-review", entries=10)
-        self.assertEqual([item["action"] for item in journal["entries"]], ["removed", "updated", "created"])
+        self.assertEqual([item["action"] for item in journal["entries"]],
+                         ["scenario_removed", "scenario_updated", "scenario_created"])
 
     def test_unsupported_and_corrupt_rows_do_not_hide_healthy_scenarios(self):
         with memory.transaction(self.conn):
