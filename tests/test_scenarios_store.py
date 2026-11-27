@@ -27,11 +27,15 @@ class ScenariosStoreTests(unittest.TestCase):
     def test_builtin_review_template_loads_and_validates(self):
         templates = scenarios.builtin_templates()
         self.assertIn("review", templates)
+        self.assertIn("deep-review", templates)
         review = templates["review"]["definition"]
         self.assertEqual(scenario_format.normalize(review), review)
         self.assertEqual([step["id"] for step in review["steps"]], ["context", "angle", "merge", "approve"])
+        deep = templates["deep-review"]["definition"]
+        self.assertEqual(scenario_format.normalize(deep), deep)
+        self.assertEqual(len(deep["steps"]), 7)
         listing = scenarios.list_templates()
-        self.assertEqual([item["id"] for item in listing["templates"]], ["review"])
+        self.assertEqual([item["id"] for item in listing["templates"]], ["deep-review", "review"])
 
     def test_copy_and_scope_resolution_order(self):
         # Built-in resolves out of the box.
@@ -53,7 +57,8 @@ class ScenariosStoreTests(unittest.TestCase):
         # Listing filters by scope.
         all_list = scenarios.listing(self.conn, memory, workspace="demo")
         self.assertEqual(len(all_list["scenarios"]), 2)
-        self.assertTrue(all_list["builtin_templates"][0]["shadowed"])
+        review_tpl = next(item for item in all_list["builtin_templates"] if item["id"] == "review")
+        self.assertTrue(review_tpl["shadowed"])
         self.assertEqual(len(scenarios.listing(self.conn, memory, global_scope=True)["scenarios"]), 1)
         self.assertEqual(len(scenarios.listing(self.conn, memory, project="alpha")["scenarios"]), 1)
 

@@ -54,7 +54,7 @@ class ScenarioCliTests(unittest.TestCase):
     def test_e2e_review_cli_walkthrough_and_chat_handoff(self):
         # Discover templates, copy, plan, run.
         templates = self.cli("scenario", "templates")
-        self.assertEqual([item["id"] for item in templates["templates"]], ["review"])
+        self.assertEqual([item["id"] for item in templates["templates"]], ["deep-review", "review"])
         copied = self.cli("--project-path", str(self.repo), "scenario", "copy", "review",
                           "--project", "service", "--id", "svc-review")
         self.assertEqual(copied["status"], "created")

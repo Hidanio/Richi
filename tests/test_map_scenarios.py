@@ -141,6 +141,7 @@ class MapScenariosAPITests(unittest.TestCase):
         self.assertFalse(snap["editing"])
         self.assertEqual(snap["scenarios"], [])
         self.assertTrue(any(t["id"] == "review" and not t["shadowed"] for t in snap["builtin_templates"]))
+        self.assertTrue(any(t["id"] == "deep-review" and not t["shadowed"] for t in snap["builtin_templates"]))
         self.assertEqual([p["id"] for p in snap["projects"]], ["service"])
 
         secret = self.redeem_secret()
