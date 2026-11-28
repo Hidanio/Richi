@@ -180,4 +180,8 @@ richi --compact-json scenario eval bug-hunt --case auth-bug-1 --memory-mode clea
 `stop` со счётчиком продолжений на стороне Richi для защиты от зацикливания и
 `pre-compact`). Для каждого запуска создаётся запись `task` с тегом
 `scenario-run`, обновляемая на ключевых переходах (`in_progress`, `blocked`,
-`done`).
+`done`). Сценарии из репозитория (`.richi/scenarios/*.json`) импортируй через
+`richi scenario import` (с `--trust-sha256` после проверки сводки безопасности),
+а не через `scenario apply`, чтобы промпты и команды были привязаны к одобренному дайджесту. Сценарии из репозитория (`.richi/scenarios/*.json`) импортируй через
+`richi scenario import` (с `--trust-sha256` после проверки сводки безопасности),
+а не через `scenario apply`, чтобы промпты и команды были привязаны к одобренному дайджесту.

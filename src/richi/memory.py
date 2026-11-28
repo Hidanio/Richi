@@ -1012,6 +1012,7 @@ def run(args, cli=None):
         )
         checked_project = checked_root = unmatched_path = None
         infer_rule_scope = args.command == "rules" and args.action in {"show", "check"} and args.project is None
+        scenario_post_export = None
         with transaction(conn, write=writing or source_attach or adding_project or applying_scan or building_index or writing_rules or writing_scenarios):
             if project_path is not None:
                 from .projects import checkout_root, ensure_project_match
@@ -1041,81 +1042,88 @@ def run(args, cli=None):
                                  checked_project=checked_project, unmatched_path=unmatched_path,
                                  request=rule_request)
             if args.command == "scenario":
-                return scenario_commands.run(conn, args, sys.modules[__name__], database,
-                                             workspace=settings.workspace, checked_project=checked_project,
-                                             project_path=checked_root if checked_root is not None else project_path,
-                                             request=scenario_request, preflight_io=scenario_preflight)
-            if scanning:
-                from .projects import project_scan
-                result = project_scan(conn, args.path, apply=args.apply, max_depth=args.max_depth)
-                return dict(result, workspace=settings.workspace, database=str(database))
-            if args.command == "query":
-                from . import query_tools
-                return query_tools.run(conn, args, sys.modules[__name__])
-            if args.command == "tools":
-                from . import tool_catalog
-                return tool_catalog.run(conn, args, sys.modules[__name__])
-            if args.command == "search-index":
-                from . import search_index
-                return search_index.build(conn, sys.modules[__name__]) if building_index else search_index.status(conn)
-            if args.command == "project" and args.action == "check":
-                from .projects import project_check
-                return dict(project_check(conn, args.path, project_id=args.project_id),
-                            workspace=settings.workspace, database=str(database))
-            if adding_project:
-                result = project_add(conn, args.path, args.project_id, args.name, args.description)
-                return dict(result, workspace=settings.workspace, database=str(database))
-            if args.command == "brief":
-                from . import task_brief
-                return task_brief.brief(conn, args, sys.modules[__name__], database)
-            if args.command == "sources" and args.action == "impact":
-                from . import git_impact
-                return git_impact.impact(conn, args, sys.modules[__name__], database)
-            if args.command == "sources" and args.action not in {"snapshot", "check"}:
-                from . import git_sources
-                return git_sources.run(conn, args, sys.modules[__name__], database)
-            if args.command in {"entity", "edge", "graph"}:
-                graph.require_v2(conn, sys.modules[__name__])
+                scenario_res = scenario_commands.run(conn, args, sys.modules[__name__], database,
+                                                     workspace=settings.workspace, checked_project=checked_project,
+                                                     project_path=checked_root if checked_root is not None else project_path,
+                                                     request=scenario_request, preflight_io=scenario_preflight)
+                if args.action == "export" and getattr(args, "out", None):
+                    scenario_post_export = scenario_res
+                else:
+                    return scenario_res
+            if scenario_post_export is None:
+                if scanning:
+                    from .projects import project_scan
+                    result = project_scan(conn, args.path, apply=args.apply, max_depth=args.max_depth)
+                    return dict(result, workspace=settings.workspace, database=str(database))
+                if args.command == "query":
+                    from . import query_tools
+                    return query_tools.run(conn, args, sys.modules[__name__])
+                if args.command == "tools":
+                    from . import tool_catalog
+                    return tool_catalog.run(conn, args, sys.modules[__name__])
+                if args.command == "search-index":
+                    from . import search_index
+                    return search_index.build(conn, sys.modules[__name__]) if building_index else search_index.status(conn)
+                if args.command == "project" and args.action == "check":
+                    from .projects import project_check
+                    return dict(project_check(conn, args.path, project_id=args.project_id),
+                                workspace=settings.workspace, database=str(database))
+                if adding_project:
+                    result = project_add(conn, args.path, args.project_id, args.name, args.description)
+                    return dict(result, workspace=settings.workspace, database=str(database))
+                if args.command == "brief":
+                    from . import task_brief
+                    return task_brief.brief(conn, args, sys.modules[__name__], database)
+                if args.command == "sources" and args.action == "impact":
+                    from . import git_impact
+                    return git_impact.impact(conn, args, sys.modules[__name__], database)
+                if args.command == "sources" and args.action not in {"snapshot", "check"}:
+                    from . import git_sources
+                    return git_sources.run(conn, args, sys.modules[__name__], database)
+                if args.command in {"entity", "edge", "graph"}:
+                    graph.require_v2(conn, sys.modules[__name__])
+                    if writing:
+                        return {"results": [graph.put(conn, item, args.command, sys.modules[__name__]) for item in items]}
+                    if args.command == "graph":
+                        return graph.export(conn, args, sys.modules[__name__])
+                    return graph.get(conn, args.command, args.id, sys.modules[__name__], history=getattr(args, "history", False))
                 if writing:
-                    return {"results": [graph.put(conn, item, args.command, sys.modules[__name__]) for item in items]}
-                if args.command == "graph":
-                    return graph.export(conn, args, sys.modules[__name__])
-                return graph.get(conn, args.command, args.id, sys.modules[__name__], history=getattr(args, "history", False))
-            if writing:
-                put = {"project": project_put, "entry": entry_put, "relation": relation_put}[args.command]
-                return {"results": [put(conn, item) for item in items]}
-            if args.command == "project":
-                return {"projects": [dict(row) for row in conn.execute("SELECT * FROM projects ORDER BY id")]}
-            if args.command == "entry":
-                record = entry_get(conn, args.id, history=getattr(args, "history", False), counts_only=args.action == "read")
-                if args.action == "read":
-                    return compact.fit_response({"entry": compact.card(record, "entry:" + args.id)}, args.max_chars)
-                return record
-            if args.command == "recall":
-                from . import recall
-                return recall.recall(conn, args, sys.modules[__name__])
-            if args.command in {"discover", "fetch"}:
-                from . import retrieval_tools
-                return retrieval_tools.run(conn, args, sys.modules[__name__])
-            if args.command == "punisher":
-                from . import punisher
-                return punisher.punisher(conn, args, sys.modules[__name__])
-            if args.command == "sources":
-                from . import source_watch
-                if args.action == "snapshot":
-                    return source_watch.snapshot(conn, db_path=database, refs=args.refs, project=args.project, output=args.output)
-                return source_watch.check(conn, db_path=database, manifest=args.manifest, max_chars=args.max_chars)
-            if args.command == "search":
-                return search(conn, args, search_backend)
-            if args.command == "context":
-                return context(conn, args)
-            if args.command == "check":
-                integrity = [row[0] for row in conn.execute("PRAGMA integrity_check")]
-                foreign_keys = [list(row) for row in conn.execute("PRAGMA foreign_key_check")]
-                if integrity != ["ok"] or foreign_keys:
-                    raise MemoryError("Database check failed: " + dumps({"integrity": integrity, "foreign_keys": foreign_keys}))
-                return {"status": "ok", "schema_version": conn.execute("PRAGMA user_version").fetchone()[0], "search_backend": search_backend,
-                        "integrity": integrity, "foreign_key_violations": foreign_keys}
+                    put = {"project": project_put, "entry": entry_put, "relation": relation_put}[args.command]
+                    return {"results": [put(conn, item) for item in items]}
+                if args.command == "project":
+                    return {"projects": [dict(row) for row in conn.execute("SELECT * FROM projects ORDER BY id")]}
+                if args.command == "entry":
+                    record = entry_get(conn, args.id, history=getattr(args, "history", False), counts_only=args.action == "read")
+                    if args.action == "read":
+                        return compact.fit_response({"entry": compact.card(record, "entry:" + args.id)}, args.max_chars)
+                    return record
+                if args.command == "recall":
+                    from . import recall
+                    return recall.recall(conn, args, sys.modules[__name__])
+                if args.command in {"discover", "fetch"}:
+                    from . import retrieval_tools
+                    return retrieval_tools.run(conn, args, sys.modules[__name__])
+                if args.command == "punisher":
+                    from . import punisher
+                    return punisher.punisher(conn, args, sys.modules[__name__])
+                if args.command == "sources":
+                    from . import source_watch
+                    if args.action == "snapshot":
+                        return source_watch.snapshot(conn, db_path=database, refs=args.refs, project=args.project, output=args.output)
+                    return source_watch.check(conn, db_path=database, manifest=args.manifest, max_chars=args.max_chars)
+                if args.command == "search":
+                    return search(conn, args, search_backend)
+                if args.command == "context":
+                    return context(conn, args)
+                if args.command == "check":
+                    integrity = [row[0] for row in conn.execute("PRAGMA integrity_check")]
+                    foreign_keys = [list(row) for row in conn.execute("PRAGMA foreign_key_check")]
+                    if integrity != ["ok"] or foreign_keys:
+                        raise MemoryError("Database check failed: " + dumps({"integrity": integrity, "foreign_keys": foreign_keys}))
+                    return {"status": "ok", "schema_version": conn.execute("PRAGMA user_version").fetchone()[0], "search_backend": search_backend,
+                            "integrity": integrity, "foreign_key_violations": foreign_keys}
+        if scenario_post_export is not None:
+            return scenario_commands.write_export_file(args, scenario_post_export, sys.modules[__name__], database)
         raise MemoryError("Unknown command")
     finally:
         conn.close()

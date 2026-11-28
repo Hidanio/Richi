@@ -175,4 +175,10 @@ shows both definition edits and run events newest first. `scenario hook`
 powers agent lifecycle hooks (`session-start`, `stop` with a Richi-side
 continuation counter so agents cannot loop infinitely, and `pre-compact`).
 Each run also creates a `task` entry tagged `scenario-run` that updates on
-milestone transitions (`in_progress`, `blocked`, `done`).
+milestone transitions (`in_progress`, `blocked`, `done`). Always import
+repository-sourced scenario files via `richi scenario import` (with
+`--trust-sha256` after inspecting the security summary) rather than
+`scenario apply`, so prompt/command surfaces stay pinned to an approved digest. Always import
+repository-sourced scenario files via `richi scenario import` (with
+`--trust-sha256` after inspecting the security summary) rather than
+`scenario apply`, so prompt/command surfaces stay pinned to an approved digest.

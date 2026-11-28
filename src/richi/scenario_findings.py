@@ -53,26 +53,41 @@ def _safe_rel_repo_path(rel_path):
     parts = clean.split("/")
     if any(seg in ("", ".", "..") for seg in parts):
         return None, "file must not contain empty, '.' or '..' segments: " + clean[:80]
-    if parts[0] == ".git" or ".git" in parts:
+    if any(seg.casefold() == ".git" for seg in parts):
         return None, "file must not target .git internals: " + clean[:80]
     return clean, None
 
 
 def _open_regular_inside_root(root, rel_path):
-    """Safely open a regular file inside root without following escaping symlinks."""
+    """Safely open a regular file inside root using anchored component-wise dir_fd + O_NOFOLLOW + O_NONBLOCK."""
     resolved_root = Path(root).resolve()
-    candidate = resolved_root / rel_path
+    parts = rel_path.split("/")
+    if not parts or any(seg in ("", ".", "..") or seg.casefold() == ".git" for seg in parts):
+        return None, "invalid path: " + rel_path
+    dir_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    nonblock = getattr(os, "O_NONBLOCK", 0)
+    cur_fd = None
     try:
-        resolved = candidate.resolve()
-        resolved.relative_to(resolved_root)
-    except (OSError, ValueError):
-        return None, "path escapes project root: " + rel_path
-    # Reject symlinks anywhere along the path if leaf is a symlink via O_NOFOLLOW
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        fd = os.open(str(candidate), flags)
+        cur_fd = os.open(str(resolved_root), dir_flags)
+        for seg in parts[:-1]:
+            nxt_fd = os.open(seg, dir_flags | nofollow, dir_fd=cur_fd)
+            os.close(cur_fd)
+            cur_fd = nxt_fd
+        fd = os.open(parts[-1], os.O_RDONLY | nofollow | nonblock, dir_fd=cur_fd)
     except OSError:
+        # Distinguish symlink escape vs missing file for clear diagnostics
+        try:
+            (resolved_root / rel_path).resolve().relative_to(resolved_root)
+        except (OSError, ValueError):
+            return None, "path escapes project root: " + rel_path
         return None, "file not found or unreadable regular file: " + rel_path
+    finally:
+        if cur_fd is not None:
+            try:
+                os.close(cur_fd)
+            except OSError:
+                pass
     try:
         st = os.fstat(fd)
     except OSError:
@@ -111,10 +126,16 @@ def compute_worktree_fingerprint(project_path):
     h = hashlib.sha256()
     try:
         with git_evidence.operation_deadline(deadline):
+            top_out, top_rc = git_evidence._git(root, ["rev-parse", "--show-toplevel"], allowed=(0, 1))
+            if top_rc == 0 and top_out.strip():
+                top_str = top_out.strip().decode("utf-8", errors="surrogateescape") if isinstance(top_out, bytes) else top_out.strip()
+                git_root = Path(top_str).resolve()
+            else:
+                git_root = root
             head_out, head_rc = git_evidence._git(root, ["rev-parse", "--verify", "--quiet", "HEAD"], allowed=(0, 1))
             head_b = head_out.strip() if head_rc == 0 and head_out.strip() else b"UNBORN"
             status_out, _ = git_evidence._git(
-                root, ["status", "--porcelain=v1", "-z", "--untracked-files=normal"], allowed=(0,)
+                root, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], allowed=(0,)
             )
             cached_out, _ = git_evidence._git(
                 root, ["diff", "--raw", "--no-abbrev", "--no-renames", "-z", "--cached"], allowed=(0,)
@@ -159,7 +180,7 @@ def compute_worktree_fingerprint(project_path):
         if idx >= MAX_FINGERPRINT_FILES or time.monotonic() > deadline:
             # Bounded metadata fallback so huge dirty trees never OOM or hang
             try:
-                lst = os.lstat(str(root / rel))
+                lst = os.lstat(str(git_root / rel))
                 h.update(f"CAP:{lst.st_size}:{lst.st_mtime_ns}\x00".encode("ascii"))
             except OSError:
                 h.update(b"MISSING\x00")
@@ -168,11 +189,11 @@ def compute_worktree_fingerprint(project_path):
         if path_err:
             h.update(b"SKIP\x00")
             continue
-        opened, open_err = _open_regular_inside_root(root, clean)
+        opened, open_err = _open_regular_inside_root(git_root, clean)
         if open_err:
             # Deleted file, directory, or symlink: include lstat signature if present
             try:
-                lst = os.lstat(str(root / clean))
+                lst = os.lstat(str(git_root / clean))
                 h.update(f"NONREG:{lst.st_mode}:{lst.st_size}:{lst.st_mtime_ns}\x00".encode("ascii"))
             except OSError:
                 h.update(b"GONE\x00")
@@ -252,14 +273,14 @@ def verify_findings_grounded_io(findings, project_path, path_label="findings"):
     """
     if not isinstance(findings, list):
         return [f"check findings_grounded failed: data.{path_label} must be a list"]
+    if project_path is None:
+        return [f"check findings_grounded requires --project-path to verify data.{path_label}"]
     if len(findings) == 0:
         return []
     if len(findings) > MAX_GROUNDED_FINDINGS:
         return [
             f"check findings_grounded failed: data.{path_label} has {len(findings)} items (max {MAX_GROUNDED_FINDINGS})"
         ]
-    if project_path is None:
-        return [f"check findings_grounded requires --project-path to verify data.{path_label}"]
 
     root = Path(project_path).resolve()
     deadline = time.monotonic() + MAX_IO_SECONDS
@@ -382,6 +403,25 @@ def canonical_finding_id(file_path, line, title, evidence=""):
     return "f:" + hashlib.sha256(sig.encode("utf-8")).hexdigest()[:12]
 
 
+def findings_similar(a, b):
+    """Status-agnostic similarity check for cross-step provenance propagation and cross-run matching."""
+    fa = _normalize_file(a.get("file") or "")
+    fb = _normalize_file(b.get("file") or "")
+    if not fa or fa != fb:
+        return False
+    la = a.get("line") if (isinstance(a.get("line"), int) and not isinstance(a.get("line"), bool) and a.get("line") >= 1) else None
+    lb = b.get("line") if (isinstance(b.get("line"), int) and not isinstance(b.get("line"), bool) and b.get("line") >= 1) else None
+    ta = (str(a.get("title") or "") + " " + str(a.get("evidence") or "")).strip()
+    tb = (str(b.get("title") or "") + " " + str(b.get("evidence") or "")).strip()
+    id_j = _jaccard(_extract_identifiers(ta), _extract_identifiers(tb))
+    tok_c = _cosine(_token_counts(ta), _token_counts(tb))
+    if la is not None and lb is not None:
+        if abs(la - lb) > CLUSTER_LINE_DIAMETER:
+            return False
+        return id_j >= 0.25 or tok_c >= 0.35
+    return id_j >= 0.50 and tok_c >= 0.50
+
+
 def _can_join_cluster(item, cluster_members):
     """Complete-linkage rule: item must match EVERY member in the cluster."""
     i_disproved = item["status"] == "disproved"
@@ -424,7 +464,8 @@ def dedupe_findings(raw_findings, *, replicated_totals=None):
         if isinstance(line, bool) or not isinstance(line, int) or line < 1:
             line = None
         end_line = raw.get("end_line")
-        if isinstance(end_line, bool) or not isinstance(end_line, int) or (line is not None and end_line < line):
+        if (isinstance(end_line, bool) or not isinstance(end_line, int) or end_line < 1
+                or line is None or end_line < line):
             end_line = None
         sev = raw.get("severity") if raw.get("severity") in SEVERITY_RANK else "P2"
         title = str(raw.get("title") or "").strip()
@@ -468,11 +509,13 @@ def dedupe_findings(raw_findings, *, replicated_totals=None):
             clusters.append([item])
 
     results = []
+    seen_fids = {}
     for members in clusters:
-        # Pick representative: highest severity, longest evidence, lowest line
+        # Pick representative: prefer confirmed over candidate, then highest severity, longest evidence, lowest line
         members_sorted = sorted(
             members,
             key=lambda x: (
+                0 if x["status"] == "confirmed" else 1,
                 SEVERITY_RANK.get(x["severity"], 9),
                 -len(x["evidence"]),
                 x["line"] if x["line"] is not None else 10**9,
@@ -508,12 +551,21 @@ def dedupe_findings(raw_findings, *, replicated_totals=None):
         lines = [m["line"] for m in members if m["line"] is not None]
         min_line = min(lines) if lines else None
         max_line = max(lines) if lines else None
-        fid = canonical_finding_id(rep["file"], min_line, rep["title"], rep["evidence"])
+        end_cands = [m["end_line"] for m in members if m["end_line"] is not None]
+        if max_line is not None and max_line != min_line:
+            end_cands.append(max_line)
+        merged_end_line = max(end_cands) if end_cands else None
+        base_fid = canonical_finding_id(rep["file"], min_line, rep["title"], rep["evidence"])
+        if rep["status"] == "disproved":
+            base_fid = base_fid + ":d"
+        cnt = seen_fids.get(base_fid, 0) + 1
+        seen_fids[base_fid] = cnt
+        fid = base_fid if cnt == 1 else f"{base_fid}-{cnt}"
         results.append({
             "finding_id": fid,
             "file": rep["file"],
             "line": min_line,
-            "end_line": rep["end_line"] or (max_line if max_line != min_line else None),
+            "end_line": merged_end_line,
             "severity": rep["severity"],
             "severity_votes": sev_votes,
             "title": rep["title"],

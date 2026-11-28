@@ -1,17 +1,18 @@
 """Phase 3 scenario workflows: DAG fork (pin data), trust-bound Git export/import, and CLI Golden Eval.
 
-* `fork_run`: creates an isolated `run_kind='fork'` run copying non-descendant steps strictly by DAG `needs`
-  from a prior run and recomputing `from_step` and its transitive descendants.
-* `export_scenario` / `import_scenario`: portable JSON export/import with Security Summary and SHA-256 trust
-  bound to `(sha256, project_id)` (never blind `--trust`).
-* `golden_*` / `eval_start` / `eval_score`: fixed-commit golden bug benchmarks with memory isolation modes
-  (`clean | as_of_commit | with_fp_only`), severity-agnostic matching, `extra_unjudged`, and Paired Bug Diff.
+* `fork_run`: creates an isolated `run_kind='fork'` run copying compatible terminal non-descendant steps
+  strictly by DAG `needs` and recomputing `from_step`, its descendants, and any non-terminal/changed siblings.
+* `export_scenario` / `import_scenario`: portable JSON export/import with Security Summary (including
+  `instruction` steps) and SHA-256 trust bound to `(scope, project_id, sha256)` (never blind `--trust`).
+* `golden_*` / `eval_start` / `eval_score`: fixed-commit (hex SHA) golden bug benchmarks with memory
+  isolation modes (`clean | as_of_commit | with_fp_only`), 1-to-1 severity-agnostic matching, `extra_unjudged`,
+  and Paired Bug Diff.
 """
 from datetime import datetime, timezone
 import json
 import re
 
-from . import rules, scenario_findings, scenario_format, scenario_review, scenario_runs, scenarios
+from . import rules, scenario_findings, scenario_format, scenario_registry, scenario_review, scenario_runs, scenarios
 
 
 TRUST_PREFIX = "scenario-trust:"
@@ -20,14 +21,58 @@ MEMORY_MODES = ("clean", "as_of_commit", "with_fp_only")
 MAX_GOLDEN_ITEMS = 50
 MAX_GOLDEN_BYTES = 64 * 1024
 _LINE_SLOP = 5
+_COMMIT_SHA = re.compile(r"^[0-9a-fA-F]{7,64}\Z")
+
+
+def _resolve_safe(conn, api, scenario_id, project_id, *, scope=None):
+    try:
+        return scenarios.resolve(conn, scenario_id, project_id, scope=scope)
+    except scenario_format.UnsupportedVersion as exc:
+        raise scenario_runs._failure(api, str(exc), "unsupported_scenario") from exc
+    except ValueError as exc:
+        raise scenario_runs._failure(api, str(exc), "invalid_scenario") from exc
+
+
+def _check_project_binding(target_project, checked_project, api, subject):
+    if checked_project is not None and target_project is not None and target_project != checked_project:
+        raise scenario_runs._failure(
+            api,
+            f"{subject} belongs to project '{target_project}', but --project-path is bound to '{checked_project}'",
+            "project_mismatch",
+        )
 
 
 # ---------------------------------------------------------------- 1. Fork (Pin Data)
 
 
+def _step_rows_terminal(step_spec, rows):
+    if not rows:
+        return False
+    allow_failed = bool(step_spec.get("continue_on_failure"))
+    for r in rows:
+        if r["status"] in ("done", "skipped"):
+            continue
+        if r["status"] == "failed" and allow_failed:
+            continue
+        return False
+    return True
+
+
+def _step_shape_compatible(step_spec, rows):
+    if not rows:
+        return False
+    if any(r["type"] != step_spec["type"] for r in rows):
+        return False
+    want_matrix = "matrix" in step_spec
+    has_matrix = any(r["matrix_index"] is not None for r in rows)
+    if want_matrix != has_matrix:
+        return False
+    return True
+
+
 def fork_run(conn, api, database, source_run_id, from_step_id, *, use_latest=False, dry_run=False,
              checked_project=None, project_path=None, author=None, now_override=None):
-    """Fork a scenario run from `from_step_id`, freezing non-descendant steps strictly by DAG `needs`."""
+    """Fork a scenario run from `from_step_id`, freezing compatible terminal non-descendant steps by DAG `needs`."""
     scenario_runs.require_v4(conn, api)
     author = author or rules.current_author()
     at_dt = scenario_runs._now_dt(api, now_override)
@@ -37,43 +82,94 @@ def fork_run(conn, api, database, source_run_id, from_step_id, *, use_latest=Fal
     scenario_runs._check_run_project(src_row, checked_project, api)
     src_steps = scenario_runs._load_steps(conn, source_run_id)
     src_def = json.loads(src_row["definition_json"])
+    src_meta = scenario_runs.get_run_meta(conn, source_run_id)
 
     if use_latest:
-        resolved = scenarios.resolve(conn, src_row["scenario_id"], src_row["project_id"])
+        resolved = _resolve_safe(conn, api, src_row["scenario_id"], src_row["project_id"])
         if resolved is None:
             raise api.NotFoundError("Cannot resolve latest definition for scenario: " + src_row["scenario_id"])
         definition = resolved["definition"]
         scn_version = int(resolved.get("version") or src_row["scenario_version"])
+        target_scope = resolved["scope"]
     else:
         definition = src_def
         scn_version = int(src_row["scenario_version"])
+        target_scope = src_row["scope"]
 
     by_def = {s["id"]: s for s in definition["steps"]}
     if from_step_id not in by_def:
         raise api.NotFoundError(f"Unknown step '{from_step_id}' in scenario {src_row['scenario_id']}")
 
-    ancestry = scenario_format.ancestors(definition)
-    recompute_ids = {from_step_id} | {sid for sid, anc in ancestry.items() if from_step_id in anc}
-    frozen_ids = [s["id"] for s in definition["steps"] if s["id"] not in recompute_ids]
-    recompute_ordered = [s["id"] for s in definition["steps"] if s["id"] in recompute_ids]
+    if src_row["project_id"] is None and any(
+        c["kind"] in scenario_registry.PROJECT_BOUND_CHECKS
+        for step in definition.get("steps") or []
+        for c in step.get("checks") or []
+    ):
+        raise scenario_runs._failure(
+            api,
+            f"Scenario {src_row['scenario_id']} uses project-bound checks and requires a project-scoped run",
+            "invalid_input",
+        )
 
-    # Verify every prerequisite ancestor of from_step_id is completed/skipped in source run
+    # Re-resolve inputs when --use-latest so new defaults are populated and missing newly required inputs fail fast
+    try:
+        stored_inputs = json.loads(src_row["inputs_json"] or "{}")
+    except (ValueError, TypeError):
+        stored_inputs = {}
+    if use_latest:
+        try:
+            _, redacted_inputs, missing_inputs, _ = scenarios.resolve_inputs(definition, stored_inputs)
+        except scenario_format.FormatError as exc:
+            raise scenario_runs._failure(api, str(exc), "invalid_input") from exc
+        if missing_inputs:
+            raise scenario_runs._failure(
+                api, "Latest definition requires new input(s): " + ", ".join(missing_inputs), "missing_input"
+            )
+        inputs_json_str = json.dumps(redacted_inputs, ensure_ascii=False, separators=(",", ":"))
+    else:
+        inputs_json_str = src_row["inputs_json"]
+
+    ancestry = scenario_format.ancestors(definition)
     src_by_step_id = {}
     for row in src_steps:
         src_by_step_id.setdefault(row["step_id"], []).append(row)
 
+    # Verify every prerequisite ancestor of from_step_id is terminal and compatible in source run
     for anc_id in sorted(ancestry[from_step_id]):
         anc_rows = src_by_step_id.get(anc_id) or []
+        anc_spec = by_def[anc_id]
         if not anc_rows:
             raise scenario_runs._failure(
                 api, f"Cannot fork from {from_step_id}: prerequisite step '{anc_id}' is missing in source run {source_run_id}",
                 "invalid_state",
             )
-        if not all(r["status"] in ("done", "skipped") for r in anc_rows):
+        if not _step_shape_compatible(anc_spec, anc_rows):
             raise scenario_runs._failure(
-                api, f"Cannot fork from {from_step_id}: prerequisite step '{anc_id}' is not done/skipped in source run",
+                api, f"Cannot fork from {from_step_id}: prerequisite step '{anc_id}' changed type/matrix shape in latest definition",
                 "invalid_state",
             )
+        if not _step_rows_terminal(anc_spec, anc_rows):
+            raise scenario_runs._failure(
+                api, f"Cannot fork from {from_step_id}: prerequisite step '{anc_id}' is not terminal in source run",
+                "invalid_state",
+            )
+
+    # Determine recompute set: from_step, its descendants, plus any non-terminal / missing / shape-changed siblings
+    # and their descendants — so --dry-run and actual execution agree 100% and never create zombie claimed steps!
+    base_recompute = {from_step_id}
+    for s in definition["steps"]:
+        sid = s["id"]
+        rows = src_by_step_id.get(sid) or []
+        if not rows or not _step_shape_compatible(s, rows) or not _step_rows_terminal(s, rows):
+            base_recompute.add(sid)
+
+    recompute_ids = set(base_recompute)
+    for sid, anc in ancestry.items():
+        if anc & base_recompute:
+            recompute_ids.add(sid)
+
+    frozen_ids = [s["id"] for s in definition["steps"] if s["id"] not in recompute_ids]
+    recompute_ordered = [s["id"] for s in definition["steps"] if s["id"] in recompute_ids]
 
     if dry_run:
         return {
@@ -94,22 +190,28 @@ def fork_run(conn, api, database, source_run_id, from_step_id, *, use_latest=Fal
         "inputs_json, status, task_entry_id, created_by_chat, created_by_agent, created_at, updated_at, revision) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', NULL, ?, ?, ?, ?, 1)",
         (
-            run_id, src_row["scenario_id"], src_row["scope"], src_row["project_id"], scn_version,
+            run_id, src_row["scenario_id"], target_scope, src_row["project_id"], scn_version,
             scenario_format.digest(definition),
-            scenario_format.canonical_json(definition), src_row["inputs_json"],
+            scenario_format.canonical_json(definition), inputs_json_str,
             author.by, author.agent, at_iso, at_iso,
         ),
     )
-    scenario_runs.set_run_meta(conn, run_id, {
+    fork_meta = {
         "kind": "fork",
         "parent_run_id": source_run_id,
         "fork_from": from_step_id,
         "use_latest": bool(use_latest),
-    })
+    }
+    # Preserve eval memory isolation if forking from an eval run
+    for inherit_key in ("memory_mode", "case_id", "commit_time"):
+        if src_meta.get(inherit_key) is not None:
+            fork_meta[inherit_key] = src_meta[inherit_key]
+    scenario_runs.set_run_meta(conn, run_id, fork_meta)
 
+    frozen_set = set(frozen_ids)
     for pos, step in enumerate(definition["steps"]):
         sid = step["id"]
-        if sid in frozen_ids and sid in src_by_step_id:
+        if sid in frozen_set:
             for src_r in src_by_step_id[sid]:
                 conn.execute(
                     "INSERT INTO scenario_steps(run_id, step_key, step_id, position, matrix_index, matrix_json, "
@@ -153,9 +255,10 @@ def fork_run(conn, api, database, source_run_id, from_step_id, *, use_latest=Fal
 
 
 def security_summary(definition):
-    """Inspect a normalized scenario definition for executable or privileged surfaces."""
+    """Inspect a normalized scenario definition for all agent-executable and privileged surfaces."""
     commands = []
     skills = []
+    instructions = []
     memory_records = []
     checks = set()
     for step in definition.get("steps") or ():
@@ -165,6 +268,9 @@ def security_summary(definition):
             commands.append({"step_id": step["id"], "command": params.get("command", "")})
         elif stype == "skill":
             skills.append({"step_id": step["id"], "skill": params.get("skill")})
+        elif stype == "instruction":
+            txt = str(params.get("text") or "").strip()
+            instructions.append({"step_id": step["id"], "preview": txt[:140]})
         elif stype == "memory.record":
             memory_records.append({
                 "step_id": step["id"],
@@ -181,28 +287,35 @@ def security_summary(definition):
     return {
         "commands": commands,
         "skills": skills,
+        "instructions": instructions,
         "memory_records": memory_records,
         "secrets": secrets,
         "checks": sorted(checks),
-        "requires_trust": bool(commands or skills or memory_records or secrets),
+        "requires_trust": bool(commands or skills or instructions or memory_records or secrets),
     }
 
 
 def _trust_key(project_id, sha256):
+    if project_id is None:
+        return f"{TRUST_PREFIX}global:{sha256}"
+    return f"{TRUST_PREFIX}project:{len(project_id)}:{project_id}:{sha256}"
+
+
+def _legacy_trust_key(project_id, sha256):
     return f"{TRUST_PREFIX}{project_id or '_global'}:{sha256}"
 
 
 def export_scenario(conn, api, scenario_id, *, project_id=None, scope=None, checked_project=None):
     """Export one stored scenario or built-in template with its canonical SHA-256 and security summary."""
     eff_project = project_id if project_id is not None else checked_project
+    if project_id is not None:
+        api.require_project(conn, project_id)
     if scope == "builtin":
         rec = scenarios.builtin_templates().get(scenario_id)
     elif scope == "global":
-        rec = scenarios.resolve(conn, scenario_id, None)
-        if rec and rec["scope"] != "global":
-            rec = None
+        rec = _resolve_safe(conn, api, scenario_id, None, scope="global")
     else:
-        rec = scenarios.resolve(conn, scenario_id, eff_project)
+        rec = _resolve_safe(conn, api, scenario_id, eff_project)
     if rec is None:
         raise api.NotFoundError("Unknown scenario: " + scenario_id)
     defn = rec["definition"]
@@ -220,13 +333,14 @@ def export_scenario(conn, api, scenario_id, *, project_id=None, scope=None, chec
 
 def import_scenario(conn, api, raw_definition, *, scope="project", project_id=None, checked_project=None,
                     trust_sha256=None, replace=False, author=None):
-    """Import a scenario JSON definition with canonical SHA-256 trust bound to (sha256, project_id)."""
+    """Import a scenario JSON definition with canonical SHA-256 trust bound to (scope, project_id, sha256)."""
     author = author or rules.current_author()
     if scope == "project":
         eff_project = project_id if project_id is not None else checked_project
         if not eff_project:
             raise scenario_runs._failure(api, "Project import requires --project ID or --project-path", "invalid_input")
         api.require_project(conn, eff_project)
+        _check_project_binding(eff_project, checked_project, api, "Scenario import")
     else:
         eff_project = None
 
@@ -238,8 +352,13 @@ def import_scenario(conn, api, raw_definition, *, scope="project", project_id=No
     sha = scenario_format.digest(defn)
     sec = security_summary(defn)
     tkey = _trust_key(eff_project, sha)
-    already_trusted = conn.execute("SELECT 1 FROM metadata WHERE key = ?", (tkey,)).fetchone() is not None
+    already_trusted = (
+        conn.execute("SELECT 1 FROM metadata WHERE key = ?", (tkey,)).fetchone() is not None
+        or (eff_project != "_global"
+            and conn.execute("SELECT 1 FROM metadata WHERE key = ?", (_legacy_trust_key(eff_project, sha),)).fetchone() is not None)
+    )
 
+    should_record_trust = False
     if sec["requires_trust"] and not already_trusted:
         if not trust_sha256:
             return {
@@ -258,10 +377,7 @@ def import_scenario(conn, api, raw_definition, *, scope="project", project_id=No
                 api, f"Digest mismatch: scenario SHA-256 is {sha}, but --trust-sha256 was {provided[:80]}",
                 "digest_mismatch",
             )
-        conn.execute(
-            "INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)",
-            (tkey, json.dumps({"sha256": sha, "project_id": eff_project, "scenario_id": defn["id"], "by": author.by})),
-        )
+        should_record_trust = True
 
     existing_key = scenarios.storage_key(scope, defn["id"], eff_project)
     existing_row = conn.execute("SELECT CAST(value AS BLOB) FROM metadata WHERE key = ?", (existing_key,)).fetchone()
@@ -291,6 +407,11 @@ def import_scenario(conn, api, raw_definition, *, scope="project", project_id=No
         req["project"] = eff_project
 
     res = scenarios.change(conn, req, api, checked_project=checked_project, author=author)
+    if should_record_trust:
+        conn.execute(
+            "INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)",
+            (tkey, json.dumps({"sha256": sha, "project_id": eff_project, "scenario_id": defn["id"], "by": author.by})),
+        )
     res["view"] = "scenario-import"
     res["sha256"] = sha
     res["security_summary"] = sec
@@ -341,7 +462,7 @@ def _validate_golden_bug_list(items, label, api, *, required=False):
 
 
 def golden_add(conn, api, case_obj, *, checked_project=None, author=None, now_override=None):
-    """Add or update a fixed-commit golden bug benchmark case."""
+    """Add or update a fixed-commit (hex SHA) golden bug benchmark case."""
     author = author or rules.current_author()
     at_iso = scenario_runs._format_iso(scenario_runs._now_dt(api, now_override))
     if not isinstance(case_obj, dict):
@@ -353,18 +474,27 @@ def golden_add(conn, api, case_obj, *, checked_project=None, author=None, now_ov
     project_id = case_obj.get("project_id") or checked_project
     if project_id is not None:
         api.require_project(conn, project_id)
+        _check_project_binding(project_id, checked_project, api, f"Golden case '{cid}'")
     base_rev = str(case_obj.get("base_rev") or "").strip()
     head_rev = str(case_obj.get("head_rev") or "").strip()
-    if not base_rev or not head_rev or not scenario_runs._GIT_REV.fullmatch(base_rev) or not scenario_runs._GIT_REV.fullmatch(head_rev):
-        raise scenario_runs._failure(api, "Golden case requires valid base_rev and head_rev Git revisions", "invalid_input")
+    if not _COMMIT_SHA.fullmatch(base_rev) or not _COMMIT_SHA.fullmatch(head_rev):
+        raise scenario_runs._failure(
+            api, "Golden case base_rev and head_rev must be fixed Git commit SHAs (7-64 hex characters, not floating branch names)",
+            "invalid_input",
+        )
     expected_bugs = _validate_golden_bug_list(case_obj.get("expected_bugs"), "expected_bugs", api, required=True)
     known_traps = _validate_golden_bug_list(case_obj.get("known_traps"), "known_traps", api, required=False)
     as_of_iso = case_obj.get("commit_time")
     if as_of_iso is not None:
+        if not isinstance(as_of_iso, str) or not as_of_iso.strip():
+            raise scenario_runs._failure(api, "commit_time must be an ISO-8601 UTC timestamp with timezone", "invalid_input")
         try:
-            datetime.fromisoformat(str(as_of_iso).replace("Z", "+00:00"))
+            parsed_dt = datetime.fromisoformat(as_of_iso.strip().replace("Z", "+00:00"))
         except ValueError as exc:
-            raise scenario_runs._failure(api, "commit_time must be ISO-8601 timestamp", "invalid_input") from exc
+            raise scenario_runs._failure(api, "commit_time must be an ISO-8601 timestamp", "invalid_input") from exc
+        if parsed_dt.tzinfo is None:
+            raise scenario_runs._failure(api, "commit_time must include a timezone offset or 'Z'", "invalid_input")
+        as_of_iso = scenario_runs._format_iso(parsed_dt.astimezone(timezone.utc))
 
     stored = {
         "id": cid,
@@ -389,10 +519,18 @@ def golden_get(conn, api, case_id):
     row = conn.execute("SELECT value FROM metadata WHERE key = ?", (_golden_key(case_id),)).fetchone()
     if row is None or not row[0]:
         raise api.NotFoundError("Unknown golden case: " + str(case_id))
-    return json.loads(row[0])
+    try:
+        parsed = json.loads(row[0])
+    except (ValueError, TypeError) as exc:
+        raise scenario_runs._failure(api, f"Corrupt golden case '{case_id}'", "invalid_scenario") from exc
+    if not isinstance(parsed, dict):
+        raise scenario_runs._failure(api, f"Corrupt golden case '{case_id}'", "invalid_scenario")
+    return parsed
 
 
-def golden_list(conn, *, project_id=None):
+def golden_list(conn, *, project_id=None, api=None):
+    if project_id is not None and api is not None:
+        api.require_project(conn, project_id)
     rows = conn.execute(
         "SELECT value FROM metadata WHERE key >= ? AND key < ? ORDER BY key",
         (GOLDEN_PREFIX, GOLDEN_PREFIX[:-1] + ";"),
@@ -403,37 +541,52 @@ def golden_list(conn, *, project_id=None):
             c = json.loads(raw)
         except (ValueError, TypeError):
             continue
+        if not isinstance(c, dict):
+            continue
         if project_id is not None and c.get("project_id") != project_id:
             continue
         cases.append(c)
     return {"view": "scenario-golden-list", "cases": cases}
 
 
-def golden_remove(conn, api, case_id):
-    cur = conn.execute("DELETE FROM metadata WHERE key = ?", (_golden_key(case_id),))
-    if cur.rowcount == 0:
-        raise api.NotFoundError("Unknown golden case: " + str(case_id))
+def golden_remove(conn, api, case_id, *, checked_project=None):
+    case = golden_get(conn, api, case_id)
+    _check_project_binding(case.get("project_id"), checked_project, api, f"Golden case '{case_id}'")
+    conn.execute("DELETE FROM metadata WHERE key = ?", (_golden_key(case_id),))
     return {"view": "scenario-golden", "status": "removed", "id": case_id}
 
 
-def _finding_matches_spec(finding, spec):
-    """Severity-agnostic matcher: same file AND (line within range±slop OR symbol overlap)."""
+def _match_quality(finding, spec):
+    """Return match priority tuple (lower is better) or None if finding does not match spec.
+
+    Severity-agnostic: requires same normalized file AND (line within range±slop OR word-boundary symbol hit).
+    """
     if scenario_findings._normalize_file(finding.get("file") or "") != spec["file"]:
-        return False
+        return None
     lr = spec.get("line_range")
     line = finding.get("line")
+    exact_line = False
     line_hit = False
     if lr is not None and isinstance(line, int) and not isinstance(line, bool):
+        exact_line = lr[0] <= line <= lr[1]
         line_hit = (lr[0] - _LINE_SLOP) <= line <= (lr[1] + _LINE_SLOP)
     syms = set(spec.get("symbols") or ())
     sym_hit = False
     if syms:
-        hay_ids = scenario_findings._extract_identifiers((finding.get("title") or "") + " " + (finding.get("evidence") or ""))
-        hay_low = ((finding.get("title") or "") + " " + (finding.get("evidence") or "")).lower()
-        sym_hit = any(s in hay_ids or s in hay_low for s in syms)
+        hay_text = (finding.get("title") or "") + " " + (finding.get("evidence") or "")
+        hay_ids = scenario_findings._extract_identifiers(hay_text)
+        hay_low = hay_text.lower()
+        sym_hit = any(
+            s in hay_ids or bool(re.search(r"(?<![A-Za-z0-9_])" + re.escape(s) + r"(?![A-Za-z0-9_])", hay_low))
+            for s in syms
+        )
     if lr is not None and syms:
-        return line_hit or sym_hit
-    return line_hit if lr is not None else sym_hit
+        if not (line_hit or sym_hit):
+            return None
+        return (0 if (exact_line and sym_hit) else (1 if (line_hit and sym_hit) else (2 if line_hit else 3)),)
+    if lr is not None:
+        return (0 if exact_line else 1,) if line_hit else None
+    return (0,) if sym_hit else None
 
 
 def _score_single_run(conn, api, case, run_id):
@@ -443,13 +596,27 @@ def _score_single_run(conn, api, case, run_id):
     deduped, _ = scenario_review._extract_run_findings(defn, step_rows)
     active = [f for f in deduped if f["status"] != "disproved"]
 
+    # Strict 1-to-1 global quality-first matching (exact line+symbol pairs win over line-only/symbol-only pairs)
     matched_finding_ids = set()
+    matched_bug_indices = {}
+    bug_pairs = []
+    for exp_idx, exp in enumerate(case["expected_bugs"]):
+        for f in active:
+            q = _match_quality(f, exp)
+            if q is not None:
+                bug_pairs.append((q, exp_idx, f["finding_id"], f))
+    bug_pairs.sort(key=lambda item: (item[0], item[1], item[2]))
+    for _q, exp_idx, fid, f in bug_pairs:
+        if exp_idx in matched_bug_indices or fid in matched_finding_ids:
+            continue
+        matched_bug_indices[exp_idx] = f
+        matched_finding_ids.add(fid)
+
     detected = []
     missed = []
-    for exp in case["expected_bugs"]:
-        hit = next((f for f in active if _finding_matches_spec(f, exp)), None)
+    for exp_idx, exp in enumerate(case["expected_bugs"]):
+        hit = matched_bug_indices.get(exp_idx)
         if hit is not None:
-            matched_finding_ids.add(hit["finding_id"])
             detected.append({
                 "bug_id": exp["id"],
                 "file": exp["file"],
@@ -460,11 +627,27 @@ def _score_single_run(conn, api, case, run_id):
         else:
             missed.append({"bug_id": exp["id"], "file": exp["file"], "description": exp.get("description", "")})
 
+    matched_trap_indices = {}
+    trap_pairs = []
+    traps_list = list(case.get("known_traps") or ())
+    for trap_idx, trap in enumerate(traps_list):
+        for f in active:
+            if f["finding_id"] in matched_finding_ids:
+                continue
+            q = _match_quality(f, trap)
+            if q is not None:
+                trap_pairs.append((q, trap_idx, f["finding_id"], f))
+    trap_pairs.sort(key=lambda item: (item[0], item[1], item[2]))
+    for _q, trap_idx, fid, f in trap_pairs:
+        if trap_idx in matched_trap_indices or fid in matched_finding_ids:
+            continue
+        matched_trap_indices[trap_idx] = f
+        matched_finding_ids.add(fid)
+
     traps_triggered = []
-    for trap in case.get("known_traps") or ():
-        hit = next((f for f in active if f["finding_id"] not in matched_finding_ids and _finding_matches_spec(f, trap)), None)
+    for trap_idx, trap in enumerate(traps_list):
+        hit = matched_trap_indices.get(trap_idx)
         if hit is not None:
-            matched_finding_ids.add(hit["finding_id"])
             traps_triggered.append({
                 "trap_id": trap["id"],
                 "file": trap["file"],
@@ -478,7 +661,7 @@ def _score_single_run(conn, api, case, run_id):
     ]
     total_exp = len(case["expected_bugs"])
     recall = round(len(detected) / total_exp, 4) if total_exp else None
-    return {
+    result = {
         "run_id": run_id,
         "scenario_id": run_row["scenario_id"],
         "scenario_version": run_row["scenario_version"],
@@ -495,14 +678,45 @@ def _score_single_run(conn, api, case, run_id):
         "traps_triggered": traps_triggered,
         "extra_unjudged": extra_unjudged,
     }
+    if run_row["status"] != "done":
+        result["warning"] = f"Run {run_id} has status '{run_row['status']}' (not 'done'); score may be incomplete"
+    return result
 
 
-def eval_score(conn, api, case_id, run_id, *, compare_run_id=None, checked_project=None):
-    """Score a completed eval run against a golden case, optionally with Paired Bug Diff."""
+def _validate_eval_score_run(conn, api, case_id, case, run_row, *, expected_scenario_id=None, checked_project=None):
+    scenario_runs._check_run_project(run_row, checked_project, api)
+    if case.get("project_id") and run_row["project_id"] and case["project_id"] != run_row["project_id"]:
+        raise scenario_runs._failure(
+            api, f"Run {run_row['id']} belongs to project '{run_row['project_id']}', not case project '{case['project_id']}'",
+            "project_mismatch",
+        )
+    if expected_scenario_id and run_row["scenario_id"] != expected_scenario_id:
+        raise scenario_runs._failure(
+            api, f"Run {run_row['id']} is for scenario '{run_row['scenario_id']}', not '{expected_scenario_id}'",
+            "invalid_input",
+        )
+    meta = scenario_runs.get_run_meta(conn, run_row["id"])
+    if meta.get("case_id") and meta["case_id"] != case_id:
+        raise scenario_runs._failure(
+            api, f"Run {run_row['id']} was evaluated on case '{meta['case_id']}', not '{case_id}'",
+            "invalid_input",
+        )
+    if run_row["status"] in ("failed", "cancelled"):
+        raise scenario_runs._failure(
+            api, f"Cannot score {run_row['status']} run {run_row['id']}", "invalid_state"
+        )
+
+
+def eval_score(conn, api, case_id, run_id, *, compare_run_id=None, expected_scenario_id=None, checked_project=None):
+    """Score a completed (or gate-waiting) eval run against a golden case, optionally with Paired Bug Diff."""
     scenario_runs.require_v4(conn, api)
     case = golden_get(conn, api, case_id)
+    _check_project_binding(case.get("project_id"), checked_project, api, f"Golden case '{case_id}'")
     run_row = scenario_runs._load_run(conn, run_id, api)
-    scenario_runs._check_run_project(run_row, checked_project, api)
+    _validate_eval_score_run(
+        conn, api, case_id, case, run_row,
+        expected_scenario_id=expected_scenario_id, checked_project=checked_project,
+    )
     current = _score_single_run(conn, api, case, run_id)
     out = {
         "view": "scenario-eval-score",
@@ -512,7 +726,9 @@ def eval_score(conn, api, case_id, run_id, *, compare_run_id=None, checked_proje
     }
     if compare_run_id:
         prev_row = scenario_runs._load_run(conn, compare_run_id, api)
-        scenario_runs._check_run_project(prev_row, checked_project, api)
+        _validate_eval_score_run(
+            conn, api, case_id, case, prev_row, checked_project=checked_project,
+        )
         prev = _score_single_run(conn, api, case, compare_run_id)
         cur_caught = {d["bug_id"] for d in current["detected"]}
         prev_caught = {d["bug_id"] for d in prev["detected"]}
@@ -537,9 +753,15 @@ def eval_start(conn, api, database, scenario_id, case_id, *, memory_mode="clean"
     if memory_mode not in MEMORY_MODES:
         raise scenario_runs._failure(api, "memory_mode must be one of " + ", ".join(MEMORY_MODES), "invalid_input")
     case = golden_get(conn, api, case_id)
+    if memory_mode == "as_of_commit" and not case.get("commit_time"):
+        raise scenario_runs._failure(
+            api, f"memory_mode=as_of_commit requires commit_time on golden case '{case_id}'", "invalid_input"
+        )
+    _check_project_binding(case.get("project_id"), checked_project, api, f"Golden case '{case_id}'")
     eff_project = project_id or case.get("project_id") or checked_project
+    _check_project_binding(eff_project, checked_project, api, "Scenario eval")
 
-    resolved = scenarios.resolve(conn, scenario_id, eff_project)
+    resolved = _resolve_safe(conn, api, scenario_id, eff_project)
     if resolved is None:
         raise api.NotFoundError("Unknown scenario: " + scenario_id)
     declared_inputs = resolved["definition"].get("inputs") or {}
@@ -553,7 +775,6 @@ def eval_start(conn, api, database, scenario_id, case_id, *, memory_mode="clean"
     if "focus" in declared_inputs:
         eval_inputs["focus"] = f"eval:{case_id}"
 
-    # Pre-register run_meta during start_run via hook parameter so memory.brief honors memory_mode on step 1!
     eval_meta = {
         "kind": "eval",
         "case_id": case_id,

@@ -2,9 +2,9 @@
 """Loopback viewer for project memory. Python standard library only.
 
 Knowledge is served read-only. The only changes the map accepts are to the
-user's standing rules and to the user's agent settings (which agents there
-are and where each finds skills), and only from a page opened by `richi map`
-(map_access).
+user's standing rules, scenario definitions, scenario finding triage feedback,
+and agent settings (which agents there are and where each finds skills), and
+only from a page opened by `richi map` (map_access).
 
 Like the knowledge itself, the rules, the agents with their skill folders (as
 the user wrote them, under the home directory as ~/...) and the names and
@@ -164,12 +164,12 @@ RULES_LIST_OUTPUT_LIMIT = GRAPH_WORKER_OUTPUT_LIMIT
 # Error codes of a refused change and the HTTP status the map answers with; any other code is 400.
 CHANGE_ERROR_STATUS = {
     "not_found": 404, "conflict": 409, "exists": 409, "settings": 409, "busy": 503,
-    "invalid_state": 409, "schema_upgrade_required": 409,
+    "invalid_state": 409, "schema_upgrade_required": 409, "forbidden": 403, "limit": 413,
 }
 # How long a request waits for its turn: reading for another reading, a change for another change.
 TURN_TIMEOUT = RULES_WORKER_TIMEOUT + 5
 RULES_SOURCE = "richi map"
-CHANGES_ONLY = "The map changes only standing rules, scenarios and agent settings"
+CHANGES_ONLY = "The map changes only standing rules, scenarios, finding triage feedback and agent settings"
 # What a page that may not edit is told about agent settings that cannot be used: the full text names the file.
 SETTINGS_PROBLEM = "The agent settings cannot be used now"
 # No change the page sends nests deeper; a deeper body is refused before anything else reads it.
@@ -722,7 +722,12 @@ def _scenario_review_worker(database, project_id):
     """Private map read of Review Hub KPIs, deduped findings inbox, and FP patterns."""
     try:
         with closing(memory.connect(Path(database), readonly=True, timeout=5)) as conn:
-            payload = scenario_review.review_hub_snapshot(conn, memory, project_id=project_id or None)
+            with memory.transaction(conn, write=False):
+                memory.backend(conn)
+                payload = scenario_review.review_hub_snapshot(conn, memory, project_id=project_id or None)
+    except memory.NotFoundError as exc:
+        print(json.dumps({"error": str(exc), "code": "not_found"}), file=sys.stderr)
+        return 1
     except memory.MemoryError as exc:
         code = getattr(exc, "code", None) or "error"
         print(json.dumps({"error": str(exc), "code": code}), file=sys.stderr)
@@ -751,10 +756,14 @@ def _scenario_feedback_worker(database):
     try:
         with closing(memory.connect(Path(database), readonly=False, timeout=5)) as conn:
             with memory.transaction(conn, write=True):
+                memory.backend(conn)
                 payload = scenario_review.record_feedback(
                     conn, memory, body["run_id"], body["items"],
                     author=rules.current_author(), allow_remember_pattern=False,
                 )
+    except memory.NotFoundError as exc:
+        print(json.dumps({"error": str(exc), "code": "not_found"}), file=sys.stderr)
+        return 1
     except memory.MemoryError as exc:
         code = getattr(exc, "code", None) or "error"
         print(json.dumps({"error": str(exc), "code": code}), file=sys.stderr)
@@ -1149,7 +1158,11 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 return self.send_data(405, {"error": CHANGES_ONLY})
             scenario_request = path.path == "/api/scenarios"
             feedback_request = path.path == "/api/scenario-feedback"
-            raw = self.read_change(max_bytes=SCENARIOS_BODY_LIMIT if scenario_request else RULES_BODY_LIMIT)
+            body_limit = (
+                SCENARIOS_BODY_LIMIT if scenario_request
+                else (scenario_review.MAX_FEEDBACK_BYTES + 16 * 1024 if feedback_request else RULES_BODY_LIMIT)
+            )
+            raw = self.read_change(max_bytes=body_limit)
             if raw is None:
                 return None
             if path.path == "/api/session":
@@ -1175,7 +1188,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
             agent_request = path.path == "/api/agents"
             if feedback_request:
                 try:
-                    change = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                    change = json.dumps(body, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
                 except (TypeError, ValueError, UnicodeEncodeError):
                     return self.send_data(400, {"error": "Invalid feedback payload", "code": "invalid_request"})
                 if len(change) > scenario_review.MAX_FEEDBACK_BYTES:
@@ -1589,8 +1602,8 @@ def _main(argv=None):
     print("Project memory map: " + address, flush=True)
     if listener is not None:
         print("Took over the listening socket of the previous map process.", flush=True)
-    print("Local viewer: knowledge is read-only; standing rules and agent settings change only from a page "
-          "opened by richi map. Press Ctrl+C to stop.", flush=True)
+    print("Local viewer: knowledge is read-only; standing rules, scenarios, finding triage feedback and agent "
+          "settings change only from a page opened by richi map. Press Ctrl+C to stop.", flush=True)
     if args.open:
         # In a thread: the page can redeem its edit ticket only once the server below answers.
         threading.Thread(target=map_access.open_browser, args=(address, database), daemon=True).start()

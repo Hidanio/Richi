@@ -1,7 +1,9 @@
 """CLI declarations and dispatch for `richi scenario ...`."""
 import argparse
 import json
+import os
 from pathlib import Path
+import tempfile
 
 from . import agents, rules, scenario_eval, scenario_format, scenario_hooks, scenario_registry, scenario_review, scenario_runs, scenarios
 
@@ -221,6 +223,7 @@ def add_commands(commands, api):
     exp_scope.add_argument("--project", metavar="ID", help="Project scope to resolve first")
     exp_scope.add_argument("--builtin", action="store_true", help="Export the built-in template")
     exp_cmd.add_argument("--out", metavar="FILE", help="Write portable scenario JSON directly to FILE")
+    exp_cmd.add_argument("--force", action="store_true", help="Overwrite an existing regular --out file (symlinks are still refused)")
 
     imp_cmd = actions.add_parser("import", help="Import a scenario JSON file with SHA-256 trust bound to project")
     imp_cmd.add_argument("file", metavar="FILE", help="Scenario JSON file path (or '-' for stdin)")
@@ -228,7 +231,7 @@ def add_commands(commands, api):
     imp_scope.add_argument("--global", dest="global_scope", action="store_true", help="Import into workspace-wide scope")
     imp_scope.add_argument("--project", metavar="ID", help="Import into this registered project (default: --project-path)")
     imp_cmd.add_argument("--trust-sha256", metavar="HEX",
-                         help="Approve executable surfaces (command/skill/memory.record/secret) for this exact SHA-256")
+                         help="Approve instruction/command/skill/memory.record/secret surfaces for this exact SHA-256")
     imp_cmd.add_argument("--replace", action="store_true", help="Update an existing scenario with the same ID")
 
     gold_cmd = actions.add_parser("golden", help="Manage fixed-commit golden bug cases for CLI scenario evaluation")
@@ -241,7 +244,8 @@ def add_commands(commands, api):
     gold_rm.add_argument("case_id", metavar="ID", type=_argument_id, help="Golden case ID to remove")
 
     eval_cmd = actions.add_parser("eval", help="Run or score a scenario on a fixed-commit golden bug case")
-    eval_cmd.add_argument("id", type=_argument_id, help="Scenario ID to evaluate")
+    eval_cmd.add_argument("id", nargs="?", type=_argument_id,
+                          help="Scenario ID to evaluate (optional with --score; verified when passed)")
     eval_cmd.add_argument("--case", dest="case_id", required=True, metavar="ID", type=_argument_id,
                           help="Golden case ID to evaluate against")
     eval_cmd.add_argument("--memory-mode", choices=scenario_eval.MEMORY_MODES, default="clean", metavar="MODE",
@@ -278,9 +282,9 @@ def read_request(args, api):
     if args.action in ("plan", "run") and getattr(args, "inputs_json", None):
         return scenarios.read_json_input(args.inputs_json, api, limit=scenarios.MAX_CHANGE)
     if args.action == "feedback" and getattr(args, "batch", None):
-        return scenarios.read_json_input(args.batch, api, limit=scenario_review.MAX_FEEDBACK_BYTES)
+        return scenarios.read_json_input(args.batch, api, limit=scenario_review.MAX_FEEDBACK_BYTES, allow_list=True)
     if args.action == "import":
-        return scenarios.read_json_input(args.file, api, limit=scenario_format.MAX_BYTES)
+        return scenarios.read_json_input(args.file, api, limit=scenario_format.MAX_BYTES * 2)
     if args.action == "golden" and getattr(args, "golden_action", None) == "add":
         return scenarios.read_json_input(args.json, api, limit=scenario_eval.MAX_GOLDEN_BYTES)
     return None
@@ -401,7 +405,8 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
             res = scenario_hooks.session_start(conn, api, chat=author.by, agent=args.agent or author.agent, project_id=project_id)
         elif event == "stop":
             res = scenario_hooks.stop_check(conn, api, chat=author.by, agent=args.agent or author.agent,
-                                            project_id=project_id, max_continuations=args.max_continuations)
+                                            project_id=project_id, project_path=project_path,
+                                            max_continuations=args.max_continuations)
         else:
             res = scenario_hooks.pre_compact(conn, api, chat=author.by, agent=args.agent or author.agent, project_id=project_id)
         return scenario_hooks.format_agent_output(event, res, args.hook_format)
@@ -426,6 +431,24 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
         return scenario_registry.platform_catalog(conn)
     if action == "feedback":
         if getattr(args, "batch", None):
+            conflicting = [
+                flag for flag, val in (
+                    ("--finding", args.finding),
+                    ("--verdict", args.verdict),
+                    ("--resolution", args.resolution),
+                    ("--note", args.note),
+                    ("--remember-pattern", args.remember_pattern),
+                    ("--scope-path", args.scope_paths),
+                    ("--safety-condition", args.safety_condition),
+                    ("--rev", args.rev),
+                    ("--title", args.title),
+                )
+                if val
+            ]
+            if conflicting:
+                err = api.MemoryError("--batch cannot be combined with " + ", ".join(conflicting))
+                err.code = "usage_error"
+                raise err
             items = request.get("items") if isinstance(request, dict) else request
             if not isinstance(items, list):
                 err = api.MemoryError("--batch JSON must be a list of items or an object with 'items'")
@@ -464,15 +487,9 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
         )
     if action == "export":
         scope = "builtin" if args.builtin else ("global" if args.global_scope else None)
-        res = scenario_eval.export_scenario(
+        return scenario_eval.export_scenario(
             conn, api, args.id, project_id=args.project, scope=scope, checked_project=checked_project,
         )
-        if args.out:
-            out_path = Path(args.out).expanduser()
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(json.dumps(res["definition"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            res["written_to"] = str(out_path)
-        return res
     if action == "import":
         scope = "global" if args.global_scope else "project"
         return scenario_eval.import_scenario(
@@ -485,15 +502,20 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
             return scenario_eval.golden_add(conn, api, request, checked_project=checked_project, author=author)
         if ga == "list":
             project_id = args.project if args.project is not None else checked_project
-            return scenario_eval.golden_list(conn, project_id=project_id)
+            return scenario_eval.golden_list(conn, api=api, project_id=project_id)
         if ga == "remove":
-            return scenario_eval.golden_remove(conn, api, args.case_id)
+            return scenario_eval.golden_remove(conn, api, args.case_id, checked_project=checked_project)
     if action == "eval":
         if args.score_run:
             return scenario_eval.eval_score(
                 conn, api, args.case_id, args.score_run,
                 compare_run_id=args.compare_run, checked_project=checked_project,
+                expected_scenario_id=args.id,
             )
+        if not args.id:
+            err = api.MemoryError("Pass a scenario ID to start an eval run, or pass --score RUN")
+            err.code = "usage_error"
+            raise err
         return scenario_eval.eval_start(
             conn, api, database, args.id, args.case_id,
             memory_mode=args.memory_mode, project_id=args.project,
@@ -546,3 +568,69 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
         return scenario_runs.list_runs(conn, api, active=args.active, chat=chat_filter,
                                        project_id=project_id, scenario_id=args.scenario, limit=args.limit)
     raise api.MemoryError("Unknown scenario action: " + str(action))
+
+
+def write_export_file(args, res, api, database):
+    """Write exported scenario JSON atomically outside any SQLite transaction (no symlinks, no DB clobber)."""
+    raw_out = getattr(args, "out", None)
+    if not isinstance(raw_out, str) or not raw_out.strip() or "\x00" in raw_out:
+        err = api.MemoryError("--out must be a valid file path")
+        err.code = "invalid_input"
+        raise err
+    out_path = Path(raw_out).expanduser()
+    if out_path.is_symlink():
+        err = api.MemoryError("Refusing to write export to a symlink: " + str(out_path))
+        err.code = "invalid_input"
+        raise err
+    resolved_out = out_path.resolve(strict=False)
+    resolved_db = Path(database).expanduser().resolve(strict=False)
+    db_files = {resolved_db.name, resolved_db.name + "-wal", resolved_db.name + "-shm", resolved_db.name + "-journal"}
+    if resolved_out.parent == resolved_db.parent and resolved_out.name in db_files:
+        err = api.MemoryError("Refusing to overwrite the store database file: " + str(out_path))
+        err.code = "invalid_input"
+        raise err
+    if out_path.exists() and out_path.is_dir():
+        err = api.MemoryError("Export --out path is a directory: " + str(out_path))
+        err.code = "invalid_input"
+        raise err
+    force = bool(getattr(args, "force", False))
+    if out_path.exists() and not force:
+        err = api.MemoryError("Output file already exists (pass --force to overwrite): " + str(out_path))
+        err.code = "exists"
+        raise err
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(res["definition"], ensure_ascii=False, indent=2) + "\n"
+    tmp_name = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=str(out_path.parent),
+            prefix=".richi-export-", suffix=".tmp", delete=False,
+        ) as handle:
+            tmp_name = handle.name
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if out_path.is_symlink():
+            err = api.MemoryError("Refusing to write export to a symlink: " + str(out_path))
+            err.code = "invalid_input"
+            raise err
+        if not force:
+            try:
+                os.link(tmp_name, str(out_path))
+            except FileExistsError as exc:
+                err = api.MemoryError("Output file already exists (pass --force to overwrite): " + str(out_path))
+                err.code = "exists"
+                raise err from exc
+            os.unlink(tmp_name)
+            tmp_name = None
+        else:
+            os.replace(tmp_name, str(out_path))
+            tmp_name = None
+    finally:
+        if tmp_name:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+    res["written_to"] = str(out_path)
+    return res

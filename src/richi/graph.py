@@ -24,7 +24,8 @@ MIGRATION_TARGET = 4
 
 
 def require_v2(conn, api):
-    if conn.execute("PRAGMA user_version").fetchone()[0] not in {2, 3, 4}:
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if not (2 <= version <= api.SCHEMA):
         raise api.MemoryError("Graph commands require schema 2 or newer; run richi migrate, which backs up the store first")
 
 
@@ -105,7 +106,7 @@ def _migratable(conn, api):
     """The store's schema version if it can be migrated or already is current;
     stores that migrate would refuse raise before anything is written."""
     version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if version not in {1, 2, 3, 4}:
+    if not (1 <= version <= MIGRATION_TARGET):
         raise api.MemoryError("Cannot migrate unknown schema version: " + str(version))
     api.backend(conn)
     if version == MIGRATION_TARGET:

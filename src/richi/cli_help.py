@@ -834,19 +834,20 @@ DETAILS = {
         )),
     "scenario export": dict(about="""
         Exports a scenario definition or built-in template as portable JSON with
-        its canonical SHA-256 digest and a security summary listing any command,
-        skill, memory.record or secret input surfaces. Pass --out FILE to write
-        directly to .richi/scenarios/<id>.json for Git version control.""",
+        its canonical SHA-256 digest and a security summary listing instruction,
+        command, skill, memory.record and secret input surfaces. Pass --out FILE
+        to write atomically to .richi/scenarios/<id>.json (pass --force to
+        overwrite an existing regular file; symlinks are refused).""",
         examples=(
             ("Export to stdout with SHA-256", "richi scenario export bug-hunt --builtin"),
             ("Write to repo file", "richi scenario export review --out .richi/scenarios/review.json"),
         )),
     "scenario import": dict(about="""
         Imports a portable scenario JSON file into project or global scope. If
-        the scenario contains executable or privileged steps (command, skill,
-        memory.record or secret inputs), Richi prints a security summary and the
-        exact SHA-256 digest; re-run with --trust-sha256 HEX to trust that exact
-        revision for the target project.""",
+        the scenario contains agent instructions or executable/privileged steps
+        (instruction, command, skill, memory.record or secret inputs), Richi
+        prints a security summary and the exact SHA-256 digest; re-run with
+        --trust-sha256 HEX to trust that exact revision for the target project.""",
         examples=(
             ("Inspect security summary before trust", "richi scenario import .richi/scenarios/review.json --project svc"),
             ("Import with pinned digest trust", "richi scenario import .richi/scenarios/review.json --project svc --trust-sha256 0123456789abcdef"),

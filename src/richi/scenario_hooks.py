@@ -6,6 +6,7 @@ so enforcement never relies on an agent's own loop-guard flag (e.g. Antigravity'
 """
 from datetime import datetime, timezone
 import json
+import shlex
 
 from . import rules, scenario_registry, scenario_runs, scenarios
 
@@ -43,8 +44,8 @@ def _step_title(definition, step_id):
     return step_id
 
 
-def _load_active_context(conn, *, chat=None, agent=None, project_id=None):
-    """Collect active claimed steps, waiting human gates, and agent-pinned ready steps."""
+def _load_active_context(conn, *, chat=None, agent=None, project_id=None, now_dt=None):
+    """Collect active claimed steps (excluding expired leases), waiting human gates, and agent-pinned ready steps."""
     if not _has_tables(conn):
         return {
             "active_runs": [],
@@ -53,10 +54,18 @@ def _load_active_context(conn, *, chat=None, agent=None, project_id=None):
             "agent_ready_steps": [],
         }
 
-    runs_rows = conn.execute(
-        "SELECT id, scenario_id, scope, project_id, status, definition_json, created_by_chat, created_by_agent, updated_at "
-        "FROM scenario_runs WHERE status IN ('running', 'waiting') ORDER BY updated_at DESC, id DESC LIMIT 50"
-    ).fetchall()
+    if project_id is not None:
+        runs_rows = conn.execute(
+            "SELECT id, scenario_id, scope, project_id, status, definition_json, created_by_chat, created_by_agent, updated_at "
+            "FROM scenario_runs WHERE status IN ('running', 'waiting') AND (project_id IS NULL OR project_id = ?) "
+            "ORDER BY updated_at DESC, id DESC LIMIT 50",
+            (project_id,),
+        ).fetchall()
+    else:
+        runs_rows = conn.execute(
+            "SELECT id, scenario_id, scope, project_id, status, definition_json, created_by_chat, created_by_agent, updated_at "
+            "FROM scenario_runs WHERE status IN ('running', 'waiting') ORDER BY updated_at DESC, id DESC LIMIT 50"
+        ).fetchall()
     if not runs_rows:
         return {
             "active_runs": [],
@@ -65,12 +74,12 @@ def _load_active_context(conn, *, chat=None, agent=None, project_id=None):
             "agent_ready_steps": [],
         }
 
+    meta_map = scenario_runs.all_run_meta(conn)
     runs_by_id = {}
     defs_by_id = {}
     for row in runs_rows:
         r = dict(row)
-        if project_id is not None and r["project_id"] not in (None, project_id):
-            continue
+        r["run_kind"] = (meta_map.get(r["id"]) or {}).get("kind", "prod")
         runs_by_id[r["id"]] = r
         try:
             defs_by_id[r["id"]] = json.loads(r["definition_json"])
@@ -94,6 +103,7 @@ def _load_active_context(conn, *, chat=None, agent=None, project_id=None):
         tuple(runs_by_id.keys()),
     ).fetchall()
 
+    now_dt = now_dt or datetime.now(timezone.utc)
     claimed_steps = []
     waiting_human = []
     agent_ready_steps = []
@@ -107,6 +117,7 @@ def _load_active_context(conn, *, chat=None, agent=None, project_id=None):
             "run_id": s["run_id"],
             "scenario_id": run["scenario_id"],
             "project_id": run["project_id"],
+            "run_kind": run["run_kind"],
             "step_key": s["step_key"],
             "step_id": s["step_id"],
             "title": title,
@@ -114,18 +125,27 @@ def _load_active_context(conn, *, chat=None, agent=None, project_id=None):
             "status": s["status"],
         }
         if s["status"] == "claimed" and chat and s["claimed_by_chat"] == chat:
+            # Skip already-expired leases so Stop hooks never loop on dead claims.
+            if s["lease_until"]:
+                try:
+                    if scenario_runs._parse_iso(s["lease_until"]) <= now_dt:
+                        continue
+                except (ValueError, TypeError):
+                    pass
             item["lease_until"] = s["lease_until"]
             item["stop_continuations"] = int(s["stop_continuations"] or 0)
             claimed_steps.append(item)
             touched_runs.add(s["run_id"])
         elif s["status"] == "waiting_human" and (
             (chat and run["created_by_chat"] == chat)
-            or (project_id is not None and run["project_id"] == project_id)
+            or (project_id is not None and run["project_id"] == project_id and run["run_kind"] == "prod")
         ):
             waiting_human.append(item)
             touched_runs.add(s["run_id"])
         elif s["status"] == "ready" and s["executor_role"] == "agent":
-            if agent and s["executor_agent"] == agent:
+            if agent and s["executor_agent"] == agent and (
+                run["run_kind"] == "prod" or (chat and run["created_by_chat"] == chat)
+            ):
                 item["executor_agent"] = s["executor_agent"]
                 agent_ready_steps.append(item)
                 touched_runs.add(s["run_id"])
@@ -140,6 +160,7 @@ def _load_active_context(conn, *, chat=None, agent=None, project_id=None):
             "run_id": rid,
             "scenario_id": runs_by_id[rid]["scenario_id"],
             "project_id": runs_by_id[rid]["project_id"],
+            "run_kind": runs_by_id[rid]["run_kind"],
             "status": runs_by_id[rid]["status"],
             "updated_at": runs_by_id[rid]["updated_at"],
         }
@@ -159,7 +180,8 @@ def session_start(conn, api, *, chat=None, agent=None, project_id=None, entries=
     author = rules.current_author(entries=entries) if (chat is None or agent is None) else rules.Author(chat, agent)
     chat_id = chat or author.by
     agent_id = agent or author.agent
-    ctx = _load_active_context(conn, chat=chat_id, agent=agent_id, project_id=project_id)
+    now_dt = scenario_runs._now_dt(api, now_override)
+    ctx = _load_active_context(conn, chat=chat_id, agent=agent_id, project_id=project_id, now_dt=now_dt)
 
     lines = []
     if ctx["claimed_steps"]:
@@ -186,10 +208,10 @@ def session_start(conn, api, *, chat=None, agent=None, project_id=None, entries=
     }
 
 
-def stop_check(conn, api, *, chat=None, agent=None, project_id=None,
+def stop_check(conn, api, *, chat=None, agent=None, project_id=None, project_path=None,
                max_continuations=DEFAULT_MAX_CONTINUATIONS, now_override=None):
     """Check whether this chat may stop its turn, enforcing claimed steps with a Richi-side counter."""
-    author = rules.current_author()
+    author = rules.current_author() if (chat is None or agent is None) else rules.Author(chat, agent)
     chat_id = chat or author.by
     agent_id = agent or author.agent
     if not isinstance(max_continuations, int) or not 1 <= max_continuations <= MAX_CONTINUATIONS_LIMIT:
@@ -207,7 +229,8 @@ def stop_check(conn, api, *, chat=None, agent=None, project_id=None,
     if not _enforcement_enabled(conn):
         return {**base, "decision": "allow", "enforced": False}
 
-    ctx = _load_active_context(conn, chat=chat_id, agent=agent_id, project_id=project_id)
+    now_dt = scenario_runs._now_dt(api, now_override)
+    ctx = _load_active_context(conn, chat=chat_id, agent=agent_id, project_id=project_id, now_dt=now_dt)
     if ctx["claimed_steps"]:
         step = ctx["claimed_steps"][0]
         count = step["stop_continuations"]
@@ -241,10 +264,11 @@ def stop_check(conn, api, *, chat=None, agent=None, project_id=None,
             "stop_enforced", chat_id, agent_id,
             {"continuations": new_count, "max_continuations": max_continuations},
         )
-        next_cmd = f"richi scenario report {step['run_id']} {step['step_key']} --json -"
+        prefix = f"richi --project-path {shlex.quote(str(project_path))} " if project_path else "richi "
+        next_cmd = f"{prefix}scenario report {step['run_id']} {step['step_key']} --json -"
         reason = (
             f"Scenario run {step['run_id']} still has claimed step '{step['step_key']}' ({step['title']}). "
-            f"Finish it and submit `{next_cmd}`, or pause explicitly with `richi scenario pause {step['run_id']}` "
+            f"Finish it and submit `{next_cmd}`, or pause explicitly with `{prefix}scenario pause {step['run_id']}` "
             f"(continuation {new_count}/{max_continuations})."
         )
         return {
@@ -274,10 +298,11 @@ def stop_check(conn, api, *, chat=None, agent=None, project_id=None,
 
 def pre_compact(conn, api, *, chat=None, agent=None, project_id=None, now_override=None):
     """Produce a compact state handoff block to preserve active scenario progress across compaction."""
-    author = rules.current_author()
+    author = rules.current_author() if (chat is None or agent is None) else rules.Author(chat, agent)
     chat_id = chat or author.by
     agent_id = agent or author.agent
-    ctx = _load_active_context(conn, chat=chat_id, agent=agent_id, project_id=project_id)
+    now_dt = scenario_runs._now_dt(api, now_override)
+    ctx = _load_active_context(conn, chat=chat_id, agent=agent_id, project_id=project_id, now_dt=now_dt)
 
     lines = []
     for run in ctx["active_runs"]:

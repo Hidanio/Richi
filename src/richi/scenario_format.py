@@ -98,19 +98,19 @@ STEP_KINDS = {
     "instruction": {
         "executor": "agent",
         "params": frozenset({"text"}),
-        "results": frozenset({"summary", "status", "data", "files"}),
+        "results": frozenset({"summary", "status", "data", "files", "artifacts"}),
         "matrix": True, "outputs": True, "checks": True, "retry": True,
     },
     "skill": {
         "executor": "agent",
         "params": frozenset({"skill", "instruction"}),
-        "results": frozenset({"summary", "status", "data", "files"}),
+        "results": frozenset({"summary", "status", "data", "files", "artifacts"}),
         "matrix": True, "outputs": True, "checks": True, "retry": True,
     },
     "command": {
         "executor": "agent",
         "params": frozenset({"command", "cwd", "expect_exit", "tail_lines"}),
-        "results": frozenset({"summary", "status", "data", "files", "exit_code"}),
+        "results": frozenset({"summary", "status", "data", "files", "artifacts", "exit_code"}),
         "matrix": True, "outputs": True, "checks": True, "retry": True,
     },
     "gate": {
@@ -197,8 +197,8 @@ def _unique(pairs):
     return result
 
 
-def parse(text, *, max_bytes=MAX_BYTES, what="a definition"):
-    """The JSON object in text, before validation: one object, no duplicate keys, bounded size."""
+def parse(text, *, max_bytes=MAX_BYTES, what="a definition", allow_list=False):
+    """The JSON object (or array when allow_list=True) in text, before validation."""
     if isinstance(text, bytes):
         try:
             text = text.decode("utf-8")
@@ -222,7 +222,10 @@ def parse(text, *, max_bytes=MAX_BYTES, what="a definition"):
     except ValueError as exc:
         raise FormatError("not valid JSON: " + str(exc)) from exc
     _shallow(value, what)
-    if not isinstance(value, dict):
+    if allow_list:
+        if not isinstance(value, (dict, list)):
+            raise FormatError(what + " must be a JSON object or array")
+    elif not isinstance(value, dict):
         raise FormatError(what + " must be a JSON object")
     return value
 
@@ -822,6 +825,8 @@ def _step_result_fields(step):
         fields.add("data")
     if "files" in kind_results:
         fields.add("files")
+    if "artifacts" in kind_results:
+        fields.add("artifacts")
     return frozenset(fields)
 
 

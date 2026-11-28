@@ -705,7 +705,7 @@ def log(conn, *, scenario_id=None, run_id=None, entries=20):
     return {"view": "scenario-log", "source": "metadata", "entries": found, "more": more, "kept": MAX_LOG}
 
 
-def read_json_input(path_arg, api, limit=MAX_CHANGE):
+def read_json_input(path_arg, api, limit=MAX_CHANGE, *, allow_list=False):
     """Read a bounded JSON object from a file path or '-' (stdin) before acquiring a write lock."""
     try:
         if path_arg == "-":
@@ -730,7 +730,7 @@ def read_json_input(path_arg, api, limit=MAX_CHANGE):
     except UnicodeDecodeError as exc:
         raise _failure(api, "JSON input must be UTF-8 text", "invalid_json") from exc
     try:
-        data = scenario_format.parse(raw_text, max_bytes=limit, what="JSON input")
+        data = scenario_format.parse(raw_text, max_bytes=limit, what="JSON input", allow_list=allow_list)
     except scenario_format.FormatError as exc:
         raise _failure(api, str(exc), "invalid_json") from exc
     return data
@@ -932,11 +932,11 @@ def map_snapshot(conn, api, workspace=None, *, run_limit=50, log_limit=100):
         runs_waiting = conn.execute(
             "SELECT count(DISTINCT r.id) FROM scenario_runs r "
             "JOIN scenario_steps s ON s.run_id = r.id "
-            "WHERE r.status = 'waiting' AND s.status = 'waiting_human'"
+            "WHERE r.status IN ('running', 'waiting') AND s.status = 'waiting_human'"
         ).fetchone()[0]
         runs = scenario_runs.list_runs(conn, api, limit=run_limit)["runs"]
         waiting_queue = scenario_runs.waiting_gates_queue(conn, limit=30)
-        stats = scenario_runs.scenario_stats(conn, api)
+        stats = scenario_runs.scenario_stats(conn, api, last_n=200)
         if runs:
             run_ids = [item["id"] for item in runs]
             placeholders = ",".join("?" for _ in run_ids)

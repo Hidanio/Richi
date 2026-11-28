@@ -65,6 +65,7 @@
       "type": "memory.record",
       "title": "Записать релиз в память",
       "needs": ["release_checklist"],
+      "if": "steps.release_checklist.status == 'done'",
       "params": {
         "kind": "note",
         "title": "Release {{inputs.version}}",

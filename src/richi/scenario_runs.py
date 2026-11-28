@@ -42,15 +42,16 @@ MAX_GIT_EVIDENCE = 20
 ACTIVE_RUN_STATUSES = ("running", "waiting", "paused")
 TERMINAL_RUN_STATUSES = ("done", "failed", "cancelled")
 _GIT_REV = re.compile(r"[0-9A-Za-z][0-9A-Za-z._/@~^-]{0,199}\Z")
-_ARTIFACT_URI = re.compile(r"^richi://artifact/[A-Za-z0-9_.:-]+@[A-Za-z0-9_-]+(?:/[^?#\x00]+)?\Z")
+_ARTIFACT_URI = re.compile(r"^richi://artifact/[A-Za-z0-9][A-Za-z0-9_.:-]*@[A-Za-z0-9_-]+(?:/[^\x00-\x1f\x7f?#\\]+)?\Z")
 MAX_ARTIFACTS = 50
 RUN_META_PREFIX = "scenario-run-meta:"
 _UNSET = object()
+_PATH_TOKEN_RE = re.compile(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+")
 
 
 def require_v4(conn, api):
     if not scenario_registry.has_scenario_tables(conn):
-        error = api.MemoryError("Scenario runs require schema 4; run richi migrate, which backs up the store first")
+        error = api.MemoryError("Scenario runs require migrating this workspace to add scenario tables; run richi migrate, which backs up the store first")
         error.code = "schema_upgrade_required"
         raise error
 
@@ -105,15 +106,21 @@ def _valid_artifact_item(item):
     if not set(item).issubset({"uri", "kind", "title"}) or not _valid_artifact_uri(item.get("uri")):
         return False
     for opt in ("kind", "title"):
-        if opt in item and (not isinstance(item[opt], str) or len(item[opt]) > 200 or "\x00" in item[opt]):
-            return False
+        if opt in item:
+            val = item[opt]
+            if not isinstance(val, str) or len(val) > 200 or any(ord(ch) < 32 or ord(ch) == 127 for ch in val):
+                return False
     return True
 
 
 def _valid_artifact_uri(uri):
     if not isinstance(uri, str) or len(uri) > 1000 or not _ARTIFACT_URI.fullmatch(uri):
         return False
-    _, _, tail = uri[len("richi://artifact/"):].partition("/")
+    body = uri[len("richi://artifact/"):]
+    head, _, tail = body.partition("/")
+    art_id, _, _ver = head.partition("@")
+    if ".." in art_id:
+        return False
     if tail and any(seg in ("", ".", "..") for seg in tail.split("/")):
         return False
     return True
@@ -266,6 +273,8 @@ def _build_steps_context(step_rows, definition):
             if row["status"] in ("done", "failed") and row["result_json"]:
                 payload = json.loads(row["result_json"])
                 payload["status"] = row["status"]
+                if spec.get("type") in ("instruction", "skill", "command") and "artifacts" not in payload:
+                    payload["artifacts"] = []
                 result[step_id] = payload
             else:
                 result[step_id] = {"status": row["status"]}
@@ -273,10 +282,10 @@ def _build_steps_context(step_rows, definition):
 
         # Matrix step: placeholder row before expansion or N instance rows after expansion.
         if len(rows) == 1 and rows[0]["matrix_index"] is None:
-            result[step_id] = {"status": rows[0]["status"], "items": [], "data": {}, "files": []}
+            result[step_id] = {"status": rows[0]["status"], "items": [], "data": {}, "files": [], "artifacts": []}
             continue
 
-        items, files = [], []
+        items, files, artifacts = [], [], []
         data_buckets = {}
         statuses = []
         for row in rows:
@@ -291,6 +300,8 @@ def _build_steps_context(step_rows, definition):
             if row["status"] == "done":
                 for file_path in parsed.get("files") or []:
                     files.append(file_path)
+                for art in parsed.get("artifacts") or []:
+                    artifacts.append(art)
                 for key, val in (parsed.get("data") or {}).items():
                     data_buckets.setdefault(key, []).append(val)
 
@@ -313,7 +324,10 @@ def _build_steps_context(step_rows, definition):
         else:
             agg_status = "running"
 
-        result[step_id] = {"status": agg_status, "items": items, "data": aggregated_data, "files": files}
+        result[step_id] = {
+            "status": agg_status, "items": items, "data": aggregated_data,
+            "files": files, "artifacts": artifacts,
+        }
     return result
 
 
@@ -387,16 +401,31 @@ def _release_all_claims(conn, run_id):
 BASELINE_PREFIX = "scenario-baseline:"
 
 
-def _baseline_key(scenario_id, project_id):
+def _legacy_baseline_key(scenario_id, project_id):
     return BASELINE_PREFIX + scenario_id + ":" + (project_id if project_id else "_global")
+
+
+def _baseline_key(scenario_id, project_id):
+    if not project_id:
+        return f"{BASELINE_PREFIX}g:{len(scenario_id)}:{scenario_id}"
+    return f"{BASELINE_PREFIX}p:{len(scenario_id)}:{scenario_id}:{len(project_id)}:{project_id}"
 
 
 def get_baseline_run_id(conn, scenario_id, project_id):
     row = conn.execute("SELECT value FROM metadata WHERE key = ?", (_baseline_key(scenario_id, project_id),)).fetchone()
     if row is None or not row[0]:
-        return None
+        if project_id != "_global":
+            row = conn.execute(
+                "SELECT value FROM metadata WHERE key = ?",
+                (_legacy_baseline_key(scenario_id, project_id),),
+            ).fetchone()
+        if row is None or not row[0]:
+            return None
     rid = str(row[0]).strip()
-    exists = conn.execute("SELECT 1 FROM scenario_runs WHERE id = ?", (rid,)).fetchone()
+    exists = conn.execute(
+        "SELECT 1 FROM scenario_runs WHERE id = ? AND scenario_id = ? AND project_id IS ?",
+        (rid, scenario_id, project_id),
+    ).fetchone()
     return rid if exists else None
 
 
@@ -414,8 +443,18 @@ def set_baseline(conn, api, run_id, *, clear=False, checked_project=None, author
     run_row = _load_run(conn, run_id, api)
     _check_run_project(run_row, checked_project, api)
     key = _baseline_key(run_row["scenario_id"], run_row["project_id"])
+    legacy_key = _legacy_baseline_key(run_row["scenario_id"], run_row["project_id"])
     if clear:
         conn.execute("DELETE FROM metadata WHERE key = ?", (key,))
+        if run_row["project_id"] != "_global":
+            leg = conn.execute("SELECT value FROM metadata WHERE key = ?", (legacy_key,)).fetchone()
+            if leg and leg[0]:
+                leg_match = conn.execute(
+                    "SELECT 1 FROM scenario_runs WHERE id = ? AND scenario_id = ? AND project_id IS ?",
+                    (str(leg[0]).strip(), run_row["scenario_id"], run_row["project_id"]),
+                ).fetchone()
+                if leg_match:
+                    conn.execute("DELETE FROM metadata WHERE key = ?", (legacy_key,))
         _record_event(conn, at_iso, run_row["scenario_id"], run_id, None, "baseline_cleared",
                       author.by, author.agent, {})
         return {"status": "cleared", "run_id": run_id, "scenario_id": run_row["scenario_id"],
@@ -428,6 +467,15 @@ def set_baseline(conn, api, run_id, *, clear=False, checked_project=None, author
         raise _failure(api, "Only prod runs can be marked as baseline (run kind is %s)" % run_kind,
                        "invalid_state")
     conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)", (key, run_id))
+    if run_row["project_id"] != "_global":
+        leg = conn.execute("SELECT value FROM metadata WHERE key = ?", (legacy_key,)).fetchone()
+        if leg and leg[0]:
+            leg_match = conn.execute(
+                "SELECT 1 FROM scenario_runs WHERE id = ? AND scenario_id = ? AND project_id IS ?",
+                (str(leg[0]).strip(), run_row["scenario_id"], run_row["project_id"]),
+            ).fetchone()
+            if leg_match:
+                conn.execute("DELETE FROM metadata WHERE key = ?", (legacy_key,))
     _record_event(conn, at_iso, run_row["scenario_id"], run_id, None, "baseline_set",
                   author.by, author.agent, {})
     return {"status": "set", "run_id": run_id, "scenario_id": run_row["scenario_id"],
@@ -436,31 +484,18 @@ def set_baseline(conn, api, run_id, *, clear=False, checked_project=None, author
 
 def _past_runs_summary(conn, scenario_id, project_id, exclude_run_id, limit=3):
     """Load recent completed/failed prod runs of the same scenario+project for memory.brief process memory."""
-    fetch_limit = max(limit * 4, 20)
-    if project_id is None:
-        rows = conn.execute(
-            "SELECT id, status, finished.finished_at, created_at, updated_at, inputs_json "
-            "FROM scenario_runs LEFT JOIN ("
-            "  SELECT run_id, MAX(finished_at) AS finished_at FROM scenario_steps GROUP BY run_id"
-            ") AS finished ON finished.run_id = scenario_runs.id "
-            "WHERE scenario_id = ? AND project_id IS NULL AND id <> ? AND status IN ('done', 'failed') "
-            "ORDER BY created_at DESC, id DESC LIMIT ?",
-            (scenario_id, exclude_run_id, fetch_limit),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT id, status, finished.finished_at, created_at, updated_at, inputs_json "
-            "FROM scenario_runs LEFT JOIN ("
-            "  SELECT run_id, MAX(finished_at) AS finished_at FROM scenario_steps GROUP BY run_id"
-            ") AS finished ON finished.run_id = scenario_runs.id "
-            "WHERE scenario_id = ? AND project_id = ? AND id <> ? AND status IN ('done', 'failed') "
-            "ORDER BY created_at DESC, id DESC LIMIT ?",
-            (scenario_id, project_id, exclude_run_id, fetch_limit),
-        ).fetchall()
-    meta_map = all_run_meta(conn)
-    prod_rows = [r for r in rows if (meta_map.get(r["id"]) or {}).get("kind", "prod") == "prod"][:limit]
+    rows = conn.execute(
+        "SELECT r.id, r.status, r.created_at, r.updated_at "
+        "FROM scenario_runs r "
+        "LEFT JOIN metadata m ON m.key = 'scenario-run-meta:' || r.id "
+        "WHERE r.scenario_id = ? AND r.project_id IS ? AND r.id <> ? "
+        "AND r.status IN ('done', 'failed') "
+        "AND (m.value IS NULL OR COALESCE(json_extract(m.value, '$.kind'), 'prod') = 'prod') "
+        "ORDER BY r.created_at DESC, r.id DESC LIMIT ?",
+        (scenario_id, project_id, exclude_run_id, limit),
+    ).fetchall()
     out = []
-    for row in prod_rows:
+    for row in rows:
         rid = row["id"]
         steps = conn.execute(
             "SELECT step_key, status, result_json, reason FROM scenario_steps "
@@ -542,6 +577,31 @@ def _step_data_for_compare(conn, run_id, step_id):
     return merged
 
 
+def _sanitize_untrusted(text):
+    return " ".join(str(text or "").replace("]", ")").replace("[", "(").split())
+
+
+def _extract_path_hints(question, run_inputs):
+    hints = []
+    seen = set()
+    sources = [str(question or "")]
+    if isinstance(run_inputs, dict):
+        for val in run_inputs.values():
+            if isinstance(val, str) and val != "<secret>":
+                sources.append(val)
+            elif isinstance(val, list):
+                for item in val:
+                    if isinstance(item, str):
+                        sources.append(item)
+    for src in sources:
+        for tok in _PATH_TOKEN_RE.findall(src):
+            clean = tok.strip("./")
+            if clean and clean not in seen and ".." not in clean.split("/"):
+                seen.add(clean)
+                hints.append(clean)
+    return hints[:30]
+
+
 def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
     """Execute a Richi-owned step (`condition`, `memory.recall`, `memory.brief`, `memory.record`, `compare`)."""
     kind = step_spec["type"]
@@ -559,25 +619,35 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
         mem_mode = run_meta.get("memory_mode")
         if mem_mode in ("clean", "with_fp_only"):
             return {"status": "done", "summary": f"Eval memory_mode={mem_mode}: recall omitted.", "data": {"refs": [], "count": 0}}
-        from . import recall
+        from . import recall, scenario_review
+        as_of_dt = None
+        if mem_mode == "as_of_commit":
+            as_of_dt = scenario_review._parse_utc(run_meta.get("commit_time"))
+            if as_of_dt is None:
+                raise ValueError("eval memory_mode=as_of_commit requires valid commit_time")
         query = _render_field(params["query"], ctx, line=True, limit=2000, field="params.query", empty=False)
         limit = params.get("limit", 8)
+        fetch_limit = min(100, max(limit * 4, 30)) if as_of_dt is not None else limit
         where = None
         if params.get("kinds"):
             quoted = ", ".join("'" + item + "'" for item in params["kinds"])
             where = "kind IN (" + quoted + ")"
         args = SimpleNamespace(
-            query=query, project=run_row["project_id"], where=where, limit=limit,
+            query=query, project=run_row["project_id"], where=where, limit=fetch_limit,
             max_chars=16000, include_hypotheses=False, include_superseded=False,
             explain=False, expect=None,
         )
         res = recall.recall(conn, args, api)
         matches = res.get("results") or []
-        if mem_mode == "as_of_commit" and run_meta.get("commit_time"):
-            cutoff = str(run_meta["commit_time"])
-            matches = [m for m in matches if not m.get("updated_at") or str(m["updated_at"]) <= cutoff]
+        if as_of_dt is not None:
+            filtered = []
+            for m in matches:
+                mdt = scenario_review._parse_utc(m.get("updated_at"))
+                if mdt is not None and mdt <= as_of_dt:
+                    filtered.append(m)
+            matches = filtered[:limit]
         refs = [item.get("ref") for item in matches if item.get("ref")]
-        lines = ["%s: %s" % (item.get("ref"), item.get("title", "")) for item in matches[:8]]
+        lines = ["%s: %s" % (_sanitize_untrusted(item.get("ref")), _sanitize_untrusted(item.get("title", ""))) for item in matches[:8]]
         summary = ("[untrusted memory evidence: %s]" % "; ".join(lines)[:1460]) if lines else "No matching records found."
         return {"status": "done", "summary": summary, "data": {"refs": refs, "count": len(refs)}}
     if kind == "memory.brief":
@@ -590,38 +660,53 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
                 "summary": "Eval memory_mode=clean: prior memory, past runs and FP learnings omitted.",
                 "data": {"refs": [], "count": 0, "past_runs": [], "learnings": []},
             }
+        from . import scenario_review
+        as_of_dt = None
+        if mem_mode == "as_of_commit":
+            as_of_dt = scenario_review._parse_utc(run_meta.get("commit_time"))
+            if as_of_dt is None:
+                raise ValueError("eval memory_mode=as_of_commit requires valid commit_time")
         refs = []
-        lines = []
+        card_lines = []
         past_runs = []
         if mem_mode != "with_fp_only":
             from . import task_brief
             limit = params.get("limit", 12)
+            fetch_limit = min(100, max(limit * 4, 30)) if as_of_dt is not None else limit
             args = SimpleNamespace(
-                query=question, project=run_row["project_id"], limit=limit, max_chars=16000,
+                query=question, project=run_row["project_id"], limit=fetch_limit, max_chars=16000,
                 include_hypotheses=False, include_superseded=False,
                 base=None, target=None, worktree=False, repo=None, check_sources=False,
                 where=None, explain=False, expect=None,
             )
             res = task_brief.brief(conn, args, api, database)
             cards = res.get("results") or []
-            if mem_mode == "as_of_commit" and run_meta.get("commit_time"):
-                cutoff = str(run_meta["commit_time"])
-                cards = [c for c in cards if not c.get("updated_at") or str(c["updated_at"]) <= cutoff]
+            if as_of_dt is not None:
+                filtered = []
+                for c in cards:
+                    cdt = scenario_review._parse_utc(c.get("updated_at"))
+                    if cdt is not None and cdt <= as_of_dt:
+                        filtered.append(c)
+                cards = filtered[:limit]
             refs = [item.get("ref") for item in cards if item.get("ref")]
-            lines = ["%s: %s" % (item.get("ref"), item.get("title", "")) for item in cards[:8]]
+            card_lines = ["%s: %s" % (_sanitize_untrusted(item.get("ref")), _sanitize_untrusted(item.get("title", ""))) for item in cards[:8]]
             if params.get("include_past_runs", True) and mem_mode != "as_of_commit":
                 past_runs = _past_runs_summary(conn, run_row["scenario_id"], run_row["project_id"], run_row["id"], limit=3)
                 for pr in past_runs:
-                    hl = ", ".join(pr["highlights"][:2])
-                    lines.append("past-run %s (%s)%s" % (pr["run_id"], pr["status"], (": " + hl) if hl else ""))
+                    hl = ", ".join(_sanitize_untrusted(x) for x in pr["highlights"][:2])
+                    card_lines.append("past-run %s (%s)%s" % (pr["run_id"], pr["status"], (": " + hl) if hl else ""))
         learnings = []
+        fp_hints = []
         if params.get("include_learnings") or mem_mode == "with_fp_only":
-            from . import scenario_review
+            path_hints = _extract_path_hints(question, json.loads(run_row["inputs_json"] or "{}"))
             learnings, fp_hints = scenario_review.load_scoped_fp_learnings(
                 conn, project_id=run_row["project_id"], query=question,
+                changed_files=path_hints or None, as_of_dt=as_of_dt,
             )
-            lines.extend(fp_hints)
-        summary = ("[untrusted memory evidence: %s]" % "; ".join(lines)[:1460]) if lines else "No prior records found for this context."
+        card_part = "; ".join(card_lines)[:900] if card_lines else ""
+        fp_part = "; ".join(_sanitize_untrusted(h) for h in fp_hints)[:550] if fp_hints else ""
+        parts = [p for p in (card_part, fp_part) if p]
+        summary = ("[untrusted memory evidence: %s]" % "; ".join(parts)) if parts else "No prior records found for this context."
         return {
             "status": "done",
             "summary": summary,
@@ -637,9 +722,17 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
             raw_id = "%s:scenario-%s-%s" % (entry_kind, run_row["id"], step_spec["id"])
             entry_id = re.sub(r"[^A-Za-z0-9_.:-]", "-", raw_id)[:100]
         run_meta = get_run_meta(conn, run_row["id"])
+        run_kind = run_meta.get("kind", "prod")
+        # Eval runs are strictly dry-run no-ops for memory.record (zero writes to entries/graph_edges).
+        if run_kind == "eval":
+            return {
+                "status": "done",
+                "summary": "Simulated eval memory.record (skipped write for %s): %s" % (entry_id, title[:120]),
+                "data": {"entry_id": entry_id, "ref": "entry:" + entry_id, "kind": entry_kind, "status": "simulated_eval"},
+            }
         ks = params.get("knowledge_state") or "confirmed"
-        # Fork/eval runs must never write confirmed memory entries.
-        if run_meta.get("kind", "prod") != "prod":
+        # Fork runs must never write confirmed entries or mutate any pre-existing entry.
+        if run_kind != "prod":
             ks = "hypothesis"
         # Forbid automated memory.record from setting false-positive tags (only explicit human feedback may).
         extra_tags = [
@@ -652,12 +745,21 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
             {"reference": "scenario-run:" + run_row["id"], "type": "scenario-run", "label": run_row["id"]},
         ]
         existing = api.entry_record(conn, entry_id)
+        if run_kind != "prod" and existing is not None:
+            raw_fork = "%s:scenario-%s-%s" % (entry_kind, run_row["id"], step_spec["id"])
+            entry_id = re.sub(r"[^A-Za-z0-9_.:-]", "-", raw_fork)[:94]
+            suffix = 1
+            while api.entry_record(conn, entry_id) is not None:
+                entry_id = re.sub(r"[^A-Za-z0-9_.:-]", "-", raw_fork)[:90] + f"-f{suffix}"
+                suffix += 1
+            existing = None
         if existing is not None:
             current = api.entry_get(conn, entry_id, history=False)
             updated = {k: v for k, v in current.items() if k not in ("created_at", "updated_at", "history")}
             updated["summary"] = (current.get("summary") or "") + "\n\n--- Run %s ---\n%s" % (run_row["id"], body)
             seen_refs = {s.get("reference") for s in (updated.get("sources") or []) if isinstance(s, dict)}
-            updated["sources"] = list(updated.get("sources") or []) + [s for s in base_sources if s["reference"] not in seen_refs]
+            merged_sources = list(updated.get("sources") or []) + [s for s in base_sources if s["reference"] not in seen_refs]
+            updated["sources"] = merged_sources[-100:]
             merged_tags = list(dict.fromkeys(list(updated.get("tags") or []) + ["scenario:" + run_row["scenario_id"]] + extra_tags))
             updated["tags"] = merged_tags[:20]
             updated["expected_updated_at"] = current["updated_at"]
@@ -696,30 +798,26 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
         base_run_id = None
         if params.get("baseline_run"):
             cand = _render_field(params["baseline_run"], ctx, line=True, limit=100, field="params.baseline_run", empty=False)
-            if cand != run_row["id"] and conn.execute("SELECT 1 FROM scenario_runs WHERE id = ?", (cand,)).fetchone():
+            if cand != run_row["id"] and conn.execute(
+                "SELECT 1 FROM scenario_runs WHERE id = ? AND scenario_id = ? AND project_id IS ? AND status = 'done'",
+                (cand, run_row["scenario_id"], run_row["project_id"]),
+            ).fetchone():
                 base_run_id = cand
         if base_run_id is None:
             pinned = get_baseline_run_id(conn, run_row["scenario_id"], run_row["project_id"])
             if pinned and pinned != run_row["id"]:
                 base_run_id = pinned
         if base_run_id is None:
-            meta_map = all_run_meta(conn)
-            if run_row["project_id"] is None:
-                cands = conn.execute(
-                    "SELECT id FROM scenario_runs WHERE scenario_id = ? AND project_id IS NULL AND id <> ? AND status = 'done' "
-                    "ORDER BY created_at DESC, id DESC LIMIT 20",
-                    (run_row["scenario_id"], run_row["id"]),
-                ).fetchall()
-            else:
-                cands = conn.execute(
-                    "SELECT id FROM scenario_runs WHERE scenario_id = ? AND project_id = ? AND id <> ? AND status = 'done' "
-                    "ORDER BY created_at DESC, id DESC LIMIT 20",
-                    (run_row["scenario_id"], run_row["project_id"], run_row["id"]),
-                ).fetchall()
-            for cand in cands:
-                if (meta_map.get(cand[0]) or {}).get("kind", "prod") == "prod":
-                    base_run_id = cand[0]
-                    break
+            cand_row = conn.execute(
+                "SELECT r.id FROM scenario_runs r "
+                "LEFT JOIN metadata m ON m.key = 'scenario-run-meta:' || r.id "
+                "WHERE r.scenario_id = ? AND r.project_id IS ? AND r.id <> ? AND r.status = 'done' "
+                "AND (m.value IS NULL OR COALESCE(json_extract(m.value, '$.kind'), 'prod') = 'prod') "
+                "ORDER BY r.created_at DESC, r.id DESC LIMIT 1",
+                (run_row["scenario_id"], run_row["project_id"], run_row["id"]),
+            ).fetchone()
+            if cand_row:
+                base_run_id = cand_row[0]
         if base_run_id is None:
             return {
                 "status": "done",
@@ -1427,6 +1525,8 @@ def next_step(conn, api, database, run_id, *, claim=False, step_key=None, checke
                 fp_info = claim_fingerprint if isinstance(claim_fingerprint, dict) else scenario_findings.compute_worktree_fingerprint(project_path)
                 if fp_info and fp_info.get("fingerprint"):
                     claim_detail["worktree_fingerprint"] = fp_info["fingerprint"]
+                elif fp_info and fp_info.get("error"):
+                    claim_detail["worktree_fingerprint_error"] = fp_info["error"]
             conn.execute(
                 "UPDATE scenario_steps SET status = 'claimed', claimed_by_chat = ?, claimed_by_agent = ?, "
                 "lease_until = ?, stop_continuations = 0, attempts = attempts + 1, started_at = COALESCE(started_at, ?) "
@@ -1536,6 +1636,8 @@ def claim_step(conn, api, database, run_id, step_key, *, checked_project=None, p
             fp_info = claim_fingerprint if isinstance(claim_fingerprint, dict) else scenario_findings.compute_worktree_fingerprint(project_path)
             if fp_info and fp_info.get("fingerprint"):
                 claim_detail["worktree_fingerprint"] = fp_info["fingerprint"]
+            elif fp_info and fp_info.get("error"):
+                claim_detail["worktree_fingerprint_error"] = fp_info["error"]
         conn.execute(
             "UPDATE scenario_steps SET status = 'claimed', claimed_by_chat = ?, claimed_by_agent = ?, "
             "lease_until = ?, stop_continuations = 0, attempts = attempts + 1, started_at = COALESCE(started_at, ?) "
@@ -1700,7 +1802,7 @@ def prepare_report_preflight(conn, api, run_id, step_key, report, *, checked_pro
     if spec is None:
         return None
     checks = spec.get("checks") or []
-    if not any(c["kind"] in ("file_exists", "evidence_git", "no_dirty_git", "findings_grounded") for c in checks):
+    if not any(c["kind"] in scenario_registry.PROJECT_BOUND_CHECKS for c in checks):
         return None
     ctx = _context(run_row, step_rows, definition, project_path=project_path,
                    agent=author.agent if author is not None else None, now_dt=at_dt)
@@ -1924,7 +2026,11 @@ def _validate_report(report, step_row, step_spec, ctx, project_path, preflight_i
                 if not wt.get("is_clean"):
                     reasons.append("check no_dirty_git (clean) failed: repository worktree has uncommitted changes")
             else:
-                if claimed_fingerprint is not None and wt.get("fingerprint") != claimed_fingerprint:
+                if claimed_fingerprint is None:
+                    reasons.append(
+                        "check no_dirty_git (unchanged) failed: missing baseline worktree fingerprint from claim; re-claim with --project-path"
+                    )
+                elif wt.get("fingerprint") != claimed_fingerprint:
                     reasons.append("check no_dirty_git (unchanged) failed: repository worktree changed during read-only step")
         elif kind == "findings_grounded":
             path = check.get("path") or "findings"
@@ -2282,7 +2388,9 @@ def set_run_state(conn, api, database, run_id, action, *, checked_project=None, 
         run_row, step_rows, _ = _advance(conn, api, database, run_id, project_path=project_path,
                                          agent=author.agent, now_override=at_dt)
         _sync_task_entry(conn, api, run_row, step_rows, definition)
-        return _format_status(run_row, step_rows, definition, view="scenario-run")
+        is_base = get_baseline_run_id(conn, run_row["scenario_id"], run_row["project_id"]) == run_id
+        return _format_status(run_row, step_rows, definition, view="scenario-run",
+                              is_baseline=is_base, run_meta=get_run_meta(conn, run_id))
     elif action == "cancel":
         if run_row["status"] in ("done", "cancelled"):
             raise _failure(api, "Run %s is already %s" % (run_id, run_row["status"]), "invalid_state")
@@ -2296,7 +2404,9 @@ def set_run_state(conn, api, database, run_id, action, *, checked_project=None, 
     run_row = _load_run(conn, run_id, api)
     step_rows = _load_steps(conn, run_id)
     _sync_task_entry(conn, api, run_row, step_rows, definition)
-    return _format_status(run_row, step_rows, definition, view="scenario-run")
+    is_base = get_baseline_run_id(conn, run_row["scenario_id"], run_row["project_id"]) == run_id
+    return _format_status(run_row, step_rows, definition, view="scenario-run",
+                          is_baseline=is_base, run_meta=get_run_meta(conn, run_id))
 
 
 def _format_status(run_row, step_rows, definition, *, view="scenario-status", is_baseline=False, run_meta=None):
@@ -2449,30 +2559,47 @@ def scenario_stats(conn, api, *, scenario_id=None, project_id=None, version=None
     if version is not None:
         clauses.append("r.scenario_version = ?")
         params.append(int(version))
-    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-    all_runs = conn.execute(
-        "SELECT r.id, r.scenario_id, r.scenario_version, r.project_id, r.status, r.created_at, r.updated_at "
-        "FROM scenario_runs r" + where + " ORDER BY r.created_at DESC, r.id DESC",
-        params,
-    ).fetchall()
-    if not all_runs:
-        return empty
-    meta_map = all_run_meta(conn)
     if run_kind and run_kind != "all":
-        run_rows = [r for r in all_runs if (meta_map.get(r["id"]) or {}).get("kind", "prod") == run_kind]
-    else:
-        run_rows = list(all_runs)
+        if run_kind == "prod":
+            clauses.append("(m.value IS NULL OR COALESCE(json_extract(m.value, '$.kind'), 'prod') = 'prod')")
+        else:
+            clauses.append("COALESCE(json_extract(m.value, '$.kind'), 'prod') = ?")
+            params.append(run_kind)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    limit_sql = ""
+    run_params = list(params)
     if last_n is not None and int(last_n) > 0:
-        run_rows = run_rows[: int(last_n)]
+        limit_sql = " LIMIT ?"
+        run_params.append(int(last_n))
+    run_rows = conn.execute(
+        "SELECT r.id, r.scenario_id, r.scenario_version, r.project_id, r.status, r.created_at, r.updated_at "
+        "FROM scenario_runs r LEFT JOIN metadata m ON m.key = 'scenario-run-meta:' || r.id"
+        + where + " ORDER BY r.created_at DESC, r.id DESC" + limit_sql,
+        run_params,
+    ).fetchall()
     if not run_rows:
         return empty
 
-    selected_ids = {r["id"] for r in run_rows}
-    step_rows = conn.execute(
-        "SELECT s.run_id, s.step_id, s.type, s.status, s.attempts, s.rejections, s.reason, s.started_at, s.finished_at "
-        "FROM scenario_steps s JOIN scenario_runs r ON r.id = s.run_id" + where,
-        params,
-    ).fetchall()
+    selected_id_list = [r["id"] for r in run_rows]
+    selected_ids = set(selected_id_list)
+    run_scenario = {r["id"]: r["scenario_id"] for r in run_rows}
+
+    # Chunk IN(...) queries to stay well below SQLITE_MAX_VARIABLE_NUMBER (999) and avoid scanning unselected history.
+    step_rows = []
+    ev_rows = []
+    for offset in range(0, len(selected_id_list), 500):
+        chunk = selected_id_list[offset:offset + 500]
+        ph = ",".join("?" for _ in chunk)
+        step_rows.extend(conn.execute(
+            "SELECT run_id, step_key, step_id, type, executor_role, status, attempts, rejections, reason, started_at, finished_at "
+            f"FROM scenario_steps WHERE run_id IN ({ph})",
+            chunk,
+        ).fetchall())
+        ev_rows.extend(conn.execute(
+            "SELECT run_id, step_key, detail_json "
+            f"FROM scenario_events WHERE run_id IN ({ph}) AND action = 'step_failed'",
+            chunk,
+        ).fetchall())
 
     by_status = {}
     scn_buckets = {}
@@ -2483,17 +2610,17 @@ def scenario_stats(conn, api, *, scenario_id=None, project_id=None, version=None
     run_has_agent = set()
     run_has_human = set()
     step_buckets = {}
+    step_failed_ev_keys = set()
 
     for sr in step_rows:
         rid = sr["run_id"]
-        if rid not in selected_ids:
-            continue
         run_rejections[rid] = run_rejections.get(rid, 0) + int(sr["rejections"] or 0)
         if int(sr["attempts"] or 0) > 1:
             run_retries[rid] = run_retries.get(rid, 0) + (int(sr["attempts"]) - 1)
         sid = sr["step_id"]
-        sb = step_buckets.setdefault(sid, {
-            "step_id": sid, "type": sr["type"], "executions": 0, "done": 0, "failed": 0,
+        sc_id = run_scenario[rid]
+        sb = step_buckets.setdefault((sc_id, sid), {
+            "scenario_id": sc_id, "step_id": sid, "type": sr["type"], "executions": 0, "done": 0, "failed": 0,
             "skipped": 0, "blocked": 0, "rejections": 0, "_durs": [], "_reasons": {},
         })
         sb["executions"] += 1
@@ -2504,29 +2631,21 @@ def scenario_stats(conn, api, *, scenario_id=None, project_id=None, version=None
         dur = _duration_sec(sr["started_at"], sr["finished_at"])
         if dur is not None:
             sb["_durs"].append(dur)
-            if sr["type"] in ("gate", "checklist"):
+            role = sr["executor_role"]
+            if role == "human":
                 run_human_sec[rid] = run_human_sec.get(rid, 0.0) + dur
                 run_has_human.add(rid)
-            else:
+            elif role == "agent":
                 run_agent_sec[rid] = run_agent_sec.get(rid, 0.0) + dur
                 run_has_agent.add(rid)
-        if sr["reason"] and st in ("failed", "blocked"):
-            key = str(sr["reason"])[:120]
-            sb["_reasons"][key] = sb["_reasons"].get(key, 0) + 1
 
-    # Also collect historical step_failed reasons from scenario_events (survives retries!) via SQL JOIN.
-    ev_clauses = clauses + ["e.action = 'step_failed'"]
-    ev_where = " WHERE " + " AND ".join(ev_clauses)
-    ev_rows = conn.execute(
-        "SELECT e.run_id, e.step_key, e.detail_json "
-        "FROM scenario_events e JOIN scenario_runs r ON r.id = e.run_id" + ev_where,
-        params,
-    ).fetchall()
+    # Collect step_failed reasons from scenario_events once (survives retries, avoids double-counting).
     for ev in ev_rows:
-        if ev["run_id"] not in selected_ids:
-            continue
+        rid = ev["run_id"]
+        sc_id = run_scenario.get(rid)
         sk = (ev["step_key"] or "").split(".", 1)[0]
-        if sk not in step_buckets:
+        bucket = step_buckets.get((sc_id, sk))
+        if bucket is None:
             continue
         try:
             det = json.loads(ev["detail_json"] or "{}")
@@ -2534,8 +2653,19 @@ def scenario_stats(conn, api, *, scenario_id=None, project_id=None, version=None
             continue
         reason = det.get("reason")
         if reason:
+            step_failed_ev_keys.add((rid, ev["step_key"]))
             key = str(reason)[:120]
-            step_buckets[sk]["_reasons"][key] = step_buckets[sk]["_reasons"].get(key, 0) + 1
+            bucket["_reasons"][key] = bucket["_reasons"].get(key, 0) + 1
+
+    # Add blocked reasons (and fallback failed reasons only when no step_failed event recorded a reason).
+    for sr in step_rows:
+        st = sr["status"]
+        if not sr["reason"]:
+            continue
+        if st == "blocked" or (st == "failed" and (sr["run_id"], sr["step_key"]) not in step_failed_ev_keys):
+            bucket = step_buckets[(run_scenario[sr["run_id"]], sr["step_id"])]
+            key = str(sr["reason"])[:120]
+            bucket["_reasons"][key] = bucket["_reasons"].get(key, 0) + 1
 
     terminal = 0
     done_total = 0
@@ -2582,7 +2712,7 @@ def scenario_stats(conn, api, *, scenario_id=None, project_id=None, version=None
         per_scenario.append(sc)
 
     per_step = []
-    for sb in sorted(step_buckets.values(), key=lambda x: (-(x["failed"] + x["rejections"]), -x["executions"], x["step_id"])):
+    for sb in sorted(step_buckets.values(), key=lambda x: (-(x["failed"] + x["rejections"]), -x["executions"], x["scenario_id"], x["step_id"])):
         durs = sb.pop("_durs")
         reasons = sb.pop("_reasons")
         sb["avg_duration_sec"] = round(sum(durs) / len(durs), 2) if durs else None
@@ -2610,14 +2740,18 @@ def scenario_stats(conn, api, *, scenario_id=None, project_id=None, version=None
 
 
 def waiting_gates_queue(conn, *, limit=30):
-    """Unified 'Waiting for me' queue of all active human gate/checklist steps across projects."""
+    """Unified 'Waiting for me' queue of all active human gate/checklist steps across projects (excludes eval runs)."""
     if not scenario_registry.has_scenario_tables(conn):
         return []
     rows = conn.execute(
         "SELECT s.run_id, s.step_key, s.step_id, s.type, s.matrix_json, s.started_at, "
-        "r.scenario_id, r.project_id, r.definition_json, r.inputs_json, r.created_by_chat, r.created_by_agent "
-        "FROM scenario_steps s JOIN scenario_runs r ON r.id = s.run_id "
+        "r.scenario_id, r.project_id, r.definition_json, r.inputs_json, r.created_by_chat, r.created_by_agent, "
+        "COALESCE(json_extract(m.value, '$.kind'), 'prod') AS run_kind "
+        "FROM scenario_steps s "
+        "JOIN scenario_runs r ON r.id = s.run_id "
+        "LEFT JOIN metadata m ON m.key = 'scenario-run-meta:' || r.id "
         "WHERE r.status IN ('running', 'waiting') AND s.status = 'waiting_human' "
+        "AND (m.value IS NULL OR COALESCE(json_extract(m.value, '$.kind'), 'prod') <> 'eval') "
         "ORDER BY s.started_at ASC, s.run_id ASC LIMIT ?",
         (limit,),
     ).fetchall()
@@ -2631,6 +2765,8 @@ def waiting_gates_queue(conn, *, limit=30):
         try:
             defn = json.loads(row["definition_json"])
         except (ValueError, TypeError):
+            continue
+        if not isinstance(defn, dict) or not isinstance(defn.get("steps"), list):
             continue
         spec = _step_by_id_map(defn).get(row["step_id"])
         if not spec:
@@ -2660,6 +2796,7 @@ def waiting_gates_queue(conn, *, limit=30):
             "scenario_id": row["scenario_id"],
             "scenario_title": defn.get("title") or row["scenario_id"],
             "project_id": pid,
+            "run_kind": row["run_kind"] or "prod",
             "step_key": row["step_key"],
             "step_id": row["step_id"],
             "type": row["type"],

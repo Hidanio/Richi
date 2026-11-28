@@ -22,7 +22,7 @@
 
   function scnShellQuote(value){
     const text=String(value??'');
-    return /^[A-Za-z0-9_./:@%+=,-]+$/.test(text)?text:"'"+text.replace(/'/g,"'\"'\"'")+"'";
+    return /^[A-Za-z0-9_./:@%+,-]+$/.test(text)?text:"'"+text.replace(/'/g,"'\"'\"'")+"'";
   }
   function scenarioStepRole(type){return SCN_STEP_META[type]?.role||'agent';}
   function scenarioDefaultParams(type){
@@ -473,7 +473,7 @@
       }else if(step.type==='compare'){
         const target=String(p.step||'').trim();
         if(!target)push(step.id,'err','Выберите шаг-предок для сравнения с baseline.');
-        else if(!ancestry[step.id]?.has(target))push(step.id,'err','Шаг «'+target+'» должен быть предком в needs для compare.');
+        else if(!scenarioAncestors(def.steps,step.id).has(target))push(step.id,'err','Шаг «'+target+'» должен быть предком в needs для compare.');
       }else if(step.type==='condition'){
         if(!String(p.expr||'').trim())push(step.id,'err','Укажите условие.');
       }
@@ -529,7 +529,7 @@
     logFilter:'all',
     reviewData:null,reviewLoading:false,reviewError:'',reviewRequest:0,
     reviewProject:'',reviewSeverity:'all',reviewStatus:'open',
-    reviewSelected:new Set(),triageCart:[],
+    reviewSelected:new Set(),triageCart:[],triageBusy:new Set(),
   };
   let scenariosController=null,scenarioRunController=null,scenarioReviewController=null;
 
@@ -627,16 +627,19 @@
   async function loadScenarioReview(projectId=''){
     if(scenarioReviewController)scenarioReviewController.abort();
     const request=++scenariosState.reviewRequest,sent=ruleSecret;
-    scenariosState.reviewProject=projectId||'';
+    const nextProject=projectId||'';
+    if(nextProject!==scenariosState.reviewProject)scenariosState.reviewSelected.clear();
+    scenariosState.reviewProject=nextProject;
     scenariosState.reviewLoading=true;scenariosState.reviewError='';
     if(state.mode==='scenarios'&&scenariosState.subtab==='review')renderScenarios();
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);scenarioReviewController=controller;
     try{
-      const qs=projectId?('?project='+encodeURIComponent(projectId)):'';
+      const qs=nextProject?('?project='+encodeURIComponent(nextProject)):'';
       const response=await fetch('/api/scenario-review'+qs,{cache:'no-store',headers:sent?{[RULE_HEADER]:sent}:{},signal:controller.signal});
       let data=null;try{data=await response.json();}catch{data=null;}
       if(!response.ok)throw new Error(data&&data.error||'Сервер вернул HTTP '+response.status);
       if(request!==scenariosState.reviewRequest)return;
+      if(sent!==ruleSecret){scenariosState.reviewLoading=false;loadScenarioReview(nextProject);return;}
       scenariosState.reviewData=data;
       if(typeof data.editing==='boolean')setMapEditing(data.editing===true,sent);
     }catch(error){
@@ -650,19 +653,7 @@
       }
     }
   }
-  async function sendScenarioFeedback(runId,items){
-    const response=await fetch('/api/scenario-feedback',{
-      method:'POST',
-      headers:{'Content-Type':'application/json',[RULE_HEADER]:ruleSecret},
-      body:JSON.stringify({run_id:runId,items}),
-    });
-    let data=null;try{data=await response.json();}catch{data=null;}
-    if(!response.ok){
-      const err=new Error(data&&data.error||'Сервер вернул HTTP '+response.status);
-      err.code=data&&data.code||'';throw err;
-    }
-    return data;
-  }
+  const sendScenarioFeedback=(runId,items)=>sendMapChange('/api/scenario-feedback',{run_id:runId,items});
   const sendScenarioChange=change=>sendMapChange('/api/scenarios',change);
   function scenarioClone(obj){return JSON.parse(JSON.stringify(obj));}
   function ensureDraftPositions(def){
@@ -840,12 +831,14 @@
     const panel=ruleDialog('Как запустить: '+(def.title||item.id),scenarioScopeText(item)+' · '+item.id);
     const {dialog,body,foot}=panel;
     const schemaVersion=Number(scenariosState.data?.schema_version)||0;
-    if(schemaVersion<4){
+    const capScenarios=scenariosState.data?.platform?.capabilities?.scenarios;
+    const needsMigration=capScenarios===false||(capScenarios===undefined&&schemaVersion<4);
+    if(needsMigration){
       const migBox=make('div','tools-warning');
-      migBox.append(make('strong','','Сначала обновите схему хранилища до v4 (сейчас v'+schemaVersion+')'));
-      migBox.append(make('p','','Запуск сценариев требует схему v4. Без обновления команда запуска вернёт ошибку schema_upgrade_required. Перед обновлением Richi сам создаст резервную копию базы:'));
+      migBox.append(make('strong','','Сначала обновите схему хранилища (сейчас v'+schemaVersion+')'));
+      migBox.append(make('p','','Для запуска сценариев требуется миграция таблиц сценариев. Без обновления команда запуска вернёт ошибку schema_upgrade_required. Перед обновлением Richi сам создаст резервную копию базы:'));
       const migCmd=['richi',...list(state.mapStore).map(scnShellQuote),'migrate'].join(' ');
-      const showMig=ruleCommandBox(migBox,scenarioCommandHint('Команда обновит схему базы до v4 с резервной копией'));showMig(migCmd);
+      const showMig=ruleCommandBox(migBox,scenarioCommandHint('Команда обновит схему базы с резервной копией'));showMig(migCmd);
       body.append(migBox);
     }
     const chatBox=make('div','scn-chat-prompt');
@@ -1409,6 +1402,8 @@
         ['checklist','Чек-лист','Список пунктов на проверку'],
         ['memory.recall','Поиск в памяти','Richi найдёт прошлые записи'],
         ['memory.brief','Сводка из памяти','Richi соберёт сводку по вопросу'],
+        ['memory.record','Записать в память','Сохраняет итог в базу знаний Richi'],
+        ['compare','Сравнить с baseline','Сравнивает метрики с эталонным запуском'],
         ['condition','Условие / ветвление','Вычисляет флаг для проверок if'],
       ];
       for(const [type,label,desc] of quickTypes){
@@ -2431,6 +2426,10 @@
       pastCb.addEventListener('change',()=>{pushScenarioUndo(ed);p.include_past_runs=pastCb.checked;markScenarioDirty(ed);});
       pastLbl.append(pastCb,document.createTextNode('Включать итоги последних 3 запусков этого сценария'));
       box.append(pastLbl);
+      const learnLbl=make('label','check-label'),learnCb=make('input');learnCb.type='checkbox';learnCb.checked=Boolean(p.include_learnings);
+      learnCb.addEventListener('change',()=>{pushScenarioUndo(ed);p.include_learnings=learnCb.checked;markScenarioDirty(ed);});
+      learnLbl.append(learnCb,document.createTextNode('Подмешивать подтверждённые FP-паттерны проекта (include_learnings)'));
+      box.append(learnLbl);
     }else if(step.type==='memory.record'){
       const kindSel=make('select');
       for(const k of SCN_ENTRY_KINDS)kindSel.add(new Option(kindLabel(k,true)+' ('+k+')',k));
@@ -2945,8 +2944,9 @@
   }
   function renderScenarioRuns(root){
     const schemaVersion=Number(scenariosState.data?.schema_version)||0;
-    if(schemaVersion<4){
-      toolWarning(root,'В этом workspace схема хранилища v'+schemaVersion+'. Определения и конструктор уже работают, а таблица запусков появится после обновления схемы до v4 (команда richi migrate после резервной копии).');
+    const capScenarios=scenariosState.data?.platform?.capabilities?.scenarios;
+    if(capScenarios===false||(capScenarios===undefined&&schemaVersion<4)){
+      toolWarning(root,'В этом workspace схема хранилища v'+schemaVersion+'. Определения и конструктор уже работают, а таблица запусков появится после миграции таблиц сценариев (команда richi migrate после резервной копии).');
       return;
     }
     const allRuns=list(scenariosState.data?.runs);
@@ -3007,7 +3007,7 @@
       if(scenariosState.scope==='builtin'&&run.scope!=='builtin')return false;
       if(scenariosState.scope.startsWith('project:')&&run.project_id!==scenariosState.scope.slice(8))return false;
       if(scenariosState.runFilter==='active'&&!['running','waiting','paused'].includes(run.status))return false;
-      if(scenariosState.runFilter==='waiting'&&(run.status!=='waiting'||isBlockedOnlyRun(run)))return false;
+      if(scenariosState.runFilter==='waiting'&&(!['running','waiting'].includes(run.status)||!(run.step_counts?.waiting_human||0)))return false;
       if(scenariosState.runFilter==='done'&&run.status!=='done')return false;
       if(scenariosState.runFilter==='failed'&&!['failed','cancelled'].includes(run.status)&&!isBlockedOnlyRun(run))return false;
       if(!q)return true;
@@ -3030,7 +3030,10 @@
       const btn=toolButton('',()=>{loadScenarioRun(run.id);},'scn-run-card');
       btn.setAttribute('aria-pressed',String(run.id===scenariosState.selectedRunId));
       const top=make('div','scn-run-top');
-      top.append(make('strong','',run.scenario_id+' · v'+run.scenario_version+(run.is_baseline?' ★':'')),make('span','scn-status st-'+runDisplayStatus(run),runDisplayLabel(run)));
+      const runTitleWrap=make('span');
+      runTitleWrap.append(make('strong','',run.scenario_id+' · v'+run.scenario_version+(run.is_baseline?' ★':'')));
+      if(run.run_kind&&run.run_kind!=='prod')runTitleWrap.append(document.createTextNode(' '),make('span','scn-pill-badge '+(run.run_kind==='eval'?'tpl':'count'),run.run_kind));
+      top.append(runTitleWrap,make('span','scn-status st-'+runDisplayStatus(run),runDisplayLabel(run)));
       const counts=run.step_counts||{},total=counts.total||0,done=(counts.done||0)+(counts.skipped||0);
       const prog=make('div','scn-progress'),fill=make('i');fill.style.width=(total?Math.round(done*100/total):0)+'%';prog.append(fill);
       const meta=make('div','rule-meta');
@@ -3062,6 +3065,7 @@
       const meta=make('div','rule-meta');
       const scopeLabel=r.scope==='builtin'?('Встроенный шаблон'+(r.project_id?' · проект: '+r.project_id:'')):(r.scope==='project'?'Проект: '+r.project_id:'Глобальный');
       meta.append(make('code','',r.run_id),make('span','','rev '+r.revision),make('span','',scopeLabel));
+      if(r.run_kind&&r.run_kind!=='prod')meta.append(make('span','scn-pill-badge '+(r.run_kind==='eval'?'tpl':'count'),r.run_kind));
       if(r.is_baseline)meta.append(make('span','scn-node-badge','★ Эталон (baseline)'));
       if(r.created_by_agent)meta.append(make('span','','Агент: '+r.created_by_agent));
       if(r.updated_at)meta.append(make('span','','Снимок от '+dateText(r.updated_at)));
@@ -3264,6 +3268,17 @@
         if(step.claimed_by_chat)sMeta.append(make('span','','чат: '+cut(step.claimed_by_chat,36)));
         row.append(sTop,sMeta);
         if(step.summary)row.append(make('div','',step.summary));
+        if(list(step.artifacts).length){
+          const artRow=make('div','rule-meta');
+          artRow.append(make('span','tools-inline-note','Артефакты:'));
+          for(const art of list(step.artifacts)){
+            const uri=typeof art==='string'?art:(art&&art.uri?String(art.uri):'');
+            if(!uri)continue;
+            const lbl=typeof art==='object'&&art&&art.title?(String(art.title)+' ('+uri+')'):uri;
+            artRow.append(make('code','',lbl));
+          }
+          row.append(artRow);
+        }
         if(step.answer!==undefined&&String(step.answer)!==String(step.summary||''))row.append(make('div','tools-inline-note','Ответ: '+String(step.answer)));
         if(step.reason)row.append(make('div','tools-inline-note','Причина: '+step.reason));
         detail.append(row);
@@ -3333,11 +3348,11 @@
     const condIn=make('textarea');condIn.rows=3;condIn.placeholder='Например: Gateway проверяет HMAC-подпись до вызова verify_token';
     const outPre=make('pre','rule-command');
     const buildCmd=()=>{
-      const sp=scopeIn.value.trim()||(finding.file||'src/');
+      const sp=scopeIn.value.trim()||(finding.file||'src');
       const cd=condIn.value.trim()||'<условие безопасности (минимум 10 символов)>';
       const base=['richi',...list(state.mapStore).map(scnShellQuote),'scenario','feedback',scnShellQuote(finding.run_id),
-        '--finding',scnShellQuote(finding.finding_id),'--verdict','false_positive','--remember-pattern',
-        '--scope-path',scnShellQuote(sp),'--safety-condition',scnShellQuote(cd)];
+        '--finding='+scnShellQuote(finding.finding_id),'--verdict','false_positive','--remember-pattern',
+        '--scope-path='+scnShellQuote(sp),'--safety-condition='+scnShellQuote(cd)];
       outPre.textContent=base.join(' ');
     };
     scopeIn.addEventListener('input',buildCmd);condIn.addEventListener('input',buildCmd);buildCmd();
@@ -3388,6 +3403,22 @@
     }
     return cmds.join('\n\n');
   }
+  function renderReviewFpPatterns(root,data){
+    const fps=list(data?.fp_patterns);
+    if(!fps.length)return;
+    const fpFold=make('details','tools-fold');fpFold.style.marginTop='14px';
+    fpFold.append(make('summary','','Паттерны ложных срабатываний в памяти ('+fps.length+')'));
+    const fpList=make('div','scn-fp-list');
+    for(const pat of fps){
+      const row=make('div','scn-fp-item'),rh=make('div','scn-finding-head');
+      rh.append(make('strong','',pat.title||pat.entry_id),make('span','scn-pill-badge '+(pat.stale?'tpl':'project'),pat.stale?'Устарел (>90д)':'Актуален'));
+      row.append(rh);
+      if(list(pat.scope_paths).length)row.append(make('div','tools-inline-note','Область: '+pat.scope_paths.join(', ')));
+      if(pat.safety_condition)row.append(make('div','','Условие безопасности: '+pat.safety_condition));
+      fpList.append(row);
+    }
+    fpFold.append(fpList);root.append(fpFold);
+  }
   function renderScenarioReviewHub(root){
     if(scenariosState.reviewLoading&&!scenariosState.reviewData){
       const box=make('div','tools-empty');
@@ -3429,6 +3460,7 @@
       }
       hero.append(ctas);
       root.append(hero);
+      renderReviewFpPatterns(root,data);
       return;
     }
 
@@ -3470,7 +3502,8 @@
       for(const row of k.step_signal_table){
         const tr=make('tr');
         const rate=row.signal_rate===null?'—':(Math.round(row.signal_rate*100)+'%');
-        for(const val of [row.step_id,row.total,row.actionable,row.valid_nit,row.false_positive,row.unlabeled,rate]){
+        const stepLabel=row.scenario_id?(row.scenario_id+' / '+row.step_id):row.step_id;
+        for(const val of [stepLabel,row.total,row.actionable,row.valid_nit,row.false_positive,row.unlabeled,rate]){
           tr.append(make('td','',String(val)));
         }
         tbody.append(tr);
@@ -3492,8 +3525,16 @@
       cartBar.append(cBtns);root.append(cartBar);
     }
 
-    // Inbox filters + Review -> Fix Handoff button
-    const allFindings=list(data.findings);
+    // Inbox filters + Review -> Fix Handoff button (overlay read-only cart without mutating server snapshot)
+    const cartMap=new Map(scenariosState.triageCart.map(c=>[c.run_id+'::'+c.finding_id,c]));
+    const allFindings=list(data.findings).map(raw=>{
+      const c=cartMap.get(raw.run_id+'::'+raw.finding_id);
+      if(!c)return raw;
+      return Object.assign({},raw,
+        c.verdict!==undefined?{verdict:c.verdict}:{},
+        c.resolution!==undefined?{resolution:c.resolution}:{}
+      );
+    });
     const fBar=make('div','scn-rev-filters');
     const stTabs=make('div','scn-subtabs');stTabs.style.margin='0';
     for(const [val,lbl] of [['open','Открытые'],['all','Все'],['fp','Ложные (FP)'],['disproved','Опровергнутые']]){
@@ -3532,31 +3573,38 @@
       inbox.append(em);
     }
     const applyTriage=async(finding,patch)=>{
+      const key=finding.run_id+'::'+finding.finding_id;
       if(!rulesState.editing){
         const idx=scenariosState.triageCart.findIndex(c=>c.run_id===finding.run_id&&c.finding_id===finding.finding_id);
         const merged=Object.assign(idx>=0?scenariosState.triageCart[idx]:{run_id:finding.run_id,finding_id:finding.finding_id},patch);
         if(idx>=0)scenariosState.triageCart[idx]=merged;else scenariosState.triageCart.push(merged);
-        if(patch.verdict!==undefined)finding.verdict=patch.verdict;
-        if(patch.resolution!==undefined)finding.resolution=patch.resolution;
         announce('Добавлено в корзину триажа');renderScenarios();return;
       }
-      const prevV=finding.verdict,prevR=finding.resolution;
-      if(patch.verdict!==undefined)finding.verdict=patch.verdict;
-      if(patch.resolution!==undefined)finding.resolution=patch.resolution;
+      if(scenariosState.triageBusy.has(key))return;
+      scenariosState.triageBusy.add(key);
+      const raw=list(scenariosState.reviewData?.findings).find(x=>x.run_id===finding.run_id&&x.finding_id===finding.finding_id)||finding;
+      const prevV=raw.verdict,prevR=raw.resolution;
+      if(patch.verdict!==undefined)raw.verdict=patch.verdict;
+      if(patch.resolution!==undefined)raw.resolution=patch.resolution;
+      scenariosState.reviewError='';
       renderScenarios();
       try{
         await sendScenarioFeedback(finding.run_id,[Object.assign({finding_id:finding.finding_id},patch)]);
         announce('Оценка сохранена');
         loadScenarioReview(scenariosState.reviewProject);
       }catch(err){
-        finding.verdict=prevV;finding.resolution=prevR;
-        scenariosState.reviewError=err.message||'Не удалось сохранить оценку.';
+        raw.verdict=prevV;raw.resolution=prevR;
+        const keyMsg=editKeyProblem(err);
+        scenariosState.reviewError=keyMsg||changeFailure(err)||err.message||'Не удалось сохранить оценку.';
+      }finally{
+        scenariosState.triageBusy.delete(key);
         renderScenarios();
       }
     };
 
     for(const f of shown){
       const key=f.run_id+'::'+f.finding_id;
+      const isBusy=scenariosState.triageBusy.has(key);
       const card=make('article','scn-finding-card sev-'+(f.severity||'P2')+(f.resolution!=='open'||f.verdict==='false_positive'||f.status==='disproved'?' is-resolved':''));
       const head=make('div','scn-finding-head'),left=make('div','scn-finding-left');
       const cb=make('input');cb.type='checkbox';cb.checked=scenariosState.reviewSelected.has(key);
@@ -3565,7 +3613,7 @@
       const loc=(f.file||'(без файла)')+(f.line?(':'+f.line+(f.end_line&&f.end_line!==f.line?'-'+f.end_line:'')):'');
       const fileBtn=make('button','scn-file-btn',loc);fileBtn.type='button';fileBtn.title='Скопировать путь и строку';
       fileBtn.addEventListener('click',async()=>{
-        try{await navigator.clipboard.writeText(loc);const orig=fileBtn.textContent;fileBtn.textContent='Скопировано: '+loc;setTimeout(()=>{fileBtn.textContent=orig;},1400);}catch{}
+        try{await navigator.clipboard.writeText(loc);fileBtn.textContent='Скопировано: '+loc;setTimeout(()=>{fileBtn.textContent=loc;},1400);}catch{}
       });
       left.append(fileBtn,make('strong','',f.title||'(без заголовка)'));
       const badges=make('div','scn-triage-btns');
@@ -3585,10 +3633,11 @@
       if(f.evidence)card.append(make('pre','scn-finding-ev',f.evidence));
 
       const tBar=make('div','scn-triage-bar'),tBtns=make('div','scn-triage-btns');
-      const mkBtn=(lbl,pressed,fn)=>{const b=make('button','scn-triage-btn',lbl);b.type='button';b.setAttribute('aria-pressed',String(Boolean(pressed)));b.addEventListener('click',fn);return b;};
+      const mkBtn=(lbl,pressed,fn)=>{const b=make('button','scn-triage-btn',lbl);b.type='button';b.disabled=isBusy;b.setAttribute('aria-pressed',String(Boolean(pressed)));b.addEventListener('click',fn);return b;};
+      const reopenIfWontFix=f.resolution==='wont_fix'?{resolution:'open'}:{};
       tBtns.append(
-        mkBtn('Баг',f.verdict==='actionable_bug',()=>applyTriage(f,{verdict:'actionable_bug'})),
-        mkBtn('Замечание',f.verdict==='valid_nit',()=>applyTriage(f,{verdict:'valid_nit'})),
+        mkBtn('Баг',f.verdict==='actionable_bug',()=>applyTriage(f,Object.assign({verdict:'actionable_bug'},reopenIfWontFix))),
+        mkBtn('Замечание',f.verdict==='valid_nit',()=>applyTriage(f,Object.assign({verdict:'valid_nit'},reopenIfWontFix))),
         mkBtn('Ложное (FP)',f.verdict==='false_positive',()=>applyTriage(f,{verdict:'false_positive',resolution:'wont_fix'})),
         mkBtn(f.resolution==='fixed'?'Исправлено ✓':'Исправлено',f.resolution==='fixed',()=>applyTriage(f,{resolution:f.resolution==='fixed'?'open':'fixed'}))
       );
@@ -3600,23 +3649,7 @@
       inbox.append(card);
     }
     root.append(inbox);
-
-    // FP Patterns health section
-    const fps=list(data.fp_patterns);
-    if(fps.length){
-      const fpFold=make('details','tools-fold');fpFold.style.marginTop='14px';
-      fpFold.append(make('summary','','Паттерны ложных срабатываний в памяти ('+fps.length+')'));
-      const fpList=make('div','scn-fp-list');
-      for(const pat of fps){
-        const row=make('div','scn-fp-item'),rh=make('div','scn-finding-head');
-        rh.append(make('strong','',pat.title||pat.entry_id),make('span','scn-pill-badge '+(pat.stale?'tpl':'project'),pat.stale?'Устарел (>90д)':'Актуален'));
-        row.append(rh);
-        if(list(pat.scope_paths).length)row.append(make('div','tools-inline-note','Область: '+pat.scope_paths.join(', ')));
-        if(pat.safety_condition)row.append(make('div','','Условие безопасности: '+pat.safety_condition));
-        fpList.append(row);
-      }
-      fpFold.append(fpList);root.append(fpFold);
-    }
+    renderReviewFpPatterns(root,data);
   }
   function renderScenarios(){
     const root=$('scenarios-content');root.replaceChildren();
@@ -3644,7 +3677,7 @@
     const subtabs=make('div','scn-subtabs');
     const runsList=list(scenariosState.data.runs);
     const runsTotal=scenariosState.data.runs_total||runsList.length;
-    const waitingCount=scenariosState.data.runs_waiting!==undefined?scenariosState.data.runs_waiting:runsList.filter(r=>r.status==='waiting'&&(r.step_counts?.waiting_human||0)>0).length;
+    const waitingCount=scenariosState.data.runs_waiting!==undefined?scenariosState.data.runs_waiting:runsList.filter(r=>(r.status==='running'||r.status==='waiting')&&(r.step_counts?.waiting_human||0)>0).length;
     const domainViews=list(scenariosState.data.platform?.domain_views).filter(v=>v&&v.available!==false);
     const tabs=[];
     for(const dv of domainViews){

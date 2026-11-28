@@ -48,7 +48,7 @@
       "needs": ["spec"],
       "params": {
         "question": "План для «{{inputs.feature}}»: {{steps.spec.summary}}. Согласуем переход к реализации?",
-        "options": ["approve", "revise", "cancel"],
+        "options": ["approve", "defer"],
         "allow_comment": true
       }
     },

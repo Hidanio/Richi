@@ -10,7 +10,7 @@ import hashlib
 import json
 import re
 
-from . import rules, scenario_findings, scenario_registry, scenario_runs
+from . import rules, scenario_findings, scenario_format, scenario_registry, scenario_runs
 
 
 FEEDBACK_PREFIX = "scenario-feedback:"
@@ -19,13 +19,24 @@ MAX_FEEDBACK_ITEMS = 250
 MAX_BATCH_ITEMS = 100
 MAX_NOTE_CHARS = 1000
 MAX_SCOPE_PATHS = 10
+MAX_ENTRY_SOURCES = 100
 FP_TAG = "false-positive"
 FP_STALE_DAYS = 90
 FP_MAX_INJECT = 5
 
 VERDICTS = ("actionable_bug", "valid_nit", "false_positive")
 RESOLUTIONS = ("open", "fixed", "wont_fix", "unreviewed_dismissed")
-REVIEW_TAGS = frozenset({"review", "bug-hunt", "pre-commit"})
+
+
+def _review_domain_spec():
+    for dv in scenario_registry.DOMAIN_VIEWS:
+        if dv.get("id") == "review":
+            return dv
+    return {"match_tags": ["review", "bug-hunt", "pre-commit"], "empty_cta_templates": ["pre-commit-review", "bug-hunt"]}
+
+
+REVIEW_TAGS = frozenset(str(t).lower() for t in _review_domain_spec().get("match_tags") or ("review", "bug-hunt", "pre-commit"))
+_CTRL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
 
 
 def _feedback_key(run_id):
@@ -44,21 +55,39 @@ def get_run_feedback(conn, run_id):
         return {}
 
 
-def _all_run_feedback(conn):
-    rows = conn.execute(
-        "SELECT key, value FROM metadata WHERE key >= ? AND key < ?",
-        (FEEDBACK_PREFIX, FEEDBACK_PREFIX[:-1] + ";"),
-    ).fetchall()
+def _feedback_for_runs(conn, run_ids):
+    """Load feedback blobs ONLY for the specified run IDs (bounded, never full-table scan)."""
+    if not run_ids:
+        return {}
     out = {}
-    for k, v in rows:
-        rid = k[len(FEEDBACK_PREFIX):]
-        try:
-            parsed = json.loads(v)
-            if isinstance(parsed, dict):
-                out[rid] = parsed
-        except (ValueError, TypeError):
-            continue
+    keys = [_feedback_key(rid) for rid in run_ids]
+    for i in range(0, len(keys), 500):
+        chunk = keys[i : i + 500]
+        placeholders = ",".join("?" for _ in chunk)
+        rows = conn.execute(
+            f"SELECT key, value FROM metadata WHERE key IN ({placeholders})",
+            chunk,
+        ).fetchall()
+        for k, v in rows:
+            rid = k[len(FEEDBACK_PREFIX):]
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, dict):
+                    out[rid] = parsed
+            except (ValueError, TypeError):
+                continue
     return out
+
+
+def _clean_single_line(value, field, api, *, min_len=0, max_len=500):
+    if not isinstance(value, str) or _CTRL_CHARS.search(value):
+        raise scenario_runs._failure(api, f"{field} must be valid text without control characters", "invalid_input")
+    collapsed = " ".join(value.split()).strip()
+    if len(collapsed) < min_len or len(collapsed) > max_len:
+        raise scenario_runs._failure(
+            api, f"{field} must be {min_len}-{max_len} characters", "invalid_input"
+        )
+    return collapsed
 
 
 def _clean_scope_paths(paths, api):
@@ -68,7 +97,10 @@ def _clean_scope_paths(paths, api):
         raise scenario_runs._failure(api, f"At most {MAX_SCOPE_PATHS} scope paths allowed", "invalid_input")
     cleaned = []
     for raw in paths:
-        p, err = scenario_findings._safe_rel_repo_path(raw)
+        if not isinstance(raw, str):
+            raise scenario_runs._failure(api, "Invalid scope_path: must be text", "invalid_input")
+        trimmed = raw.strip().rstrip("/")
+        p, err = scenario_findings._safe_rel_repo_path(trimmed)
         if err:
             raise scenario_runs._failure(api, "Invalid scope_path: " + err, "invalid_input")
         if p not in cleaned:
@@ -79,27 +111,28 @@ def _clean_scope_paths(paths, api):
 def _remember_fp_pattern(conn, api, run_row, item, author, at_iso):
     """Persist a scoped false-positive learning as a confirmed fact entry."""
     scope_paths = _clean_scope_paths(item.get("scope_paths"), api)
-    cond = item.get("safety_condition")
-    if not isinstance(cond, str) or len(cond.strip()) < 10 or len(cond) > 500 or "\x00" in cond:
-        raise scenario_runs._failure(
-            api, "remember_pattern requires safety_condition (10-500 chars explaining when code is actually safe)",
-            "invalid_input",
-        )
-    cond = cond.strip()
+    cond = _clean_single_line(
+        item.get("safety_condition"), "safety_condition", api, min_len=10, max_len=500
+    )
     created_rev = item.get("created_rev")
     if created_rev is not None:
-        if not isinstance(created_rev, str) or len(created_rev.strip()) > 120 or "\x00" in created_rev:
-            raise scenario_runs._failure(api, "Invalid created_rev for FP pattern", "invalid_input")
-        created_rev = created_rev.strip() or None
+        created_rev = _clean_single_line(created_rev, "created_rev", api, min_len=0, max_len=120) or None
     fid = item["finding_id"]
-    raw_title = (item.get("title") or "").strip()
-    title = raw_title[:180] if raw_title else f"FP pattern ({scope_paths[0]}): {cond[:90]}"
-    note = (item.get("note") or "").strip()
-    sig = f"{run_row['project_id'] or '_global'}|{','.join(sorted(scope_paths))}|{cond.lower()}"
-    entry_id = "fact:fp-" + hashlib.sha256(sig.encode("utf-8")).hexdigest()[:12]
+    raw_title = item.get("title")
+    if raw_title is not None:
+        raw_title = _clean_single_line(raw_title, "title", api, min_len=0, max_len=180)
+    title = raw_title if raw_title else f"FP pattern ({scope_paths[0]}): {cond[:90]}"
+    note_raw = item.get("note")
+    note = _clean_single_line(note_raw, "note", api, min_len=0, max_len=500) if note_raw else ""
+
+    sig_payload = json.dumps(
+        [run_row["project_id"], sorted(scope_paths), cond.lower()],
+        ensure_ascii=False, separators=(",", ":"),
+    )
+    entry_id = "fact:fp-" + hashlib.sha256(sig_payload.encode("utf-8")).hexdigest()[:12]
 
     lines = [
-        "Scope paths: " + ", ".join(scope_paths),
+        "Scope paths: " + json.dumps(scope_paths, ensure_ascii=False),
         "Safety condition: " + cond,
     ]
     if created_rev:
@@ -119,8 +152,10 @@ def _remember_fp_pattern(conn, api, run_row, item, author, at_iso):
         updated = {k: v for k, v in current.items() if k not in ("created_at", "updated_at", "history")}
         updated["title"] = title
         updated["summary"] = summary
+        updated["knowledge_state"] = "confirmed"
         seen_refs = {s.get("reference") for s in (updated.get("sources") or []) if isinstance(s, dict)}
-        updated["sources"] = list(updated.get("sources") or []) + [s for s in sources if s["reference"] not in seen_refs]
+        merged_sources = list(updated.get("sources") or []) + [s for s in sources if s["reference"] not in seen_refs]
+        updated["sources"] = merged_sources[-MAX_ENTRY_SOURCES:]
         updated["tags"] = list(dict.fromkeys(list(updated.get("tags") or []) + tags))[:20]
         updated["expected_updated_at"] = current["updated_at"]
         put_res = api.entry_put(conn, updated)
@@ -240,43 +275,63 @@ def record_feedback(conn, api, run_id, items, *, checked_project=None, author=No
 
 
 def _parse_fp_summary(summary):
-    scope_paths = []
-    safety_condition = ""
+    """Parse structured FP header fields (first-match-wins before Rationale:)."""
+    scope_paths = None
+    safety_condition = None
     created_rev = None
     for line in str(summary or "").splitlines():
-        low = line.strip()
-        if low.lower().startswith("scope paths:"):
-            raw = low.split(":", 1)[1].strip()
-            scope_paths = [p.strip() for p in raw.split(",") if p.strip()]
-        elif low.lower().startswith("safety condition:"):
-            safety_condition = low.split(":", 1)[1].strip()
-        elif low.lower().startswith("created rev:"):
-            created_rev = low.split(":", 1)[1].strip() or None
-    return scope_paths, safety_condition, created_rev
+        stripped = line.strip()
+        low = stripped.lower()
+        if low.startswith("rationale:"):
+            break
+        if low.startswith("scope paths:") and scope_paths is None:
+            raw = stripped.split(":", 1)[1].strip()
+            if raw.startswith("["):
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, list):
+                        scope_paths = [str(p).strip() for p in parsed if isinstance(p, str) and p.strip()]
+                except (ValueError, TypeError):
+                    scope_paths = None
+            if scope_paths is None:
+                scope_paths = [p.strip() for p in raw.split(",") if p.strip()]
+        elif low.startswith("safety condition:") and safety_condition is None:
+            safety_condition = stripped.split(":", 1)[1].strip()
+        elif low.startswith("created rev:") and created_rev is None:
+            created_rev = stripped.split(":", 1)[1].strip() or None
+    return scope_paths or [], safety_condition or "", created_rev
 
 
-def _is_stale(updated_at, now_dt):
-    if not updated_at:
-        return False
+def _parse_utc(ts):
+    if not ts:
+        return None
     try:
-        dt = datetime.fromisoformat(str(updated_at).replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        return (now_dt - dt).days > FP_STALE_DAYS
+        return dt.astimezone(timezone.utc)
     except (ValueError, TypeError):
+        return None
+
+
+def _is_stale(updated_at, ref_dt):
+    dt = _parse_utc(updated_at)
+    if dt is None:
         return False
+    return (ref_dt - dt).days > FP_STALE_DAYS
 
 
-def load_scoped_fp_learnings(conn, project_id=None, *, query="", changed_files=None, now_dt=None, limit=FP_MAX_INJECT):
-    """Load confirmed `false-positive` fact entries scoped to project/query, with staleness detection."""
-    now_dt = now_dt or datetime.now(timezone.utc)
+def load_scoped_fp_learnings(conn, project_id=None, *, query="", changed_files=None,
+                             now_dt=None, as_of_dt=None, limit=FP_MAX_INJECT):
+    """Load confirmed `false-positive` fact entries scoped to project/query, with staleness & as_of cutoff."""
+    ref_dt = as_of_dt or now_dt or datetime.now(timezone.utc)
     if project_id is not None:
         rows = conn.execute(
             "SELECT e.id, e.title, e.summary, e.updated_at, e.tags "
             "FROM entries e LEFT JOIN entry_projects ep ON ep.entry_id = e.id "
             "WHERE e.kind = 'fact' AND e.knowledge_state = 'confirmed' AND e.tags LIKE ? "
             "AND (ep.project_id = ? OR ep.project_id IS NULL) "
-            "ORDER BY e.updated_at DESC LIMIT 60",
+            "ORDER BY e.updated_at DESC LIMIT 120",
             ('%"false-positive"%', project_id),
         ).fetchall()
     else:
@@ -284,13 +339,13 @@ def load_scoped_fp_learnings(conn, project_id=None, *, query="", changed_files=N
             "SELECT e.id, e.title, e.summary, e.updated_at, e.tags "
             "FROM entries e "
             "WHERE e.kind = 'fact' AND e.knowledge_state = 'confirmed' AND e.tags LIKE ? "
-            "ORDER BY e.updated_at DESC LIMIT 60",
+            "ORDER BY e.updated_at DESC LIMIT 120",
             ('%"false-positive"%',),
         ).fetchall()
 
     seen = set()
     q_tokens = set(re.findall(r"[A-Za-zА-Яа-яЁё0-9_./-]{3,}", str(query or "").lower()))
-    changed = [str(f).strip().replace("\\", "/") for f in (changed_files or ()) if f]
+    changed = [str(f).strip().replace("\\", "/").lstrip("./") for f in (changed_files or ()) if f]
 
     scored = []
     for row in rows:
@@ -298,6 +353,10 @@ def load_scoped_fp_learnings(conn, project_id=None, *, query="", changed_files=N
         if eid in seen:
             continue
         seen.add(eid)
+        if as_of_dt is not None:
+            upd_dt = _parse_utc(row[3])
+            if upd_dt is not None and upd_dt > as_of_dt:
+                continue
         try:
             tags = json.loads(row[4] or "[]")
         except (ValueError, TypeError):
@@ -305,7 +364,7 @@ def load_scoped_fp_learnings(conn, project_id=None, *, query="", changed_files=N
         if FP_TAG not in tags:
             continue
         scope_paths, cond, created_rev = _parse_fp_summary(row[2])
-        stale = _is_stale(row[3], now_dt)
+        stale = _is_stale(row[3], ref_dt)
         score = 0
         if not stale:
             score += 10
@@ -317,10 +376,10 @@ def load_scoped_fp_learnings(conn, project_id=None, *, query="", changed_files=N
         for tok in q_tokens:
             if tok in hay:
                 score += 5
-        scored.append((
-            -score,
-            str(row[3] or ""),
-            {
+        scored.append({
+            "score": score,
+            "updated_at": str(row[3] or ""),
+            "item": {
                 "entry_id": eid,
                 "title": row[1],
                 "scope_paths": scope_paths,
@@ -329,16 +388,20 @@ def load_scoped_fp_learnings(conn, project_id=None, *, query="", changed_files=N
                 "updated_at": row[3],
                 "stale": stale,
             },
-        ))
+        })
 
-    scored.sort(key=lambda x: (x[0], x[2]["entry_id"]))
-    items = [x[2] for x in scored[:max(0, int(limit))]]
+    # Sort deterministically: highest score first, then newest updated_at DESC, then entry_id ASC.
+    scored.sort(key=lambda x: x["item"]["entry_id"])
+    scored.sort(key=lambda x: x["updated_at"], reverse=True)
+    scored.sort(key=lambda x: -x["score"])
+    items = [x["item"] for x in scored[:max(0, int(limit))]]
     hints = []
     for it in items:
         scope_str = ", ".join(it["scope_paths"][:3]) if it["scope_paths"] else "project"
         stale_tag = " [stale]" if it["stale"] else ""
+        safe_cond = str(it["safety_condition"]).replace("]", ")").replace("[", "(")[:180]
         hints.append(
-            f"FP-check{stale_tag} [{it['entry_id']}] ({scope_str}): verify whether safety condition holds before flagging — {it['safety_condition'][:180]}"
+            f"FP-check{stale_tag} ({it['entry_id']}, {scope_str}): verify whether safety condition holds before flagging — {safe_cond}"
         )
     return items, hints
 
@@ -361,8 +424,19 @@ def _is_review_definition(defn):
 
 
 def _extract_run_findings(defn, step_rows):
-    """Extract raw findings + disprove metrics from one run's completed steps, then dedupe."""
-    by_def = {s["id"]: s for s in (defn.get("steps") or ())}
+    """Extract findings + disprove metrics using per-branch DAG dominance (no hardcoded step IDs).
+
+    If a completed (`done`) step B is a transitive DAG descendant of step A and B emits `findings` or
+    `disproved`, B supersedes A's raw candidates along that branch while inheriting `consensus_ratio`,
+    `corroborated_by`, and `severity_votes` from fuzzy-matched upstream candidates of A.
+    """
+    steps_list = defn.get("steps") or []
+    by_def = {s["id"]: s for s in steps_list if isinstance(s, dict) and "id" in s}
+    try:
+        ancestry = scenario_format.ancestors(defn) if steps_list else {}
+    except Exception:
+        ancestry = {}
+
     replicated_totals = {}
     for row in step_rows:
         if row["status"] != "done":
@@ -371,18 +445,9 @@ def _extract_run_findings(defn, step_rows):
         if spec.get("matrix_mode") == "replicated":
             replicated_totals[row["step_id"]] = replicated_totals.get(row["step_id"], 0) + 1
 
-    raw = []
-    disprove_candidates = 0
-    disprove_removed = 0
-    has_disprove_step = False
-
-    # Identify if a downstream disprove/merge step supersedes earlier candidate sweep findings
-    has_final_findings_step = False
-    final_step_ids = set()
-    for s in defn.get("steps") or ():
-        sid = s["id"]
-        if sid in ("disprove", "merge", "code_critic", "agent_debates"):
-            final_step_ids.add(sid)
+    per_step_active = {}
+    per_step_disproved = {}
+    critic_step_ids = set()
 
     for row in step_rows:
         if row["status"] != "done" or not row["result_json"]:
@@ -409,12 +474,12 @@ def _extract_run_findings(defn, step_rows):
         f_list = data.get("findings")
         d_list = data.get("disproved")
         if isinstance(d_list, list):
-            has_disprove_step = True
-            disprove_removed += len([x for x in d_list if isinstance(x, dict)])
+            critic_step_ids.add(sid)
+            per_step_disproved.setdefault(sid, [])
             for item in d_list:
                 if not isinstance(item, dict):
                     continue
-                raw.append({
+                per_step_disproved[sid].append({
                     "file": item.get("file", ""),
                     "line": item.get("line"),
                     "end_line": item.get("end_line"),
@@ -428,45 +493,121 @@ def _extract_run_findings(defn, step_rows):
                     "matrix_mode": "orthogonal",
                 })
         if isinstance(f_list, list):
-            if sid in final_step_ids:
-                has_final_findings_step = True
+            per_step_active.setdefault(sid, [])
             for item in f_list:
                 if not isinstance(item, dict):
                     continue
-                raw.append({
+                per_step_active[sid].append({
                     "file": item.get("file", ""),
                     "line": item.get("line"),
                     "end_line": item.get("end_line"),
                     "severity": item.get("severity", "P2"),
                     "title": item.get("title", ""),
                     "evidence": item.get("evidence", ""),
-                    "status": item.get("status") or ("confirmed" if sid in final_step_ids else "candidate"),
+                    "status": item.get("status") or ("confirmed" if sid in critic_step_ids else "candidate"),
                     "step_id": sid,
                     "step_key": row["step_key"],
                     "matrix_label": matrix_label or sid,
                     "matrix_mode": matrix_mode,
                 })
 
-    if has_disprove_step:
-        # Count candidates from non-disprove steps (or confirmed + disproved)
-        non_disprove = [x for x in raw if x["status"] != "disproved" and x["step_id"] not in ("disprove",)]
-        if non_disprove:
-            disprove_candidates = len(scenario_findings.dedupe_findings(non_disprove, replicated_totals=replicated_totals))
-        else:
-            disprove_candidates = len([x for x in raw if x["step_id"] == "disprove"])
+    # Per-branch DAG dominance: a step A is superseded iff some completed descendant B emitted findings or disproved.
+    done_emitting = set(per_step_active) | set(per_step_disproved)
+    superseded_steps = set()
+    for step_b in done_emitting:
+        for anc_a in ancestry.get(step_b, ()):
+            if anc_a in done_emitting:
+                superseded_steps.add(anc_a)
 
-    deduped = scenario_findings.dedupe_findings(raw, replicated_totals=replicated_totals)
-    return deduped, {
-        "has_disprove": has_disprove_step,
+    # Mark findings emitted by steps that dominate an upstream findings step as confirmed by default
+    dominating_steps = {
+        step_b for step_b in done_emitting
+        if any(anc_a in done_emitting for anc_a in ancestry.get(step_b, ()))
+    }
+    for sid in dominating_steps:
+        for item in per_step_active.get(sid, ()):
+            if item["status"] == "candidate":
+                item["status"] = "confirmed"
+
+    terminal_active_raw = []
+    superseded_raw = []
+    for sid, items in per_step_active.items():
+        if sid in superseded_steps:
+            superseded_raw.extend(items)
+        else:
+            terminal_active_raw.extend(items)
+
+    all_disproved_raw = []
+    for items in per_step_disproved.values():
+        all_disproved_raw.extend(items)
+
+    terminal_deduped = scenario_findings.dedupe_findings(terminal_active_raw, replicated_totals=replicated_totals)
+    disproved_deduped = scenario_findings.dedupe_findings(all_disproved_raw, replicated_totals=replicated_totals)
+    upstream_deduped = scenario_findings.dedupe_findings(superseded_raw, replicated_totals=replicated_totals) if superseded_raw else []
+
+    # Propagate upstream replicated consensus & orthogonal corroboration onto surviving terminal findings
+    if upstream_deduped and terminal_deduped:
+        for tf in terminal_deduped:
+            matched_up = [uf for uf in upstream_deduped if scenario_findings.findings_similar(tf, uf)]
+            if not matched_up:
+                continue
+            for uf in matched_up:
+                if tf["consensus_ratio"] is None and uf.get("consensus_ratio") is not None:
+                    tf["consensus_ratio"] = uf["consensus_ratio"]
+                for lbl in uf.get("corroborated_by") or ():
+                    if lbl not in tf["corroborated_by"]:
+                        tf["corroborated_by"].append(lbl)
+                for sk in uf.get("source_steps") or ():
+                    if sk not in tf["source_steps"]:
+                        tf["source_steps"].append(sk)
+
+    # Disprove yield strictly on deduped sets so 0.0 <= disprove_rate <= 1.0 ALWAYS holds
+    has_disprove = bool(critic_step_ids)
+    disprove_removed = len(disproved_deduped)
+    disprove_candidates = 0
+    if has_disprove:
+        critic_ancestors = set()
+        for cid in critic_step_ids:
+            critic_ancestors.update(ancestry.get(cid, ()))
+        upstream_of_critics_raw = [it for sid in critic_ancestors for it in per_step_active.get(sid, ())]
+        upstream_cnt = len(scenario_findings.dedupe_findings(upstream_of_critics_raw, replicated_totals=replicated_totals)) if upstream_of_critics_raw else 0
+        critic_survived = len([f for f in terminal_deduped if f["step_id"] in critic_step_ids])
+        disprove_candidates = max(upstream_cnt, critic_survived + disprove_removed)
+
+    combined = terminal_deduped + disproved_deduped
+    combined.sort(key=lambda x: (
+        1 if x["status"] == "disproved" else 0,
+        scenario_findings.SEVERITY_RANK.get(x["severity"], 9),
+        x["file"],
+        x["line"] if x["line"] is not None else 10**9,
+        x["finding_id"],
+    ))
+    return combined, {
+        "has_disprove": has_disprove,
         "candidates": disprove_candidates,
         "disproved": disprove_removed,
-        "has_final_step": has_final_findings_step,
+        "has_final_step": bool(dominating_steps or critic_step_ids),
     }
+
+
+def _scope_target_key(inputs_json):
+    """Extract normalized branch/target scope for cross-run likely_fixed grouping (ignoring free-text focus)."""
+    try:
+        inp = json.loads(inputs_json or "{}")
+    except (ValueError, TypeError):
+        return (None, None)
+    if not isinstance(inp, dict):
+        return (None, None)
+    branch = str(inp.get("branch")).strip() if inp.get("branch") else None
+    target = str(inp.get("target")).strip() if inp.get("target") else None
+    return (branch, target)
 
 
 def review_hub_snapshot(conn, api=None, *, project_id=None, limit=30):
     """Aggregate Review Hub KPIs, deduped Findings Inbox, and FP health for the Scenarios > Review tab."""
     caps = scenario_registry.detect_capabilities(conn)
+    domain_spec = _review_domain_spec()
+    empty_ctas = list(domain_spec.get("empty_cta_templates") or ["pre-commit-review", "bug-hunt"])
     projects = [{"id": r[0], "name": r[1]} for r in conn.execute("SELECT id, name FROM projects ORDER BY name, id")]
     now_dt = datetime.now(timezone.utc)
     fp_all, _ = load_scoped_fp_learnings(conn, project_id=project_id, now_dt=now_dt, limit=50)
@@ -495,50 +636,61 @@ def review_hub_snapshot(conn, api=None, *, project_id=None, limit=30):
             "kpis": empty_kpis,
             "findings": [],
             "fp_patterns": fp_all,
-            "empty_cta_templates": ["pre-commit-review", "bug-hunt"],
+            "empty_cta_templates": empty_ctas,
         }
 
-    clauses = []
+    # Filter prod runs in SQL via LEFT JOIN metadata and paginate until `limit` review runs are collected.
+    clauses = ["(m.value IS NULL OR COALESCE(json_extract(m.value, '$.kind'), 'prod') = 'prod')"]
     params = []
     if project_id is not None:
-        clauses.append("project_id = ?")
+        clauses.append("r.project_id = ?")
         params.append(project_id)
-    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-    all_runs = conn.execute(
-        "SELECT id, scenario_id, scenario_version, project_id, status, definition_json, created_at, updated_at "
-        "FROM scenario_runs" + where + " ORDER BY created_at DESC, id DESC LIMIT ?",
-        params + [max(limit * 3, 90)],
-    ).fetchall()
-
-    meta_map = scenario_runs.all_run_meta(conn)
-    fb_map = _all_run_feedback(conn)
+    where = " WHERE " + " AND ".join(clauses)
 
     review_runs = []
-    for r in all_runs:
-        if (meta_map.get(r["id"]) or {}).get("kind", "prod") != "prod":
-            continue
-        try:
-            defn = json.loads(r["definition_json"])
-        except (ValueError, TypeError):
-            continue
-        if not _is_review_definition(defn):
-            continue
-        review_runs.append((r, defn))
-        if len(review_runs) >= limit:
+    offset = 0
+    batch_size = max(limit * 3, 60)
+    max_scan = 2000
+    while len(review_runs) < limit and offset < max_scan:
+        rows = conn.execute(
+            "SELECT r.id, r.scenario_id, r.scenario_version, r.project_id, r.status, r.definition_json, "
+            "r.inputs_json, r.created_at, r.updated_at "
+            "FROM scenario_runs r "
+            "LEFT JOIN metadata m ON m.key = 'scenario-run-meta:' || r.id"
+            + where + " ORDER BY r.created_at DESC, r.id DESC LIMIT ? OFFSET ?",
+            params + [batch_size, offset],
+        ).fetchall()
+        if not rows:
             break
+        offset += len(rows)
+        for r in rows:
+            try:
+                defn = json.loads(r["definition_json"])
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(defn, dict) or not _is_review_definition(defn):
+                continue
+            review_runs.append((r, defn))
+            if len(review_runs) >= limit:
+                break
 
-    # Track latest done run per (scenario_id, project_id) to infer likely_fixed on older runs
+    fb_map = _feedback_for_runs(conn, [r["id"] for r, _ in review_runs])
+
+    # Track newest done run per (scenario_id, project_id, branch, target) with its chronological index
     latest_done_findings = {}
     per_run_extracted = []
-    for r, defn in review_runs:
+    for run_idx, (r, defn) in enumerate(review_runs):
         step_rows = scenario_runs._load_steps(conn, r["id"])
         deduped, dmeta = _extract_run_findings(defn, step_rows)
-        per_run_extracted.append((r, defn, deduped, dmeta))
-        group_key = (r["scenario_id"], r["project_id"])
+        per_run_extracted.append((run_idx, r, defn, deduped, dmeta))
+        group_key = (r["scenario_id"], r["project_id"], _scope_target_key(r["inputs_json"]))
         if r["status"] == "done" and group_key not in latest_done_findings:
+            active_in_done = [f for f in deduped if f["status"] != "disproved"]
             latest_done_findings[group_key] = (
+                run_idx,
                 r["id"],
-                {f["finding_id"] for f in deduped if f["status"] != "disproved"},
+                {f["finding_id"] for f in active_in_done},
+                active_in_done,
             )
 
     inbox = []
@@ -547,13 +699,13 @@ def review_hub_snapshot(conn, api=None, *, project_id=None, limit=30):
     step_signal = {}
     disp_cand = disp_rem = 0
 
-    for r, defn, deduped, dmeta in per_run_extracted:
+    for run_idx, r, defn, deduped, dmeta in per_run_extracted:
         rid = r["id"]
         run_fb = fb_map.get(rid) or {}
         if dmeta["has_disprove"]:
             disp_cand += dmeta["candidates"]
             disp_rem += dmeta["disproved"]
-        group_key = (r["scenario_id"], r["project_id"])
+        group_key = (r["scenario_id"], r["project_id"], _scope_target_key(r["inputs_json"]))
         newest_done = latest_done_findings.get(group_key)
 
         for f in deduped:
@@ -561,10 +713,15 @@ def review_hub_snapshot(conn, api=None, *, project_id=None, limit=30):
             verdict = fb.get("verdict")
             resolution = fb.get("resolution") or ("unreviewed_dismissed" if f["status"] == "disproved" else "open")
             likely_fixed = False
+            # Only flag likely_fixed for runs STRICTLY OLDER than newest_done (run_idx > newest_done_idx)
             if (f["status"] != "disproved" and resolution == "open" and verdict != "false_positive"
-                    and newest_done is not None and newest_done[0] != rid
-                    and f["finding_id"] not in newest_done[1]):
-                likely_fixed = True
+                    and newest_done is not None and run_idx > newest_done[0]):
+                still_present = (
+                    f["finding_id"] in newest_done[2]
+                    or any(scenario_findings.findings_similar(f, nf) for nf in newest_done[3])
+                )
+                if not still_present:
+                    likely_fixed = True
 
             enriched = dict(f)
             enriched.update({
@@ -595,14 +752,19 @@ def review_hub_snapshot(conn, api=None, *, project_id=None, limit=30):
                 if resolution == "open" and verdict != "false_positive":
                     if f["severity"] == "P0":
                         open_p0 += 1
+                        if likely_fixed:
+                            likely_fixed_cnt += 1
                     elif f["severity"] == "P1":
                         open_p1 += 1
-                    if likely_fixed:
-                        likely_fixed_cnt += 1
+                        if likely_fixed:
+                            likely_fixed_cnt += 1
 
                 sid = f["step_id"] or "unknown"
-                sb = step_signal.setdefault(sid, {
-                    "step_id": sid, "total": 0, "actionable": 0, "valid_nit": 0, "false_positive": 0, "unlabeled": 0,
+                scn_id = r["scenario_id"]
+                sb_key = (scn_id, sid)
+                sb = step_signal.setdefault(sb_key, {
+                    "scenario_id": scn_id, "step_id": sid, "total": 0, "actionable": 0,
+                    "valid_nit": 0, "false_positive": 0, "unlabeled": 0,
                 })
                 sb["total"] += 1
                 if verdict == "actionable_bug":
@@ -617,7 +779,7 @@ def review_hub_snapshot(conn, api=None, *, project_id=None, limit=30):
     labeled = actionable + valid_nit + false_pos
     total_active = labeled + unlabeled
     step_table = []
-    for sb in sorted(step_signal.values(), key=lambda x: (-x["total"], x["step_id"])):
+    for sb in sorted(step_signal.values(), key=lambda x: (-x["total"], x["scenario_id"], x["step_id"])):
         lab = sb["actionable"] + sb["valid_nit"] + sb["false_positive"]
         sb["signal_rate"] = round((sb["actionable"] + sb["valid_nit"]) / lab, 4) if lab else None
         step_table.append(sb)
@@ -647,7 +809,7 @@ def review_hub_snapshot(conn, api=None, *, project_id=None, limit=30):
             "candidates": disp_cand,
             "disproved": disp_rem,
             "survived": disp_survived,
-            "disprove_rate": round(disp_rem / disp_cand, 4) if disp_cand else None,
+            "disprove_rate": min(1.0, round(disp_rem / disp_cand, 4)) if disp_cand else None,
         },
         "fp_health": {
             "total": len(fp_all),
@@ -674,5 +836,5 @@ def review_hub_snapshot(conn, api=None, *, project_id=None, limit=30):
         "kpis": kpis,
         "findings": inbox[:200],
         "fp_patterns": fp_all,
-        "empty_cta_templates": ["pre-commit-review", "bug-hunt"],
+        "empty_cta_templates": empty_ctas,
     }

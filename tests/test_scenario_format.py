@@ -332,9 +332,9 @@ class ScenarioFormatTests(unittest.TestCase):
         named["steps"][2]["needs"] = ["matrix"]
         named["steps"][2]["params"]["text"] = "Merge {{steps.matrix.data.findings}}"
         scenario_format.normalize(named)
-        # Matrix step exposes aggregate fields (status, items, data, files), not scalar summary/answer.
+        # Matrix step exposes aggregate fields (status, items, data, files, artifacts), not scalar summary/answer.
         self.assertRejects(lambda d: d["steps"][2]["params"].update(text="{{steps.angle.summary}}"),
-                           "exposes data, files, items, status")
+                           "exposes artifacts, data, files, items, status")
         ok_items = review()
         ok_items["steps"][2]["params"]["text"] = "First: {{steps.angle.items[0].summary}}"
         scenario_format.normalize(ok_items)

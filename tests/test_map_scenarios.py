@@ -658,6 +658,29 @@ assert.notEqual(scenarioValidateDraft(scenarioNormalizeDraft(multiCmd)), '');
 // Draft baseline dirty comparison
 assert.equal(scenarioDraftChanged({id: 'a', steps: []}, {id: 'a', steps: []}), false);
 assert.equal(scenarioDraftChanged({id: 'a', steps: [{id: 'x'}]}, {id: 'a', steps: []}), true);
+
+// CR-11: compare step linting must use scenarioAncestors without ReferenceError
+const cmpOk = {
+  id: 'cmp-ok', title: 'Compare OK',
+  steps: [
+    {id: 'measure', type: 'instruction', title: 'Measure', needs: [], params: {text: 'Measure'}},
+    {id: 'diff', type: 'compare', title: 'Diff', needs: ['measure'], params: {step: 'measure', metrics: ['ms']}},
+  ],
+};
+assert.equal(scenarioLintDraft(cmpOk).ok, true);
+const cmpBad = {
+  id: 'cmp-bad', title: 'Compare Bad',
+  steps: [
+    {id: 'measure', type: 'instruction', title: 'Measure', needs: [], params: {text: 'Measure'}},
+    {id: 'diff', type: 'compare', title: 'Diff', needs: [], params: {step: 'measure', metrics: ['ms']}},
+  ],
+};
+const cmpBadRes = scenarioLintDraft(cmpBad);
+assert.equal(cmpBadRes.ok, false);
+assert.equal(cmpBadRes.byStep.diff.severity, 'err');
+
+// CR-29: scnShellQuote quotes '=' values safely
+assert.equal(scnShellQuote('a=b'), "'a=b'");
 """)
 
 

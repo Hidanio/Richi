@@ -59,14 +59,24 @@
       }
     },
     {
+      "id": "apply_fix",
+      "type": "instruction",
+      "title": "Применить согласованное исправление",
+      "needs": ["mitigate_gate"],
+      "if": "steps.mitigate_gate.answer != 'document_only'",
+      "params": {
+        "text": "Выполни стратегию «{{steps.mitigate_gate.answer}}» (комментарий: {{steps.mitigate_gate.comment}}) для корневой причины «{{steps.rca.data.root_cause}}», проверь тестами и отчитайся о результате."
+      }
+    },
+    {
       "id": "record_rca",
       "type": "memory.record",
       "title": "Сохранить расследование в память",
-      "needs": ["mitigate_gate"],
+      "needs": ["apply_fix"],
       "params": {
         "kind": "investigation",
         "title": "RCA: {{inputs.symptom}}",
-        "summary": "Корневая причина: {{steps.rca.summary}}\nРешение: {{steps.mitigate_gate.answer}} ({{steps.mitigate_gate.comment}})",
+        "summary": "Корневая причина: {{steps.rca.data.root_cause}}\nДетали: {{steps.rca.summary}}\nРешение: {{steps.mitigate_gate.answer}} ({{steps.mitigate_gate.comment}})",
         "tags": ["incident", "rca"],
         "knowledge_state": "confirmed"
       }

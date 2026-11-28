@@ -97,19 +97,19 @@ STEP_BLOCK_CATALOG = (
         "type": "instruction", "category": "agent", "role": "agent",
         "label": "Инструкция", "requires_capability": None,
         "description": "Free-form task executed by the chat agent in its sandbox.",
-        "exposes": ["summary", "status", "data", "files"],
+        "exposes": ["summary", "status", "data", "files", "artifacts"],
     },
     {
         "type": "skill", "category": "agent", "role": "agent",
         "label": "Скилл", "requires_capability": None,
         "description": "Invoke an installed agent skill (shared default or per_agent mapping).",
-        "exposes": ["summary", "status", "data", "files"],
+        "exposes": ["summary", "status", "data", "files", "artifacts"],
     },
     {
         "type": "command", "category": "agent", "role": "agent",
         "label": "Команда", "requires_capability": None,
         "description": "Run a shell command inside --project-path (templates require | shell).",
-        "exposes": ["summary", "status", "data", "files", "exit_code"],
+        "exposes": ["summary", "status", "data", "files", "artifacts", "exit_code"],
     },
     {
         "type": "gate", "category": "human", "role": "human",
@@ -153,7 +153,7 @@ STEP_BLOCK_CATALOG = (
         "description": "Evaluate a safe boolean expression for downstream branching.",
         "exposes": ["summary", "status", "data"],
     },
-    # Reserved extension slots that activate automatically once Richi Artifact Storage is merged.
+    # Reserved extension slots implemented in Phase 4 once Artifact Storage is merged and executors ship.
     {
         "type": "artifact.fetch", "category": "storage", "role": "richi",
         "label": "Получить из хранилища", "requires_capability": "artifacts",
@@ -177,7 +177,7 @@ DOMAIN_VIEWS = (
     {
         "id": "review",
         "title": "Ревью",
-        "match_tags": ["review", "bug-hunt"],
+        "match_tags": ["review", "bug-hunt", "pre-commit"],
         "endpoint": "/api/scenario-review",
         "requires_capability": "review_hub",
         "widgets": [
