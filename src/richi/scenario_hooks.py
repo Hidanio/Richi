@@ -155,9 +155,9 @@ def _load_active_context(conn, *, chat=None, agent=None, project_id=None):
     }
 
 
-def session_start(conn, api, *, chat=None, agent=None, project_id=None, now_override=None):
+def session_start(conn, api, *, chat=None, agent=None, project_id=None, entries=None, now_override=None):
     """Build SessionStart context for active scenario runs relevant to this chat or agent."""
-    author = rules.current_author()
+    author = rules.current_author(entries=entries) if (chat is None or agent is None) else rules.Author(chat, agent)
     chat_id = chat or author.by
     agent_id = agent or author.agent
     ctx = _load_active_context(conn, chat=chat_id, agent=agent_id, project_id=project_id)

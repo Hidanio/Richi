@@ -780,12 +780,13 @@ DETAILS = {
         examples=(("", "richi scenario log"),
                   ("For one run", "richi scenario log --run run-review-20261127-0001 --entries 50"))),
     "scenario hook": dict(about="""
-        Handles an agent lifecycle hook for active scenario runs:
-        - session-start: summarizes claimed steps, pending gates and agent-pinned ready steps;
-        - stop: blocks stopping while this chat holds a claimed step, capped by a Richi-side
-          continuation counter (default 5) so hooks never loop forever;
-        - pre-compact: prints a compact handoff summary to preserve across context compaction.
-        Use --format claude|codex|cursor|antigravity for native hook JSON contracts.""",
+        Handles an agent lifecycle hook for active scenario runs. session-start
+        summarizes claimed steps, pending human gates and agent-pinned ready
+        steps. stop blocks ending a turn while this chat holds a claimed step,
+        capped by a Richi-side continuation counter (default 5) so hooks never
+        loop forever. pre-compact prints a compact handoff summary to preserve
+        across context compaction. Use --format claude|codex|cursor|antigravity
+        for native hook JSON contracts.""",
         examples=(("Session start context", "richi scenario hook session-start --agent claude"),
                   ("Stop enforcement for Cursor", "richi scenario hook stop --agent cursor --format cursor"),
                   ("Pre-compact handoff", "richi scenario hook pre-compact"))),

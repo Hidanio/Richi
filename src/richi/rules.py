@@ -758,7 +758,7 @@ def show(conn, api, workspace, project_id, agent=None, unmatched_path=None):
     review = preference_review.notice(conn, project_id)
     if review:
         result["preference_review"] = review
-    active_scn = scenario_hooks.session_start(conn, api, agent=agent, project_id=project_id)
+    active_scn = scenario_hooks.session_start(conn, api, agent=agent, project_id=project_id, entries=settings.entries)
     if active_scn["active_runs"]:
         result["active_scenarios"] = {
             "runs": active_scn["active_runs"],
