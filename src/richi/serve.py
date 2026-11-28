@@ -632,16 +632,24 @@ def _scenario_run_worker(database, run_id):
                 run_dict = dict(run_row)
                 definition = json.loads(run_dict["definition_json"])
                 step_rows = scenario_runs._load_steps(conn, run_id)
-                base_ctx = scenario_runs._context(run_dict, step_rows, definition)
+                repo_path = None
+                if run_dict.get("project_id"):
+                    prow = conn.execute("SELECT repo_path FROM projects WHERE id = ?", (run_dict["project_id"],)).fetchone()
+                    if prow and prow[0]:
+                        repo_path = prow[0]
+                base_ctx = scenario_runs._context(
+                    run_dict, step_rows, definition,
+                    project_path=repo_path, agent=run_dict.get("created_by_agent"),
+                )
 
-                def _try_render(template_text, ctx):
+                def _try_render(template_text, ctx, *, line=False, limit=4000):
                     text = str(template_text or "")
                     if "{{" not in text:
-                        return text
+                        return text[:limit]
                     try:
-                        return templating.render(templating.parse_template(text), ctx)
+                        return scenario_runs._render_field(text, ctx, line=line, limit=limit, empty=False)
                     except (templating.TemplateError, templating.Unresolved, ValueError):
-                        return text
+                        return text[:limit]
 
                 run_data["scenario_title"] = definition.get("title") or run_data["scenario_id"]
                 def_steps = [step for step in definition.get("steps", []) if isinstance(step, dict)]
@@ -665,11 +673,11 @@ def _scenario_run_worker(database, run_id):
                     step_ctx = dict(base_ctx)
                     if isinstance(step.get("matrix"), dict):
                         step_ctx["matrix"] = step["matrix"]
-                    step["title"] = _try_render(spec.get("title") or step["id"], step_ctx)
+                    step["title"] = _try_render(spec.get("title") or step["id"], step_ctx, line=True, limit=200)
                     params = spec.get("params") or {}
                     if spec.get("type") == "gate":
                         step["gate"] = {
-                            "question": _try_render(params.get("question", ""), step_ctx),
+                            "question": _try_render(params.get("question", ""), step_ctx, line=False, limit=4000),
                             "options": list(params.get("options") or []),
                             "allow_comment": params.get("allow_comment") is not False,
                         }
@@ -679,10 +687,10 @@ def _scenario_run_worker(database, run_id):
                             if isinstance(item, dict):
                                 rendered_items.append({
                                     **item,
-                                    "text": _try_render(item.get("text", ""), step_ctx),
+                                    "text": _try_render(item.get("text", ""), step_ctx, line=True, limit=1000),
                                 })
                             else:
-                                rendered_items.append(_try_render(item, step_ctx))
+                                rendered_items.append(_try_render(item, step_ctx, line=True, limit=1000))
                         step["checklist"] = {"items": rendered_items}
             events = scenarios.log(conn, run_id=run_id, entries=100)
             payload = {"run": run_data, "log": events["entries"], "log_more": events["more"]}

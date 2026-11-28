@@ -77,6 +77,8 @@ def add_commands(commands, api):
                          help="Input value for the run (repeat for multiple inputs; secrets are never stored)")
     run_cmd.add_argument("--inputs-json", metavar="FILE",
                          help="JSON object of input values; - reads from stdin")
+    run_cmd.add_argument("--secret-env", dest="secret_envs", action="append", metavar="KEY=ENV_VAR",
+                         help="Read a secret input from an environment variable (never stored; keeps value out of argv)")
     run_cmd.add_argument("--project", metavar="ID", help="Registered project for this run (default: --project-path project)")
 
     next_cmd = actions.add_parser("next", help="Get the next ready step of a run (and optionally claim it)")
@@ -266,9 +268,10 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
         return scenarios.log(conn, scenario_id=args.scenario_id, run_id=args.run_id, entries=args.entries)
     if action == "run":
         project_id = args.project if args.project is not None else checked_project
+        secrets_runtime = _parse_secrets(None, api, getattr(args, "secret_envs", None))
         return scenario_runs.start_run(conn, api, database, args.id, project_id=project_id,
                                        project_path=project_path, raw_inputs=args.inputs,
-                                       inputs_json=request, author=author)
+                                       inputs_json=request, secrets_runtime=secrets_runtime, author=author)
     if action == "next":
         secrets_runtime = _parse_secrets(args.secrets, api, getattr(args, "secret_envs", None))
         return scenario_runs.next_step(conn, api, database, args.run_id, claim=args.claim, step_key=args.step_key,

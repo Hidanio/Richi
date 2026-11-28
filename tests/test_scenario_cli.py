@@ -31,9 +31,11 @@ class ScenarioCliTests(unittest.TestCase):
         self.cli("init")
         self.cli("project", "add", str(self.repo), "--id", "service", "--name", "Service")
 
-    def cli(self, *args, chat="claude:chat-1", stdin_text=None, ok=True):
+    def cli(self, *args, chat="claude:chat-1", stdin_text=None, ok=True, extra_env=None):
         out, err = io.StringIO(), io.StringIO()
         env = cli_environment(self.root)
+        if extra_env:
+            env.update(extra_env)
         if chat is not None:
             env["RICHI_CHAT_ID"] = chat
         argv = ["--db", str(self.db), "--compact-json"] + list(args)
@@ -250,6 +252,31 @@ class ScenarioCliTests(unittest.TestCase):
         acc_mono = self.cli("--project-path", str(pkg_a), "scenario", "report", r_mono["run_id"], "s1", "--json", "-",
                             stdin_text=json.dumps({"status": "done", "summary": "in pkg_a"}))
         self.assertEqual(acc_mono["status"], "accepted")
+
+    def test_secret_env_cli_end_to_end_run_and_next(self):
+        defn = {
+            "format": "richi-scenario", "format_version": 1, "id": "sec-e2e", "title": "Secret E2E",
+            "inputs": {"tok": {"type": "secret", "required": True}},
+            "steps": [{
+                "id": "s1", "type": "instruction",
+                "if": "inputs.tok != null",
+                "params": {"text": "Token={{inputs.tok}}"},
+            }],
+        }
+        self.cli("scenario", "apply", "--json", "-",
+                 stdin_text=json.dumps({"action": "add", "scope": "project", "project": "service", "definition": defn}))
+        sec_env = {"RICHI_E2E_SEC": "super-secret-value-42"}
+        started = self.cli("--project-path", str(self.repo), "scenario", "run", "sec-e2e",
+                           "--secret-env", "tok=RICHI_E2E_SEC", extra_env=sec_env)
+        rid = started["run_id"]
+        st = self.cli("--project-path", str(self.repo), "scenario", "status", rid)
+        self.assertEqual(st["inputs"]["tok"], "<secret>")
+        self.assertNotIn("super-secret-value-42", json.dumps(st))
+        nxt = self.cli("--project-path", str(self.repo), "scenario", "next", rid, "--claim",
+                       "--secret-env", "tok=RICHI_E2E_SEC", extra_env=sec_env)
+        self.assertEqual(nxt["step"]["text"], "Token=super-secret-value-42")
+        log_res = self.cli("scenario", "log", "--run", rid)
+        self.assertNotIn("super-secret-value-42", json.dumps(log_res))
 
 
 if __name__ == "__main__":

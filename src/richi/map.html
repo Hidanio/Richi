@@ -234,7 +234,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 .scn-card-preview-badges{position:absolute;top:10px;left:12px;right:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;pointer-events:none}
 .scn-pill-badge{font-size:11px;font-weight:650;padding:3px 9px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);box-shadow:0 2px 8px #0001}
 .scn-pill-badge.tpl{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
-.scn-pill-badge.global{color:var(--record);border-color:var(--record)}
+.scn-pill-badge.global{color:var(--scn-richi-ink);border-color:var(--record)}
 .scn-pill-badge.project{color:var(--project);border-color:var(--project)}
 .scn-pill-badge.count{font-family:ui-monospace,SFMono-Regular,monospace;color:var(--muted)}
 .scn-card-body{padding:18px 20px 14px;display:flex;flex-direction:column;gap:10px;flex:1}
@@ -243,8 +243,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 .scn-card-steps{display:grid;gap:5px;margin-top:4px}
 .scn-card-step{display:flex;align-items:center;gap:8px;font-size:12.5px;line-height:1.35;color:var(--ink)}
 .scn-card-step-num{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:700;font-family:ui-monospace,SFMono-Regular,monospace;flex:none;background:var(--accent-soft);color:var(--accent)}
-.scn-card-step-num.role-richi{background:#36988820;color:var(--record)}
-.scn-card-step-num.role-human{background:#ba874024;color:var(--entity)}
+.scn-card-step-num.role-richi{background:#36988820;color:var(--scn-richi-ink)}
+.scn-card-step-num.role-human{background:#ba874024;color:var(--scn-human-ink)}
 .scn-card-step-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .scn-card-step-tag{margin-left:auto;font-size:10.5px;color:var(--muted);padding:1px 7px;border-radius:999px;background:var(--panel-soft);border:1px solid var(--line);white-space:nowrap}
 .scn-card-footer{margin-top:auto;padding:13px 20px 15px;border-top:1px solid var(--line);background:var(--panel-soft);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -313,8 +313,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 .scn-node-head:active{cursor:grabbing}
 .scn-node-head-left{display:flex;align-items:center;gap:6px;min-width:0}
 .scn-node-num{font-family:ui-monospace,SFMono-Regular,monospace;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:5px;background:var(--accent-soft);color:var(--accent);flex:none}
-.scn-node.role-richi .scn-node-num{background:#36988820;color:var(--record)}
-.scn-node.role-human .scn-node-num{background:#ba874024;color:var(--entity)}
+.scn-node.role-richi .scn-node-num{background:#36988820;color:var(--scn-richi-ink)}
+.scn-node.role-human .scn-node-num{background:#ba874024;color:var(--scn-human-ink)}
 .scn-node-type{font-size:10.5px;font-weight:650;text-transform:uppercase;letter-spacing:.45px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .scn-node-body{padding:10px 12px 11px;cursor:pointer;display:grid;gap:5px}
 .scn-node-title{font-size:13.5px;font-weight:650;line-height:1.35;color:var(--ink);overflow-wrap:anywhere}
@@ -2680,6 +2680,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     scenariosState.editing={
       mode:record?'update':'add',
       fromCopy:Boolean(copyFrom),
+      idTouched:Boolean(record||copyFrom),
+      invalidFields:new Set(),
       original:record,
       scope:baseScope,
       project_id:baseProject,
@@ -2741,6 +2743,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     ed.draft=prev.draft;ed.scope=prev.scope;ed.project_id=prev.project_id;
     scenariosState.selectedStepId=list(ed.draft.steps).some(s=>s.id===prev.selectedStepId)?prev.selectedStepId:(ed.draft.steps[0]?.id||'');
     ed.dirty=scenarioDraftChanged(ed.draft,ed.baseline)||ed.scope!==ed.baselineScope||ed.project_id!==ed.baselineProject;
+    if(ed.invalidFields)ed.invalidFields.clear();
     scenariosState.lintResult=null;
     syncScenarioTabBadge();
     announce('Последнее изменение отменено');
@@ -2753,7 +2756,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     ed.scope=ed.baselineScope;ed.project_id=ed.baselineProject;
     ensureDraftPositions(ed.draft);
     if(!list(ed.draft.steps).some(s=>s.id===scenariosState.selectedStepId))scenariosState.selectedStepId=ed.draft.steps[0]?.id||'';
-    ed.dirty=false;scenariosState.lintResult=null;scenariosState.saveError='';scenariosState.commandText='';
+    ed.dirty=false;if(ed.invalidFields)ed.invalidFields.clear();scenariosState.lintResult=null;scenariosState.saveError='';scenariosState.commandText='';
     syncScenarioTabBadge();
     announce('Изменения сброшены до исходной версии');
     renderScenarios();
@@ -2786,6 +2789,12 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   function closeScenarioEditor(){
     confirmLeaveScenarioEditor(null,'выйти к списку');
   }
+  function scenarioCommandHint(actionText){
+    const wsOnly=state.mapStore.length===2&&state.mapStore[0]==='--workspace';
+    return wsOnly
+      ?(actionText+' (workspace «'+state.mapStore[1]+'»).')
+      :(actionText+' Выполните в терминале (чат агента, привязанный к workspace, команду с --db/--config не примет).');
+  }
   function openScenarioRunModal(item){
     const def=item.definition||{};
     const panel=ruleDialog('Как запустить: '+(def.title||item.id),scenarioScopeText(item)+' · '+item.id);
@@ -2796,7 +2805,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       migBox.append(make('strong','','Сначала обновите схему хранилища до v4 (сейчас v'+schemaVersion+')'));
       migBox.append(make('p','','Запуск сценариев требует схему v4. Без обновления команда запуска вернёт ошибку schema_upgrade_required. Перед обновлением Richi сам создаст резервную копию базы:'));
       const migCmd=['richi',...list(state.mapStore).map(scnShellQuote),'migrate'].join(' ');
-      const showMig=ruleCommandBox(migBox);showMig(migCmd);
+      const showMig=ruleCommandBox(migBox,scenarioCommandHint('Команда обновит схему базы до v4 с резервной копией'));showMig(migCmd);
       body.append(migBox);
     }
     const chatBox=make('div','scn-chat-prompt');
@@ -2859,14 +2868,16 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     }
     const missingReqNote=make('div','rule-field-hint');missingReqNote.style.color='var(--danger)';missingReqNote.hidden=true;
     cliBody.append(missingReqNote);
-    const showCmd=ruleCommandBox(cliBody);
+    const showCmd=ruleCommandBox(cliBody,scenarioCommandHint('Команда запускает сценарий'));
     const updateCmd=()=>{
       const missing=inputs.filter(([n,s])=>s.required&&s.type!=='secret'&&(values[n]===''||values[n]===undefined||(Array.isArray(values[n])&&!values[n].length))).map(([n,s])=>s.title||n);
       missingReqNote.hidden=!missing.length;
       if(missing.length)missingReqNote.textContent='Для запуска в терминале заполните обязательные параметры: '+missing.join(', ');
       const scopeArg=item.builtin?null:item.scope;
       const projArg=item.builtin?null:item.project_id;
-      showCmd(scenarioRunCommand(item.id,scopeArg,projArg,values,state.mapStore));
+      let cmd=scenarioRunCommand(item.id,scopeArg,projArg,values,state.mapStore);
+      for(const [n,s] of inputs)if(s.type==='secret'&&s.required)cmd+=' --secret-env '+scnShellQuote(n+'='+n.toUpperCase());
+      showCmd(cmd);
     };
     cliFold.append(cliBody);body.append(cliFold);
     foot.append(toolButton('Закрыть',()=>dialog.close(),'primary'));
@@ -2876,7 +2887,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const panel=ruleDialog('Удалить сценарий?',record.id+' · '+scenarioScopeText(record));
     const {dialog,form,body,foot}=panel;
     body.append(make('p','rule-confirm','Удалённый сценарий исчезнет из списка определений. Уже созданные запуски сохранят свою замороженную копию определения.'));
-    const problem=ruleProblem(body),showCmd=ruleCommandBox(body);
+    const problem=ruleProblem(body),showCmd=ruleCommandBox(body,scenarioCommandHint('Команда удаляет сценарий'));
     const cancel=toolButton('Отмена',()=>dialog.close());
     const submit=make('button',rulesState.editing?'danger solid':'primary',rulesState.editing?'Удалить сценарий':'Показать команду');
     submit.type='submit';foot.append(cancel,submit);
@@ -2902,6 +2913,10 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   async function saveScenarioDraft(){
     const ed=scenariosState.editing;if(!ed||scenariosState.busy)return false;
     scenariosState.saveError='';scenariosState.commandText='';
+    if(ed.invalidFields&&ed.invalidFields.size){
+      scenariosState.saveError='Исправьте поля с ошибками ('+[...ed.invalidFields].join(', ')+') перед сохранением.';
+      renderScenarios();return false;
+    }
     const def=scenarioNormalizeDraft(ed.draft);
     const invalid=scenarioValidateDraft(def);
     if(invalid){scenariosState.saveError=invalid;renderScenarios();return false;}
@@ -3052,18 +3067,22 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     bar.append(make('p','','Собирайте повторяемые пайплайны для агентов на визуальном холсте, клонируйте готовые шаблоны или попросите агента в чате создать сценарий через richi scenario apply.'));
     bar.append(keyed(toolButton('+ Новый сценарий',()=>openScenarioEditor(),'scn-btn-primary'),'scn-add'));
     root.append(bar);
-    toolSection(root,'Ваши сценарии',stored.length);
-    if(!stored.length){
-      const empty=make('div','tools-empty');
-      empty.append(ruleMark('rule'),make('h3','',list(scenariosState.data?.scenarios).length?'Подходящих сценариев нет':'Своих сценариев пока нет'),make('p','',list(scenariosState.data?.scenarios).length?'Измените поиск или фильтр области.':'Создайте новый сценарий с нуля или откройте готовый шаблон «Глубокое ревью в 7 этапов» ниже.'));
-      empty.append(toolButton('+ Создать сценарий',()=>openScenarioEditor(),'scn-btn-primary'));
-      root.append(empty);
-    }else{
-      const grid=make('div','scn-cards-grid');stored.forEach(item=>grid.append(renderScenarioCard(item)));root.append(grid);
+    if(scenariosState.scope!=='builtin'){
+      toolSection(root,'Ваши сценарии',stored.length);
+      if(!stored.length){
+        const empty=make('div','tools-empty');
+        empty.append(ruleMark('rule'),make('h3','',list(scenariosState.data?.scenarios).length?'Подходящих сценариев нет':'Своих сценариев пока нет'),make('p','',list(scenariosState.data?.scenarios).length?'Измените поиск или фильтр области.':'Создайте новый сценарий с нуля или откройте готовый шаблон «Глубокое ревью в 7 этапов» ниже.'));
+        empty.append(toolButton('+ Создать сценарий',()=>openScenarioEditor(),'scn-btn-primary'));
+        root.append(empty);
+      }else{
+        const grid=make('div','scn-cards-grid');stored.forEach(item=>grid.append(renderScenarioCard(item)));root.append(grid);
+      }
     }
-    toolSection(root,'Готовые шаблоны',builtins.length);
-    if(builtins.length){
-      const grid=make('div','scn-cards-grid');builtins.forEach(item=>grid.append(renderScenarioCard(item)));root.append(grid);
+    if(builtins.length||scenariosState.scope===''||scenariosState.scope==='builtin'){
+      toolSection(root,'Готовые шаблоны',builtins.length);
+      if(builtins.length){
+        const grid=make('div','scn-cards-grid');builtins.forEach(item=>grid.append(renderScenarioCard(item)));root.append(grid);
+      }
     }
   }
   function renameStepId(draft,oldId,newId){
@@ -3617,6 +3636,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     return wrap;
   }
   function renderStepInspector(ed){
+    if(ed.invalidFields)ed.invalidFields.clear();
     const box=make('aside','scn-inspector'),def=ed.draft,steps=list(def.steps);
     const step=steps.find(s=>s.id===scenariosState.selectedStepId)||steps[0]||null;
     if(!step){
@@ -3661,10 +3681,11 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     bindTextUndo(titleInput);
     titleInput.addEventListener('input',()=>{
       step.title=titleInput.value;markScenarioDirty(ed);
+      const labelText=prettyStepLabel(step);
       const nodeEl=$('scenarios-content')?.querySelector('.scn-node[data-step-id="'+step.id+'"] .scn-node-title');
-      if(nodeEl)nodeEl.textContent=prettyStepLabel(step);
+      if(nodeEl)nodeEl.textContent=labelText;
+      const inspH3=box.querySelector('h3');if(inspH3)inspH3.textContent=labelText;
     });
-    titleInput.addEventListener('change',()=>renderScenarios());
     box.append(ruleField('Название шага',titleInput));
 
     if(role==='agent'){
@@ -3926,14 +3947,16 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
           }
           if(e.key==='Escape'){e.preventDefault();closeMention();return;}
         }
-        if(e.key==='Enter'&&!e.shiftKey&&!mentionEl){
-          e.preventDefault();
-          if(opts.singleLine)return;
-          const sel=window.getSelection();if(!sel||!sel.rangeCount)return;
-          const r=sel.getRangeAt(0);r.deleteContents();
-          const br=make('br');r.insertNode(br);
-          if(!br.nextSibling){const sent=make('br');sent.dataset.sentinel='1';br.after(sent);}
-          placeCaretAfter(br);emitChange();
+        if(e.key==='Enter'&&!mentionEl){
+          if(opts.singleLine){e.preventDefault();return;}
+          if(!e.shiftKey){
+            e.preventDefault();
+            const sel=window.getSelection();if(!sel||!sel.rangeCount)return;
+            const r=sel.getRangeAt(0);r.deleteContents();
+            const br=make('br');r.insertNode(br);
+            if(!br.nextSibling){const sent=make('br');sent.dataset.sentinel='1';br.after(sent);}
+            placeCaretAfter(br);emitChange();
+          }
         }
       });
       editor.addEventListener('paste',e=>{
@@ -3995,6 +4018,16 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     };
 
     if(!step.params||typeof step.params!=='object')step.params=scenarioDefaultParams(step.type);
+    const invalidFields=ed.invalidFields||(ed.invalidFields=new Set());
+    const bindBoundedInt=(inp,errEl,fieldKey,min,max,onSet,onClear)=>{
+      inp.addEventListener('input',()=>{
+        const raw=inp.value.trim(),v=scnInt(raw);
+        if(raw===''){onClear();errEl.textContent='';invalidFields.delete(fieldKey);}
+        else if(v===null||v<min||v>max){errEl.textContent='Введите целое число от '+min+' до '+max;invalidFields.add(fieldKey);}
+        else{onSet(v);errEl.textContent='';invalidFields.delete(fieldKey);}
+        markScenarioDirty(ed);
+      });
+    };
     const p=step.params;
     if(step.type==='instruction'){
       const rich=createRichPromptEditor(p.text||'',{placeholder:'Напишите простым языком, что должен сделать агент на этом шаге…'},val=>{p.text=val;});
@@ -4033,10 +4066,10 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       const row=make('div','rule-field-row');
       const expErr=make('div','rule-field-hint');expErr.style.color='var(--danger)';
       const exp=make('input');exp.type='text';exp.value=p.expect_exit!==undefined?String(p.expect_exit):'';exp.placeholder='0 (успех)';
-      exp.addEventListener('input',()=>{const raw=exp.value.trim(),v=scnInt(raw);if(raw===''){delete p.expect_exit;expErr.textContent='';}else if(v===null||v<0||v>255){expErr.textContent='Введите целое число от 0 до 255';}else{p.expect_exit=v;expErr.textContent='';}markScenarioDirty(ed);});
+      bindBoundedInt(exp,expErr,'Код выхода',0,255,v=>{p.expect_exit=v;},()=>{delete p.expect_exit;});
       const tailErr=make('div','rule-field-hint');tailErr.style.color='var(--danger)';
       const tail=make('input');tail.type='text';tail.value=p.tail_lines!==undefined?String(p.tail_lines):'';tail.placeholder='200';
-      tail.addEventListener('input',()=>{const raw=tail.value.trim(),v=scnInt(raw);if(raw===''){delete p.tail_lines;tailErr.textContent='';}else if(v===null||v<0||v>500){tailErr.textContent='Введите целое число от 0 до 500';}else{p.tail_lines=v;tailErr.textContent='';}markScenarioDirty(ed);});
+      bindBoundedInt(tail,tailErr,'Строки лога',0,500,v=>{p.tail_lines=v;},()=>{delete p.tail_lines;});
       const expF=ruleField('Ожидаемый код выхода',exp);expF.append(expErr);
       const tailF=ruleField('Сколько последних строк лога сохранить',tail);tailF.append(tailErr);
       row.append(expF,tailF);
@@ -4111,9 +4144,10 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       f.append(buildLivePreview(q,{forbidSecret:true}));
       const ex=renderExampleButtons(q,guide.examples);if(ex)f.append(ex);
       box.append(f);
+      const limErr=make('div','rule-field-hint');limErr.style.color='var(--danger)';
       const lim=make('input');lim.type='text';lim.value=p.limit!==undefined?String(p.limit):'10';
-      lim.addEventListener('input',()=>{const v=scnInt(lim.value);if(lim.value.trim()==='')delete p.limit;else if(v!==null)p.limit=v;markScenarioDirty(ed);});
-      box.append(ruleField('Максимум записей (1–50)',lim));
+      bindBoundedInt(lim,limErr,'Максимум записей',1,50,v=>{p.limit=v;},()=>{delete p.limit;});
+      const limF=ruleField('Максимум записей (1–50)',lim);limF.append(limErr);box.append(limF);
       const kindsWrap=make('div','rule-field');kindsWrap.append(make('span','field-label','Искать только среди типов (необязательно)'));
       const kg=make('div','scn-needs-grid');
       const kindNames={task:'Задачи',decision:'Решения',fact:'Факты',note:'Заметки',investigation:'Разборы',experiment:'Эксперименты',procedure:'Процедуры'};
@@ -4134,9 +4168,10 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       f.append(buildLivePreview(q,{forbidSecret:true}));
       const ex=renderExampleButtons(q,guide.examples);if(ex)f.append(ex);
       box.append(f);
+      const limErr=make('div','rule-field-hint');limErr.style.color='var(--danger)';
       const lim=make('input');lim.type='text';lim.value=p.limit!==undefined?String(p.limit):'10';
-      lim.addEventListener('input',()=>{const v=scnInt(lim.value);if(lim.value.trim()==='')delete p.limit;else if(v!==null)p.limit=v;markScenarioDirty(ed);});
-      box.append(ruleField('Максимум записей (1–50)',lim));
+      bindBoundedInt(lim,limErr,'Максимум записей',1,50,v=>{p.limit=v;},()=>{delete p.limit;});
+      const limF=ruleField('Максимум записей (1–50)',lim);limF.append(limErr);box.append(limF);
     }else if(step.type==='condition'){
       box.append(renderConditionHelper(def,steps,step,p.expr||'',val=>{p.expr=val;markScenarioDirty(ed);}));
     }
@@ -4239,17 +4274,18 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       agSel.value=step.executor?.agent||'';
       agSel.addEventListener('change',()=>{step.executor=agSel.value?{agent:agSel.value}:undefined;markScenarioDirty(ed);});
       advBody.append(ruleField('Закрепить конкретного агента',agSel,'Оставьте «Любой», чтобы шаг выполнял агент, в котором запущен чат.'));
+      const retErr=make('div','rule-field-hint');retErr.style.color='var(--danger)';
       const ret=make('input');ret.type='text';ret.value=step.retry?.max?String(step.retry.max):'';ret.placeholder='0 (без повторов)';
-      ret.addEventListener('input',()=>{const n=scnInt(ret.value);if(ret.value.trim()==='')delete step.retry;else if(n!==null&&n>0)step.retry={max:n};else if(n===0)delete step.retry;markScenarioDirty(ed);});
-      advBody.append(ruleField('Повторы при неудаче (0–5)',ret));
+      bindBoundedInt(ret,retErr,'Повторы',0,5,v=>{if(v>0)step.retry={max:v};else delete step.retry;},()=>{delete step.retry;});
+      const retF=ruleField('Повторы при неудаче (0–5)',ret);retF.append(retErr);advBody.append(retF);
       const jsonField=(label,hint,prop,placeholder)=>{
         const ta=make('textarea');ta.style.minHeight='64px';ta.style.fontFamily='ui-monospace,SFMono-Regular,monospace';ta.style.fontSize='11px';
         ta.value=step[prop]?JSON.stringify(step[prop],null,2):'';ta.placeholder=placeholder;
         const err=make('div','rule-field-hint');err.style.color='var(--danger)';
         ta.addEventListener('change',()=>{
-          const raw=ta.value.trim();if(!raw){delete step[prop];err.textContent='';markScenarioDirty(ed);return;}
-          try{step[prop]=JSON.parse(raw);err.textContent='';markScenarioDirty(ed);}
-          catch(e){err.textContent='Ошибка JSON: '+e.message;}
+          const raw=ta.value.trim();if(!raw){delete step[prop];err.textContent='';invalidFields.delete(prop);markScenarioDirty(ed);return;}
+          try{step[prop]=JSON.parse(raw);err.textContent='';invalidFields.delete(prop);markScenarioDirty(ed);}
+          catch(e){err.textContent='Ошибка JSON: '+e.message;invalidFields.add(prop);}
         });
         const f=ruleField(label,ta,hint);f.append(err);advBody.append(f);
       };
@@ -4425,25 +4461,24 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       const err=make('div','rule-error',scenariosState.saveError);err.setAttribute('role','alert');wrap.append(err);
     }
     if(scenariosState.commandText){
-      const showCmd=ruleCommandBox(wrap,'Скопируйте и выполните команду в терминале (или откройте карту командой richi map для прямого сохранения).');
+      const showCmd=ruleCommandBox(wrap,scenarioCommandHint('Команда сохраняет сценарий'));
       showCmd(scenariosState.commandText);
     }
 
     // Metadata & inputs card
     const metaCard=make('div','scn-meta-card'),metaGrid=make('div','scn-meta-grid');
-    let idTouched=ed.mode==='update'||Boolean(ed.fromCopy);
     const titleInp=make('input');titleInp.type='text';titleInp.value=def.title||'';titleInp.placeholder='Например: Глубокое ревью перед мержем';
     const idInp=make('input');idInp.type='text';idInp.value=def.id||'';idInp.disabled=ed.mode==='update';idInp.spellcheck=false;idInp.placeholder='deep-review-custom';
     titleInp.addEventListener('input',()=>{
       def.title=titleInp.value;markScenarioDirty(ed);
       const tEl=$('scenarios-content')?.querySelector('.scn-editor-title');
       if(tEl)tEl.textContent=def.title||def.id||'Новый сценарий';
-      if(ed.mode==='add'&&!idTouched&&typeof ruleSlug==='function'){
+      if(ed.mode==='add'&&!ed.idTouched&&typeof ruleSlug==='function'){
         const slug=ruleSlug(titleInp.value);
         if(slug){def.id=uniqueScenarioId(slug);idInp.value=def.id;}
       }
     });
-    idInp.addEventListener('input',()=>{idTouched=true;def.id=idInp.value.trim();markScenarioDirty(ed);});
+    idInp.addEventListener('input',()=>{ed.idTouched=true;def.id=idInp.value.trim();markScenarioDirty(ed);});
     metaGrid.append(ruleField('Название сценария',titleInp));
     const scopeSel=make('select');scopeSel.disabled=ed.mode==='update';
     scopeSel.add(new Option('Весь workspace (глобальный)','global'));
@@ -4635,7 +4670,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       btn.append(top,prog,meta);col.append(btn);
     }
     if(scenariosState.data?.runs_more){
-      col.append(make('div','tools-inline-note','Показаны последние '+allRuns.length+' из '+(scenariosState.data.runs_total||allRuns.length)+' запусков. Остальные доступны через richi scenario runs --limit 200.'));
+      col.append(make('div','tools-inline-note','Показаны последние '+allRuns.length+' из '+(scenariosState.data.runs_total||allRuns.length)+' запусков. До 200 последних запусков доступно через richi scenario runs --limit 200 (используйте фильтры --active, --scenario, --project).'));
     }
     const detail=make('div','scn-run-detail');
     if(scenariosState.runDetailLoading&&scenariosState.runDetail?.run?.run_id!==scenariosState.selectedRunId){
@@ -4671,7 +4706,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
           if(r.status==='cancelled'&&!$('superseded').checked){$('superseded').checked=true;changed=true;}
           if(changed){await loadGraph();}
           if(state.nodeMap.has(nodeId)){focusNode(nodeId);}
-          else{jumpNote.textContent='Задача «'+r.task_entry_id+'» не найдена в текущем снимке карты.';jumpNote.hidden=false;}
+          else{scenariosState.outcome='Задача «'+r.task_entry_id+'» не найдена в текущем снимке карты.';renderScenarios();}
         },'small primary');
         actRow.append(jumpBtn);
       }
@@ -4712,7 +4747,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         gateBox.append(chatWrap);
         const cliFold=make('details','tools-fold');cliFold.append(make('summary','','Команда для терминала (CLI)'));
         const cliInner=make('div');cliInner.style.marginTop='8px';
-        const showAnswerCmd=ruleCommandBox(cliInner);
+        const showAnswerCmd=ruleCommandBox(cliInner,scenarioCommandHint('Команда записывает ответ на шаг'));
         cliFold.append(cliInner);gateBox.append(cliFold);
         const syncAnswerBoxes=()=>{
           chatPre.textContent='Ответь на шаг '+ws.key+' запуска '+r.run_id+': '+chosenVal+(commentVal?' ('+commentVal+')':'');
@@ -4895,7 +4930,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const subtabs=make('div','scn-subtabs');
     const runsList=list(scenariosState.data.runs);
     const runsTotal=scenariosState.data.runs_total||runsList.length;
-    const waitingCount=runsList.filter(r=>r.status==='waiting'&&(r.step_counts?.waiting_human||0)>0).length;
+    const waitingCount=scenariosState.data.runs_waiting!==undefined?scenariosState.data.runs_waiting:runsList.filter(r=>r.status==='waiting'&&(r.step_counts?.waiting_human||0)>0).length;
     const tabs=[
       ['definitions','Определения ('+list(scenariosState.data.scenarios).length+' + '+list(scenariosState.data.builtin_templates).length+')'],
       ['runs','Запуски ('+runsTotal+(waitingCount?' · '+waitingCount+' ждут':'')+')'],

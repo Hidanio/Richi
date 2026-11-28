@@ -14,7 +14,7 @@ import threading
 import unittest
 from unittest import mock
 
-from richi import agents, map_access, memory, scenario_runs, scenarios, serve
+from richi import agents, map_access, memory, rules, scenario_runs, scenarios, serve
 
 
 MAP = serve.BASE / "map.html"
@@ -303,7 +303,49 @@ class MapScenariosAPITests(unittest.TestCase):
         self.assertEqual(detail["run"]["layout"]["positions"]["approve"], {"x": 352, "y": 36})
         self.assertTrue(len(detail["log"]) >= 1)
         self.assertEqual(snap["runs_total"], 1)
+        self.assertEqual(snap["runs_waiting"], 1)
         self.assertFalse(snap["runs_more"])
+
+        # Project-scoped run renders {{project.path}} and {{agent.id}} in /api/scenario-run gate prompt (F3)
+        proj_def = {
+            "format": "richi-scenario", "format_version": 1, "id": "proj-gate", "title": "Project Gate",
+            "steps": [{
+                "id": "ask", "type": "gate", "title": "Check {{run.id}}",
+                "params": {"question": "Approve {{project.path}} by {{agent.id}}?", "options": ["yes", "no"]},
+            }],
+        }
+        status, proj_res = self.request("POST", "/api/scenarios", {
+            "action": "add", "scope": "project", "project": "service", "definition": proj_def,
+        }, headers=auth)
+        self.assertEqual(status, 200, proj_res)
+        with closing(memory.connect(self.database)) as conn, memory.transaction(conn, write=True):
+            p_run = scenario_runs.start_run(conn, memory, self.database, "proj-gate",
+                                            project_id="service",
+                                            author=rules.Author(by="codex:r2-test", agent="codex"))
+        status, p_detail = self.request("GET", f"/api/scenario-run?id={p_run['run_id']}")
+        self.assertEqual(status, 200, p_detail)
+        p_gate = p_detail["run"]["steps"][0]["gate"]
+        self.assertIn(str(self.repo), p_gate["question"])
+        self.assertIn("codex", p_gate["question"])
+
+        # Lone surrogate in JSON body returns 400 invalid_request rather than 500 (F6)
+        raw_conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        try:
+            raw_conn.request(
+                "POST", "/api/scenarios",
+                body=b'{"action":"add","scope":"global","definition":{"id":"bad-sur","title":"\\ud800","steps":[]}}',
+                headers={
+                    "Content-Type": "application/json",
+                    "Origin": f"http://127.0.0.1:{self.port}",
+                    map_access.HEADER: secret,
+                },
+            )
+            raw_resp = raw_conn.getresponse()
+            raw_data = json.loads(raw_resp.read().decode("utf-8"))
+            self.assertEqual(raw_resp.status, 400, raw_data)
+            self.assertEqual(raw_data.get("code"), "invalid_request")
+        finally:
+            raw_conn.close()
 
         # Large Cyrillic scenario (~130 KB UTF-8 across 10 steps, < 256 KB MAX_BYTES) must NOT inflate 3x to HTTP 413!
         ru_def = {

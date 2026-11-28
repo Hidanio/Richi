@@ -347,8 +347,8 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
         matches = res.get("results") or []
         refs = [item.get("ref") for item in matches if item.get("ref")]
         lines = ["%s: %s" % (item.get("ref"), item.get("title", "")) for item in matches[:8]]
-        summary = ("[untrusted memory evidence: %s]" % "; ".join(lines)) if lines else "No matching records found."
-        return {"status": "done", "summary": summary[:1500], "data": {"refs": refs, "count": len(refs)}}
+        summary = ("[untrusted memory evidence: %s]" % "; ".join(lines)[:1460]) if lines else "No matching records found."
+        return {"status": "done", "summary": summary, "data": {"refs": refs, "count": len(refs)}}
     if kind == "memory.brief":
         from . import task_brief
         question = _render_field(params["question"], ctx, line=False, limit=2000, field="params.question", empty=False)
@@ -363,8 +363,8 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
         cards = res.get("results") or []
         refs = [item.get("ref") for item in cards if item.get("ref")]
         lines = ["%s: %s" % (item.get("ref"), item.get("title", "")) for item in cards[:8]]
-        summary = ("[untrusted memory evidence: %s]" % "; ".join(lines)) if lines else "No prior records found for this context."
-        return {"status": "done", "summary": summary[:1500], "data": {"refs": refs, "count": len(refs)}}
+        summary = ("[untrusted memory evidence: %s]" % "; ".join(lines)[:1460]) if lines else "No prior records found for this context."
+        return {"status": "done", "summary": summary, "data": {"refs": refs, "count": len(refs)}}
     raise ValueError("Unsupported Richi step type: " + kind)
 
 
@@ -644,7 +644,7 @@ def _next_run_id(conn, scenario_id, at_dt):
 
 
 def start_run(conn, api, database, scenario_id, *, project_id=None, project_path=None, scope=None,
-              raw_inputs=None, inputs_json=None, author=None, now_override=None):
+              raw_inputs=None, inputs_json=None, secrets_runtime=None, author=None, now_override=None):
     """Start a new run: validate inputs, freeze snapshot, create task entry, advance ready steps."""
     require_v4(conn, api)
     if project_id is not None:
@@ -673,6 +673,9 @@ def start_run(conn, api, database, scenario_id, *, project_id=None, project_path
         )
     try:
         provided = scenarios.parse_input_options(definition, raw_inputs, inputs_json)
+        if secrets_runtime:
+            validated_secrets = _validate_runtime_secrets(secrets_runtime, definition, api)
+            provided.update(validated_secrets)
         _, redacted, missing, secret_names = scenarios.resolve_inputs(definition, provided)
     except scenario_format.FormatError as exc:
         raise _failure(api, str(exc), "invalid_input") from exc
@@ -1363,6 +1366,10 @@ def _validate_report(report, step_row, step_spec, ctx, project_path, preflight_i
             except scenario_format.FormatError as exc:
                 reasons.append(str(exc))
 
+    raw_exit = report.get("exit_code")
+    if raw_exit is not None and (isinstance(raw_exit, bool) or not isinstance(raw_exit, int) or not (-255 <= raw_exit <= 65535)):
+        reasons.append("report.exit_code must be an integer between -255 and 65535")
+
     if status == "failed":
         return reasons
 
@@ -1480,10 +1487,13 @@ def report_step(conn, api, database, run_id, step_key, report, *, checked_projec
         "agent": author.agent,
         "chat": author.by,
     }
-    if report.get("exit_code") is not None:
-        stored["exit_code"] = report["exit_code"]
+    raw_exit = report.get("exit_code")
+    if raw_exit is not None and not isinstance(raw_exit, bool) and isinstance(raw_exit, int):
+        stored["exit_code"] = raw_exit
     elif "exit_code" in stored["data"]:
-        stored["exit_code"] = stored["data"]["exit_code"]
+        data_exit = stored["data"]["exit_code"]
+        if not isinstance(data_exit, bool) and isinstance(data_exit, int) and -255 <= data_exit <= 65535:
+            stored["exit_code"] = data_exit
 
     new_step_status = report["status"]
     conn.execute(

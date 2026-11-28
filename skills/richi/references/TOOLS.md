@@ -72,7 +72,7 @@ itself supported by evidence.
 
 The Tools view follows tool → project → related tasks. It includes tasks only
 through their explicit tool-use evidence or linked details, within the selected
-project. It shows standalone scenarios separately. A project with only `used_in`
+project. It shows standalone procedures separately. A project with only `used_in`
 evidence may have no linked tasks; this is incomplete task evidence, not a reason
 to enumerate every task in that project. Unknown project scope stays unknown.
 

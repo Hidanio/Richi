@@ -921,8 +921,14 @@ def map_snapshot(conn, api, workspace=None, *, run_limit=50, log_limit=100):
 
     runs = []
     runs_total = 0
+    runs_waiting = 0
     if schema_version >= 4:
         runs_total = conn.execute("SELECT count(*) FROM scenario_runs").fetchone()[0]
+        runs_waiting = conn.execute(
+            "SELECT count(DISTINCT r.id) FROM scenario_runs r "
+            "JOIN scenario_steps s ON s.run_id = r.id "
+            "WHERE r.status = 'waiting' AND s.status = 'waiting_human'"
+        ).fetchone()[0]
         runs = scenario_runs.list_runs(conn, api, limit=run_limit)["runs"]
         if runs:
             run_ids = [item["id"] for item in runs]
@@ -952,6 +958,7 @@ def map_snapshot(conn, api, workspace=None, *, run_limit=50, log_limit=100):
         "unsupported_scenarios": unsupported,
         "runs": runs,
         "runs_total": runs_total,
+        "runs_waiting": runs_waiting,
         "runs_more": runs_total > len(runs),
         "log": journal["entries"],
         "log_more": journal["more"],

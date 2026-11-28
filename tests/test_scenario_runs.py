@@ -882,6 +882,66 @@ class ScenarioRunsTests(unittest.TestCase):
                        if e["action"] == "step_failed"][0]
             self.assertEqual(fail_ev["detail"].get("reason"), "pytest timeout 60s")
 
+    def test_round2_exit_code_validation_run_secrets_and_evidence_closing_bracket(self):
+        # F1: invalid exit_code rejected even on failed status; valid exit_code persisted to step_failed detail.
+        self.add_scenario({
+            "format": "richi-scenario", "format_version": 1, "id": "r2-checks", "title": "R2 Checks",
+            "inputs": {"tok": {"type": "secret", "required": True}},
+            "steps": [
+                {"id": "rec", "type": "memory.recall", "title": "Recall", "params": {"query": "LongEntry"}},
+                {"id": "cmd", "type": "command", "title": "Cmd", "needs": ["rec"],
+                 "if": "inputs.tok != null", "params": {"command": "echo ok"}},
+            ],
+        })
+        with memory.transaction(self.conn):
+            for i in range(6):
+                memory.entry_put(self.conn, {
+                    "id": f"fact:long-entry-{i}", "kind": "fact",
+                    "title": f"LongEntry {i} " + ("x" * 180),
+                    "summary": "Long summary " + ("y" * 180),
+                    "project_ids": ["demo"],
+                    "knowledge_state": "confirmed", "sources": [{"reference": "docs/long.md"}],
+                    "expected_updated_at": None,
+                })
+            # F2: required secret accepted via secrets_runtime at start_run without storing plaintext.
+            started = scenario_runs.start_run(
+                self.conn, memory, self.db, "r2-checks",
+                project_id="demo", project_path=self.repo,
+                secrets_runtime={"tok": "top-secret-r2"}, author=self.chat_a,
+            )
+            run_id = started["run_id"]
+            st = scenario_runs.run_status(self.conn, memory, run_id)
+            self.assertEqual(st["inputs"]["tok"], "<secret>")
+            self.assertNotIn("top-secret-r2", json.dumps(st))
+            # F7: untrusted memory evidence framing preserves closing ']' even when truncated.
+            rec_step = next(s for s in st["steps"] if s["id"] == "rec")
+            self.assertTrue(rec_step["summary"].startswith("[untrusted memory evidence: "))
+            self.assertTrue(rec_step["summary"].endswith("]"))
+            # F2: conditional step `if: inputs.tok != null` is ready (not skipped!).
+            cmd_step = next(s for s in st["steps"] if s["id"] == "cmd")
+            self.assertEqual(cmd_step["status"], "ready")
+            scenario_runs.next_step(self.conn, memory, self.db, run_id, claim=True,
+                                    checked_project="demo", project_path=self.repo, author=self.chat_a)
+            for bad_code in ("bad", True, 999999, -300):
+                rej = scenario_runs.report_step(
+                    self.conn, memory, self.db, run_id, "cmd",
+                    {"status": "failed", "summary": "boom", "exit_code": bad_code},
+                    checked_project="demo", project_path=self.repo, author=self.chat_a,
+                )
+                self.assertEqual(rej["status"], "rejected", f"expected rejected for exit_code={bad_code!r}")
+                self.assertTrue(any("exit_code" in r for r in rej["reasons"]))
+            rep = scenario_runs.report_step(
+                self.conn, memory, self.db, run_id, "cmd",
+                {"status": "failed", "summary": "oom killed", "reason": "SIGKILL", "exit_code": 137},
+                checked_project="demo", project_path=self.repo, author=self.chat_a,
+            )
+            self.assertEqual(rep["status"], "accepted")
+            self.assertEqual(rep["step_status"], "failed")
+            fail_ev = [e for e in scenarios.log(self.conn, run_id=run_id, entries=20)["entries"]
+                       if e["action"] == "step_failed"][0]
+            self.assertEqual(fail_ev["detail"].get("exit_code"), 137)
+            self.assertEqual(fail_ev["detail"].get("reason"), "SIGKILL")
+
 
 if __name__ == "__main__":
     unittest.main()

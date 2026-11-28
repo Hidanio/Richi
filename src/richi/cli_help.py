@@ -712,22 +712,24 @@ DETAILS = {
         Starts a new run on schema 4: freezes a snapshot of the scenario
         definition, redacts secret inputs so raw secrets are never written to
         SQLite, creates a task entry tagged scenario-run, and executes any
-        immediately ready Richi steps.""",
+        immediately ready Richi steps. Prefer --secret-env KEY=ENV_VAR for
+        secret inputs so secret values stay out of argv.""",
         examples=(("", "richi --project-path /path/to/service scenario run review --input branch=feature_x"),
                   ("With JSON inputs", "richi scenario run review --inputs-json inputs.json"))),
     "scenario next": dict(about="""
         Returns the next ready or already-claimed step for this agent/chat,
         rendering templates and resolving skills. Pass --step STEP to target a
         specific parallel step. With --claim, acquires or renews a 30-minute
-        lease on the returned agent step. Pass --secret KEY=VALUE when a step
-        needs a runtime-only secret input.""",
+        lease on the returned agent step. Prefer --secret-env KEY=ENV_VAR (or
+        --secret KEY=VALUE) when a step needs a runtime-only secret input.""",
         examples=(("", "richi scenario next run-review-20261127-0001 --claim"),
                   ("With explicit agent", "richi scenario next run-review-20261127-0001 --agent codex"))),
     "scenario claim": dict(about="""
         Claims one specific ready agent step for this chat with a 30-minute
         lease and returns its rendered step payload, preventing another chat
-        from working on the same step at once. Pass --secret KEY=VALUE when
-        the claimed step needs a runtime-only secret input.""",
+        from working on the same step at once. Prefer --secret-env KEY=ENV_VAR
+        (or --secret KEY=VALUE) when the claimed step needs a runtime-only
+        secret input.""",
         examples=(("", "richi scenario claim run-review-20261127-0001 angle.0"),)),
     "scenario release": dict(about="""
         Releases a step lease held by this chat so another chat can claim it.""",
