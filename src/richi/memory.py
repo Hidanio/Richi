@@ -1046,7 +1046,7 @@ def run(args, cli=None):
                                                      workspace=settings.workspace, checked_project=checked_project,
                                                      project_path=checked_root if checked_root is not None else project_path,
                                                      request=scenario_request, preflight_io=scenario_preflight)
-                if args.action == "export" and getattr(args, "out", None):
+                if args.action == "export" and getattr(args, "out", None) is not None:
                     scenario_post_export = scenario_res
                 else:
                     return scenario_res

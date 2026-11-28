@@ -99,6 +99,28 @@ def _open_regular_inside_root(root, rel_path):
     return (fd, st), None
 
 
+def _check_rel_path_no_symlink_inside_root(root, rel_path):
+    """Validate rel_path has no .git/traversal and no symlink components under root (allows non-existent tail)."""
+    clean, err = _safe_rel_repo_path(rel_path)
+    if err:
+        return None, err
+    resolved_root = Path(root).resolve()
+    cur = resolved_root
+    for seg in clean.split("/"):
+        nxt = cur / seg
+        if nxt.is_symlink():
+            return None, "path contains symlink component: " + clean
+        if not nxt.exists():
+            break
+        cur = nxt
+    target = (resolved_root / clean).resolve()
+    try:
+        target.relative_to(resolved_root)
+    except ValueError:
+        return None, "path escapes project root: " + clean
+    return str(target), None
+
+
 def _stream_file_hash(fd, hasher, remaining_bytes, deadline):
     """Stream regular file fd into hasher under byte and time caps. Returns bytes_read or None if capped."""
     total = 0
@@ -177,17 +199,17 @@ def compute_worktree_fingerprint(project_path):
     remaining_bytes = MAX_TOTAL_BYTES
     for idx, rel in enumerate(sorted(dirty_paths)):
         h.update(b"FILE\x00" + rel.encode("utf-8", errors="replace") + b"\x00")
-        if idx >= MAX_FINGERPRINT_FILES or time.monotonic() > deadline:
-            # Bounded metadata fallback so huge dirty trees never OOM or hang
-            try:
-                lst = os.lstat(str(git_root / rel))
-                h.update(f"CAP:{lst.st_size}:{lst.st_mtime_ns}\x00".encode("ascii"))
-            except OSError:
-                h.update(b"MISSING\x00")
-            continue
         clean, path_err = _safe_rel_repo_path(rel)
         if path_err:
             h.update(b"SKIP\x00")
+            continue
+        if idx >= MAX_FINGERPRINT_FILES or time.monotonic() > deadline:
+            # Bounded metadata fallback so huge dirty trees never OOM or hang
+            try:
+                lst = os.lstat(str(git_root / clean))
+                h.update(f"CAP:{lst.st_size}:{lst.st_mtime_ns}\x00".encode("ascii"))
+            except OSError:
+                h.update(b"MISSING\x00")
             continue
         opened, open_err = _open_regular_inside_root(git_root, clean)
         if open_err:
@@ -413,22 +435,30 @@ def findings_similar(a, b):
     lb = b.get("line") if (isinstance(b.get("line"), int) and not isinstance(b.get("line"), bool) and b.get("line") >= 1) else None
     ta = (str(a.get("title") or "") + " " + str(a.get("evidence") or "")).strip()
     tb = (str(b.get("title") or "") + " " + str(b.get("evidence") or "")).strip()
-    id_j = _jaccard(_extract_identifiers(ta), _extract_identifiers(tb))
-    tok_c = _cosine(_token_counts(ta), _token_counts(tb))
+    ids_a = _extract_identifiers(ta)
+    ids_b = _extract_identifiers(tb)
+    toks_a = _token_counts(ta)
+    toks_b = _token_counts(tb)
+    id_j = _jaccard(ids_a, ids_b)
+    tok_c = _cosine(toks_a, toks_b)
     if la is not None and lb is not None:
         if abs(la - lb) > CLUSTER_LINE_DIAMETER:
             return False
         return id_j >= 0.25 or tok_c >= 0.35
+    if not ids_a or not ids_b:
+        return tok_c >= 0.70 and ((len(toks_a) >= 2 and len(toks_b) >= 2) or tok_c >= 0.85)
     return id_j >= 0.50 and tok_c >= 0.50
 
 
 def _can_join_cluster(item, cluster_members):
     """Complete-linkage rule: item must match EVERY member in the cluster."""
+    if not item["file"]:
+        return False
     i_disproved = item["status"] == "disproved"
     for m in cluster_members:
         if (m["status"] == "disproved") != i_disproved:
             return False
-        if m["file"] != item["file"]:
+        if not m["file"] or m["file"] != item["file"]:
             return False
         il, ml = item["line"], m["line"]
         id_j = _jaccard(item["_ids"], m["_ids"])
@@ -439,7 +469,10 @@ def _can_join_cluster(item, cluster_members):
             if not (id_j >= 0.25 or tok_c >= 0.35):
                 return False
         else:
-            if not (id_j >= 0.50 and tok_c >= 0.50):
+            if not item["_ids"] or not m["_ids"]:
+                if not (tok_c >= 0.70 and ((len(item["_toks"]) >= 2 and len(m["_toks"]) >= 2) or tok_c >= 0.85)):
+                    return False
+            elif not (id_j >= 0.50 and tok_c >= 0.50):
                 return False
     return True
 

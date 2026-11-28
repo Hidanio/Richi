@@ -16,6 +16,7 @@ from . import rules, scenario_findings, scenario_format, scenario_registry, scen
 
 
 TRUST_PREFIX = "scenario-trust:"
+TRUST_V2_PREFIX = "scenario-trust-v2:"
 GOLDEN_PREFIX = "scenario-golden:"
 MEMORY_MODES = ("clean", "as_of_commit", "with_fp_only")
 MAX_GOLDEN_ITEMS = 50
@@ -65,7 +66,10 @@ def _step_shape_compatible(step_spec, rows):
         return False
     want_matrix = "matrix" in step_spec
     has_matrix = any(r["matrix_index"] is not None for r in rows)
-    if want_matrix != has_matrix:
+    if want_matrix and not has_matrix:
+        # A conditional matrix step whose `if` evaluated false before expansion stays a single skipped row.
+        return len(rows) == 1 and rows[0]["status"] == "skipped" and rows[0]["matrix_index"] is None
+    if not want_matrix and has_matrix:
         return False
     return True
 
@@ -117,8 +121,18 @@ def fork_run(conn, api, database, source_run_id, from_step_id, *, use_latest=Fal
     except (ValueError, TypeError):
         stored_inputs = {}
     if use_latest:
+        old_specs = src_def.get("inputs") or {}
+        new_specs = definition.get("inputs") or {}
+        cleaned_inputs = {}
+        for k, v in (stored_inputs.items() if isinstance(stored_inputs, dict) else ()):
+            old_is_sec = isinstance(old_specs.get(k), dict) and old_specs[k].get("type") == "secret"
+            new_is_sec = isinstance(new_specs.get(k), dict) and new_specs[k].get("type") == "secret"
+            # Drop inputs whose secret/non-secret classification changed so "<secret>" is never persisted as literal text.
+            if old_is_sec != new_is_sec:
+                continue
+            cleaned_inputs[k] = v
         try:
-            _, redacted_inputs, missing_inputs, _ = scenarios.resolve_inputs(definition, stored_inputs)
+            _, redacted_inputs, missing_inputs, _ = scenarios.resolve_inputs(definition, cleaned_inputs)
         except scenario_format.FormatError as exc:
             raise scenario_runs._failure(api, str(exc), "invalid_input") from exc
         if missing_inputs:
@@ -196,8 +210,10 @@ def fork_run(conn, api, database, source_run_id, from_step_id, *, use_latest=Fal
             author.by, author.agent, at_iso, at_iso,
         ),
     )
+    src_is_eval = src_meta.get("kind") == "eval" or src_meta.get("case_id") is not None
     fork_meta = {
-        "kind": "fork",
+        "kind": "eval" if src_is_eval else "fork",
+        "forked": True,
         "parent_run_id": source_run_id,
         "fork_from": from_step_id,
         "use_latest": bool(use_latest),
@@ -265,18 +281,42 @@ def security_summary(definition):
         stype = step.get("type")
         params = step.get("params") or {}
         if stype == "command":
-            commands.append({"step_id": step["id"], "command": params.get("command", "")})
+            cmd_item = {"step_id": step["id"], "command": params.get("command", "")}
+            if params.get("cwd"):
+                cmd_item["cwd"] = params["cwd"]
+            commands.append(cmd_item)
         elif stype == "skill":
-            skills.append({"step_id": step["id"], "skill": params.get("skill")})
+            sk_item = {"step_id": step["id"], "skill": params.get("skill")}
+            sk_inst = str(params.get("instruction") or "").strip()
+            if sk_inst:
+                sk_item["instruction_preview"] = sk_inst[:140]
+                sk_item["instruction_chars"] = len(sk_inst)
+                sk_item["instruction_truncated"] = len(sk_inst) > 140
+            skills.append(sk_item)
         elif stype == "instruction":
             txt = str(params.get("text") or "").strip()
-            instructions.append({"step_id": step["id"], "preview": txt[:140]})
+            instructions.append({
+                "step_id": step["id"],
+                "preview": txt[:140],
+                "chars": len(txt),
+                "truncated": len(txt) > 140,
+            })
         elif stype == "memory.record":
-            memory_records.append({
+            sum_txt = str(params.get("summary") or "").strip()
+            rec_item = {
                 "step_id": step["id"],
                 "kind": params.get("kind"),
                 "knowledge_state": params.get("knowledge_state", "confirmed"),
-            })
+                "title": str(params.get("title") or "")[:140],
+                "summary_preview": sum_txt[:140],
+                "summary_chars": len(sum_txt),
+                "summary_truncated": len(sum_txt) > 140,
+            }
+            if params.get("entry_id"):
+                rec_item["entry_id"] = params["entry_id"]
+            if params.get("tags"):
+                rec_item["tags"] = list(params["tags"])
+            memory_records.append(rec_item)
         for chk in step.get("checks") or ():
             if chk.get("kind"):
                 checks.add(chk["kind"])
@@ -284,7 +324,7 @@ def security_summary(definition):
         name for name, spec in (definition.get("inputs") or {}).items()
         if isinstance(spec, dict) and spec.get("type") == "secret"
     )
-    return {
+    out = {
         "commands": commands,
         "skills": skills,
         "instructions": instructions,
@@ -293,9 +333,19 @@ def security_summary(definition):
         "checks": sorted(checks),
         "requires_trust": bool(commands or skills or instructions or memory_records or secrets),
     }
+    wtu = str(definition.get("when_to_use") or "").strip()
+    if wtu:
+        out["when_to_use"] = wtu[:200]
+    return out
 
 
 def _trust_key(project_id, sha256):
+    if project_id is None:
+        return f"{TRUST_V2_PREFIX}global:{sha256}"
+    return f"{TRUST_V2_PREFIX}project:{len(project_id)}:{project_id}:{sha256}"
+
+
+def _r4_trust_key(project_id, sha256):
     if project_id is None:
         return f"{TRUST_PREFIX}global:{sha256}"
     return f"{TRUST_PREFIX}project:{len(project_id)}:{project_id}:{sha256}"
@@ -303,6 +353,24 @@ def _trust_key(project_id, sha256):
 
 def _legacy_trust_key(project_id, sha256):
     return f"{TRUST_PREFIX}{project_id or '_global'}:{sha256}"
+
+
+def _is_trusted(conn, eff_project, sha):
+    """Check trust across v2 and legacy keys while strictly verifying stored JSON project_id and sha256."""
+    keys = [_trust_key(eff_project, sha), _r4_trust_key(eff_project, sha)]
+    if eff_project != "_global":
+        keys.append(_legacy_trust_key(eff_project, sha))
+    for k in keys:
+        row = conn.execute("SELECT value FROM metadata WHERE key = ?", (k,)).fetchone()
+        if row is None or not row[0]:
+            continue
+        try:
+            parsed = json.loads(row[0])
+        except (ValueError, TypeError):
+            continue
+        if isinstance(parsed, dict) and parsed.get("project_id") == eff_project and parsed.get("sha256") == sha:
+            return True
+    return False
 
 
 def export_scenario(conn, api, scenario_id, *, project_id=None, scope=None, checked_project=None):
@@ -352,11 +420,7 @@ def import_scenario(conn, api, raw_definition, *, scope="project", project_id=No
     sha = scenario_format.digest(defn)
     sec = security_summary(defn)
     tkey = _trust_key(eff_project, sha)
-    already_trusted = (
-        conn.execute("SELECT 1 FROM metadata WHERE key = ?", (tkey,)).fetchone() is not None
-        or (eff_project != "_global"
-            and conn.execute("SELECT 1 FROM metadata WHERE key = ?", (_legacy_trust_key(eff_project, sha),)).fetchone() is not None)
-    )
+    already_trusted = _is_trusted(conn, eff_project, sha)
 
     should_record_trust = False
     if sec["requires_trust"] and not already_trusted:
@@ -475,6 +539,21 @@ def golden_add(conn, api, case_obj, *, checked_project=None, author=None, now_ov
     if project_id is not None:
         api.require_project(conn, project_id)
         _check_project_binding(project_id, checked_project, api, f"Golden case '{cid}'")
+    existing_row = conn.execute("SELECT value FROM metadata WHERE key = ?", (_golden_key(cid),)).fetchone()
+    if existing_row is not None and existing_row[0]:
+        try:
+            existing_case = json.loads(existing_row[0])
+        except (ValueError, TypeError):
+            existing_case = None
+        if isinstance(existing_case, dict):
+            existing_proj = existing_case.get("project_id")
+            _check_project_binding(existing_proj, checked_project, api, f"Existing golden case '{cid}'")
+            if existing_proj != project_id:
+                raise scenario_runs._failure(
+                    api,
+                    f"Golden case '{cid}' belongs to project '{existing_proj or 'global'}' and cannot be reassigned to '{project_id or 'global'}'",
+                    "project_mismatch",
+                )
     base_rev = str(case_obj.get("base_rev") or "").strip()
     head_rev = str(case_obj.get("head_rev") or "").strip()
     if not _COMMIT_SHA.fullmatch(base_rev) or not _COMMIT_SHA.fullmatch(head_rev):
@@ -559,17 +638,19 @@ def golden_remove(conn, api, case_id, *, checked_project=None):
 def _match_quality(finding, spec):
     """Return match priority tuple (lower is better) or None if finding does not match spec.
 
-    Severity-agnostic: requires same normalized file AND (line within range±slop OR word-boundary symbol hit).
+    Severity-agnostic: requires same normalized file AND (line/end_line overlap within range±slop OR word-boundary symbol hit).
     """
     if scenario_findings._normalize_file(finding.get("file") or "") != spec["file"]:
         return None
     lr = spec.get("line_range")
     line = finding.get("line")
+    end_line = finding.get("end_line")
     exact_line = False
     line_hit = False
     if lr is not None and isinstance(line, int) and not isinstance(line, bool):
-        exact_line = lr[0] <= line <= lr[1]
-        line_hit = (lr[0] - _LINE_SLOP) <= line <= (lr[1] + _LINE_SLOP)
+        f_end = end_line if (isinstance(end_line, int) and not isinstance(end_line, bool) and end_line >= line) else line
+        exact_line = line <= lr[1] and f_end >= lr[0]
+        line_hit = line <= (lr[1] + _LINE_SLOP) and f_end >= (lr[0] - _LINE_SLOP)
     syms = set(spec.get("symbols") or ())
     sym_hit = False
     if syms:
@@ -589,6 +670,81 @@ def _match_quality(finding, spec):
     return (0,) if sym_hit else None
 
 
+def _min_cost_max_matching(specs, candidates):
+    """Exact maximum-cardinality, minimum-cost bipartite matching (SPFA successive shortest paths, stdlib only)."""
+    n_left = len(specs)
+    ordered = sorted(candidates, key=lambda f: f["finding_id"])
+    n_right = len(ordered)
+    if not n_left or not n_right:
+        return {}
+    src = 0
+    sink = n_left + n_right + 1
+    n_nodes = sink + 1
+    adj = [[] for _ in range(n_nodes)]
+
+    def add_edge(u, v, cap, cost):
+        adj[u].append([v, cap, cost, len(adj[v])])
+        adj[v].append([u, 0, -cost, len(adj[u]) - 1])
+
+    for i in range(n_left):
+        add_edge(src, 1 + i, 1, 0)
+    for j in range(n_right):
+        add_edge(1 + n_left + j, sink, 1, 0)
+
+    has_any = False
+    for i, spec in enumerate(specs):
+        for j, finding in enumerate(ordered):
+            q = _match_quality(finding, spec)
+            if q is not None:
+                has_any = True
+                weight = q[0] * 1_000_000 + i * 1_000 + j
+                add_edge(1 + i, 1 + n_left + j, 1, weight)
+    if not has_any:
+        return {}
+
+    inf = 10**18
+    while True:
+        dist = [inf] * n_nodes
+        parent_v = [-1] * n_nodes
+        parent_e = [-1] * n_nodes
+        in_q = [False] * n_nodes
+        dist[src] = 0
+        queue = [src]
+        in_q[src] = True
+        head = 0
+        while head < len(queue):
+            u = queue[head]
+            head += 1
+            in_q[u] = False
+            du = dist[u]
+            for idx, (v, cap, cost, _rev) in enumerate(adj[u]):
+                if cap > 0 and du + cost < dist[v]:
+                    dist[v] = du + cost
+                    parent_v[v] = u
+                    parent_e[v] = idx
+                    if not in_q[v]:
+                        queue.append(v)
+                        in_q[v] = True
+        if dist[sink] == inf:
+            break
+        cur = sink
+        while cur != src:
+            pv = parent_v[cur]
+            pe = parent_e[cur]
+            edge = adj[pv][pe]
+            edge[1] -= 1
+            adj[cur][edge[3]][1] += 1
+            cur = pv
+
+    matches = {}
+    for i in range(n_left):
+        for v, cap, _cost, _rev in adj[1 + i]:
+            if 1 + n_left <= v < sink and cap == 0:
+                matches[i] = ordered[v - 1 - n_left]
+                break
+    return matches
+
+
 def _score_single_run(conn, api, case, run_id):
     run_row = scenario_runs._load_run(conn, run_id, api)
     defn = json.loads(run_row["definition_json"])
@@ -596,21 +752,9 @@ def _score_single_run(conn, api, case, run_id):
     deduped, _ = scenario_review._extract_run_findings(defn, step_rows)
     active = [f for f in deduped if f["status"] != "disproved"]
 
-    # Strict 1-to-1 global quality-first matching (exact line+symbol pairs win over line-only/symbol-only pairs)
-    matched_finding_ids = set()
-    matched_bug_indices = {}
-    bug_pairs = []
-    for exp_idx, exp in enumerate(case["expected_bugs"]):
-        for f in active:
-            q = _match_quality(f, exp)
-            if q is not None:
-                bug_pairs.append((q, exp_idx, f["finding_id"], f))
-    bug_pairs.sort(key=lambda item: (item[0], item[1], item[2]))
-    for _q, exp_idx, fid, f in bug_pairs:
-        if exp_idx in matched_bug_indices or fid in matched_finding_ids:
-            continue
-        matched_bug_indices[exp_idx] = f
-        matched_finding_ids.add(fid)
+    # Strict 1-to-1 exact maximum-cardinality, minimum-cost bipartite matching
+    matched_bug_indices = _min_cost_max_matching(case["expected_bugs"], active)
+    matched_finding_ids = {f["finding_id"] for f in matched_bug_indices.values()}
 
     detected = []
     missed = []
@@ -627,22 +771,11 @@ def _score_single_run(conn, api, case, run_id):
         else:
             missed.append({"bug_id": exp["id"], "file": exp["file"], "description": exp.get("description", "")})
 
-    matched_trap_indices = {}
-    trap_pairs = []
     traps_list = list(case.get("known_traps") or ())
-    for trap_idx, trap in enumerate(traps_list):
-        for f in active:
-            if f["finding_id"] in matched_finding_ids:
-                continue
-            q = _match_quality(f, trap)
-            if q is not None:
-                trap_pairs.append((q, trap_idx, f["finding_id"], f))
-    trap_pairs.sort(key=lambda item: (item[0], item[1], item[2]))
-    for _q, trap_idx, fid, f in trap_pairs:
-        if trap_idx in matched_trap_indices or fid in matched_finding_ids:
-            continue
-        matched_trap_indices[trap_idx] = f
-        matched_finding_ids.add(fid)
+    remaining_active = [f for f in active if f["finding_id"] not in matched_finding_ids]
+    matched_trap_indices = _min_cost_max_matching(traps_list, remaining_active)
+    for f in matched_trap_indices.values():
+        matched_finding_ids.add(f["finding_id"])
 
     traps_triggered = []
     for trap_idx, trap in enumerate(traps_list):
@@ -747,7 +880,8 @@ def eval_score(conn, api, case_id, run_id, *, compare_run_id=None, expected_scen
 
 
 def eval_start(conn, api, database, scenario_id, case_id, *, memory_mode="clean",
-               project_id=None, checked_project=None, project_path=None, author=None, now_override=None):
+               project_id=None, raw_inputs=None, inputs_json=None,
+               checked_project=None, project_path=None, author=None, now_override=None):
     """Start an isolated `run_kind='eval'` run of `scenario_id` on a fixed-commit golden case."""
     scenario_runs.require_v4(conn, api)
     if memory_mode not in MEMORY_MODES:
@@ -758,6 +892,12 @@ def eval_start(conn, api, database, scenario_id, case_id, *, memory_mode="clean"
             api, f"memory_mode=as_of_commit requires commit_time on golden case '{case_id}'", "invalid_input"
         )
     _check_project_binding(case.get("project_id"), checked_project, api, f"Golden case '{case_id}'")
+    if project_id is not None and case.get("project_id") is not None and project_id != case["project_id"]:
+        raise scenario_runs._failure(
+            api,
+            f"Golden case '{case_id}' belongs to project '{case['project_id']}', not --project '{project_id}'",
+            "project_mismatch",
+        )
     eff_project = project_id or case.get("project_id") or checked_project
     _check_project_binding(eff_project, checked_project, api, "Scenario eval")
 
@@ -766,14 +906,22 @@ def eval_start(conn, api, database, scenario_id, case_id, *, memory_mode="clean"
         raise api.NotFoundError("Unknown scenario: " + scenario_id)
     declared_inputs = resolved["definition"].get("inputs") or {}
     eval_inputs = {}
-    if "base" in declared_inputs:
-        eval_inputs["base"] = case["base_rev"]
-    if "branch" in declared_inputs:
-        eval_inputs["branch"] = case["head_rev"]
-    if "target" in declared_inputs:
-        eval_inputs["target"] = f"{case['base_rev']}...{case['head_rev']}"
-    if "focus" in declared_inputs:
-        eval_inputs["focus"] = f"eval:{case_id}"
+    defaults_map = {
+        "base": case["base_rev"],
+        "branch": case["head_rev"],
+        "target": f"{case['base_rev']}...{case['head_rev']}",
+        "focus": f"eval:{case_id}",
+    }
+    for key, val in defaults_map.items():
+        spec = declared_inputs.get(key)
+        if isinstance(spec, dict) and spec.get("type") in ("string", "text"):
+            eval_inputs[key] = val
+    if raw_inputs or inputs_json is not None:
+        try:
+            extra = scenarios.parse_input_options(resolved["definition"], raw_inputs, inputs_json)
+        except scenario_format.FormatError as exc:
+            raise scenario_runs._failure(api, str(exc), "invalid_input") from exc
+        eval_inputs.update(extra)
 
     eval_meta = {
         "kind": "eval",

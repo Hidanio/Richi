@@ -45,6 +45,10 @@ _GIT_REV = re.compile(r"[0-9A-Za-z][0-9A-Za-z._/@~^-]{0,199}\Z")
 _ARTIFACT_URI = re.compile(r"^richi://artifact/[A-Za-z0-9][A-Za-z0-9_.:-]*@[A-Za-z0-9_-]+(?:/[^\x00-\x1f\x7f?#\\]+)?\Z")
 MAX_ARTIFACTS = 50
 RUN_META_PREFIX = "scenario-run-meta:"
+RUN_KIND_SQL = (
+    "CASE WHEN typeof(m.value) = 'text' AND json_valid(m.value) "
+    "THEN COALESCE(json_extract(m.value, '$.kind'), 'prod') ELSE 'prod' END"
+)
 _UNSET = object()
 _PATH_TOKEN_RE = re.compile(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+")
 
@@ -273,7 +277,7 @@ def _build_steps_context(step_rows, definition):
             if row["status"] in ("done", "failed") and row["result_json"]:
                 payload = json.loads(row["result_json"])
                 payload["status"] = row["status"]
-                if spec.get("type") in ("instruction", "skill", "command") and "artifacts" not in payload:
+                if "artifacts" in scenario_format.STEP_KINDS.get(spec.get("type"), {}).get("results", ()) and "artifacts" not in payload:
                     payload["artifacts"] = []
                 result[step_id] = payload
             else:
@@ -399,40 +403,67 @@ def _release_all_claims(conn, run_id):
 
 
 BASELINE_PREFIX = "scenario-baseline:"
+BASELINE_V2_PREFIX = "scenario-baseline-v2:"
 
 
 def _legacy_baseline_key(scenario_id, project_id):
     return BASELINE_PREFIX + scenario_id + ":" + (project_id if project_id else "_global")
 
 
-def _baseline_key(scenario_id, project_id):
+def _r4_baseline_key(scenario_id, project_id):
     if not project_id:
         return f"{BASELINE_PREFIX}g:{len(scenario_id)}:{scenario_id}"
     return f"{BASELINE_PREFIX}p:{len(scenario_id)}:{scenario_id}:{len(project_id)}:{project_id}"
 
 
+def _baseline_key(scenario_id, project_id):
+    if not project_id:
+        return f"{BASELINE_V2_PREFIX}g:{len(scenario_id)}:{scenario_id}"
+    return f"{BASELINE_V2_PREFIX}p:{len(scenario_id)}:{scenario_id}:{len(project_id)}:{project_id}"
+
+
 def get_baseline_run_id(conn, scenario_id, project_id):
-    row = conn.execute("SELECT value FROM metadata WHERE key = ?", (_baseline_key(scenario_id, project_id),)).fetchone()
-    if row is None or not row[0]:
-        if project_id != "_global":
-            row = conn.execute(
-                "SELECT value FROM metadata WHERE key = ?",
-                (_legacy_baseline_key(scenario_id, project_id),),
-            ).fetchone()
+    candidates = [_baseline_key(scenario_id, project_id), _r4_baseline_key(scenario_id, project_id)]
+    if project_id != "_global":
+        candidates.append(_legacy_baseline_key(scenario_id, project_id))
+    for key in candidates:
+        row = conn.execute("SELECT value FROM metadata WHERE key = ?", (key,)).fetchone()
         if row is None or not row[0]:
-            return None
-    rid = str(row[0]).strip()
-    exists = conn.execute(
-        "SELECT 1 FROM scenario_runs WHERE id = ? AND scenario_id = ? AND project_id IS ?",
-        (rid, scenario_id, project_id),
-    ).fetchone()
-    return rid if exists else None
+            continue
+        rid = str(row[0]).strip()
+        exists = conn.execute(
+            "SELECT 1 FROM scenario_runs WHERE id = ? AND scenario_id = ? AND project_id IS ?",
+            (rid, scenario_id, project_id),
+        ).fetchone()
+        if exists:
+            return rid
+    return None
 
 
 def _all_baseline_ids(conn):
-    rows = conn.execute("SELECT value FROM metadata WHERE key >= ? AND key < ?",
-                        (BASELINE_PREFIX, BASELINE_PREFIX[:-1] + ";")).fetchall()
-    return {str(r[0]).strip() for r in rows if r and r[0]}
+    out = set()
+    for prefix in (BASELINE_V2_PREFIX, BASELINE_PREFIX):
+        rows = conn.execute("SELECT value FROM metadata WHERE key >= ? AND key < ?",
+                            (prefix, prefix[:-1] + ";")).fetchall()
+        for r in rows:
+            if r and r[0]:
+                out.add(str(r[0]).strip())
+    return out
+
+
+def _delete_owned_legacy_baselines(conn, scenario_id, project_id):
+    legacy_keys = [_r4_baseline_key(scenario_id, project_id)]
+    if project_id != "_global":
+        legacy_keys.append(_legacy_baseline_key(scenario_id, project_id))
+    for lkey in legacy_keys:
+        leg = conn.execute("SELECT value FROM metadata WHERE key = ?", (lkey,)).fetchone()
+        if leg and leg[0]:
+            leg_match = conn.execute(
+                "SELECT 1 FROM scenario_runs WHERE id = ? AND scenario_id = ? AND project_id IS ?",
+                (str(leg[0]).strip(), scenario_id, project_id),
+            ).fetchone()
+            if leg_match:
+                conn.execute("DELETE FROM metadata WHERE key = ?", (lkey,))
 
 
 def set_baseline(conn, api, run_id, *, clear=False, checked_project=None, author=None, now_override=None):
@@ -443,18 +474,9 @@ def set_baseline(conn, api, run_id, *, clear=False, checked_project=None, author
     run_row = _load_run(conn, run_id, api)
     _check_run_project(run_row, checked_project, api)
     key = _baseline_key(run_row["scenario_id"], run_row["project_id"])
-    legacy_key = _legacy_baseline_key(run_row["scenario_id"], run_row["project_id"])
     if clear:
         conn.execute("DELETE FROM metadata WHERE key = ?", (key,))
-        if run_row["project_id"] != "_global":
-            leg = conn.execute("SELECT value FROM metadata WHERE key = ?", (legacy_key,)).fetchone()
-            if leg and leg[0]:
-                leg_match = conn.execute(
-                    "SELECT 1 FROM scenario_runs WHERE id = ? AND scenario_id = ? AND project_id IS ?",
-                    (str(leg[0]).strip(), run_row["scenario_id"], run_row["project_id"]),
-                ).fetchone()
-                if leg_match:
-                    conn.execute("DELETE FROM metadata WHERE key = ?", (legacy_key,))
+        _delete_owned_legacy_baselines(conn, run_row["scenario_id"], run_row["project_id"])
         _record_event(conn, at_iso, run_row["scenario_id"], run_id, None, "baseline_cleared",
                       author.by, author.agent, {})
         return {"status": "cleared", "run_id": run_id, "scenario_id": run_row["scenario_id"],
@@ -467,15 +489,7 @@ def set_baseline(conn, api, run_id, *, clear=False, checked_project=None, author
         raise _failure(api, "Only prod runs can be marked as baseline (run kind is %s)" % run_kind,
                        "invalid_state")
     conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)", (key, run_id))
-    if run_row["project_id"] != "_global":
-        leg = conn.execute("SELECT value FROM metadata WHERE key = ?", (legacy_key,)).fetchone()
-        if leg and leg[0]:
-            leg_match = conn.execute(
-                "SELECT 1 FROM scenario_runs WHERE id = ? AND scenario_id = ? AND project_id IS ?",
-                (str(leg[0]).strip(), run_row["scenario_id"], run_row["project_id"]),
-            ).fetchone()
-            if leg_match:
-                conn.execute("DELETE FROM metadata WHERE key = ?", (legacy_key,))
+    _delete_owned_legacy_baselines(conn, run_row["scenario_id"], run_row["project_id"])
     _record_event(conn, at_iso, run_row["scenario_id"], run_id, None, "baseline_set",
                   author.by, author.agent, {})
     return {"status": "set", "run_id": run_id, "scenario_id": run_row["scenario_id"],
@@ -489,8 +503,7 @@ def _past_runs_summary(conn, scenario_id, project_id, exclude_run_id, limit=3):
         "FROM scenario_runs r "
         "LEFT JOIN metadata m ON m.key = 'scenario-run-meta:' || r.id "
         "WHERE r.scenario_id = ? AND r.project_id IS ? AND r.id <> ? "
-        "AND r.status IN ('done', 'failed') "
-        "AND (m.value IS NULL OR COALESCE(json_extract(m.value, '$.kind'), 'prod') = 'prod') "
+        f"AND r.status IN ('done', 'failed') AND {RUN_KIND_SQL} = 'prod' "
         "ORDER BY r.created_at DESC, r.id DESC LIMIT ?",
         (scenario_id, project_id, exclude_run_id, limit),
     ).fetchall()
@@ -499,7 +512,7 @@ def _past_runs_summary(conn, scenario_id, project_id, exclude_run_id, limit=3):
         rid = row["id"]
         steps = conn.execute(
             "SELECT step_key, status, result_json, reason FROM scenario_steps "
-            "WHERE run_id = ? AND status IN ('done', 'failed') ORDER BY position, step_key",
+            "WHERE run_id = ? AND status IN ('done', 'failed') ORDER BY position, COALESCE(matrix_index, -1), step_key",
             (rid,),
         ).fetchall()
         highlights = []
@@ -544,7 +557,8 @@ def _safe_link_entries(conn, api, edge_id, from_entry_id, to_entry_id, kind, des
 def _step_data_for_compare(conn, run_id, step_id):
     """Extract comparable data dict for step_id from a historical run (handles matrix and scalar steps)."""
     rows = conn.execute(
-        "SELECT status, matrix_index, result_json FROM scenario_steps WHERE run_id = ? AND step_id = ? ORDER BY position, step_key",
+        "SELECT status, matrix_index, result_json FROM scenario_steps WHERE run_id = ? AND step_id = ? "
+        "ORDER BY position, COALESCE(matrix_index, -1), step_key",
         (run_id, step_id),
     ).fetchall()
     if not rows:
@@ -578,7 +592,18 @@ def _step_data_for_compare(conn, run_id, step_id):
 
 
 def _sanitize_untrusted(text):
-    return " ".join(str(text or "").replace("]", ")").replace("[", "(").split())
+    cleaned = "".join(
+        " " if (ord(ch) < 32 or ord(ch) == 127 or unicodedata.category(ch) == "Cf") else ch
+        for ch in str(text or "")
+    )
+    return " ".join(cleaned.replace("]", ")").replace("[", "(").split())
+
+
+def _as_of_where_clause(as_of_dt):
+    """Build a query_filters updated_at cutoff padded by +1s (clamped) so julianday rounding never drops exact hits."""
+    max_dt = datetime(9999, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+    padded = min(max_dt, as_of_dt + timedelta(seconds=1))
+    return "updated_at <= '" + _format_iso(padded) + "'"
 
 
 def _extract_path_hints(question, run_inputs):
@@ -595,7 +620,7 @@ def _extract_path_hints(question, run_inputs):
                         sources.append(item)
     for src in sources:
         for tok in _PATH_TOKEN_RE.findall(src):
-            clean = tok.strip("./")
+            clean = scenario_findings._normalize_file(tok).rstrip("./")
             if clean and clean not in seen and ".." not in clean.split("/"):
                 seen.add(clean)
                 hints.append(clean)
@@ -618,7 +643,8 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
         run_meta = get_run_meta(conn, run_row["id"])
         mem_mode = run_meta.get("memory_mode")
         if mem_mode in ("clean", "with_fp_only"):
-            return {"status": "done", "summary": f"Eval memory_mode={mem_mode}: recall omitted.", "data": {"refs": [], "count": 0}}
+            return {"status": "done", "summary": f"Eval memory_mode={mem_mode}: recall omitted.",
+                    "data": {"refs": [], "count": 0, "untrusted_memory": True}}
         from . import recall, scenario_review
         as_of_dt = None
         if mem_mode == "as_of_commit":
@@ -628,13 +654,17 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
         query = _render_field(params["query"], ctx, line=True, limit=2000, field="params.query", empty=False)
         limit = params.get("limit", 8)
         fetch_limit = min(100, max(limit * 4, 30)) if as_of_dt is not None else limit
-        where = None
+        where_parts = []
         if params.get("kinds"):
             quoted = ", ".join("'" + item + "'" for item in params["kinds"])
-            where = "kind IN (" + quoted + ")"
+            where_parts.append("kind IN (" + quoted + ")")
+        if as_of_dt is not None:
+            where_parts.append(_as_of_where_clause(as_of_dt))
+        where = " AND ".join(where_parts) if where_parts else None
         args = SimpleNamespace(
             query=query, project=run_row["project_id"], where=where, limit=fetch_limit,
-            max_chars=16000, include_hypotheses=False, include_superseded=False,
+            max_chars=100000 if as_of_dt is not None else 16000,
+            include_hypotheses=False, include_superseded=False,
             explain=False, expect=None,
         )
         res = recall.recall(conn, args, api)
@@ -649,7 +679,7 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
         refs = [item.get("ref") for item in matches if item.get("ref")]
         lines = ["%s: %s" % (_sanitize_untrusted(item.get("ref")), _sanitize_untrusted(item.get("title", ""))) for item in matches[:8]]
         summary = ("[untrusted memory evidence: %s]" % "; ".join(lines)[:1460]) if lines else "No matching records found."
-        return {"status": "done", "summary": summary, "data": {"refs": refs, "count": len(refs)}}
+        return {"status": "done", "summary": summary, "data": {"refs": refs, "count": len(refs), "untrusted_memory": True}}
     if kind == "memory.brief":
         run_meta = get_run_meta(conn, run_row["id"])
         mem_mode = run_meta.get("memory_mode")
@@ -658,7 +688,7 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
             return {
                 "status": "done",
                 "summary": "Eval memory_mode=clean: prior memory, past runs and FP learnings omitted.",
-                "data": {"refs": [], "count": 0, "past_runs": [], "learnings": []},
+                "data": {"refs": [], "count": 0, "past_runs": [], "learnings": [], "untrusted_memory": True},
             }
         from . import scenario_review
         as_of_dt = None
@@ -672,12 +702,14 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
         if mem_mode != "with_fp_only":
             from . import task_brief
             limit = params.get("limit", 12)
-            fetch_limit = min(100, max(limit * 4, 30)) if as_of_dt is not None else limit
+            fetch_limit = min(50, max(limit * 2, 30)) if as_of_dt is not None else min(50, limit)
+            where = _as_of_where_clause(as_of_dt) if as_of_dt is not None else None
             args = SimpleNamespace(
-                query=question, project=run_row["project_id"], limit=fetch_limit, max_chars=16000,
+                query=question, project=run_row["project_id"], limit=fetch_limit,
+                max_chars=100000 if as_of_dt is not None else 16000,
                 include_hypotheses=False, include_superseded=False,
                 base=None, target=None, worktree=False, repo=None, check_sources=False,
-                where=None, explain=False, expect=None,
+                where=where, explain=False, expect=None,
             )
             res = task_brief.brief(conn, args, api, database)
             cards = res.get("results") or []
@@ -707,10 +739,32 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
         fp_part = "; ".join(_sanitize_untrusted(h) for h in fp_hints)[:550] if fp_hints else ""
         parts = [p for p in (card_part, fp_part) if p]
         summary = ("[untrusted memory evidence: %s]" % "; ".join(parts)) if parts else "No prior records found for this context."
+        safe_past_runs = [
+            {
+                "run_id": pr["run_id"],
+                "status": pr["status"],
+                "created_at": pr["created_at"],
+                "highlights": [_sanitize_untrusted(h) for h in (pr.get("highlights") or ())],
+            }
+            for pr in past_runs
+        ]
+        safe_learnings = [
+            {
+                **it,
+                "title": _sanitize_untrusted(it.get("title", "")),
+                "safety_condition": _sanitize_untrusted(it.get("safety_condition", "")),
+                "scope_paths": [_sanitize_untrusted(sp) for sp in (it.get("scope_paths") or ())],
+            }
+            for it in learnings
+        ]
         return {
             "status": "done",
             "summary": summary,
-            "data": {"refs": refs, "count": len(refs), "past_runs": past_runs, "learnings": learnings},
+            "data": {
+                "refs": refs, "count": len(refs),
+                "past_runs": safe_past_runs, "learnings": safe_learnings,
+                "untrusted_memory": True,
+            },
         }
     if kind == "memory.record":
         entry_kind = params["kind"]
@@ -723,8 +777,8 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
             entry_id = re.sub(r"[^A-Za-z0-9_.:-]", "-", raw_id)[:100]
         run_meta = get_run_meta(conn, run_row["id"])
         run_kind = run_meta.get("kind", "prod")
-        # Eval runs are strictly dry-run no-ops for memory.record (zero writes to entries/graph_edges).
-        if run_kind == "eval":
+        # Eval runs (including forks of eval runs) are strictly dry-run no-ops for memory.record.
+        if run_kind == "eval" or run_meta.get("case_id") is not None or run_meta.get("memory_mode") is not None:
             return {
                 "status": "done",
                 "summary": "Simulated eval memory.record (skipped write for %s): %s" % (entry_id, title[:120]),
@@ -755,6 +809,20 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
             existing = None
         if existing is not None:
             current = api.entry_get(conn, entry_id, history=False)
+            existing_tags = [str(t).strip().lower() for t in (current.get("tags") or ())]
+            if "false-positive" in existing_tags:
+                raise ValueError("memory.record cannot modify human-curated false-positive entry: " + entry_id)
+            existing_projects = list(current.get("project_ids") or ())
+            if run_row["project_id"] is not None:
+                if run_row["project_id"] not in existing_projects:
+                    raise ValueError(
+                        "memory.record cannot modify entry %s outside run project scope %s"
+                        % (entry_id, run_row["project_id"])
+                    )
+            elif existing_projects:
+                raise ValueError(
+                    "memory.record in a workspace-wide run cannot modify project-scoped entry %s" % entry_id
+                )
             updated = {k: v for k, v in current.items() if k not in ("created_at", "updated_at", "history")}
             updated["summary"] = (current.get("summary") or "") + "\n\n--- Run %s ---\n%s" % (run_row["id"], body)
             seen_refs = {s.get("reference") for s in (updated.get("sources") or []) if isinstance(s, dict)}
@@ -793,6 +861,31 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
             "data": {"entry_id": entry_id, "ref": "entry:" + entry_id, "kind": entry_kind, "status": put_res["status"]},
         }
     if kind == "compare":
+        run_meta = get_run_meta(conn, run_row["id"])
+        mem_mode = run_meta.get("memory_mode")
+        if mem_mode in ("clean", "with_fp_only"):
+            return {
+                "status": "done",
+                "summary": f"Eval memory_mode={mem_mode}: baseline comparison omitted.",
+                "data": {"has_baseline": False, "baseline_run_id": None, "diffs": {}, "changed_count": 0},
+            }
+        as_of_dt = None
+        if mem_mode == "as_of_commit":
+            from . import scenario_review
+            as_of_dt = scenario_review._parse_utc(run_meta.get("commit_time"))
+            if as_of_dt is None:
+                raise ValueError("eval memory_mode=as_of_commit requires valid commit_time")
+
+        def _within_as_of(cand_id):
+            if as_of_dt is None:
+                return True
+            ts_row = conn.execute("SELECT created_at, updated_at FROM scenario_runs WHERE id = ?", (cand_id,)).fetchone()
+            if ts_row is None:
+                return False
+            cdt = scenario_review._parse_utc(ts_row[0])
+            udt = scenario_review._parse_utc(ts_row[1])
+            return cdt is not None and udt is not None and cdt <= as_of_dt and udt <= as_of_dt
+
         target_step = params["step"]
         current_data = (ctx["steps"].get(target_step) or {}).get("data") or {}
         base_run_id = None
@@ -801,23 +894,39 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
             if cand != run_row["id"] and conn.execute(
                 "SELECT 1 FROM scenario_runs WHERE id = ? AND scenario_id = ? AND project_id IS ? AND status = 'done'",
                 (cand, run_row["scenario_id"], run_row["project_id"]),
-            ).fetchone():
+            ).fetchone() and _within_as_of(cand):
                 base_run_id = cand
         if base_run_id is None:
             pinned = get_baseline_run_id(conn, run_row["scenario_id"], run_row["project_id"])
-            if pinned and pinned != run_row["id"]:
+            if pinned and pinned != run_row["id"] and _within_as_of(pinned):
                 base_run_id = pinned
         if base_run_id is None:
-            cand_row = conn.execute(
-                "SELECT r.id FROM scenario_runs r "
-                "LEFT JOIN metadata m ON m.key = 'scenario-run-meta:' || r.id "
-                "WHERE r.scenario_id = ? AND r.project_id IS ? AND r.id <> ? AND r.status = 'done' "
-                "AND (m.value IS NULL OR COALESCE(json_extract(m.value, '$.kind'), 'prod') = 'prod') "
-                "ORDER BY r.created_at DESC, r.id DESC LIMIT 1",
-                (run_row["scenario_id"], run_row["project_id"], run_row["id"]),
-            ).fetchone()
-            if cand_row:
-                base_run_id = cand_row[0]
+            if as_of_dt is None:
+                cand_row = conn.execute(
+                    "SELECT r.id FROM scenario_runs r "
+                    "LEFT JOIN metadata m ON m.key = 'scenario-run-meta:' || r.id "
+                    "WHERE r.scenario_id = ? AND r.project_id IS ? AND r.id <> ? AND r.status = 'done' "
+                    f"AND {RUN_KIND_SQL} = 'prod' "
+                    "ORDER BY r.created_at DESC, r.id DESC LIMIT 1",
+                    (run_row["scenario_id"], run_row["project_id"], run_row["id"]),
+                ).fetchone()
+                if cand_row:
+                    base_run_id = cand_row[0]
+            else:
+                cand_rows = conn.execute(
+                    "SELECT r.id, r.created_at, r.updated_at FROM scenario_runs r "
+                    "LEFT JOIN metadata m ON m.key = 'scenario-run-meta:' || r.id "
+                    "WHERE r.scenario_id = ? AND r.project_id IS ? AND r.id <> ? AND r.status = 'done' "
+                    f"AND {RUN_KIND_SQL} = 'prod' "
+                    "ORDER BY r.created_at DESC, r.id DESC",
+                    (run_row["scenario_id"], run_row["project_id"], run_row["id"]),
+                ).fetchall()
+                for crow in cand_rows:
+                    cdt = scenario_review._parse_utc(crow[1])
+                    udt = scenario_review._parse_utc(crow[2])
+                    if cdt is not None and udt is not None and cdt <= as_of_dt and udt <= as_of_dt:
+                        base_run_id = crow[0]
+                        break
         if base_run_id is None:
             return {
                 "status": "done",
@@ -1252,21 +1361,16 @@ def start_run(conn, api, database, scenario_id, *, project_id=None, project_path
 
 
 def _check_cwd_containment(rendered_cwd, project_path):
-    """Ensure rendered cwd is relative without traversal, and inside project_path when given (R2-J09)."""
-    if rendered_cwd.startswith("/") or "\\" in rendered_cwd or re.match(r"[A-Za-z]:", rendered_cwd):
-        raise ValueError("command.cwd must be a relative POSIX path inside the project")
-    segments = rendered_cwd.split("/")
-    if any(segment in ("", ".", "..") for segment in segments):
-        raise ValueError("command.cwd must not contain empty, '.' or '..' segments: " + rendered_cwd)
+    """Ensure rendered cwd is relative without traversal/.git/symlinks, and inside project_path when given."""
+    clean, err = scenario_findings._safe_rel_repo_path(rendered_cwd)
+    if err:
+        raise ValueError("command.cwd: " + err)
     if project_path is None:
-        return rendered_cwd
-    root = Path(project_path).resolve()
-    target = (root / rendered_cwd).resolve()
-    try:
-        target.relative_to(root)
-    except ValueError as exc:
-        raise ValueError("command.cwd escapes --project-path: " + rendered_cwd) from exc
-    return str(target)
+        return clean
+    target, err = scenario_findings._check_rel_path_no_symlink_inside_root(project_path, clean)
+    if err:
+        raise ValueError("command.cwd: " + err)
+    return target
 
 
 def _render_step_payload(step_row, step_spec, ctx, definition, *, project_path=None, agent=None,
@@ -1372,6 +1476,13 @@ def _block_step_and_commit(conn, api, run_row, definition, step_key, reason, aut
     if new_status != previous_status:
         _sync_task_entry(conn, api, updated_run, step_rows, definition)
     return updated_run, step_rows
+
+
+def _step_has_unchanged_no_dirty_git(spec):
+    return any(
+        c.get("kind") == "no_dirty_git" and (c.get("mode") or "unchanged") != "clean"
+        for c in (spec.get("checks") or ())
+    )
 
 
 def _step_has_check(spec, kind):
@@ -1527,6 +1638,11 @@ def next_step(conn, api, database, run_id, *, claim=False, step_key=None, checke
                     claim_detail["worktree_fingerprint"] = fp_info["fingerprint"]
                 elif fp_info and fp_info.get("error"):
                     claim_detail["worktree_fingerprint_error"] = fp_info["error"]
+            if _step_has_unchanged_no_dirty_git(spec) and "worktree_fingerprint" not in claim_detail:
+                rendered["no_dirty_git_warning"] = (
+                    "Step has no_dirty_git (unchanged) but no baseline worktree fingerprint was recorded; "
+                    "release and re-claim with --project-path before reporting."
+                )
             conn.execute(
                 "UPDATE scenario_steps SET status = 'claimed', claimed_by_chat = ?, claimed_by_agent = ?, "
                 "lease_until = ?, stop_continuations = 0, attempts = attempts + 1, started_at = COALESCE(started_at, ?) "
@@ -1638,6 +1754,11 @@ def claim_step(conn, api, database, run_id, step_key, *, checked_project=None, p
                 claim_detail["worktree_fingerprint"] = fp_info["fingerprint"]
             elif fp_info and fp_info.get("error"):
                 claim_detail["worktree_fingerprint_error"] = fp_info["error"]
+        if _step_has_unchanged_no_dirty_git(spec) and "worktree_fingerprint" not in claim_detail:
+            rendered["no_dirty_git_warning"] = (
+                "Step has no_dirty_git (unchanged) but no baseline worktree fingerprint was recorded; "
+                "release and re-claim with --project-path before reporting."
+            )
         conn.execute(
             "UPDATE scenario_steps SET status = 'claimed', claimed_by_chat = ?, claimed_by_agent = ?, "
             "lease_until = ?, stop_continuations = 0, attempts = attempts + 1, started_at = COALESCE(started_at, ?) "
@@ -1714,20 +1835,18 @@ def _matches_output_type(value, expected):
 
 
 def _verify_file_exists_io(rel_path, project_path):
-    """Read-only filesystem verification for file_exists (symlink-safe inside project_path)."""
-    if rel_path.startswith("/") or "\\" in rel_path or re.match(r"[A-Za-z]:", rel_path) or any(
-            seg in ("", ".", "..") for seg in rel_path.split("/")):
-        return "check file_exists failed: invalid relative path " + rel_path
+    """Read-only filesystem verification for file_exists (anchored O_NOFOLLOW + .git-safe inside project_path)."""
+    clean, err = scenario_findings._safe_rel_repo_path(rel_path)
+    if err:
+        return "check file_exists failed: " + err
     if project_path is None:
-        return "check file_exists requires --project-path to verify " + rel_path
-    root = Path(project_path).resolve()
-    resolved = (root / rel_path).resolve()
-    try:
-        resolved.relative_to(root)
-    except ValueError:
-        return "check file_exists failed: path escapes project root: " + rel_path
-    if not resolved.is_file():
-        return "check file_exists failed: file not found: " + rel_path
+        return "check file_exists requires --project-path to verify " + clean
+    opened, open_err = scenario_findings._open_regular_inside_root(project_path, clean)
+    if open_err:
+        return "check file_exists failed: " + open_err
+    fd, _st = opened
+    import os
+    os.close(fd)
     return None
 
 
@@ -2028,7 +2147,8 @@ def _validate_report(report, step_row, step_spec, ctx, project_path, preflight_i
             else:
                 if claimed_fingerprint is None:
                     reasons.append(
-                        "check no_dirty_git (unchanged) failed: missing baseline worktree fingerprint from claim; re-claim with --project-path"
+                        "check no_dirty_git (unchanged) failed: missing baseline worktree fingerprint from claim; "
+                        "release the step (richi scenario release ...) and re-claim with --project-path"
                     )
                 elif wt.get("fingerprint") != claimed_fingerprint:
                     reasons.append("check no_dirty_git (unchanged) failed: repository worktree changed during read-only step")
@@ -2382,11 +2502,11 @@ def set_run_state(conn, api, database, run_id, action, *, checked_project=None, 
     elif action == "resume":
         if run_row["status"] != "paused":
             raise _failure(api, "Cannot resume run in status " + run_row["status"], "invalid_state")
-        conn.execute("UPDATE scenario_runs SET status = 'running', updated_at = ?, revision = revision + 1 WHERE id = ?",
-                     (at_iso, run_id))
+        conn.execute("UPDATE scenario_runs SET status = 'running', updated_at = ? WHERE id = ?", (at_iso, run_id))
         _record_event(conn, at_iso, run_row["scenario_id"], run_id, None, "resumed", author.by, author.agent, {})
         run_row, step_rows, _ = _advance(conn, api, database, run_id, project_path=project_path,
-                                         agent=author.agent, now_override=at_dt)
+                                         agent=author.agent, now_override=at_dt,
+                                         force_bump=True, previous_status="paused")
         _sync_task_entry(conn, api, run_row, step_rows, definition)
         is_base = get_baseline_run_id(conn, run_row["scenario_id"], run_row["project_id"]) == run_id
         return _format_status(run_row, step_rows, definition, view="scenario-run",
@@ -2476,32 +2596,32 @@ def list_runs(conn, api, *, active=False, chat=None, project_id=None, scenario_i
         api.require_project(conn, project_id)
     clauses, params = [], []
     if active:
-        clauses.append("status IN ('running', 'waiting', 'paused')")
+        clauses.append("r.status IN ('running', 'waiting', 'paused')")
     if chat is not None:
-        clauses.append("(created_by_chat = ? OR id IN (SELECT run_id FROM scenario_steps WHERE claimed_by_chat = ?))")
+        clauses.append("(r.created_by_chat = ? OR r.id IN (SELECT run_id FROM scenario_steps WHERE claimed_by_chat = ?))")
         params.extend([chat, chat])
     if project_id is not None:
-        clauses.append("project_id = ?")
+        clauses.append("r.project_id = ?")
         params.append(project_id)
     if scenario_id is not None:
-        clauses.append("scenario_id = ?")
+        clauses.append("r.scenario_id = ?")
         params.append(scenario_id)
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     rows = conn.execute(
-        "SELECT id, scenario_id, scope, project_id, scenario_version, status, task_entry_id, "
-        "created_by_chat, created_by_agent, created_at, updated_at, revision FROM scenario_runs"
-        + where + " ORDER BY updated_at DESC, id DESC LIMIT ?",
+        f"SELECT r.id, r.scenario_id, r.scope, r.project_id, r.scenario_version, r.status, r.task_entry_id, "
+        f"r.created_by_chat, r.created_by_agent, r.created_at, r.updated_at, r.revision, {RUN_KIND_SQL} AS run_kind "
+        "FROM scenario_runs r LEFT JOIN metadata m ON m.key = 'scenario-run-meta:' || r.id"
+        + where + " ORDER BY r.updated_at DESC, r.id DESC LIMIT ?",
         params + [limit],
     ).fetchall()
     baselines = _all_baseline_ids(conn)
-    meta_map = all_run_meta(conn)
     return {
         "view": "scenario-runs",
         "runs": [
             dict(
                 row,
                 is_baseline=row["id"] in baselines,
-                run_kind=(meta_map.get(row["id"]) or {}).get("kind", "prod"),
+                run_kind=row["run_kind"] or "prod",
             )
             for row in rows
         ],
@@ -2560,11 +2680,8 @@ def scenario_stats(conn, api, *, scenario_id=None, project_id=None, version=None
         clauses.append("r.scenario_version = ?")
         params.append(int(version))
     if run_kind and run_kind != "all":
-        if run_kind == "prod":
-            clauses.append("(m.value IS NULL OR COALESCE(json_extract(m.value, '$.kind'), 'prod') = 'prod')")
-        else:
-            clauses.append("COALESCE(json_extract(m.value, '$.kind'), 'prod') = ?")
-            params.append(run_kind)
+        clauses.append(f"{RUN_KIND_SQL} = ?")
+        params.append(run_kind)
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     limit_sql = ""
     run_params = list(params)
@@ -2746,12 +2863,12 @@ def waiting_gates_queue(conn, *, limit=30):
     rows = conn.execute(
         "SELECT s.run_id, s.step_key, s.step_id, s.type, s.matrix_json, s.started_at, "
         "r.scenario_id, r.project_id, r.definition_json, r.inputs_json, r.created_by_chat, r.created_by_agent, "
-        "COALESCE(json_extract(m.value, '$.kind'), 'prod') AS run_kind "
+        f"{RUN_KIND_SQL} AS run_kind "
         "FROM scenario_steps s "
         "JOIN scenario_runs r ON r.id = s.run_id "
         "LEFT JOIN metadata m ON m.key = 'scenario-run-meta:' || r.id "
         "WHERE r.status IN ('running', 'waiting') AND s.status = 'waiting_human' "
-        "AND (m.value IS NULL OR COALESCE(json_extract(m.value, '$.kind'), 'prod') <> 'eval') "
+        f"AND {RUN_KIND_SQL} <> 'eval' "
         "ORDER BY s.started_at ASC, s.run_id ASC LIMIT ?",
         (limit,),
     ).fetchall()

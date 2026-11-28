@@ -183,6 +183,12 @@ def record_feedback(conn, api, run_id, items, *, checked_project=None, author=No
     at_iso = scenario_runs._format_iso(scenario_runs._now_dt(api, now_override))
     run_row = scenario_runs._load_run(conn, run_id, api)
     scenario_runs._check_run_project(run_row, checked_project, api)
+    run_meta = scenario_runs.get_run_meta(conn, run_id)
+    run_kind = run_meta.get("kind", "prod")
+    if run_kind == "eval" or run_meta.get("case_id") is not None:
+        raise scenario_runs._failure(
+            api, f"Cannot record review feedback on isolated eval run {run_id}", "invalid_state"
+        )
 
     if not isinstance(items, list) or not items:
         raise scenario_runs._failure(api, "At least one feedback item is required", "invalid_input")
@@ -234,6 +240,11 @@ def record_feedback(conn, api, run_id, items, *, checked_project=None, author=No
                 raise scenario_runs._failure(
                     api, "Promoting FP patterns to memory is only allowed via CLI (richi scenario feedback --remember-pattern)",
                     "forbidden",
+                )
+            if run_kind != "prod":
+                raise scenario_runs._failure(
+                    api, f"Cannot promote confirmed FP pattern from non-prod ({run_kind}) run {run_id}",
+                    "invalid_state",
                 )
             if entry["verdict"] != "false_positive":
                 raise scenario_runs._failure(
@@ -322,30 +333,40 @@ def _is_stale(updated_at, ref_dt):
 
 
 def load_scoped_fp_learnings(conn, project_id=None, *, query="", changed_files=None,
-                             now_dt=None, as_of_dt=None, limit=FP_MAX_INJECT):
+                             now_dt=None, as_of_dt=None, limit=FP_MAX_INJECT, include_all_projects=False):
     """Load confirmed `false-positive` fact entries scoped to project/query, with staleness & as_of cutoff."""
     ref_dt = as_of_dt or now_dt or datetime.now(timezone.utc)
+    limit_sql = "" if as_of_dt is not None else " LIMIT 120"
     if project_id is not None:
         rows = conn.execute(
             "SELECT e.id, e.title, e.summary, e.updated_at, e.tags "
             "FROM entries e LEFT JOIN entry_projects ep ON ep.entry_id = e.id "
             "WHERE e.kind = 'fact' AND e.knowledge_state = 'confirmed' AND e.tags LIKE ? "
             "AND (ep.project_id = ? OR ep.project_id IS NULL) "
-            "ORDER BY e.updated_at DESC LIMIT 120",
+            "ORDER BY e.updated_at DESC" + limit_sql,
             ('%"false-positive"%', project_id),
+        ).fetchall()
+    elif include_all_projects:
+        rows = conn.execute(
+            "SELECT e.id, e.title, e.summary, e.updated_at, e.tags "
+            "FROM entries e "
+            "WHERE e.kind = 'fact' AND e.knowledge_state = 'confirmed' AND e.tags LIKE ? "
+            "ORDER BY e.updated_at DESC" + limit_sql,
+            ('%"false-positive"%',),
         ).fetchall()
     else:
         rows = conn.execute(
             "SELECT e.id, e.title, e.summary, e.updated_at, e.tags "
             "FROM entries e "
             "WHERE e.kind = 'fact' AND e.knowledge_state = 'confirmed' AND e.tags LIKE ? "
-            "ORDER BY e.updated_at DESC LIMIT 120",
+            "AND NOT EXISTS (SELECT 1 FROM entry_projects ep WHERE ep.entry_id = e.id) "
+            "ORDER BY e.updated_at DESC" + limit_sql,
             ('%"false-positive"%',),
         ).fetchall()
 
     seen = set()
     q_tokens = set(re.findall(r"[A-Za-zА-Яа-яЁё0-9_./-]{3,}", str(query or "").lower()))
-    changed = [str(f).strip().replace("\\", "/").lstrip("./") for f in (changed_files or ()) if f]
+    changed = [scenario_findings._normalize_file(str(f)).rstrip("/") for f in (changed_files or ()) if f]
 
     scored = []
     for row in rows:
@@ -355,7 +376,7 @@ def load_scoped_fp_learnings(conn, project_id=None, *, query="", changed_files=N
         seen.add(eid)
         if as_of_dt is not None:
             upd_dt = _parse_utc(row[3])
-            if upd_dt is not None and upd_dt > as_of_dt:
+            if upd_dt is None or upd_dt > as_of_dt:
                 continue
         try:
             tags = json.loads(row[4] or "[]")
@@ -471,7 +492,6 @@ def _extract_run_findings(defn, step_rows):
                 pass
         matrix_mode = spec.get("matrix_mode") or "orthogonal"
 
-        f_list = data.get("findings")
         d_list = data.get("disproved")
         if isinstance(d_list, list):
             critic_step_ids.add(sid)
@@ -492,10 +512,37 @@ def _extract_run_findings(defn, step_rows):
                     "matrix_label": matrix_label or sid,
                     "matrix_mode": "orthogonal",
                 })
-        if isinstance(f_list, list):
+
+        # Honor both standard `findings` and any custom `findings_grounded.path` configured on the step.
+        candidate_paths = ["findings"]
+        for chk in spec.get("checks") or ():
+            if chk.get("kind") == "findings_grounded":
+                p = chk.get("path") or "findings"
+                if p != "disproved" and p not in candidate_paths:
+                    candidate_paths.append(p)
+        for f_path in candidate_paths:
+            found_f, f_list = scenario_runs._lookup_dotted(data, f_path)
+            if not found_f or not isinstance(f_list, list):
+                continue
             per_step_active.setdefault(sid, [])
             for item in f_list:
                 if not isinstance(item, dict):
+                    continue
+                if item.get("status") == "disproved":
+                    critic_step_ids.add(sid)
+                    per_step_disproved.setdefault(sid, []).append({
+                        "file": item.get("file", ""),
+                        "line": item.get("line"),
+                        "end_line": item.get("end_line"),
+                        "severity": item.get("severity", "P2"),
+                        "title": item.get("title", ""),
+                        "evidence": item.get("evidence", ""),
+                        "status": "disproved",
+                        "step_id": sid,
+                        "step_key": row["step_key"],
+                        "matrix_label": matrix_label or sid,
+                        "matrix_mode": "orthogonal",
+                    })
                     continue
                 per_step_active[sid].append({
                     "file": item.get("file", ""),
@@ -519,12 +566,12 @@ def _extract_run_findings(defn, step_rows):
             if anc_a in done_emitting:
                 superseded_steps.add(anc_a)
 
-    # Mark findings emitted by steps that dominate an upstream findings step as confirmed by default
+    # Mark findings emitted by steps that dominate an upstream findings step (or act as critic) as confirmed by default
     dominating_steps = {
         step_b for step_b in done_emitting
         if any(anc_a in done_emitting for anc_a in ancestry.get(step_b, ()))
     }
-    for sid in dominating_steps:
+    for sid in (dominating_steps | critic_step_ids):
         for item in per_step_active.get(sid, ()):
             if item["status"] == "candidate":
                 item["status"] = "confirmed"
@@ -533,7 +580,10 @@ def _extract_run_findings(defn, step_rows):
     superseded_raw = []
     for sid, items in per_step_active.items():
         if sid in superseded_steps:
-            superseded_raw.extend(items)
+            # Keep only leaf/non-dominating upstream reviewer items for corroboration/severity provenance
+            # (prevents 3-stage `angle -> merge -> disprove` from counting `merge` as an extra reviewer).
+            if sid not in dominating_steps:
+                superseded_raw.extend(items)
         else:
             terminal_active_raw.extend(items)
 
@@ -545,21 +595,51 @@ def _extract_run_findings(defn, step_rows):
     disproved_deduped = scenario_findings.dedupe_findings(all_disproved_raw, replicated_totals=replicated_totals)
     upstream_deduped = scenario_findings.dedupe_findings(superseded_raw, replicated_totals=replicated_totals) if superseded_raw else []
 
-    # Propagate upstream replicated consensus & orthogonal corroboration onto surviving terminal findings
+    # Propagate upstream replicated consensus, orthogonal corroboration, and severity_votes strictly along DAG ancestry
     if upstream_deduped and terminal_deduped:
         for tf in terminal_deduped:
-            matched_up = [uf for uf in upstream_deduped if scenario_findings.findings_similar(tf, uf)]
+            tf_step_ids = {sk.split(".", 1)[0] for sk in (tf.get("source_steps") or ()) if sk}
+            if tf.get("step_id"):
+                tf_step_ids.add(tf["step_id"])
+            tf_ancestors = set()
+            for sid in tf_step_ids:
+                tf_ancestors.update(ancestry.get(sid, ()))
+            if not tf_ancestors:
+                continue
+            matched_up = []
+            for uf in upstream_deduped:
+                uf_sids = {sk.split(".", 1)[0] for sk in (uf.get("source_steps") or ()) if sk}
+                if uf.get("step_id"):
+                    uf_sids.add(uf["step_id"])
+                if (uf_sids & tf_ancestors) and scenario_findings.findings_similar(tf, uf):
+                    matched_up.append(uf)
             if not matched_up:
                 continue
+            up_corrob = []
+            up_votes = {}
             for uf in matched_up:
                 if tf["consensus_ratio"] is None and uf.get("consensus_ratio") is not None:
                     tf["consensus_ratio"] = uf["consensus_ratio"]
                 for lbl in uf.get("corroborated_by") or ():
-                    if lbl not in tf["corroborated_by"]:
-                        tf["corroborated_by"].append(lbl)
+                    if lbl not in up_corrob:
+                        up_corrob.append(lbl)
+                for sv, cnt in (uf.get("severity_votes") or {}).items():
+                    up_votes[sv] = up_votes.get(sv, 0) + int(cnt)
                 for sk in uf.get("source_steps") or ():
                     if sk not in tf["source_steps"]:
                         tf["source_steps"].append(sk)
+            # If tf came solely from dominating step(s), replace its label/votes with the true upstream reviewers
+            if tf_step_ids and tf_step_ids.issubset(dominating_steps):
+                if up_corrob:
+                    tf["corroborated_by"] = up_corrob
+                if up_votes:
+                    tf["severity_votes"] = up_votes
+            else:
+                for lbl in up_corrob:
+                    if lbl not in tf["corroborated_by"]:
+                        tf["corroborated_by"].append(lbl)
+                for sv, cnt in up_votes.items():
+                    tf["severity_votes"][sv] = tf["severity_votes"].get(sv, 0) + cnt
 
     # Disprove yield strictly on deduped sets so 0.0 <= disprove_rate <= 1.0 ALWAYS holds
     has_disprove = bool(critic_step_ids)
@@ -571,7 +651,7 @@ def _extract_run_findings(defn, step_rows):
             critic_ancestors.update(ancestry.get(cid, ()))
         upstream_of_critics_raw = [it for sid in critic_ancestors for it in per_step_active.get(sid, ())]
         upstream_cnt = len(scenario_findings.dedupe_findings(upstream_of_critics_raw, replicated_totals=replicated_totals)) if upstream_of_critics_raw else 0
-        critic_survived = len([f for f in terminal_deduped if f["step_id"] in critic_step_ids])
+        critic_survived = len([f for f in terminal_deduped if f["step_id"] in critic_step_ids and f["status"] != "disproved"])
         disprove_candidates = max(upstream_cnt, critic_survived + disprove_removed)
 
     combined = terminal_deduped + disproved_deduped
@@ -587,6 +667,7 @@ def _extract_run_findings(defn, step_rows):
         "candidates": disprove_candidates,
         "disproved": disprove_removed,
         "has_final_step": bool(dominating_steps or critic_step_ids),
+        "has_emitting_step": bool(done_emitting),
     }
 
 
@@ -610,7 +691,9 @@ def review_hub_snapshot(conn, api=None, *, project_id=None, limit=30):
     empty_ctas = list(domain_spec.get("empty_cta_templates") or ["pre-commit-review", "bug-hunt"])
     projects = [{"id": r[0], "name": r[1]} for r in conn.execute("SELECT id, name FROM projects ORDER BY name, id")]
     now_dt = datetime.now(timezone.utc)
-    fp_all, _ = load_scoped_fp_learnings(conn, project_id=project_id, now_dt=now_dt, limit=50)
+    fp_all, _ = load_scoped_fp_learnings(
+        conn, project_id=project_id, now_dt=now_dt, limit=50, include_all_projects=(project_id is None),
+    )
     stale_fp = sum(1 for p in fp_all if p["stale"])
     fresh_fp = len(fp_all) - stale_fp
 
@@ -639,8 +722,8 @@ def review_hub_snapshot(conn, api=None, *, project_id=None, limit=30):
             "empty_cta_templates": empty_ctas,
         }
 
-    # Filter prod runs in SQL via LEFT JOIN metadata and paginate until `limit` review runs are collected.
-    clauses = ["(m.value IS NULL OR COALESCE(json_extract(m.value, '$.kind'), 'prod') = 'prod')"]
+    # Filter prod non-cancelled runs in SQL via LEFT JOIN metadata (json_valid-safe) and paginate until `limit` review runs.
+    clauses = [f"{scenario_runs.RUN_KIND_SQL} = 'prod'", "r.status <> 'cancelled'"]
     params = []
     if project_id is not None:
         clauses.append("r.project_id = ?")
@@ -684,7 +767,7 @@ def review_hub_snapshot(conn, api=None, *, project_id=None, limit=30):
         deduped, dmeta = _extract_run_findings(defn, step_rows)
         per_run_extracted.append((run_idx, r, defn, deduped, dmeta))
         group_key = (r["scenario_id"], r["project_id"], _scope_target_key(r["inputs_json"]))
-        if r["status"] == "done" and group_key not in latest_done_findings:
+        if r["status"] == "done" and dmeta.get("has_emitting_step") and group_key not in latest_done_findings:
             active_in_done = [f for f in deduped if f["status"] != "disproved"]
             latest_done_findings[group_key] = (
                 run_idx,

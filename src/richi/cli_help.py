@@ -875,9 +875,10 @@ DETAILS = {
     "scenario eval": dict(about="""
         Starts an isolated run_kind='eval' run of a scenario on a fixed-commit
         golden case with explicit memory isolation (--memory-mode clean,
-        as_of_commit or with_fp_only), or scores a completed eval run with
-        --score RUN. Pass --compare-run PREV with --score to print a Paired Bug
-        Diff showing newly caught and regressed bugs.""",
+        as_of_commit or with_fp_only) and optional --input/--inputs-json
+        overrides, or scores a completed eval run with --score RUN. Pass
+        --compare-run PREV with --score to print a Paired Bug Diff showing
+        newly caught and regressed bugs.""",
         examples=(
             ("Start a clean golden eval run", "richi scenario eval bug-hunt --case auth-bug-1 --memory-mode clean"),
             ("Score and diff two eval runs", "richi scenario eval bug-hunt --case auth-bug-1 --score run-bug-hunt-20261127-0002 --compare-run run-bug-hunt-20261127-0001"),

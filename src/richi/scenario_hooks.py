@@ -54,18 +54,29 @@ def _load_active_context(conn, *, chat=None, agent=None, project_id=None, now_dt
             "agent_ready_steps": [],
         }
 
+    rk_sql = scenario_runs.RUN_KIND_SQL
+    clauses = ["r.status IN ('running', 'waiting')"]
+    params = []
     if project_id is not None:
-        runs_rows = conn.execute(
-            "SELECT id, scenario_id, scope, project_id, status, definition_json, created_by_chat, created_by_agent, updated_at "
-            "FROM scenario_runs WHERE status IN ('running', 'waiting') AND (project_id IS NULL OR project_id = ?) "
-            "ORDER BY updated_at DESC, id DESC LIMIT 50",
-            (project_id,),
-        ).fetchall()
+        clauses.append("(r.project_id IS NULL OR r.project_id = ?)")
+        params.append(project_id)
+    if chat:
+        clauses.append(
+            f"({rk_sql} = 'prod' OR r.created_by_chat = ? "
+            "OR EXISTS (SELECT 1 FROM scenario_steps s WHERE s.run_id = r.id AND s.status = 'claimed' AND s.claimed_by_chat = ?))"
+        )
+        params.extend([chat, chat])
     else:
-        runs_rows = conn.execute(
-            "SELECT id, scenario_id, scope, project_id, status, definition_json, created_by_chat, created_by_agent, updated_at "
-            "FROM scenario_runs WHERE status IN ('running', 'waiting') ORDER BY updated_at DESC, id DESC LIMIT 50"
-        ).fetchall()
+        clauses.append(f"{rk_sql} = 'prod'")
+
+    runs_rows = conn.execute(
+        f"SELECT r.id, r.scenario_id, r.scope, r.project_id, r.status, r.definition_json, "
+        f"r.created_by_chat, r.created_by_agent, r.updated_at, {rk_sql} AS run_kind "
+        "FROM scenario_runs r "
+        "LEFT JOIN metadata m ON m.key = 'scenario-run-meta:' || r.id "
+        "WHERE " + " AND ".join(clauses) + " ORDER BY r.updated_at DESC, r.id DESC LIMIT 50",
+        params,
+    ).fetchall()
     if not runs_rows:
         return {
             "active_runs": [],
@@ -74,12 +85,11 @@ def _load_active_context(conn, *, chat=None, agent=None, project_id=None, now_dt
             "agent_ready_steps": [],
         }
 
-    meta_map = scenario_runs.all_run_meta(conn)
     runs_by_id = {}
     defs_by_id = {}
     for row in runs_rows:
         r = dict(row)
-        r["run_kind"] = (meta_map.get(r["id"]) or {}).get("kind", "prod")
+        r["run_kind"] = r.get("run_kind") or "prod"
         runs_by_id[r["id"]] = r
         try:
             defs_by_id[r["id"]] = json.loads(r["definition_json"])
@@ -99,7 +109,7 @@ def _load_active_context(conn, *, chat=None, agent=None, project_id=None, now_dt
         "SELECT run_id, step_key, step_id, position, type, status, executor_role, executor_agent, "
         "claimed_by_chat, claimed_by_agent, lease_until, stop_continuations "
         f"FROM scenario_steps WHERE run_id IN ({placeholders}) "
-        "AND status IN ('claimed', 'waiting_human', 'ready') ORDER BY run_id, position, step_key",
+        "AND status IN ('claimed', 'waiting_human', 'ready') ORDER BY run_id, position, COALESCE(matrix_index, -1), step_key",
         tuple(runs_by_id.keys()),
     ).fetchall()
 
@@ -264,7 +274,7 @@ def stop_check(conn, api, *, chat=None, agent=None, project_id=None, project_pat
             "stop_enforced", chat_id, agent_id,
             {"continuations": new_count, "max_continuations": max_continuations},
         )
-        prefix = f"richi --project-path {shlex.quote(str(project_path))} " if project_path else "richi "
+        prefix = f"richi --project-path {shlex.quote(str(project_path))} " if (project_path and step.get("project_id")) else "richi "
         next_cmd = f"{prefix}scenario report {step['run_id']} {step['step_key']} --json -"
         reason = (
             f"Scenario run {step['run_id']} still has claimed step '{step['step_key']}' ({step['title']}). "

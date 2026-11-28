@@ -593,10 +593,44 @@ def _has_events_table(conn):
     return row is not None
 
 
+def _compact_step_diff(before, after):
+    """Build a bounded (<2 KiB) step-level diff between two definitions for version history without storing definitions."""
+    b_def = (before or {}).get("definition") if isinstance(before, dict) else None
+    a_def = (after or {}).get("definition") if isinstance(after, dict) else None
+    if not isinstance(b_def, dict) or not isinstance(a_def, dict):
+        return None
+    b_steps = {s["id"]: s for s in (b_def.get("steps") or ()) if isinstance(s, dict) and "id" in s}
+    a_steps = {s["id"]: s for s in (a_def.get("steps") or ()) if isinstance(s, dict) and "id" in s}
+    added, removed, changed = [], [], []
+    for sid, st in a_steps.items():
+        if sid not in b_steps:
+            added.append({"id": sid, "title": str(st.get("title") or sid)[:60]})
+        elif b_steps[sid] != st:
+            changed.append({"id": sid, "title": str(st.get("title") or sid)[:60]})
+    for sid, st in b_steps.items():
+        if sid not in a_steps:
+            removed.append({"id": sid, "title": str(st.get("title") or sid)[:60]})
+    out = {}
+    if added:
+        out["added"] = added[:20]
+        if len(added) > 20:
+            out["added_more"] = len(added) - 20
+    if removed:
+        out["removed"] = removed[:20]
+        if len(removed) > 20:
+            out["removed_more"] = len(removed) - 20
+    if changed:
+        out["changed"] = changed[:20]
+        if len(changed) > 20:
+            out["changed_more"] = len(changed) - 20
+    return out
+
+
 def _record_log(conn, at, action, scope, project_id, scenario_id, before, after, author):
     action_name = action if action.startswith("scenario_") else "scenario_" + action
     before_summary = _summary(before) if before else None
     after_summary = _summary(after) if after else None
+    step_diff = _compact_step_diff(before, after)
     if _has_events_table(conn):
         detail = {
             "scope": scope,
@@ -604,6 +638,8 @@ def _record_log(conn, at, action, scope, project_id, scenario_id, before, after,
             "before": before_summary,
             "after": after_summary,
         }
+        if step_diff:
+            detail["step_diff"] = step_diff
         conn.execute(
             "INSERT INTO scenario_events(at, scenario_id, run_id, step_key, action, chat, agent, detail_json) "
             "VALUES (?, ?, NULL, NULL, ?, ?, ?, ?)",
@@ -932,7 +968,9 @@ def map_snapshot(conn, api, workspace=None, *, run_limit=50, log_limit=100):
         runs_waiting = conn.execute(
             "SELECT count(DISTINCT r.id) FROM scenario_runs r "
             "JOIN scenario_steps s ON s.run_id = r.id "
-            "WHERE r.status IN ('running', 'waiting') AND s.status = 'waiting_human'"
+            "LEFT JOIN metadata m ON m.key = 'scenario-run-meta:' || r.id "
+            f"WHERE r.status IN ('running', 'waiting') AND s.status = 'waiting_human' "
+            f"AND {scenario_runs.RUN_KIND_SQL} <> 'eval'"
         ).fetchone()[0]
         runs = scenario_runs.list_runs(conn, api, limit=run_limit)["runs"]
         waiting_queue = scenario_runs.waiting_gates_queue(conn, limit=30)

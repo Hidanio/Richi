@@ -255,6 +255,10 @@ def add_commands(commands, api):
     eval_cmd.add_argument("--compare-run", metavar="PREV",
                           help="Compare --score RUN against a previous run to show Paired Bug Diff")
     eval_cmd.add_argument("--project", metavar="ID", help="Project ID override (default: golden case or --project-path)")
+    eval_cmd.add_argument("--input", dest="inputs", action="append", metavar="KEY=VALUE",
+                          help="Optional scenario input override when starting an eval run (repeatable)")
+    eval_cmd.add_argument("--inputs-json", metavar="FILE",
+                          help="Optional JSON object of scenario inputs when starting an eval run; - reads stdin")
 
 
 def writes(args):
@@ -267,7 +271,7 @@ def writes(args):
     if args.action == "golden":
         return getattr(args, "golden_action", None) != "list"
     if args.action == "eval":
-        return not bool(getattr(args, "score_run", None))
+        return getattr(args, "score_run", None) is None
     return args.action in WRITE_ACTIONS
 
 
@@ -279,7 +283,7 @@ def read_request(args, api):
         return scenarios.read_json_input(args.json, api, limit=scenarios.MAX_CHANGE)
     if args.action == "report":
         return scenarios.read_json_input(args.json, api, limit=scenario_runs.MAX_REPORT_BYTES)
-    if args.action in ("plan", "run") and getattr(args, "inputs_json", None):
+    if args.action in ("plan", "run", "eval") and getattr(args, "inputs_json", None):
         return scenarios.read_json_input(args.inputs_json, api, limit=scenarios.MAX_CHANGE)
     if args.action == "feedback" and getattr(args, "batch", None):
         return scenarios.read_json_input(args.batch, api, limit=scenario_review.MAX_FEEDBACK_BYTES, allow_list=True)
@@ -307,11 +311,26 @@ def preflight(conn, args, api, *, request=None, project_path=None):
             if run_id:
                 with api.transaction(conn, write=False):
                     rrow = conn.execute("SELECT definition_json FROM scenario_runs WHERE id = ?", (run_id,)).fetchone()
-                    if rrow and rrow[0] and '"no_dirty_git"' in rrow[0]:
-                        needs_fp = True
-                        from .projects import checkout_root, ensure_project_match
-                        matched = ensure_project_match(conn, project_path)
-                        effective_root = checkout_root(matched, project_path)
+                    if rrow and rrow[0]:
+                        try:
+                            defn = json.loads(rrow[0])
+                        except (ValueError, TypeError):
+                            defn = None
+                        if isinstance(defn, dict) and isinstance(defn.get("steps"), list):
+                            target_key = getattr(args, "step_key", None)
+                            target_id = target_key.split(".", 1)[0] if isinstance(target_key, str) and target_key else None
+                            for step in defn["steps"]:
+                                if not isinstance(step, dict):
+                                    continue
+                                if target_id is not None and step.get("id") != target_id:
+                                    continue
+                                if any(isinstance(c, dict) and c.get("kind") == "no_dirty_git" for c in (step.get("checks") or ())):
+                                    needs_fp = True
+                                    break
+                        if needs_fp:
+                            from .projects import checkout_root, ensure_project_match
+                            matched = ensure_project_match(conn, project_path)
+                            effective_root = checkout_root(matched, project_path)
             if needs_fp:
                 from . import scenario_findings
                 out["claim_fingerprint"] = scenario_findings.compute_worktree_fingerprint(effective_root)
@@ -430,7 +449,7 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
     if action == "catalog":
         return scenario_registry.platform_catalog(conn)
     if action == "feedback":
-        if getattr(args, "batch", None):
+        if getattr(args, "batch", None) is not None:
             conflicting = [
                 flag for flag, val in (
                     ("--finding", args.finding),
@@ -443,7 +462,7 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
                     ("--rev", args.rev),
                     ("--title", args.title),
                 )
-                if val
+                if val is not None and val is not False
             ]
             if conflicting:
                 err = api.MemoryError("--batch cannot be combined with " + ", ".join(conflicting))
@@ -459,6 +478,20 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
                 err = api.MemoryError("Pass --finding ID (or --batch FILE/-)")
                 err.code = "usage_error"
                 raise err
+            if not args.remember_pattern:
+                pat_flags = [
+                    flag for flag, val in (
+                        ("--scope-path", args.scope_paths),
+                        ("--safety-condition", args.safety_condition),
+                        ("--rev", args.rev),
+                        ("--title", args.title),
+                    )
+                    if val is not None
+                ]
+                if pat_flags:
+                    err = api.MemoryError(", ".join(pat_flags) + " require --remember-pattern")
+                    err.code = "usage_error"
+                    raise err
             item = {"finding_id": args.finding}
             if args.verdict is not None:
                 item["verdict"] = args.verdict
@@ -486,6 +519,10 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
             checked_project=checked_project, project_path=project_path, author=author,
         )
     if action == "export":
+        if args.force and args.out is None:
+            err = api.MemoryError("--force requires --out FILE")
+            err.code = "usage_error"
+            raise err
         scope = "builtin" if args.builtin else ("global" if args.global_scope else None)
         return scenario_eval.export_scenario(
             conn, api, args.id, project_id=args.project, scope=scope, checked_project=checked_project,
@@ -506,12 +543,38 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
         if ga == "remove":
             return scenario_eval.golden_remove(conn, api, args.case_id, checked_project=checked_project)
     if action == "eval":
-        if args.score_run:
+        if args.score_run is not None:
+            score_id = args.score_run.strip()
+            if not score_id:
+                err = api.MemoryError("--score requires a nonempty run ID")
+                err.code = "usage_error"
+                raise err
+            if args.compare_run is not None and not args.compare_run.strip():
+                err = api.MemoryError("--compare-run requires a nonempty run ID")
+                err.code = "usage_error"
+                raise err
+            extra_start_flags = [
+                flag for flag, val in (
+                    ("--project", args.project),
+                    ("--input", args.inputs),
+                    ("--inputs-json", args.inputs_json),
+                )
+                if val is not None
+            ]
+            if extra_start_flags:
+                err = api.MemoryError(", ".join(extra_start_flags) + " cannot be used with --score")
+                err.code = "usage_error"
+                raise err
             return scenario_eval.eval_score(
-                conn, api, args.case_id, args.score_run,
-                compare_run_id=args.compare_run, checked_project=checked_project,
+                conn, api, args.case_id, score_id,
+                compare_run_id=args.compare_run.strip() if args.compare_run is not None else None,
+                checked_project=checked_project,
                 expected_scenario_id=args.id,
             )
+        if args.compare_run is not None:
+            err = api.MemoryError("--compare-run requires --score RUN")
+            err.code = "usage_error"
+            raise err
         if not args.id:
             err = api.MemoryError("Pass a scenario ID to start an eval run, or pass --score RUN")
             err.code = "usage_error"
@@ -519,6 +582,7 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
         return scenario_eval.eval_start(
             conn, api, database, args.id, args.case_id,
             memory_mode=args.memory_mode, project_id=args.project,
+            raw_inputs=args.inputs, inputs_json=request,
             checked_project=checked_project, project_path=project_path, author=author,
         )
     if action == "next":
@@ -585,7 +649,26 @@ def write_export_file(args, res, api, database):
     resolved_out = out_path.resolve(strict=False)
     resolved_db = Path(database).expanduser().resolve(strict=False)
     db_files = {resolved_db.name, resolved_db.name + "-wal", resolved_db.name + "-shm", resolved_db.name + "-journal"}
-    if resolved_out.parent == resolved_db.parent and resolved_out.name in db_files:
+    db_files_folded = {n.casefold() for n in db_files}
+    db_candidates = [resolved_db.parent / n for n in db_files]
+    is_db_target = False
+    if resolved_out.parent == resolved_db.parent and resolved_out.name.casefold() in db_files_folded:
+        is_db_target = True
+    if not is_db_target and out_path.exists():
+        for cand in db_candidates:
+            try:
+                if cand.exists() and os.path.samefile(str(out_path), str(cand)):
+                    is_db_target = True
+                    break
+            except OSError:
+                continue
+    if not is_db_target and out_path.parent.exists() and resolved_db.parent.exists():
+        try:
+            if os.path.samefile(str(out_path.parent), str(resolved_db.parent)) and out_path.name.casefold() in db_files_folded:
+                is_db_target = True
+        except OSError:
+            pass
+    if is_db_target:
         err = api.MemoryError("Refusing to overwrite the store database file: " + str(out_path))
         err.code = "invalid_input"
         raise err
@@ -598,10 +681,10 @@ def write_export_file(args, res, api, database):
         err = api.MemoryError("Output file already exists (pass --force to overwrite): " + str(out_path))
         err.code = "exists"
         raise err
-    out_path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(res["definition"], ensure_ascii=False, indent=2) + "\n"
     tmp_name = None
     try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(
             mode="w", encoding="utf-8", dir=str(out_path.parent),
             prefix=".richi-export-", suffix=".tmp", delete=False,
@@ -626,6 +709,10 @@ def write_export_file(args, res, api, database):
         else:
             os.replace(tmp_name, str(out_path))
             tmp_name = None
+    except OSError as exc:
+        err = api.MemoryError("Cannot write export file: " + str(exc))
+        err.code = "io_error"
+        raise err from exc
     finally:
         if tmp_name:
             try:

@@ -535,7 +535,24 @@ assert.ok(applyCmd.includes("<<'RICHI_SCENARIO'"));
 
 const runCmdProj = scenarioRunCommand('my-flow', 'project', 'svc', {branch: "feat's $x"}, ['--workspace', 'w']);
 const runCmdGlobal = scenarioRunCommand('my-flow', 'global', null, {branch: 'main'}, ['--workspace', 'w']);
+const runCmdBuiltinProj = scenarioRunCommand('pre-commit-review', null, 'svc', {}, ['--workspace', 'w']);
 assert.ok(!runCmdGlobal.includes('--global'));
+assert.ok(runCmdBuiltinProj.includes('--project svc'));
+
+// R5-ARCH-08: unknown step types are preserved verbatim by normalize and flagged by validate + lint
+const unknownDraft = scenarioNormalizeDraft({
+  id: 'future-flow',
+  title: 'Future',
+  steps: [
+    {id: 'f1', type: 'artifact.fetch', title: 'Fetch', needs: [], params: {uri: 'artifact://foo'}},
+  ],
+});
+assert.equal(unknownDraft.steps[0].type, 'artifact.fetch');
+assert.deepEqual(unknownDraft.steps[0].params, {uri: 'artifact://foo'});
+assert.notEqual(scenarioValidateDraft(unknownDraft), '');
+const unknownLint = scenarioLintDraft(unknownDraft);
+assert.equal(unknownLint.ok, false);
+assert.equal(unknownLint.byStep.f1.severity, 'err');
 
 const ansCmd = scenarioAnswerCommand('run-1', 'd', 'approve', "looks $good", ['--workspace', 'w']);
 const ansCmdDash = scenarioAnswerCommand('run-1', 'd', '-reject', '', ['--workspace', 'w']);
