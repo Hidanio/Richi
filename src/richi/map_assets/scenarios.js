@@ -1050,6 +1050,175 @@
     const hay=[item.id,def.title,def.description,def.when_to_use,...list(def.tags),...list(def.steps).flatMap(s=>[s.id,s.title,s.type])].map(normalized).join(' ');
     return q.split(/\s+/).filter(Boolean).every(w=>hay.includes(w));
   }
+  function openAgentAuthorDialog(){
+    const panel=ruleDialog('Собрать сценарий с помощью агента','Опишите процесс простыми словами — агент создаст валидный сценарий прямо в Richi');
+    const {dialog,body,foot}=panel;
+    const goal=make('textarea');goal.rows=3;goal.placeholder='Например: Сделай сценарий регрессионного тестирования API: прочитать прошлые баги из памяти, прогнать pytest, сравнить время ответа с baseline и спросить меня перед релизом.';
+    const scopeSel=make('select');
+    scopeSel.add(new Option('Глобальный (для всех проектов workspace)','global'));
+    for(const [pid,pname] of scenarioProjectNames())scopeSel.add(new Option('Проект: '+pname,'project:'+pid));
+    if(scenariosState.scope.startsWith('project:'))scopeSel.value=scenariosState.scope;
+    body.append(ruleField('Что должен делать сценарий?',goal),ruleField('Куда сохранить',scopeSel));
+    const outBox=make('div','scn-chat-prompt');
+    const outPre=make('pre','');
+    const copyBtn=toolButton('Скопировать промпт для чата',async()=>{
+      try{await navigator.clipboard.writeText(outPre.textContent);copyBtn.textContent='Скопировано ✓';setTimeout(()=>copyBtn.textContent='Скопировать промпт для чата',1500);}
+      catch{copyBtn.textContent='Выделите текст';}
+    },'small scn-btn-primary');
+    outBox.append(make('div','field-label','Отправьте этот запрос в чат Claude / Codex / Cursor / Antigravity:'),outPre,copyBtn);
+    body.append(outBox);
+    const syncPrompt=()=>{
+      const desc=goal.value.trim()||'<опишите задачу и этапы>';
+      const sc=scopeSel.value.startsWith('project:')?('проекта '+scopeSel.value.slice(8)):'всего workspace (global)';
+      outPre.textContent='Создай сценарий в Richi для '+sc+': '+desc+'\n\nПрочитай справочник SCENARIOS.md (или SCENARIOS.ru.md), собери валидный JSON определения (с понятными русскими названиями, типами шагов, needs и проверками), проверь через `richi scenario plan` и сохрани через `richi scenario apply --json -`. После сохранения покажи ID и краткий список этапов.';
+    };
+    goal.addEventListener('input',syncPrompt);scopeSel.addEventListener('change',syncPrompt);
+    syncPrompt();
+    foot.append(toolButton('Закрыть',()=>dialog.close()));
+    dialog.showModal();goal.focus();
+  }
+  function openScenarioPreviewDialog(ed){
+    const def=ed.draft;
+    const panel=ruleDialog('Предпросмотр сценария для агента',def.title||def.id||'Черновик');
+    const {dialog,body,foot}=panel;
+    const agentsList=knownAgentIds();
+    const agentSel=make('select');
+    for(const aid of agentsList)agentSel.add(new Option(agentName(aid)+' ('+aid+')',aid));
+    if(!agentsList.length)agentSel.add(new Option('Агент по умолчанию',''));
+    body.append(ruleField('Смотреть глазами агента',agentSel,'Показывает выбранный скилл (с учётом per_agent) и подставленные значения входов.'));
+    const inputVals={};
+    for(const [k,spec] of Object.entries(def.inputs||{})){
+      if(spec?.type==='secret')inputVals[k]='<secret:'+k+'>';
+      else if(spec?.default!==undefined)inputVals[k]=spec.default;
+      else if(spec?.type==='boolean')inputVals[k]=true;
+      else if(spec?.type==='number')inputVals[k]=1;
+      else if(spec?.type==='select'&&list(spec.options).length)inputVals[k]=spec.options[0];
+      else if(spec?.type==='multiselect'&&list(spec.options).length)inputVals[k]=list(spec.options).slice(0,2);
+      else inputVals[k]='<'+k+'>';
+    }
+    const previewList=make('div');previewList.style.display='grid';previewList.style.gap='10px';
+    const renderPreview=()=>{
+      previewList.replaceChildren();
+      const aid=agentSel.value;
+      const renderSampleText=raw=>String(raw||'').replace(/\{\{\s*([^}]+?)\s*\}\}/g,(_,expr)=>{
+        const key=expr.split('|')[0].trim();
+        if(key.startsWith('inputs.')){
+          const name=key.slice(7).split('[')[0];
+          const v=inputVals[name];
+          if(v!==undefined)return Array.isArray(v)?v.join(', '):String(v);
+        }
+        if(key==='run.id')return 'run-'+(def.id||'draft')+'-0001';
+        if(key==='project.path')return '/path/to/repo';
+        if(key==='agent.id')return aid||'agent';
+        if(key==='now.date')return new Date().toISOString().slice(0,10);
+        return '['+key+']';
+      });
+      const allSkills=list(rulesState.skills?.skills);
+      list(def.steps).forEach((step,idx)=>{
+        const card=make('div','scn-step-row');
+        const head=make('div','scn-run-top');
+        head.append(make('strong','#'+(idx+1)+' '+prettyStepLabel(step)+' ('+step.id+')'),make('span','scn-node-badge',SCN_STEP_META[step.type]?.label||step.type));
+        card.append(head);
+        const p=step.params||{};
+        if(step.type==='skill'){
+          const per=p.skill?.per_agent||{};
+          const resolved=(aid&&per[aid])||p.skill?.default||'';
+          const info=allSkills.find(s=>s.name===resolved);
+          const missing=resolved&&allSkills.length&&(!info||(aid&&!list(info.agents).includes(aid)));
+          const skLine=make('div','tools-inline-note','Скилл для '+agentName(aid||'агента')+': '+(resolved||'не задан')+(missing?' ⚠ не установлен у этого агента':''));
+          if(missing)skLine.style.color='var(--danger)';
+          card.append(skLine);
+          if(p.instruction)card.append(make('pre','',renderSampleText(p.instruction)));
+        }else if(step.type==='instruction'){
+          card.append(make('pre','',renderSampleText(p.text||'')));
+        }else if(step.type==='command'){
+          card.append(make('code','',renderSampleText(p.command||'')));
+        }else if(step.type==='gate'){
+          card.append(make('div','',renderSampleText(p.question||'')));
+        }else if(step.type==='checklist'){
+          card.append(make('div','',list(p.items).map(it=>'☐ '+renderSampleText(typeof it==='string'?it:it.text)).join('\n')));
+        }else if(step.type==='memory.recall'){
+          card.append(make('div','tools-inline-note','Запрос: '+renderSampleText(p.query||'')));
+        }else if(step.type==='memory.brief'){
+          card.append(make('div','tools-inline-note','Вопрос: '+renderSampleText(p.question||'')));
+        }else if(step.type==='memory.record'){
+          card.append(make('div','tools-inline-note','Запишет '+String(p.kind||'decision')+': '+renderSampleText(p.title||'')));
+          if(p.summary)card.append(make('pre','',renderSampleText(p.summary)));
+        }else if(step.type==='compare'){
+          card.append(make('div','tools-inline-note','Сравнит шаг «'+(p.step||'?')+'» с baseline'+(list(p.metrics).length?' ('+p.metrics.join(', ')+')':'')));
+        }else if(step.type==='condition'){
+          card.append(make('code','',p.expr||''));
+        }
+        previewList.append(card);
+      });
+    };
+    agentSel.addEventListener('change',renderPreview);
+    renderPreview();
+    body.append(previewList);
+    foot.append(toolButton('Закрыть',()=>dialog.close()));
+    dialog.showModal();
+  }
+  function scenarioVersionDiff(beforeDef,afterDef){
+    const lines=[];
+    if(!beforeDef){lines.push('+ Создан сценарий ('+list(afterDef?.steps).length+' шагов)');return lines;}
+    if((beforeDef.title||'')!==(afterDef?.title||''))lines.push('~ Название: «'+(beforeDef.title||'')+'» → «'+(afterDef?.title||'')+'»');
+    const bSteps=new Map(list(beforeDef.steps).map(s=>[s.id,s]));
+    const aSteps=new Map(list(afterDef?.steps).map(s=>[s.id,s]));
+    for(const [id,st] of aSteps){
+      if(!bSteps.has(id))lines.push('+ Добавлен шаг «'+(st.title||id)+'» ('+id+')');
+      else if(JSON.stringify(bSteps.get(id))!==JSON.stringify(st))lines.push('~ Изменён шаг «'+(st.title||id)+'» ('+id+')');
+    }
+    for(const [id,st] of bSteps){
+      if(!aSteps.has(id))lines.push('- Удалён шаг «'+(st.title||id)+'» ('+id+')');
+    }
+    if(JSON.stringify(beforeDef.inputs||{})!==JSON.stringify(afterDef?.inputs||{}))lines.push('~ Изменены входные параметры');
+    return lines.length?lines:['~ Метаданные / раскладка обновлены'];
+  }
+  function openScenarioHistoryDialog(ed){
+    const sid=ed.original?.id||ed.draft?.id;
+    const panel=ruleDialog('История версий и отличия',sid||'Сценарий');
+    const {dialog,body,foot}=panel;
+    const events=list(scenariosState.data?.log).filter(ev=>ev.scenario_id===sid&&['scenario_created','scenario_updated'].includes(ev.action));
+    if(!events.length){
+      body.append(make('p','tools-inline-note','В текущем журнале пока нет сохранённых версий этого сценария.'));
+    }else{
+      const box=make('div','scn-log-list');
+      for(const ev of events){
+        const det=ev.detail||{};
+        const afterRec=det.after,beforeRec=det.before;
+        const afterDef=afterRec?.definition,beforeDef=beforeRec?.definition;
+        const row=make('div','scn-log-row');
+        const head=make('div','scn-run-top');
+        const ver=afterRec?.version?('v'+afterRec.version):'';
+        head.append(make('strong','',(SCN_ACTION_LABEL[ev.action]||ev.action)+(ver?' · '+ver:'')),make('span','tools-inline-note',ev.at?dateText(ev.at):''));
+        row.append(head);
+        const diffLines=scenarioVersionDiff(beforeDef,afterDef);
+        const diffBox=make('div','scn-diff-box');
+        for(const dl of diffLines){
+          const cls=dl.startsWith('+')?'add':dl.startsWith('-')?'del':'mod';
+          diffBox.append(make('div','scn-diff-line '+cls,dl));
+        }
+        row.append(diffBox);
+        if(afterDef&&Array.isArray(afterDef.steps)){
+          const loadBtn=toolButton('Загрузить эту версию в черновик',()=>{
+            pushScenarioUndo(ed);
+            ed.draft=scenarioClone(afterDef);
+            ensureDraftPositions(ed.draft);
+            scenariosState.selectedStepId=ed.draft.steps[0]?.id||'';
+            markScenarioDirty(ed);
+            dialog.close();
+            announce('Версия '+(ver||'')+' загружена в черновик — нажмите «Сохранить», чтобы применить');
+            renderScenarios();
+          },'small');
+          row.append(loadBtn);
+        }
+        box.append(row);
+      }
+      body.append(box);
+    }
+    foot.append(toolButton('Закрыть',()=>dialog.close()));
+    dialog.showModal();
+  }
   function renderScenarioCatalog(root){
     const stored=list(scenariosState.data?.scenarios).filter(scenarioMatchesFilter);
     const builtins=list(scenariosState.data?.builtin_templates).filter(scenarioMatchesFilter);
@@ -1057,7 +1226,9 @@
     for(const uns of list(scenariosState.data?.unsupported_scenarios))toolWarning(root,'Сценарий «'+(uns.id||uns.key)+'» требует более новую версию формата Richi.');
     const bar=make('div','scn-catalog-bar');
     bar.append(make('p','','Собирайте повторяемые пайплайны для агентов на визуальном холсте, клонируйте готовые шаблоны или попросите агента в чате создать сценарий через richi scenario apply.'));
-    bar.append(keyed(toolButton('+ Новый сценарий',()=>openScenarioEditor(),'scn-btn-primary'),'scn-add'));
+    const barActs=make('div','rule-actions');
+    barActs.append(toolButton('✨ Собрать с агентом',openAgentAuthorDialog,'small'),keyed(toolButton('+ Новый сценарий',()=>openScenarioEditor(),'scn-btn-primary'),'scn-add'));
+    bar.append(barActs);
     root.append(bar);
     if(scenariosState.scope!=='builtin'){
       toolSection(root,'Ваши сценарии',stored.length);
@@ -2485,6 +2656,14 @@
       announce(scenariosState.lintResult.ok?'Проверка пайплайна: ошибок не найдено':'Проверка пайплайна: найдены замечания ('+scenariosState.lintResult.issues.length+')');
       renderScenarios();
     },'small'));
+    const previewBtn=toolButton('👁 Предпросмотр',()=>openScenarioPreviewDialog(ed),'small');
+    previewBtn.title='Посмотреть итоговые промпты и выбранные скиллы глазами конкретного агента';
+    right.append(previewBtn);
+    if(ed.mode==='update'&&ed.original){
+      const histBtn=toolButton('🕒 Версии',()=>openScenarioHistoryDialog(ed),'small');
+      histBtn.title='История изменений сценария, diff по шагам и возврат к прошлой версии в черновик';
+      right.append(histBtn);
+    }
     const jsonBtn=toolButton('{ } Код JSON',()=>openScenarioJsonDialog(ed),'small');
     jsonBtn.title='Открыть исходный код сценария в JSON для экспорта или ручной правки';
     right.append(jsonBtn);
@@ -2706,6 +2885,47 @@
       return;
     }
     const allRuns=list(scenariosState.data?.runs);
+    const waitingQueue=list(scenariosState.data?.waiting_queue);
+    if(waitingQueue.length){
+      const qBox=make('div','scn-wait-queue');
+      const qHead=make('div','scn-run-top');
+      qHead.append(make('strong','','⏳ Ждёт вашего ответа ('+waitingQueue.length+')'),make('span','tools-inline-note','Единая очередь всех активных шлюзов во всех проектах'));
+      qBox.append(qHead);
+      const qGrid=make('div','scn-wait-list');
+      for(const wq of waitingQueue.slice(0,8)){
+        const item=make('div','scn-wait-item');
+        const top=make('div','scn-run-top');
+        top.append(make('strong','',wq.scenario_title+' · '+wq.title),make('code','',wq.run_id));
+        item.append(top);
+        if(wq.question)item.append(make('div','tools-inline-note',cut(wq.question,180)));
+        const defaultAns=list(wq.options)[0]||(wq.type==='checklist'?'done':'ok');
+        const phrase='Ответь на шаг '+wq.step_key+' запуска '+wq.run_id+': '+defaultAns;
+        const acts=make('div','rule-actions');
+        const cp=toolButton('Скопировать ответ («'+defaultAns+'»)',async()=>{
+          try{await navigator.clipboard.writeText(phrase);cp.textContent='Скопировано ✓';setTimeout(()=>cp.textContent='Скопировать ответ («'+defaultAns+'»)',1400);}catch{}
+        },'small scn-btn-primary');
+        const openRun=toolButton('Открыть запуск',()=>{scenariosState.runFilter='all';loadScenarioRun(wq.run_id);},'small');
+        acts.append(cp,openRun);
+        item.append(acts);
+        qGrid.append(item);
+      }
+      qBox.append(qGrid);
+      root.append(qBox);
+    }
+    const stats=scenariosState.data?.stats;
+    if(stats&&stats.total_runs>0){
+      const strip=make('div','scn-stats-strip');
+      const kpi=(val,lbl)=>{const c=make('div','scn-stat-card');c.append(make('strong','',val),make('span','',lbl));return c;};
+      strip.append(
+        kpi(String(stats.total_runs),'Всего запусков'),
+        kpi(stats.completion_rate!==null?Math.round(stats.completion_rate*100)+'%':'—','Доведены до конца'),
+        kpi(stats.first_pass_rate!==null?Math.round(stats.first_pass_rate*100)+'%':'—','С 1-го раза без отклонений'),
+        kpi(String(stats.by_status?.failed||0),'С ошибкой')
+      );
+      const worst=list(stats.per_step).find(s=>(s.failed||0)+(s.rejections||0)>0);
+      if(worst)strip.append(kpi(worst.step_id,'Узкое место ('+worst.failed+' ош. / '+worst.rejections+' откл.)'));
+      root.append(strip);
+    }
     const isBlockedOnlyRun=run=>run.status==='waiting'&&(run.step_counts?.blocked||0)>0&&!(run.step_counts?.waiting_human||0);
     const runDisplayStatus=run=>isBlockedOnlyRun(run)?'blocked':run.status;
     const runDisplayLabel=run=>isBlockedOnlyRun(run)?'Заблокирован (ошибка)':(SCN_STATUS_LABEL[run.status]||run.status);
@@ -2909,10 +3129,59 @@
         graphBox.append(surface);
         return graphBox;
       };
+      const renderRunTimeline=runObj=>{
+        const stepsList=list(runObj.steps);
+        const times=[];
+        for(const s of stepsList){
+          const a=s.started_at?Date.parse(s.started_at):NaN;
+          const b=s.finished_at?Date.parse(s.finished_at):(s.status==='claimed'||s.status==='waiting_human'?Date.now():NaN);
+          if(Number.isFinite(a))times.push(a);
+          if(Number.isFinite(b))times.push(b);
+        }
+        const minT=times.length?Math.min(...times):0;
+        const maxT=times.length?Math.max(...times):0;
+        const span=Math.max(1000,maxT-minT);
+        const fmtDur=ms=>{
+          if(!Number.isFinite(ms)||ms<0)return '—';
+          if(ms<1000)return Math.round(ms)+' мс';
+          const sec=Math.round(ms/1000);
+          return sec<60?(sec+' с'):(Math.floor(sec/60)+' м '+(sec%60)+' с');
+        };
+        const box=make('div','scn-timeline');
+        for(const s of stepsList){
+          const row=make('div','scn-tl-row');
+          const lbl=make('div','scn-tl-label');
+          lbl.append(make('span','',cut(s.title||s.key,28)),make('code','',s.key));
+          const track=make('div','scn-tl-track');
+          const a=s.started_at?Date.parse(s.started_at):NaN;
+          const b=s.finished_at?Date.parse(s.finished_at):(Number.isFinite(a)&&['claimed','waiting_human'].includes(s.status)?Date.now():a);
+          let durTxt='—';
+          if(Number.isFinite(a)&&Number.isFinite(b)&&times.length){
+            const leftPct=Math.max(0,Math.min(96,((a-minT)/span)*100));
+            const widthPct=Math.max(3,Math.min(100-leftPct,((Math.max(b-a,200))/span)*100));
+            const bar=make('div','scn-tl-bar st-'+s.status);
+            bar.style.left=leftPct+'%';bar.style.width=widthPct+'%';
+            track.append(bar);
+            durTxt=fmtDur(b-a);
+          }
+          row.append(lbl,track,make('span','scn-tl-dur',durTxt));
+          box.append(row);
+        }
+        return box;
+      };
       const runGraph=renderRunBlueprintGraph(r,detail);
-      if(runGraph){
-        toolSection(detail,'Карта выполнения',list(r.definition_steps).length||list(r.steps).length);
-        detail.append(runGraph);
+      if(runGraph||list(r.steps).length){
+        const visMode=scenariosState.runVisualMode||'graph';
+        const visHead=make('div','scn-run-top');
+        visHead.append(make('strong','',visMode==='timeline'?'Таймлайн выполнения':'Карта выполнения'));
+        const toggle=make('div','scn-subtabs');toggle.style.margin='0';
+        for(const [k,lbl] of [['graph','Граф'],['timeline','Таймлайн (водопад)']]){
+          const b=toolButton(lbl,()=>{scenariosState.runVisualMode=k;renderScenarios();},'scn-subtab');
+          b.setAttribute('aria-pressed',String(visMode===k));toggle.append(b);
+        }
+        visHead.append(toggle);
+        detail.append(visHead);
+        detail.append(visMode==='timeline'?renderRunTimeline(r):(runGraph||renderRunTimeline(r)));
       }
 
       toolSection(detail,'Шаги выполнения',list(r.steps).length);

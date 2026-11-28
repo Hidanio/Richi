@@ -323,6 +323,10 @@ class MapScenariosAPITests(unittest.TestCase):
         self.assertEqual(snap["runs_total"], 1)
         self.assertEqual(snap["runs_waiting"], 1)
         self.assertFalse(snap["runs_more"])
+        self.assertEqual(len(snap["waiting_queue"]), 1)
+        self.assertEqual(snap["waiting_queue"][0]["step_key"], "approve")
+        self.assertEqual(snap["waiting_queue"][0]["question"], "Approve branch main?")
+        self.assertEqual(snap["stats"]["total_runs"], 1)
 
         # Project-scoped run renders {{project.path}} and {{agent.id}} in /api/scenario-run gate prompt (F3)
         proj_def = {

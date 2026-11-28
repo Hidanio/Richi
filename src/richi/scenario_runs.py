@@ -2178,3 +2178,244 @@ def list_runs(conn, api, *, active=False, chat=None, project_id=None, scenario_i
         "view": "scenario-runs",
         "runs": [dict(row, is_baseline=row["id"] in baselines) for row in rows],
     }
+
+
+def _duration_sec(start_iso, end_iso):
+    if not start_iso or not end_iso:
+        return None
+    try:
+        dt = (_parse_iso(end_iso) - _parse_iso(start_iso)).total_seconds()
+        return round(max(0.0, dt), 2)
+    except (ValueError, TypeError):
+        return None
+
+
+def scenario_stats(conn, api, *, scenario_id=None, project_id=None):
+    """Aggregate execution metrics across runs, scenarios, and steps (M8 / Quick Wins)."""
+    schema_version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if schema_version < 4:
+        return {
+            "view": "scenario-stats",
+            "schema_version": schema_version,
+            "total_runs": 0,
+            "by_status": {},
+            "completion_rate": None,
+            "first_pass_rate": None,
+            "per_scenario": [],
+            "per_step": [],
+        }
+    if project_id is not None:
+        api.require_project(conn, project_id)
+    clauses, params = [], []
+    if scenario_id is not None:
+        clauses.append("scenario_id = ?")
+        params.append(scenario_id)
+    if project_id is not None:
+        clauses.append("project_id = ?")
+        params.append(project_id)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    run_rows = conn.execute(
+        "SELECT id, scenario_id, project_id, status, created_at, updated_at FROM scenario_runs" + where,
+        params,
+    ).fetchall()
+    if not run_rows:
+        return {
+            "view": "scenario-stats",
+            "schema_version": schema_version,
+            "total_runs": 0,
+            "by_status": {},
+            "completion_rate": None,
+            "first_pass_rate": None,
+            "per_scenario": [],
+            "per_step": [],
+        }
+    run_ids = [r["id"] for r in run_rows]
+    placeholders = ",".join("?" for _ in run_ids)
+    step_rows = conn.execute(
+        "SELECT run_id, step_id, type, status, attempts, rejections, reason, started_at, finished_at "
+        f"FROM scenario_steps WHERE run_id IN ({placeholders})",
+        run_ids,
+    ).fetchall()
+
+    by_status = {}
+    scn_buckets = {}
+    run_rejections = {rid: 0 for rid in run_ids}
+    run_retries = {rid: 0 for rid in run_ids}
+    step_buckets = {}
+
+    for sr in step_rows:
+        rid = sr["run_id"]
+        run_rejections[rid] = run_rejections.get(rid, 0) + int(sr["rejections"] or 0)
+        if int(sr["attempts"] or 0) > 1:
+            run_retries[rid] = run_retries.get(rid, 0) + (int(sr["attempts"]) - 1)
+        sid = sr["step_id"]
+        sb = step_buckets.setdefault(sid, {
+            "step_id": sid, "type": sr["type"], "executions": 0, "done": 0, "failed": 0,
+            "skipped": 0, "blocked": 0, "rejections": 0, "_durs": [], "_reasons": {},
+        })
+        sb["executions"] += 1
+        st = sr["status"]
+        if st in ("done", "failed", "skipped", "blocked"):
+            sb[st] += 1
+        sb["rejections"] += int(sr["rejections"] or 0)
+        dur = _duration_sec(sr["started_at"], sr["finished_at"])
+        if dur is not None:
+            sb["_durs"].append(dur)
+        if sr["reason"] and st in ("failed", "blocked"):
+            key = str(sr["reason"])[:120]
+            sb["_reasons"][key] = sb["_reasons"].get(key, 0) + 1
+
+    # Also collect historical step_failed reasons from scenario_events (survives retries!)
+    ev_rows = conn.execute(
+        f"SELECT step_key, detail_json FROM scenario_events WHERE run_id IN ({placeholders}) AND action = 'step_failed'",
+        run_ids,
+    ).fetchall()
+    for ev in ev_rows:
+        sk = (ev["step_key"] or "").split(".", 1)[0]
+        if sk not in step_buckets:
+            continue
+        try:
+            det = json.loads(ev["detail_json"] or "{}")
+        except (ValueError, TypeError):
+            continue
+        reason = det.get("reason")
+        if reason:
+            key = str(reason)[:120]
+            step_buckets[sk]["_reasons"][key] = step_buckets[sk]["_reasons"].get(key, 0) + 1
+
+    finished = 0
+    done_total = 0
+    first_pass_done = 0
+    for r in run_rows:
+        st = r["status"]
+        by_status[st] = by_status.get(st, 0) + 1
+        sc = scn_buckets.setdefault(r["scenario_id"], {
+            "scenario_id": r["scenario_id"], "total": 0, "done": 0, "failed": 0,
+            "active": 0, "cancelled": 0, "_durs": [],
+        })
+        sc["total"] += 1
+        if st == "done":
+            sc["done"] += 1
+            done_total += 1
+            finished += 1
+            if run_rejections.get(r["id"], 0) == 0 and run_retries.get(r["id"], 0) == 0:
+                first_pass_done += 1
+            dur = _duration_sec(r["created_at"], r["updated_at"])
+            if dur is not None:
+                sc["_durs"].append(dur)
+        elif st == "failed":
+            sc["failed"] += 1
+            finished += 1
+        elif st == "cancelled":
+            sc["cancelled"] += 1
+        else:
+            sc["active"] += 1
+
+    per_scenario = []
+    for sc in sorted(scn_buckets.values(), key=lambda x: (-x["total"], x["scenario_id"])):
+        durs = sc.pop("_durs")
+        sc["avg_duration_sec"] = round(sum(durs) / len(durs), 2) if durs else None
+        per_scenario.append(sc)
+
+    per_step = []
+    for sb in sorted(step_buckets.values(), key=lambda x: (-(x["failed"] + x["rejections"]), -x["executions"], x["step_id"])):
+        durs = sb.pop("_durs")
+        reasons = sb.pop("_reasons")
+        sb["avg_duration_sec"] = round(sum(durs) / len(durs), 2) if durs else None
+        sb["top_failure_reasons"] = [
+            {"reason": k, "count": v}
+            for k, v in sorted(reasons.items(), key=lambda kv: (-kv[1], kv[0]))[:3]
+        ]
+        per_step.append(sb)
+
+    return {
+        "view": "scenario-stats",
+        "schema_version": schema_version,
+        "total_runs": len(run_rows),
+        "by_status": by_status,
+        "completion_rate": round(done_total / finished, 4) if finished else None,
+        "first_pass_rate": round(first_pass_done / done_total, 4) if done_total else None,
+        "per_scenario": per_scenario,
+        "per_step": per_step[:30],
+    }
+
+
+def waiting_gates_queue(conn, *, limit=30):
+    """Unified 'Waiting for me' queue of all active human gate/checklist steps across projects."""
+    if conn.execute("PRAGMA user_version").fetchone()[0] < 4:
+        return []
+    rows = conn.execute(
+        "SELECT s.run_id, s.step_key, s.step_id, s.type, s.matrix_json, s.started_at, "
+        "r.scenario_id, r.project_id, r.definition_json, r.inputs_json, r.created_by_chat, r.created_by_agent "
+        "FROM scenario_steps s JOIN scenario_runs r ON r.id = s.run_id "
+        "WHERE r.status IN ('running', 'waiting') AND s.status = 'waiting_human' "
+        "ORDER BY s.started_at ASC, s.run_id ASC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    if not rows:
+        return []
+    repo_cache = {}
+    steps_cache = {}
+    queue = []
+    for row in rows:
+        rid = row["run_id"]
+        try:
+            defn = json.loads(row["definition_json"])
+        except (ValueError, TypeError):
+            continue
+        spec = _step_by_id_map(defn).get(row["step_id"])
+        if not spec:
+            continue
+        pid = row["project_id"]
+        if pid and pid not in repo_cache:
+            prow = conn.execute("SELECT repo_path FROM projects WHERE id = ?", (pid,)).fetchone()
+            repo_cache[pid] = prow[0] if prow else None
+        if rid not in steps_cache:
+            steps_cache[rid] = _load_steps(conn, rid)
+        run_stub = {"id": rid, "inputs_json": row["inputs_json"], "project_id": pid}
+        ctx = _context(run_stub, steps_cache[rid], defn, project_path=repo_cache.get(pid),
+                       agent=row["created_by_agent"])
+        if row["matrix_json"]:
+            try:
+                ctx["matrix"] = json.loads(row["matrix_json"])
+            except (ValueError, TypeError):
+                pass
+        params = spec.get("params") or {}
+        title = spec.get("title") or row["step_id"]
+        try:
+            title = _render_field(title, ctx, line=True, limit=scenario_format.MAX_TITLE, empty=False)
+        except (templating.Unresolved, ValueError):
+            pass
+        item = {
+            "run_id": rid,
+            "scenario_id": row["scenario_id"],
+            "scenario_title": defn.get("title") or row["scenario_id"],
+            "project_id": pid,
+            "step_key": row["step_key"],
+            "step_id": row["step_id"],
+            "type": row["type"],
+            "title": title,
+            "created_by_chat": row["created_by_chat"],
+            "started_at": row["started_at"],
+        }
+        if row["type"] == "gate":
+            q = params.get("question") or ""
+            try:
+                q = _render_field(q, ctx, line=False, limit=4000, empty=False)
+            except (templating.Unresolved, ValueError):
+                pass
+            item["question"] = q
+            item["options"] = list(params.get("options") or [])
+            item["allow_comment"] = params.get("allow_comment", True)
+        elif row["type"] == "checklist":
+            rendered_items = []
+            for it in (params.get("items") or []):
+                txt = it.get("text", "") if isinstance(it, dict) else str(it)
+                try:
+                    txt = _render_field(txt, ctx, line=True, limit=1000, empty=False)
+                except (templating.Unresolved, ValueError):
+                    pass
+                rendered_items.append({"text": txt, "required": bool(it.get("required")) if isinstance(it, dict) else False})
+            item["items"] = rendered_items
+        queue.append(item)
+    return queue

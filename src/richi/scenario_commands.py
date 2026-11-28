@@ -172,6 +172,10 @@ def add_commands(commands, api):
     base_cmd.add_argument("run_id", metavar="RUN", help="Completed run ID to pin or unpin as baseline")
     base_cmd.add_argument("--clear", action="store_true", help="Clear the pinned baseline for this run's scenario and project")
 
+    stats_cmd = actions.add_parser("stats", help="Show execution statistics across runs, scenarios and steps")
+    stats_cmd.add_argument("--scenario", metavar="ID", type=_argument_id, help="Filter metrics to one scenario ID")
+    stats_cmd.add_argument("--project", metavar="ID", help="Filter metrics to one registered project")
+
 
 def writes(args):
     if args.command != "scenario":
@@ -308,6 +312,9 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
     if action == "baseline":
         return scenario_runs.set_baseline(conn, api, args.run_id, clear=args.clear,
                                           checked_project=checked_project, author=author)
+    if action == "stats":
+        project_id = args.project if args.project is not None else checked_project
+        return scenario_runs.scenario_stats(conn, api, scenario_id=args.scenario, project_id=project_id)
     if action == "next":
         secrets_runtime = _parse_secrets(args.secrets, api, getattr(args, "secret_envs", None))
         return scenario_runs.next_step(conn, api, database, args.run_id, claim=args.claim, step_key=args.step_key,

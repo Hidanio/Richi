@@ -134,6 +134,13 @@ class ScenarioProcessMemoryTests(unittest.TestCase):
         recalled = self.cli("recall", "Perf check result", "--project", "svc")
         self.assertTrue(any(r["id"].startswith("decision:scenario-") for r in recalled["results"]))
 
+        # Verify scenario stats CLI reports accurate completion and first-pass metrics
+        stats = self.cli("--project-path", str(self.repo), "scenario", "stats", "--scenario", "perf-check")
+        self.assertEqual(stats["total_runs"], 2)
+        self.assertEqual(stats["completion_rate"], 1.0)
+        self.assertEqual(stats["first_pass_rate"], 1.0)
+        self.assertEqual(stats["per_scenario"][0]["done"], 2)
+
         # Clear baseline
         cleared = self.cli("--project-path", str(self.repo), "scenario", "baseline", r1_id, "--clear")
         self.assertFalse(cleared["is_baseline"])

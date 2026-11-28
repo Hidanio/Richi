@@ -795,6 +795,12 @@ DETAILS = {
         baseline with --clear (so compare falls back to the latest done run).""",
         examples=(("Pin a run as baseline", "richi scenario baseline run-review-20261127-0001"),
                   ("Clear pinned baseline", "richi scenario baseline run-review-20261127-0001 --clear"))),
+    "scenario stats": dict(about="""
+        Aggregates execution metrics across runs, scenarios and steps: completion rate,
+        first-pass rate (done without rejections or retries), average durations, and
+        top failure reasons per step.""",
+        examples=(("Workspace-wide metrics", "richi scenario stats"),
+                  ("For one scenario", "richi scenario stats --scenario review"))),
     "skill-sources": dict(about="""
         Richi knows which AI agents work on this computer and where each finds
         skills, so that a rule can name a skill for every agent or one per agent.
