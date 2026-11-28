@@ -1,12 +1,12 @@
 """CLI declarations and dispatch for `richi scenario ...`."""
 import argparse
 
-from . import agents, rules, scenario_format, scenario_hooks, scenario_registry, scenario_runs, scenarios
+from . import agents, rules, scenario_format, scenario_hooks, scenario_registry, scenario_review, scenario_runs, scenarios
 
 
 WRITE_ACTIONS = frozenset({
     "copy", "apply", "run", "next", "claim", "release", "report", "answer",
-    "skip", "retry", "pause", "resume", "cancel", "baseline",
+    "skip", "retry", "pause", "resume", "cancel", "baseline", "feedback",
 })
 
 
@@ -183,6 +183,25 @@ def add_commands(commands, api):
 
     actions.add_parser("catalog", help="Describe active platform capabilities, step blocks, checks and domain views")
 
+    fb_cmd = actions.add_parser("feedback", help="Record finding verdicts, resolutions and scoped FP patterns for a run")
+    fb_cmd.add_argument("run_id", metavar="RUN", help="Scenario run ID containing the reviewed findings")
+    fb_cmd.add_argument("--finding", metavar="ID", help="Finding ID (for example f:123456abcdef) for single-item feedback")
+    fb_cmd.add_argument("--verdict", choices=scenario_review.VERDICTS, metavar="VERDICT",
+                        help="Quality verdict: actionable_bug, valid_nit or false_positive")
+    fb_cmd.add_argument("--resolution", choices=scenario_review.RESOLUTIONS, metavar="STATE",
+                        help="Lifecycle resolution: open, fixed, wont_fix or unreviewed_dismissed")
+    fb_cmd.add_argument("--note", metavar="TEXT", help="Optional short rationale or fix note (<= 1000 chars)")
+    fb_cmd.add_argument("--remember-pattern", action="store_true",
+                        help="Store a scoped confirmed false-positive fact entry (requires --verdict false_positive)")
+    fb_cmd.add_argument("--scope-path", dest="scope_paths", action="append", metavar="PATH",
+                        help="Relative repo path prefix where the FP pattern applies (repeatable)")
+    fb_cmd.add_argument("--safety-condition", metavar="TEXT",
+                        help="Condition proving the code is safe (10-500 chars; required with --remember-pattern)")
+    fb_cmd.add_argument("--rev", metavar="REV", help="Optional Git revision where the FP pattern was verified")
+    fb_cmd.add_argument("--title", metavar="TEXT", help="Optional custom title for the promoted FP fact entry")
+    fb_cmd.add_argument("--batch", metavar="FILE",
+                        help="Read a JSON array (or object with items) of feedback records from FILE or '-' for stdin")
+
 
 def writes(args):
     if args.command != "scenario":
@@ -202,6 +221,8 @@ def read_request(args, api):
         return scenarios.read_json_input(args.json, api, limit=scenario_runs.MAX_REPORT_BYTES)
     if args.action in ("plan", "run") and getattr(args, "inputs_json", None):
         return scenarios.read_json_input(args.inputs_json, api, limit=scenarios.MAX_CHANGE)
+    if args.action == "feedback" and getattr(args, "batch", None):
+        return scenarios.read_json_input(args.batch, api, limit=scenario_review.MAX_FEEDBACK_BYTES)
     return None
 
 
@@ -343,6 +364,38 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
         )
     if action == "catalog":
         return scenario_registry.platform_catalog(conn)
+    if action == "feedback":
+        if getattr(args, "batch", None):
+            items = request.get("items") if isinstance(request, dict) else request
+            if not isinstance(items, list):
+                err = api.MemoryError("--batch JSON must be a list of items or an object with 'items'")
+                err.code = "invalid_input"
+                raise err
+        else:
+            if not args.finding:
+                err = api.MemoryError("Pass --finding ID (or --batch FILE/-)")
+                err.code = "usage_error"
+                raise err
+            item = {"finding_id": args.finding}
+            if args.verdict is not None:
+                item["verdict"] = args.verdict
+            if args.resolution is not None:
+                item["resolution"] = args.resolution
+            if args.note is not None:
+                item["note"] = args.note
+            if args.remember_pattern:
+                item["remember_pattern"] = True
+                item["scope_paths"] = args.scope_paths or []
+                item["safety_condition"] = args.safety_condition
+                if args.rev:
+                    item["created_rev"] = args.rev
+                if args.title:
+                    item["title"] = args.title
+            items = [item]
+        return scenario_review.record_feedback(
+            conn, api, args.run_id, items,
+            checked_project=checked_project, author=author, allow_remember_pattern=True,
+        )
     if action == "next":
         secrets_runtime = _parse_secrets(args.secrets, api, getattr(args, "secret_envs", None))
         return scenario_runs.next_step(conn, api, database, args.run_id, claim=args.claim, step_key=args.step_key,

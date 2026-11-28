@@ -809,6 +809,19 @@ DETAILS = {
         process_memory, artifacts), available step blocks, report checks,
         registered domain views and the artifact URI contract.""",
         examples=(("Inspect active platform capabilities", "richi scenario catalog"),)),
+    "scenario feedback": dict(about="""
+        Records structured human verdicts (actionable_bug, valid_nit or
+        false_positive) and lifecycle resolutions (open, fixed, wont_fix or
+        unreviewed_dismissed) for grounded findings of a scenario run. Accepts
+        either one --finding ID or a JSON list via --batch FILE (or '-' for
+        stdin). With --verdict false_positive and --remember-pattern, promotes a
+        scoped confirmed fact entry (requiring --scope-path and
+        --safety-condition) so future review runs check that invariant.""",
+        examples=(
+            ("Mark one finding as fixed bug", "richi scenario feedback run-review-20261127-0001 --finding f:a1b2c3d4e5f6 --verdict actionable_bug --resolution fixed"),
+            ("Record a scoped false-positive pattern", "richi scenario feedback run-review-20261127-0001 --finding f:a1b2c3d4e5f6 --verdict false_positive --remember-pattern --scope-path src/auth.py --safety-condition 'Gateway verifies HMAC before calling verify_token'"),
+            ("Apply batch triage from stdin", "richi scenario feedback run-review-20261127-0001 --batch -"),
+        )),
     "skill-sources": dict(about="""
         Richi knows which AI agents work on this computer and where each finds
         skills, so that a rule can name a skill for every agent or one per agent.

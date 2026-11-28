@@ -593,8 +593,19 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
             for pr in past_runs:
                 hl = ", ".join(pr["highlights"][:2])
                 lines.append("past-run %s (%s)%s" % (pr["run_id"], pr["status"], (": " + hl) if hl else ""))
+        learnings = []
+        if params.get("include_learnings"):
+            from . import scenario_review
+            learnings, fp_hints = scenario_review.load_scoped_fp_learnings(
+                conn, project_id=run_row["project_id"], query=question,
+            )
+            lines.extend(fp_hints)
         summary = ("[untrusted memory evidence: %s]" % "; ".join(lines)[:1460]) if lines else "No prior records found for this context."
-        return {"status": "done", "summary": summary, "data": {"refs": refs, "count": len(refs), "past_runs": past_runs}}
+        return {
+            "status": "done",
+            "summary": summary,
+            "data": {"refs": refs, "count": len(refs), "past_runs": past_runs, "learnings": learnings},
+        }
     if kind == "memory.record":
         entry_kind = params["kind"]
         title = _render_field(params["title"], ctx, line=True, limit=scenario_format.MAX_TITLE, field="params.title", empty=False)
@@ -604,8 +615,16 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
         else:
             raw_id = "%s:scenario-%s-%s" % (entry_kind, run_row["id"], step_spec["id"])
             entry_id = re.sub(r"[^A-Za-z0-9_.:-]", "-", raw_id)[:100]
+        run_meta = get_run_meta(conn, run_row["id"])
         ks = params.get("knowledge_state") or "confirmed"
-        extra_tags = [t for t in (params.get("tags") or []) if isinstance(t, str) and t.strip()]
+        # Fork/eval runs must never write confirmed memory entries.
+        if run_meta.get("kind", "prod") != "prod":
+            ks = "hypothesis"
+        # Forbid automated memory.record from setting false-positive tags (only explicit human feedback may).
+        extra_tags = [
+            t for t in (params.get("tags") or [])
+            if isinstance(t, str) and t.strip() and t.strip().lower() != "false-positive"
+        ]
         base_sources = [
             {"reference": "scenario:%s@v%d" % (run_row["scenario_id"], run_row["scenario_version"]),
              "type": "scenario", "label": run_row["scenario_id"]},

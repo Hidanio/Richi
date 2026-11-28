@@ -159,6 +159,7 @@ richi --compact-json scenario hook pre-compact
 richi --compact-json scenario baseline run-review-20261127-0001
 richi --compact-json scenario stats --scenario review
 richi --compact-json scenario catalog
+richi --compact-json scenario feedback run-review-20261127-0001 --finding f:a1b2c3d4e5f6 --verdict actionable_bug --resolution fixed
 ```
 
 Skipping a step requires `--reason` and still satisfies downstream `needs`

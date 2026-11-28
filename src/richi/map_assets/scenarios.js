@@ -527,8 +527,11 @@
     busy:false,saveError:'',outcome:'',commandText:'',
     runFilter:'all',selectedRunId:'',runDetail:null,runDetailLoading:false,runDetailError:'',runDetailRequest:0,
     logFilter:'all',
+    reviewData:null,reviewLoading:false,reviewError:'',reviewRequest:0,
+    reviewProject:'',reviewSeverity:'all',reviewStatus:'open',
+    reviewSelected:new Set(),triageCart:[],
   };
-  let scenariosController=null,scenarioRunController=null;
+  let scenariosController=null,scenarioRunController=null,scenarioReviewController=null;
 
   const SCN_STATUS_LABEL={
     running:'Выполняется',waiting:'Ждёт ответа',paused:'На паузе',done:'Завершён',failed:'Ошибка',cancelled:'Отменён',
@@ -545,6 +548,7 @@
     retried:'Повтор шага',lease_expired:'Истёк lease',
     stop_enforced:'Хук Stop: продолжение шага',stop_limit_reached:'Хук Stop: достигнут лимит',
     baseline_set:'Назначен эталон (baseline)',baseline_cleared:'Снят эталон (baseline)',
+    finding_feedback:'Триаж находок ревью',
   };
   function scenariosNote(){
     if(scenariosState.loading&&!scenariosState.data)return 'Загружаем сценарии…';
@@ -584,6 +588,7 @@
         scenariosState.selectedRunId='';scenariosState.runDetail=null;
       }
       if(scenariosState.subtab==='runs'&&scenariosState.selectedRunId)loadScenarioRun(scenariosState.selectedRunId);
+      if(scenariosState.subtab==='review')loadScenarioReview(scenariosState.reviewProject);
     }catch(error){
       if(request!==scenariosState.request)return;
       scenariosState.error=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;
@@ -618,6 +623,45 @@
       clearTimeout(timeout);
       if(request===scenariosState.runDetailRequest){scenariosState.runDetailLoading=false;scenarioRunController=null;if(state.mode==='scenarios')renderScenarios();}
     }
+  }
+  async function loadScenarioReview(projectId=''){
+    if(scenarioReviewController)scenarioReviewController.abort();
+    const request=++scenariosState.reviewRequest,sent=ruleSecret;
+    scenariosState.reviewProject=projectId||'';
+    scenariosState.reviewLoading=true;scenariosState.reviewError='';
+    if(state.mode==='scenarios'&&scenariosState.subtab==='review')renderScenarios();
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);scenarioReviewController=controller;
+    try{
+      const qs=projectId?('?project='+encodeURIComponent(projectId)):'';
+      const response=await fetch('/api/scenario-review'+qs,{cache:'no-store',headers:sent?{[RULE_HEADER]:sent}:{},signal:controller.signal});
+      let data=null;try{data=await response.json();}catch{data=null;}
+      if(!response.ok)throw new Error(data&&data.error||'Сервер вернул HTTP '+response.status);
+      if(request!==scenariosState.reviewRequest)return;
+      scenariosState.reviewData=data;
+      if(typeof data.editing==='boolean')setMapEditing(data.editing===true,sent);
+    }catch(error){
+      if(request!==scenariosState.reviewRequest)return;
+      scenariosState.reviewError=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;
+    }finally{
+      clearTimeout(timeout);
+      if(request===scenariosState.reviewRequest){
+        scenariosState.reviewLoading=false;scenarioReviewController=null;
+        if(state.mode==='scenarios'&&scenariosState.subtab==='review')renderScenarios();
+      }
+    }
+  }
+  async function sendScenarioFeedback(runId,items){
+    const response=await fetch('/api/scenario-feedback',{
+      method:'POST',
+      headers:{'Content-Type':'application/json',[RULE_HEADER]:ruleSecret},
+      body:JSON.stringify({run_id:runId,items}),
+    });
+    let data=null;try{data=await response.json();}catch{data=null;}
+    if(!response.ok){
+      const err=new Error(data&&data.error||'Сервер вернул HTTP '+response.status);
+      err.code=data&&data.code||'';throw err;
+    }
+    return data;
   }
   const sendScenarioChange=change=>sendMapChange('/api/scenarios',change);
   function scenarioClone(obj){return JSON.parse(JSON.stringify(obj));}
@@ -3281,6 +3325,299 @@
     root.append(listBox);
     if(scenariosState.data?.log_more)root.append(make('p','tools-inline-note','Показаны последние '+entries.length+' событий. До 200 последних событий доступно через richi scenario log --entries 200.'));
   }
+  function openRememberFpDialog(finding){
+    const panel=ruleDialog('Запомнить FP-паттерн в памяти Richi',(finding.file||'')+(finding.line?':'+finding.line:'')+' · '+finding.finding_id);
+    const {dialog,body,foot}=panel;
+    body.append(make('p','tools-inline-note','Карта не записывает правила напрямую в базу знаний (entries). Задайте область файлов и условие безопасности — Richi соберёт точную CLI-команду для сохранения подтверждённого факта.'));
+    const scopeIn=make('input');scopeIn.type='text';scopeIn.value=finding.file||'';scopeIn.placeholder='src/auth.py';
+    const condIn=make('textarea');condIn.rows=3;condIn.placeholder='Например: Gateway проверяет HMAC-подпись до вызова verify_token';
+    const outPre=make('pre','rule-command');
+    const buildCmd=()=>{
+      const sp=scopeIn.value.trim()||(finding.file||'src/');
+      const cd=condIn.value.trim()||'<условие безопасности (минимум 10 символов)>';
+      const base=['richi',...list(state.mapStore).map(scnShellQuote),'scenario','feedback',scnShellQuote(finding.run_id),
+        '--finding',scnShellQuote(finding.finding_id),'--verdict','false_positive','--remember-pattern',
+        '--scope-path',scnShellQuote(sp),'--safety-condition',scnShellQuote(cd)];
+      outPre.textContent=base.join(' ');
+    };
+    scopeIn.addEventListener('input',buildCmd);condIn.addEventListener('input',buildCmd);buildCmd();
+    body.append(
+      ruleField('Область файлов (--scope-path)',scopeIn,'Относительный путь файла или директории, к которой относится правило.'),
+      ruleField('Условие безопасности (--safety-condition)',condIn,'Объясните инвариант, который ревьюер должен перепроверить перед флагом (10–500 символов).'),
+      outPre
+    );
+    const copyBtn=toolButton('Скопировать команду',async()=>{
+      try{await navigator.clipboard.writeText(outPre.textContent);copyBtn.textContent='Скопировано';setTimeout(()=>copyBtn.textContent='Скопировать команду',1600);}
+      catch{copyBtn.textContent='Выделите текст';}
+    },'small primary');
+    foot.append(copyBtn,toolButton('Закрыть',()=>dialog.close(),'small'));
+    dialog.showModal();condIn.focus();
+  }
+  function openFixHandoffDialog(findingsList){
+    const panel=ruleDialog('Отправить баги в работу агенту',plural(findingsList.length,['находка','находки','находок'])+' готовы для исправления');
+    const {dialog,body,foot}=panel;
+    const lines=['Исправь следующие подтверждённые проблемы из Review Hub (Richi):',''];
+    findingsList.forEach((f,i)=>{
+      const loc=(f.file||'(без файла)')+(f.line?':'+f.line:'');
+      lines.push((i+1)+'. ['+f.severity+'] '+loc+' — '+f.title+' (run '+f.run_id+', '+f.finding_id+')');
+      if(f.evidence)lines.push('   Доказательство: '+f.evidence);
+    });
+    lines.push('','После исправления и прогона тестов отметь находки как исправленные через richi scenario feedback.');
+    const pre=make('pre','rule-command',lines.join('\n'));
+    body.append(make('p','tools-inline-note','Скопируйте промпт в чат агента — агент получит точные файлы, строки и доказательства из Review Hub.'),pre);
+    const copyBtn=toolButton('Скопировать промпт для чата',async()=>{
+      try{await navigator.clipboard.writeText(pre.textContent);copyBtn.textContent='Скопировано';setTimeout(()=>copyBtn.textContent='Скопировать промпт для чата',1600);}
+      catch{copyBtn.textContent='Выделите текст';}
+    },'small primary');
+    foot.append(copyBtn,toolButton('Закрыть',()=>dialog.close(),'small'));
+    dialog.showModal();copyBtn.focus();
+  }
+  function buildBatchFeedbackCommands(cart){
+    const byRun=new Map();
+    for(const item of cart){
+      if(!byRun.has(item.run_id))byRun.set(item.run_id,[]);
+      const rec={finding_id:item.finding_id};
+      if(item.verdict)rec.verdict=item.verdict;
+      if(item.resolution)rec.resolution=item.resolution;
+      byRun.get(item.run_id).push(rec);
+    }
+    const cmds=[];
+    for(const [rid,items] of byRun.entries()){
+      const prefix=['richi',...list(state.mapStore).map(scnShellQuote),'scenario','feedback',scnShellQuote(rid),'--batch','-'].join(' ');
+      cmds.push(prefix+" <<'EOF'\n"+JSON.stringify({items},null,2)+"\nEOF");
+    }
+    return cmds.join('\n\n');
+  }
+  function renderScenarioReviewHub(root){
+    if(scenariosState.reviewLoading&&!scenariosState.reviewData){
+      const box=make('div','tools-empty');
+      box.append(ruleMark('rule'),make('h3','','Загружаем Review Hub'),make('p','','Собираем находки ревью, консенсус шагов, обратную связь и FP-паттерны.'));
+      root.append(box);return;
+    }
+    if(scenariosState.reviewError&&!scenariosState.reviewData){
+      const box=make('div','tools-empty');
+      box.append(ruleMark('rule'),make('h3','','Не удалось загрузить Review Hub'),make('p','',scenariosState.reviewError),toolButton('Повторить',()=>loadScenarioReview(scenariosState.reviewProject),'primary'));
+      root.append(box);return;
+    }
+    const data=scenariosState.reviewData;
+    if(!data){loadScenarioReview(scenariosState.reviewProject);return;}
+    if(scenariosState.reviewError)toolWarning(root,'Не удалось обновить Review Hub: '+scenariosState.reviewError);
+
+    // Filter bar: project + refresh
+    const topBar=make('div','scn-rev-filters');
+    const projSel=make('select');projSel.add(new Option('Все проекты',''));
+    for(const p of list(data.projects))projSel.add(new Option(p.name||p.id,p.id));
+    projSel.value=scenariosState.reviewProject||'';
+    projSel.addEventListener('change',()=>loadScenarioReview(projSel.value));
+    topBar.append(projSel,toolButton('Обновить',()=>loadScenarioReview(scenariosState.reviewProject),'small'));
+    root.append(topBar);
+
+    if(!data.runs_analyzed){
+      const hero=make('div','scn-rev-hero');
+      hero.append(
+        make('div','tools-eyebrow','Доменный подраздел · Review Hub'),
+        make('h3','','Здесь соберутся все находки, консенсус и метрики ревью'),
+        make('p','','Запустите любой сценарий ревью (с проверкой findings_grounded или тегом review), чтобы получать заземлённые находки с привязкой к файлам и строкам, отсеивать шум через disprove и обучать память Richi на ложных срабатываниях.')
+      );
+      const ctas=make('div','scn-rev-actions');
+      const allDefs=[...list(scenariosState.data?.scenarios),...list(scenariosState.data?.builtin_templates)];
+      for(const tid of list(data.empty_cta_templates)){
+        const found=allDefs.find(x=>x.id===tid);
+        if(found){
+          ctas.append(toolButton('Запустить: '+(found.definition?.title||tid),()=>openScenarioRunModal(found),'small '+(tid==='pre-commit-review'?'scn-btn-primary':'')));
+        }
+      }
+      hero.append(ctas);
+      root.append(hero);
+      return;
+    }
+
+    // 5 Actionable KPI cards (NO live Recall/F1 in prod UI; color only when labeled >= 15)
+    const k=data.kpis||{},sm=k.signal_mix||{},ob=k.open_blockers||{},dy=k.disprove_yield||{},fp=k.fp_health||{};
+    const strip=make('div','scn-stats-strip');
+    const sigCard=make('div','scn-stat-card');
+    if(sm.sufficient_sample&&sm.actionable_share!==null){
+      sigCard.classList.add(sm.actionable_share>=0.7?'tone-good':(sm.actionable_share>=0.45?'tone-warn':'tone-bad'));
+    }
+    const sigVal=sm.labeled_total?((sm.actionable_bugs+sm.valid_nits)+'/'+sm.labeled_total+' ('+Math.round((sm.actionable_share||0)*100)+'%)'):'—';
+    const sigSub='размечено '+sm.labeled_total+'/'+sm.total_findings+(sm.sufficient_sample?' · сигнал/размечено':' · мало данных (< 15)');
+    sigCard.append(make('strong','',sigVal),make('span','',sigSub));
+
+    const blkCard=make('div','scn-stat-card'+(ob.p0>0?' tone-bad':(ob.p1>0?' tone-warn':'')));
+    blkCard.append(make('strong','',String(ob.total||0)),make('span','','открытых P0/P1 ('+(ob.p0||0)+' P0 · '+(ob.p1||0)+' P1'+(ob.likely_fixed?(' · ~'+ob.likely_fixed+' испр.'):'')+')'));
+
+    const dispCard=make('div','scn-stat-card');
+    const dispVal=dy.candidates?(dy.disproved+'/'+dy.candidates+' ('+Math.round((dy.disprove_rate||0)*100)+'%)'):'—';
+    dispCard.append(make('strong','',dispVal),make('span','','отсеяно disprove-критиком'));
+
+    const fpCard=make('div','scn-stat-card'+(fp.stale>0?' tone-warn':''));
+    fpCard.append(make('strong','',(fp.fresh||0)+'/'+(fp.total||0)),make('span','','FP-паттернов актуально'+(fp.stale?(' · '+fp.stale+' устар. >90д'):'')));
+
+    const runsCard=make('div','scn-stat-card');
+    runsCard.append(make('strong','',String(data.runs_analyzed||0)),make('span','','prod-запусков ревью'));
+    strip.append(sigCard,blkCard,dispCard,fpCard,runsCard);
+    root.append(strip);
+
+    // Step signal breakdown table (collapsible)
+    if(list(k.step_signal_table).length){
+      const fold=make('details','tools-fold');
+      fold.append(make('summary','','Сигнал по шагам ревью ('+k.step_signal_table.length+')'));
+      const tbl=make('table','scn-rev-table');
+      const thead=make('thead'),hr=make('tr');
+      for(const h of ['Шаг','Всего','Баги','Замечания','FP','Без оценки','Доля сигнала'])hr.append(make('th','',h));
+      thead.append(hr);tbl.append(thead);
+      const tbody=make('tbody');
+      for(const row of k.step_signal_table){
+        const tr=make('tr');
+        const rate=row.signal_rate===null?'—':(Math.round(row.signal_rate*100)+'%');
+        for(const val of [row.step_id,row.total,row.actionable,row.valid_nit,row.false_positive,row.unlabeled,rate]){
+          tr.append(make('td','',String(val)));
+        }
+        tbody.append(tr);
+      }
+      tbl.append(tbody);fold.append(tbl);root.append(fold);
+    }
+
+    // Read-only Batch Triage Cart
+    if(scenariosState.triageCart.length){
+      const cartBar=make('div','scn-rev-cart');
+      cartBar.append(make('strong','','Корзина триажа (read-only): '+plural(scenariosState.triageCart.length,['пометка','пометки','пометок'])));
+      const cBtns=make('div','scn-triage-btns');
+      const copyBatch=toolButton('Скопировать batch CLI',async()=>{
+        const cmd=buildBatchFeedbackCommands(scenariosState.triageCart);
+        try{await navigator.clipboard.writeText(cmd);copyBatch.textContent='Скопировано';setTimeout(()=>copyBatch.textContent='Скопировать batch CLI',1800);}
+        catch{copyBatch.textContent='Ошибка буфера';}
+      },'small primary');
+      cBtns.append(copyBatch,toolButton('Очистить',()=>{scenariosState.triageCart=[];renderScenarios();},'small'));
+      cartBar.append(cBtns);root.append(cartBar);
+    }
+
+    // Inbox filters + Review -> Fix Handoff button
+    const allFindings=list(data.findings);
+    const fBar=make('div','scn-rev-filters');
+    const stTabs=make('div','scn-subtabs');stTabs.style.margin='0';
+    for(const [val,lbl] of [['open','Открытые'],['all','Все'],['fp','Ложные (FP)'],['disproved','Опровергнутые']]){
+      const b=toolButton(lbl,()=>{scenariosState.reviewStatus=val;renderScenarios();},'scn-subtab');
+      b.setAttribute('aria-pressed',String(scenariosState.reviewStatus===val));stTabs.append(b);
+    }
+    const sevSel=make('select');
+    for(const [val,lbl] of [['all','Любая важность'],['P0','Только P0'],['P1','Только P1'],['P2','Только P2'],['nit','Только nit']]){
+      sevSel.add(new Option(lbl,val));
+    }
+    sevSel.value=scenariosState.reviewSeverity||'all';
+    sevSel.addEventListener('change',()=>{scenariosState.reviewSeverity=sevSel.value;renderScenarios();});
+
+    const shown=allFindings.filter(f=>{
+      if(scenariosState.reviewSeverity!=='all'&&f.severity!==scenariosState.reviewSeverity)return false;
+      if(scenariosState.reviewStatus==='open')return f.status!=='disproved'&&f.resolution==='open'&&f.verdict!=='false_positive';
+      if(scenariosState.reviewStatus==='fp')return f.verdict==='false_positive';
+      if(scenariosState.reviewStatus==='disproved')return f.status==='disproved';
+      return true;
+    });
+    const selectedItems=shown.filter(f=>scenariosState.reviewSelected.has(f.run_id+'::'+f.finding_id));
+    const handoffTargets=selectedItems.length?selectedItems:shown.filter(f=>f.status!=='disproved'&&f.resolution==='open'&&f.verdict!=='false_positive'&&(f.severity==='P0'||f.severity==='P1'));
+    const handoffBtn=toolButton(
+      'Отправить '+handoffTargets.length+' в работу',
+      ()=>openFixHandoffDialog(handoffTargets),
+      'small scn-btn-primary'
+    );
+    handoffBtn.disabled=!handoffTargets.length;
+    fBar.append(stTabs,sevSel,handoffBtn);
+    root.append(fBar);
+
+    const inbox=make('div','scn-rev-inbox');
+    if(!shown.length){
+      const em=make('div','tools-empty');
+      em.append(ruleMark('rule'),make('h3','','Подходящих находок нет'),make('p','','Смените фильтр важности или статуса, чтобы увидеть остальные находки.'));
+      inbox.append(em);
+    }
+    const applyTriage=async(finding,patch)=>{
+      if(!rulesState.editing){
+        const idx=scenariosState.triageCart.findIndex(c=>c.run_id===finding.run_id&&c.finding_id===finding.finding_id);
+        const merged=Object.assign(idx>=0?scenariosState.triageCart[idx]:{run_id:finding.run_id,finding_id:finding.finding_id},patch);
+        if(idx>=0)scenariosState.triageCart[idx]=merged;else scenariosState.triageCart.push(merged);
+        if(patch.verdict!==undefined)finding.verdict=patch.verdict;
+        if(patch.resolution!==undefined)finding.resolution=patch.resolution;
+        announce('Добавлено в корзину триажа');renderScenarios();return;
+      }
+      const prevV=finding.verdict,prevR=finding.resolution;
+      if(patch.verdict!==undefined)finding.verdict=patch.verdict;
+      if(patch.resolution!==undefined)finding.resolution=patch.resolution;
+      renderScenarios();
+      try{
+        await sendScenarioFeedback(finding.run_id,[Object.assign({finding_id:finding.finding_id},patch)]);
+        announce('Оценка сохранена');
+        loadScenarioReview(scenariosState.reviewProject);
+      }catch(err){
+        finding.verdict=prevV;finding.resolution=prevR;
+        scenariosState.reviewError=err.message||'Не удалось сохранить оценку.';
+        renderScenarios();
+      }
+    };
+
+    for(const f of shown){
+      const key=f.run_id+'::'+f.finding_id;
+      const card=make('article','scn-finding-card sev-'+(f.severity||'P2')+(f.resolution!=='open'||f.verdict==='false_positive'||f.status==='disproved'?' is-resolved':''));
+      const head=make('div','scn-finding-head'),left=make('div','scn-finding-left');
+      const cb=make('input');cb.type='checkbox';cb.checked=scenariosState.reviewSelected.has(key);
+      cb.addEventListener('change',()=>{if(cb.checked)scenariosState.reviewSelected.add(key);else scenariosState.reviewSelected.delete(key);renderScenarios();});
+      left.append(cb,make('span','scn-sev-pill sev-'+(f.severity||'P2'),f.severity||'P2'));
+      const loc=(f.file||'(без файла)')+(f.line?(':'+f.line+(f.end_line&&f.end_line!==f.line?'-'+f.end_line:'')):'');
+      const fileBtn=make('button','scn-file-btn',loc);fileBtn.type='button';fileBtn.title='Скопировать путь и строку';
+      fileBtn.addEventListener('click',async()=>{
+        try{await navigator.clipboard.writeText(loc);const orig=fileBtn.textContent;fileBtn.textContent='Скопировано: '+loc;setTimeout(()=>{fileBtn.textContent=orig;},1400);}catch{}
+      });
+      left.append(fileBtn,make('strong','',f.title||'(без заголовка)'));
+      const badges=make('div','scn-triage-btns');
+      if(f.consensus_ratio)badges.append(make('span','scn-pill-badge project','Консенсус '+f.consensus_ratio.votes+'/'+f.consensus_ratio.total));
+      if(list(f.corroborated_by).length>1)badges.append(make('span','scn-pill-badge global','Подтверждено: '+f.corroborated_by.join(', ')));
+      if(f.likely_fixed)badges.append(make('span','scn-pill-badge tpl','Вероятно исправлено'));
+      if(f.status==='disproved')badges.append(make('span','scn-pill-badge count','Опровергнуто'));
+      head.append(left,badges);
+      card.append(head);
+
+      const meta=make('div','rule-meta');
+      meta.append(make('code','',f.finding_id),make('span','',f.scenario_title||f.scenario_id),make('code','',f.run_id));
+      if(f.severity_votes&&Object.keys(f.severity_votes).length>1){
+        meta.append(make('span','','голоса: '+Object.entries(f.severity_votes).map(([sv,cnt])=>sv+'×'+cnt).join(', ')));
+      }
+      card.append(meta);
+      if(f.evidence)card.append(make('pre','scn-finding-ev',f.evidence));
+
+      const tBar=make('div','scn-triage-bar'),tBtns=make('div','scn-triage-btns');
+      const mkBtn=(lbl,pressed,fn)=>{const b=make('button','scn-triage-btn',lbl);b.type='button';b.setAttribute('aria-pressed',String(Boolean(pressed)));b.addEventListener('click',fn);return b;};
+      tBtns.append(
+        mkBtn('Баг',f.verdict==='actionable_bug',()=>applyTriage(f,{verdict:'actionable_bug'})),
+        mkBtn('Замечание',f.verdict==='valid_nit',()=>applyTriage(f,{verdict:'valid_nit'})),
+        mkBtn('Ложное (FP)',f.verdict==='false_positive',()=>applyTriage(f,{verdict:'false_positive',resolution:'wont_fix'})),
+        mkBtn(f.resolution==='fixed'?'Исправлено ✓':'Исправлено',f.resolution==='fixed',()=>applyTriage(f,{resolution:f.resolution==='fixed'?'open':'fixed'}))
+      );
+      tBar.append(tBtns);
+      if(f.verdict==='false_positive'){
+        tBar.append(toolButton(f.pattern_entry_id?'FP-паттерн сохранён ('+f.pattern_entry_id+')':'Запомнить FP-паттерн (CLI)',()=>openRememberFpDialog(f),'small'));
+      }
+      card.append(tBar);
+      inbox.append(card);
+    }
+    root.append(inbox);
+
+    // FP Patterns health section
+    const fps=list(data.fp_patterns);
+    if(fps.length){
+      const fpFold=make('details','tools-fold');fpFold.style.marginTop='14px';
+      fpFold.append(make('summary','','Паттерны ложных срабатываний в памяти ('+fps.length+')'));
+      const fpList=make('div','scn-fp-list');
+      for(const pat of fps){
+        const row=make('div','scn-fp-item'),rh=make('div','scn-finding-head');
+        rh.append(make('strong','',pat.title||pat.entry_id),make('span','scn-pill-badge '+(pat.stale?'tpl':'project'),pat.stale?'Устарел (>90д)':'Актуален'));
+        row.append(rh);
+        if(list(pat.scope_paths).length)row.append(make('div','tools-inline-note','Область: '+pat.scope_paths.join(', ')));
+        if(pat.safety_condition)row.append(make('div','','Условие безопасности: '+pat.safety_condition));
+        fpList.append(row);
+      }
+      fpFold.append(fpList);root.append(fpFold);
+    }
+  }
   function renderScenarios(){
     const root=$('scenarios-content');root.replaceChildren();
     $('scenarios-panel').setAttribute('aria-busy',String(scenariosState.loading));
@@ -3303,30 +3640,42 @@
     renderRuleMode(root,'Изменения сценариев сохраняются прямо в памяти workspace.');
     if(scenariosState.outcome)toolWarning(root,scenariosState.outcome);
 
-    // Sub-tabs bar
+    // Sub-tabs bar (4 clean L2 tabs driven by platform.domain_views: Review, Runs, Scenarios, Log)
     const subtabs=make('div','scn-subtabs');
     const runsList=list(scenariosState.data.runs);
     const runsTotal=scenariosState.data.runs_total||runsList.length;
     const waitingCount=scenariosState.data.runs_waiting!==undefined?scenariosState.data.runs_waiting:runsList.filter(r=>r.status==='waiting'&&(r.step_counts?.waiting_human||0)>0).length;
-    const tabs=[
-      ['definitions','Определения ('+list(scenariosState.data.scenarios).length+' + '+list(scenariosState.data.builtin_templates).length+')'],
+    const domainViews=list(scenariosState.data.platform?.domain_views).filter(v=>v&&v.available!==false);
+    const tabs=[];
+    for(const dv of domainViews){
+      if(dv.id==='review'){
+        const blk=scenariosState.reviewData?.kpis?.open_blockers?.total||0;
+        tabs.push(['review',(dv.title||'Ревью')+(blk?' ('+blk+')':'')]);
+      }
+    }
+    tabs.push(
       ['runs','Запуски ('+runsTotal+(waitingCount?' · '+waitingCount+' ждут':'')+')'],
+      ['definitions','Сценарии ('+list(scenariosState.data.scenarios).length+' + '+list(scenariosState.data.builtin_templates).length+')'],
       ['log','Журнал ('+list(scenariosState.data.log).length+(scenariosState.data.log_more?'+':'')+')'],
-    ];
+    );
     for(const [key,label] of tabs){
       const btn=toolButton(label,()=>{
         if(scenariosState.editing&&key!=='definitions'){
-          confirmLeaveScenarioEditor(()=>{scenariosState.subtab=key;},'перейти');
+          confirmLeaveScenarioEditor(()=>{scenariosState.subtab=key;if(key==='review'&&!scenariosState.reviewData)loadScenarioReview(scenariosState.reviewProject);},'перейти');
           return;
         }
-        scenariosState.subtab=key;renderScenarios();
+        scenariosState.subtab=key;
+        if(key==='review'&&!scenariosState.reviewData&&!scenariosState.reviewLoading)loadScenarioReview(scenariosState.reviewProject);
+        renderScenarios();
       },'scn-subtab');
       btn.setAttribute('aria-pressed',String(scenariosState.subtab===key));
       subtabs.append(btn);
     }
     root.append(subtabs);
 
-    if(scenariosState.subtab==='definitions'){
+    if(scenariosState.subtab==='review'){
+      renderScenarioReviewHub(root);
+    }else if(scenariosState.subtab==='definitions'){
       if(scenariosState.editing)renderScenarioEditor(root);
       else renderScenarioCatalog(root);
     }else if(scenariosState.subtab==='runs'){

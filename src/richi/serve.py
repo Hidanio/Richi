@@ -39,7 +39,7 @@ from richi_launcher.config import resolve_settings, ConfigError
 from richi_launcher.runtime import (LAUNCHER_ROOT, bootstrap_command, current_runtime, preflight,
                                     resolve_runtime, runtime_command, lease_fds)
 from .memory import Parser, MemoryError
-from . import agent_commands, map_access, memory, rules, scenario_format, scenario_runs, scenarios, skill_catalog
+from . import agent_commands, map_access, memory, rules, scenario_format, scenario_review, scenario_runs, scenarios, skill_catalog
 
 
 BASE = Path(__file__).resolve().parent
@@ -718,9 +718,57 @@ def _scenario_run_worker(database, run_id):
     return 0
 
 
+def _scenario_review_worker(database, project_id):
+    """Private map read of Review Hub KPIs, deduped findings inbox, and FP patterns."""
+    try:
+        with closing(memory.connect(Path(database), readonly=True, timeout=5)) as conn:
+            payload = scenario_review.review_hub_snapshot(conn, memory, project_id=project_id or None)
+    except memory.MemoryError as exc:
+        code = getattr(exc, "code", None) or "error"
+        print(json.dumps({"error": str(exc), "code": code}), file=sys.stderr)
+        return 1
+    except (OSError, sqlite3.Error) as exc:
+        print(json.dumps({"code": "busy" if memory._store_busy(exc) else "unavailable"}), file=sys.stderr)
+        return 1
+    sys.stdout.buffer.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    return 0
+
+
+def _scenario_feedback_worker(database):
+    """Scoped map write of finding feedback into metadata `scenario-feedback:<run_id>` (never `entries`)."""
+    raw = sys.stdin.buffer.read(scenario_review.MAX_FEEDBACK_BYTES + 1)
+    if len(raw) > scenario_review.MAX_FEEDBACK_BYTES:
+        print(json.dumps({"error": "Feedback body is too large", "code": "limit"}), file=sys.stderr)
+        return 1
+    try:
+        body = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeError):
+        print(json.dumps({"error": "Invalid feedback JSON", "code": "invalid_request"}), file=sys.stderr)
+        return 1
+    if not isinstance(body, dict) or not isinstance(body.get("run_id"), str) or not isinstance(body.get("items"), list):
+        print(json.dumps({"error": "Feedback requires run_id and items list", "code": "invalid_request"}), file=sys.stderr)
+        return 1
+    try:
+        with closing(memory.connect(Path(database), readonly=False, timeout=5)) as conn:
+            with memory.transaction(conn, write=True):
+                payload = scenario_review.record_feedback(
+                    conn, memory, body["run_id"], body["items"],
+                    author=rules.current_author(), allow_remember_pattern=False,
+                )
+    except memory.MemoryError as exc:
+        code = getattr(exc, "code", None) or "error"
+        print(json.dumps({"error": str(exc), "code": code}), file=sys.stderr)
+        return 1
+    except (OSError, sqlite3.Error) as exc:
+        print(json.dumps({"code": "busy" if memory._store_busy(exc) else "unavailable"}), file=sys.stderr)
+        return 1
+    sys.stdout.buffer.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    return 0
+
+
 def _run_scenarios_request(database, mode, runtime, config_file=None, workspace=None, config_required=False,
-                           *, run_id=None, stdin=None):
-    """Run a scenario list/run-detail/apply worker for the map."""
+                           *, run_id=None, project_id=None, stdin=None):
+    """Run a scenario list/run-detail/review/feedback/apply worker for the map."""
     environment = worker_environment(config_file, workspace, config_required)
     if stdin is not None:
         environment["RICHI_RULES_ACTOR"] = RULES_SOURCE
@@ -732,6 +780,14 @@ def _run_scenarios_request(database, mode, runtime, config_file=None, workspace=
         arguments = ["_scenario_run", str(database), run_id]
         action = "serve"
         maximum = SCENARIOS_LIST_OUTPUT_LIMIT
+    elif mode == "review":
+        arguments = ["_scenario_review", str(database), project_id or ""]
+        action = "serve"
+        maximum = SCENARIOS_LIST_OUTPUT_LIMIT
+    elif mode == "feedback":
+        arguments = ["_scenario_feedback", str(database)]
+        action = "serve"
+        maximum = RULES_WORKER_OUTPUT_LIMIT
     else:
         arguments = ["--compact-json", *config_arguments(config_file, config_required), "--db", str(database),
                      "scenario", "apply", "--json", "-"]
@@ -972,6 +1028,33 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 finally:
                     scenarios_read_lock.release()
                 return self.send_data(status, payload)
+            if url.path == "/api/scenario-review":
+                editing = self.edit_key()
+                if editing is None:
+                    return None
+                project_filter = None
+                if url.query:
+                    try:
+                        if len(url.query) > 256:
+                            return self.send_data(414, {"error": "Query exceeds the size limit"})
+                        params = parse_qs(url.query, keep_blank_values=True, strict_parsing=True, max_num_fields=1)
+                    except ValueError:
+                        return self.send_data(400, {"error": "Invalid query"})
+                    if set(params) != {"project"} or len(params["project"]) != 1:
+                        return self.send_data(400, {"error": "Pass at most one project filter"})
+                    project_filter = params["project"][0] or None
+                    if project_filter and (len(project_filter) > 120 or any(ord(c) < 32 or ord(c) == 127 for c in project_filter)):
+                        return self.send_data(400, {"error": "Invalid project filter"})
+                if not scenarios_read_lock.acquire(timeout=TURN_TIMEOUT):
+                    return self.send_data(503, {"error": "Scenarios are being read; try again", "code": "busy"})
+                try:
+                    status, payload = _run_scenarios_request(database, "review", runtime, config_file, workspace,
+                                                             config_required, project_id=project_filter)
+                finally:
+                    scenarios_read_lock.release()
+                if status == 200:
+                    payload["editing"] = editing
+                return self.send_data(status, payload)
             if url.path in {"/api/agents", "/api/skills"} and not url.query:
                 editing = self.edit_key() if url.path == "/api/agents" else False
                 if editing is None:
@@ -1062,9 +1145,10 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
 
         def post(self):
             path = urlsplit(self.path)
-            if path.path not in {"/api/session", "/api/rules", "/api/agents", "/api/scenarios"} or path.query:
+            if path.path not in {"/api/session", "/api/rules", "/api/agents", "/api/scenarios", "/api/scenario-feedback"} or path.query:
                 return self.send_data(405, {"error": CHANGES_ONLY})
             scenario_request = path.path == "/api/scenarios"
+            feedback_request = path.path == "/api/scenario-feedback"
             raw = self.read_change(max_bytes=SCENARIOS_BODY_LIMIT if scenario_request else RULES_BODY_LIMIT)
             if raw is None:
                 return None
@@ -1089,7 +1173,14 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
             if body is INVALID:
                 return None
             agent_request = path.path == "/api/agents"
-            if scenario_request:
+            if feedback_request:
+                try:
+                    change = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                except (TypeError, ValueError, UnicodeEncodeError):
+                    return self.send_data(400, {"error": "Invalid feedback payload", "code": "invalid_request"})
+                if len(change) > scenario_review.MAX_FEEDBACK_BYTES:
+                    return self.send_data(413, {"error": "The feedback change is too large", "code": "limit"})
+            elif scenario_request:
                 try:
                     change = scenarios_change(body)
                 except UnicodeEncodeError:
@@ -1101,9 +1192,9 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 if len(change) > rules.MAX_CHANGE:
                     # Escaping non-ASCII text can exceed what the rules command reads.
                     return self.send_data(413, {"error": "The rule change is too large", "code": "limit"})
-            lock = agents_lock if agent_request else (scenarios_lock if scenario_request else rules_lock)
+            lock = agents_lock if agent_request else (scenarios_lock if (scenario_request or feedback_request) else rules_lock)
             if not lock.acquire(timeout=TURN_TIMEOUT):
-                subject = "change of the agents" if agent_request else ("scenario change" if scenario_request else "rule change")
+                subject = "change of the agents" if agent_request else ("scenario change" if (scenario_request or feedback_request) else "rule change")
                 return self.send_data(503, {"error": "Another " + subject + " is in progress; try again", "code": "busy"})
             try:
                 # The page may have lost its editing session while waiting behind another save.
@@ -1111,6 +1202,9 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                     return None
                 if agent_request:
                     status, payload = agent_change(body)
+                elif feedback_request:
+                    status, payload = _run_scenarios_request(database, "feedback", runtime,
+                                                             config_file, workspace, config_required, stdin=change)
                 elif scenario_request:
                     status, payload = _run_scenarios_request(database, "apply", runtime,
                                                              config_file, workspace, config_required, stdin=change)
@@ -1576,6 +1670,10 @@ def main(argv=None):
             return _scenarios_list_worker(argv[1], argv[2] or None)
         if argv and argv[0] == "_scenario_run" and len(argv) == 3:
             return _scenario_run_worker(argv[1], argv[2])
+        if argv and argv[0] == "_scenario_review" and len(argv) == 3:
+            return _scenario_review_worker(argv[1], argv[2] or None)
+        if argv and argv[0] == "_scenario_feedback" and len(argv) == 2:
+            return _scenario_feedback_worker(argv[1])
         return _main(argv) or 0
     except (MemoryError, OSError, ValueError, RuntimeError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
