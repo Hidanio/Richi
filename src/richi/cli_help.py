@@ -789,6 +789,12 @@ DETAILS = {
         examples=(("Session start context", "richi scenario hook session-start --agent claude"),
                   ("Stop enforcement for Cursor", "richi scenario hook stop --agent cursor --format cursor"),
                   ("Pre-compact handoff", "richi scenario hook pre-compact"))),
+    "scenario baseline": dict(about="""
+        Pins a completed (done) scenario run as the reference baseline for future
+        `compare` steps of the same scenario and project, or clears the pinned
+        baseline with --clear (so compare falls back to the latest done run).""",
+        examples=(("Pin a run as baseline", "richi scenario baseline run-review-20261127-0001"),
+                  ("Clear pinned baseline", "richi scenario baseline run-review-20261127-0001 --clear"))),
     "skill-sources": dict(about="""
         Richi knows which AI agents work on this computer and where each finds
         skills, so that a rule can name a skill for every agent or one per agent.

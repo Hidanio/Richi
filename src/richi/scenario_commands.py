@@ -6,7 +6,7 @@ from . import agents, rules, scenario_format, scenario_hooks, scenario_runs, sce
 
 WRITE_ACTIONS = frozenset({
     "copy", "apply", "run", "next", "claim", "release", "report", "answer",
-    "skip", "retry", "pause", "resume", "cancel",
+    "skip", "retry", "pause", "resume", "cancel", "baseline",
 })
 
 
@@ -79,6 +79,8 @@ def add_commands(commands, api):
                          help="JSON object of input values; - reads from stdin")
     run_cmd.add_argument("--secret-env", dest="secret_envs", action="append", metavar="KEY=ENV_VAR",
                          help="Read a secret input from an environment variable (never stored; keeps value out of argv)")
+    run_cmd.add_argument("--task", dest="task_id", metavar="ENTRY_ID",
+                         help="Optional existing task/entry ID to link this run to in the knowledge graph")
     run_cmd.add_argument("--project", metavar="ID", help="Registered project for this run (default: --project-path project)")
 
     next_cmd = actions.add_parser("next", help="Get the next ready step of a run (and optionally claim it)")
@@ -165,6 +167,10 @@ def add_commands(commands, api):
                           default="richi", help="Output JSON schema: richi (default) or native agent hook contract")
     hook_cmd.add_argument("--max-continuations", type=int, default=scenario_hooks.DEFAULT_MAX_CONTINUATIONS,
                           metavar="N", help="Maximum automatic Stop continuations per claimed step, 1-20 (default: %(default)s)")
+
+    base_cmd = actions.add_parser("baseline", help="Pin or clear a completed run as the baseline for compare steps")
+    base_cmd.add_argument("run_id", metavar="RUN", help="Completed run ID to pin or unpin as baseline")
+    base_cmd.add_argument("--clear", action="store_true", help="Clear the pinned baseline for this run's scenario and project")
 
 
 def writes(args):
@@ -297,7 +303,11 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
         secrets_runtime = _parse_secrets(None, api, getattr(args, "secret_envs", None))
         return scenario_runs.start_run(conn, api, database, args.id, project_id=project_id,
                                        project_path=project_path, raw_inputs=args.inputs,
-                                       inputs_json=request, secrets_runtime=secrets_runtime, author=author)
+                                       inputs_json=request, secrets_runtime=secrets_runtime,
+                                       task_id=getattr(args, "task_id", None), author=author)
+    if action == "baseline":
+        return scenario_runs.set_baseline(conn, api, args.run_id, clear=args.clear,
+                                          checked_project=checked_project, author=author)
     if action == "next":
         secrets_runtime = _parse_secrets(args.secrets, api, getattr(args, "secret_envs", None))
         return scenario_runs.next_step(conn, api, database, args.run_id, claim=args.claim, step_key=args.step_key,

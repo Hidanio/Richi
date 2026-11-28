@@ -132,7 +132,19 @@ STEP_KINDS = {
     },
     "memory.brief": {
         "executor": "richi",
-        "params": frozenset({"question", "limit"}),
+        "params": frozenset({"question", "limit", "include_past_runs"}),
+        "results": frozenset({"summary", "status", "data"}),
+        "matrix": False, "outputs": False, "checks": False, "retry": False,
+    },
+    "memory.record": {
+        "executor": "richi",
+        "params": frozenset({"kind", "title", "summary", "entry_id", "tags", "knowledge_state", "link_task"}),
+        "results": frozenset({"summary", "status", "data"}),
+        "matrix": False, "outputs": False, "checks": False, "retry": False,
+    },
+    "compare": {
+        "executor": "richi",
+        "params": frozenset({"step", "metrics", "baseline_run"}),
         "results": frozenset({"summary", "status", "data"}),
         "matrix": False, "outputs": False, "checks": False, "retry": False,
     },
@@ -482,6 +494,32 @@ def _params(step, here, found):
         text("question", "stored_param", limit=2000, empty=False)
         if "limit" in params:
             _integer(params["limit"], where + ".limit", 1, 50)
+        if "include_past_runs" in params:
+            _bool(params["include_past_runs"], where + ".include_past_runs")
+    elif kind == "memory.record":
+        entry_kind = params.get("kind")
+        if entry_kind not in ENTRY_KINDS:
+            raise FormatError("kind must be one of " + ", ".join(ENTRY_KINDS), where + ".kind")
+        text("title", "stored_param", line=True, limit=MAX_TITLE, empty=False)
+        text("summary", "stored_param", line=False, limit=4000, empty=False)
+        text("entry_id", "stored_param", required=False, line=True, limit=100, empty=False)
+        if "tags" in params:
+            _list(params["tags"], where + ".tags", 10, 0)
+            for index, tag in enumerate(params["tags"]):
+                _line(tag, "%s.tags[%d]" % (where, index), 48)
+        if "knowledge_state" in params and params["knowledge_state"] not in ("confirmed", "hypothesis"):
+            raise FormatError("knowledge_state must be confirmed or hypothesis", where + ".knowledge_state")
+        if "link_task" in params:
+            _bool(params["link_task"], where + ".link_task")
+    elif kind == "compare":
+        target_step = params.get("step")
+        if not isinstance(target_step, str) or not STEP_ID.fullmatch(target_step):
+            raise FormatError("step must name a valid ancestor step ID", where + ".step")
+        if "metrics" in params:
+            _list(params["metrics"], where + ".metrics", 20, 1)
+            for index, metric_path in enumerate(params["metrics"]):
+                _data_path(metric_path, "%s.metrics[%d]" % (where, index))
+        text("baseline_run", "stored_param", required=False, line=True, limit=100, empty=False)
     elif kind == "condition":
         if "expr" not in params:
             raise FormatError("missing required field expr", where)
@@ -809,6 +847,16 @@ def _references(definition, found, ancestry):
     inputs = definition.get("inputs", {})
     secret_inputs = {name for name, spec in inputs.items() if spec["type"] == "secret"}
     steps = {step["id"]: step for step in definition["steps"]}
+    for step in definition["steps"]:
+        if step["type"] == "compare":
+            target_id = (step.get("params") or {}).get("step")
+            where = f"steps.{step['id']}.params.step"
+            if target_id not in steps:
+                raise FormatError("compare names an unknown step: " + str(target_id), where)
+            if target_id == step["id"]:
+                raise FormatError("compare cannot compare a step with itself", where)
+            if target_id not in ancestry[step["id"]]:
+                raise FormatError("compare reads step %s, which this step does not depend on; add it to needs" % target_id, where)
     for step_id, items in found:
         step = steps.get(step_id)
         for where, field_kind, parsed in items:

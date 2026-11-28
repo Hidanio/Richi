@@ -318,8 +318,159 @@ def _release_all_claims(conn, run_id):
     )
 
 
+BASELINE_PREFIX = "scenario-baseline:"
+
+
+def _baseline_key(scenario_id, project_id):
+    return BASELINE_PREFIX + scenario_id + ":" + (project_id if project_id else "_global")
+
+
+def get_baseline_run_id(conn, scenario_id, project_id):
+    row = conn.execute("SELECT value FROM metadata WHERE key = ?", (_baseline_key(scenario_id, project_id),)).fetchone()
+    if row is None or not row[0]:
+        return None
+    rid = str(row[0]).strip()
+    exists = conn.execute("SELECT 1 FROM scenario_runs WHERE id = ?", (rid,)).fetchone()
+    return rid if exists else None
+
+
+def _all_baseline_ids(conn):
+    rows = conn.execute("SELECT value FROM metadata WHERE key >= ? AND key < ?",
+                        (BASELINE_PREFIX, BASELINE_PREFIX[:-1] + ";")).fetchall()
+    return {str(r[0]).strip() for r in rows if r and r[0]}
+
+
+def set_baseline(conn, api, run_id, *, clear=False, checked_project=None, author=None, now_override=None):
+    """Pin or clear a completed run as the baseline for compare steps of its scenario/project."""
+    require_v4(conn, api)
+    author = author or rules.current_author()
+    at_iso = _format_iso(_now_dt(api, now_override))
+    run_row = _load_run(conn, run_id, api)
+    _check_run_project(run_row, checked_project, api)
+    key = _baseline_key(run_row["scenario_id"], run_row["project_id"])
+    if clear:
+        conn.execute("DELETE FROM metadata WHERE key = ?", (key,))
+        _record_event(conn, at_iso, run_row["scenario_id"], run_id, None, "baseline_cleared",
+                      author.by, author.agent, {})
+        return {"status": "cleared", "run_id": run_id, "scenario_id": run_row["scenario_id"],
+                "project_id": run_row["project_id"], "is_baseline": False}
+    if run_row["status"] != "done":
+        raise _failure(api, "Only completed (done) runs can be marked as baseline (run is %s)" % run_row["status"],
+                       "invalid_state")
+    conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)", (key, run_id))
+    _record_event(conn, at_iso, run_row["scenario_id"], run_id, None, "baseline_set",
+                  author.by, author.agent, {})
+    return {"status": "set", "run_id": run_id, "scenario_id": run_row["scenario_id"],
+            "project_id": run_row["project_id"], "is_baseline": True}
+
+
+def _past_runs_summary(conn, scenario_id, project_id, exclude_run_id, limit=3):
+    """Load recent completed/failed runs of the same scenario+project for memory.brief process memory."""
+    if project_id is None:
+        rows = conn.execute(
+            "SELECT id, status, finished.finished_at, created_at, updated_at, inputs_json "
+            "FROM scenario_runs LEFT JOIN ("
+            "  SELECT run_id, MAX(finished_at) AS finished_at FROM scenario_steps GROUP BY run_id"
+            ") AS finished ON finished.run_id = scenario_runs.id "
+            "WHERE scenario_id = ? AND project_id IS NULL AND id <> ? AND status IN ('done', 'failed') "
+            "ORDER BY created_at DESC, id DESC LIMIT ?",
+            (scenario_id, exclude_run_id, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT id, status, finished.finished_at, created_at, updated_at, inputs_json "
+            "FROM scenario_runs LEFT JOIN ("
+            "  SELECT run_id, MAX(finished_at) AS finished_at FROM scenario_steps GROUP BY run_id"
+            ") AS finished ON finished.run_id = scenario_runs.id "
+            "WHERE scenario_id = ? AND project_id = ? AND id <> ? AND status IN ('done', 'failed') "
+            "ORDER BY created_at DESC, id DESC LIMIT ?",
+            (scenario_id, project_id, exclude_run_id, limit),
+        ).fetchall()
+    out = []
+    for row in rows:
+        rid = row["id"]
+        steps = conn.execute(
+            "SELECT step_key, status, result_json, reason FROM scenario_steps "
+            "WHERE run_id = ? AND status IN ('done', 'failed') ORDER BY position, step_key",
+            (rid,),
+        ).fetchall()
+        highlights = []
+        for s in steps:
+            if s["result_json"]:
+                try:
+                    sm = (json.loads(s["result_json"]).get("summary") or "").strip()
+                except (ValueError, TypeError):
+                    sm = ""
+                if sm and not sm.startswith("[untrusted memory evidence:"):
+                    highlights.append(f"{s['step_key']}={sm[:120]}")
+            elif s["reason"]:
+                highlights.append(f"{s['step_key']}=failed({s['reason'][:80]})")
+        out.append({
+            "run_id": rid,
+            "status": row["status"],
+            "created_at": row["created_at"],
+            "highlights": highlights[:4],
+        })
+    return out
+
+
+def _safe_link_entries(conn, api, edge_id, from_entry_id, to_entry_id, kind, description, sources, knowledge_state="confirmed"):
+    """Link two entry nodes via graph.put, ignoring if endpoints are absent."""
+    from . import graph
+    if not from_entry_id or not to_entry_id or from_entry_id == to_entry_id:
+        return
+    if api.entry_record(conn, from_entry_id) is None or api.entry_record(conn, to_entry_id) is None:
+        return
+    safe_id = re.sub(r"[^A-Za-z0-9_.:-]", "-", edge_id)[:95]
+    graph.put(conn, {
+        "id": safe_id,
+        "from_ref": "entry:" + from_entry_id,
+        "to_ref": "entry:" + to_entry_id,
+        "kind": kind,
+        "description": description[:500],
+        "sources": sources,
+        "knowledge_state": knowledge_state,
+    }, "edge", api)
+
+
+def _step_data_for_compare(conn, run_id, step_id):
+    """Extract comparable data dict for step_id from a historical run (handles matrix and scalar steps)."""
+    rows = conn.execute(
+        "SELECT status, matrix_index, result_json FROM scenario_steps WHERE run_id = ? AND step_id = ? ORDER BY position, step_key",
+        (run_id, step_id),
+    ).fetchall()
+    if not rows:
+        return {}
+    if len(rows) == 1 and rows[0]["matrix_index"] is None:
+        if rows[0]["result_json"]:
+            try:
+                return json.loads(rows[0]["result_json"]).get("data") or {}
+            except (ValueError, TypeError):
+                return {}
+        return {}
+    buckets = {}
+    for row in rows:
+        if row["status"] == "done" and row["result_json"]:
+            try:
+                data = json.loads(row["result_json"]).get("data") or {}
+            except (ValueError, TypeError):
+                continue
+            for k, v in data.items():
+                buckets.setdefault(k, []).append(v)
+    merged = {}
+    for k, vals in buckets.items():
+        if all(isinstance(v, list) for v in vals):
+            flat = []
+            for v in vals:
+                flat.extend(v)
+            merged[k] = flat
+        else:
+            merged[k] = vals
+    return merged
+
+
 def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
-    """Execute a Richi-owned step (`condition`, `memory.recall`, `memory.brief`) inside the current transaction."""
+    """Execute a Richi-owned step (`condition`, `memory.recall`, `memory.brief`, `memory.record`, `compare`)."""
     kind = step_spec["type"]
     params = step_spec.get("params") or {}
     if kind == "condition":
@@ -363,8 +514,145 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
         cards = res.get("results") or []
         refs = [item.get("ref") for item in cards if item.get("ref")]
         lines = ["%s: %s" % (item.get("ref"), item.get("title", "")) for item in cards[:8]]
+        past_runs = []
+        if params.get("include_past_runs", True):
+            past_runs = _past_runs_summary(conn, run_row["scenario_id"], run_row["project_id"], run_row["id"], limit=3)
+            for pr in past_runs:
+                hl = ", ".join(pr["highlights"][:2])
+                lines.append("past-run %s (%s)%s" % (pr["run_id"], pr["status"], (": " + hl) if hl else ""))
         summary = ("[untrusted memory evidence: %s]" % "; ".join(lines)[:1460]) if lines else "No prior records found for this context."
-        return {"status": "done", "summary": summary, "data": {"refs": refs, "count": len(refs)}}
+        return {"status": "done", "summary": summary, "data": {"refs": refs, "count": len(refs), "past_runs": past_runs}}
+    if kind == "memory.record":
+        entry_kind = params["kind"]
+        title = _render_field(params["title"], ctx, line=True, limit=scenario_format.MAX_TITLE, field="params.title", empty=False)
+        body = _render_field(params["summary"], ctx, line=False, limit=4000, field="params.summary", empty=False)
+        if params.get("entry_id"):
+            entry_id = _render_field(params["entry_id"], ctx, line=True, limit=100, field="params.entry_id", empty=False)
+        else:
+            raw_id = "%s:scenario-%s-%s" % (entry_kind, run_row["id"], step_spec["id"])
+            entry_id = re.sub(r"[^A-Za-z0-9_.:-]", "-", raw_id)[:100]
+        ks = params.get("knowledge_state") or "confirmed"
+        extra_tags = [t for t in (params.get("tags") or []) if isinstance(t, str) and t.strip()]
+        base_sources = [
+            {"reference": "scenario:%s@v%d" % (run_row["scenario_id"], run_row["scenario_version"]),
+             "type": "scenario", "label": run_row["scenario_id"]},
+            {"reference": "scenario-run:" + run_row["id"], "type": "scenario-run", "label": run_row["id"]},
+        ]
+        existing = api.entry_record(conn, entry_id)
+        if existing is not None:
+            current = api.entry_get(conn, entry_id, history=False)
+            updated = {k: v for k, v in current.items() if k not in ("created_at", "updated_at", "history")}
+            updated["summary"] = (current.get("summary") or "") + "\n\n--- Run %s ---\n%s" % (run_row["id"], body)
+            seen_refs = {s.get("reference") for s in (updated.get("sources") or []) if isinstance(s, dict)}
+            updated["sources"] = list(updated.get("sources") or []) + [s for s in base_sources if s["reference"] not in seen_refs]
+            merged_tags = list(dict.fromkeys(list(updated.get("tags") or []) + ["scenario:" + run_row["scenario_id"]] + extra_tags))
+            updated["tags"] = merged_tags[:20]
+            updated["expected_updated_at"] = current["updated_at"]
+            put_res = api.entry_put(conn, updated)
+        else:
+            record = {
+                "id": entry_id,
+                "kind": entry_kind,
+                "title": title,
+                "summary": body,
+                "project_ids": [run_row["project_id"]] if run_row["project_id"] else [],
+                "knowledge_state": ks,
+                "sources": base_sources,
+                "tags": list(dict.fromkeys(["scenario-record", "scenario:" + run_row["scenario_id"]] + extra_tags))[:20],
+                "expected_updated_at": None,
+            }
+            put_res = api.entry_put(conn, record)
+        if params.get("link_task", True) and run_row["task_entry_id"]:
+            _safe_link_entries(
+                conn, api,
+                f"edge:scn-{run_row['id']}-{step_spec['id']}",
+                run_row["task_entry_id"], entry_id,
+                "produces",
+                f"Produced by scenario run {run_row['id']} step {step_spec['id']}",
+                base_sources,
+                knowledge_state=ks,
+            )
+        return {
+            "status": "done",
+            "summary": "Recorded %s (%s): %s" % (entry_id, put_res["status"], title[:160]),
+            "data": {"entry_id": entry_id, "ref": "entry:" + entry_id, "kind": entry_kind, "status": put_res["status"]},
+        }
+    if kind == "compare":
+        target_step = params["step"]
+        current_data = (ctx["steps"].get(target_step) or {}).get("data") or {}
+        base_run_id = None
+        if params.get("baseline_run"):
+            cand = _render_field(params["baseline_run"], ctx, line=True, limit=100, field="params.baseline_run", empty=False)
+            if cand != run_row["id"] and conn.execute("SELECT 1 FROM scenario_runs WHERE id = ?", (cand,)).fetchone():
+                base_run_id = cand
+        if base_run_id is None:
+            pinned = get_baseline_run_id(conn, run_row["scenario_id"], run_row["project_id"])
+            if pinned and pinned != run_row["id"]:
+                base_run_id = pinned
+        if base_run_id is None:
+            if run_row["project_id"] is None:
+                prev = conn.execute(
+                    "SELECT id FROM scenario_runs WHERE scenario_id = ? AND project_id IS NULL AND id <> ? AND status = 'done' "
+                    "ORDER BY created_at DESC, id DESC LIMIT 1",
+                    (run_row["scenario_id"], run_row["id"]),
+                ).fetchone()
+            else:
+                prev = conn.execute(
+                    "SELECT id FROM scenario_runs WHERE scenario_id = ? AND project_id = ? AND id <> ? AND status = 'done' "
+                    "ORDER BY created_at DESC, id DESC LIMIT 1",
+                    (run_row["scenario_id"], run_row["project_id"], run_row["id"]),
+                ).fetchone()
+            if prev:
+                base_run_id = prev[0]
+        if base_run_id is None:
+            return {
+                "status": "done",
+                "summary": "No prior baseline run found; current run establishes initial reference.",
+                "data": {"has_baseline": False, "baseline_run_id": None, "diffs": {}, "changed_count": 0},
+            }
+        base_data = _step_data_for_compare(conn, base_run_id, target_step)
+        metric_paths = list(params["metrics"]) if params.get("metrics") else sorted(set(base_data) | set(current_data))
+        diffs = {}
+        summary_parts = []
+        changed_count = 0
+        for path in metric_paths:
+            b_ok, b_val = _lookup_dotted(base_data, path)
+            c_ok, c_val = _lookup_dotted(current_data, path)
+            if not b_ok and not c_ok:
+                continue
+            if (isinstance(b_val, (int, float)) and not isinstance(b_val, bool)
+                    and isinstance(c_val, (int, float)) and not isinstance(c_val, bool)):
+                delta = round(c_val - b_val, 6)
+                pct = round((delta / b_val) * 100.0, 2) if b_val != 0 else None
+                changed = delta != 0
+                if changed:
+                    changed_count += 1
+                diffs[path] = {"baseline": b_val, "current": c_val, "delta": delta, "pct": pct, "changed": changed}
+                sign = "+" if delta > 0 else ""
+                pct_str = f" ({sign}{pct}%)" if pct is not None else ""
+                summary_parts.append(f"{path}: {b_val} -> {c_val} [{sign}{delta}{pct_str}]")
+            elif isinstance(b_val, list) or isinstance(c_val, list):
+                b_n = len(b_val) if isinstance(b_val, list) else 0
+                c_n = len(c_val) if isinstance(c_val, list) else 0
+                delta = c_n - b_n
+                changed = delta != 0
+                if changed:
+                    changed_count += 1
+                diffs[path] = {"baseline_count": b_n, "current_count": c_n, "delta": delta, "changed": changed}
+                sign = "+" if delta > 0 else ""
+                summary_parts.append(f"{path}: {b_n} -> {c_n} items [{sign}{delta}]")
+            else:
+                changed = b_val != c_val
+                if changed:
+                    changed_count += 1
+                diffs[path] = {"baseline": b_val, "current": c_val, "changed": changed}
+                summary_parts.append(f"{path}: {'changed' if changed else 'unchanged'}")
+        summary = ("Compared with %s: %s" % (base_run_id, "; ".join(summary_parts[:6]))) if summary_parts else ("Compared with %s: no comparable metrics." % base_run_id)
+        return {
+            "status": "done",
+            "summary": summary[:1000],
+            "data": {"has_baseline": True, "baseline_run_id": base_run_id, "diffs": diffs, "changed_count": changed_count},
+        }
     raise ValueError("Unsupported Richi step type: " + kind)
 
 
@@ -644,11 +932,14 @@ def _next_run_id(conn, scenario_id, at_dt):
 
 
 def start_run(conn, api, database, scenario_id, *, project_id=None, project_path=None, scope=None,
-              raw_inputs=None, inputs_json=None, secrets_runtime=None, author=None, now_override=None):
+              raw_inputs=None, inputs_json=None, secrets_runtime=None, task_id=None, author=None, now_override=None):
     """Start a new run: validate inputs, freeze snapshot, create task entry, advance ready steps."""
     require_v4(conn, api)
     if project_id is not None:
         api.require_project(conn, project_id)
+    if task_id is not None:
+        if api.entry_record(conn, task_id) is None:
+            raise api.NotFoundError("Unknown task entry for --task: " + str(task_id))
     try:
         record = scenarios.resolve(conn, scenario_id, project_id, scope=scope)
     except scenario_format.UnsupportedVersion as exc:
@@ -728,6 +1019,16 @@ def start_run(conn, api, database, scenario_id, *, project_id=None, project_path
     run_row, step_rows, _ = _advance(conn, api, database, run_id, project_path=project_path,
                                      agent=author.agent, now_override=at_dt)
     _sync_task_entry(conn, api, run_row, step_rows, definition, title=run_title, create=True)
+    if task_id is not None:
+        _safe_link_entries(
+            conn, api,
+            f"edge:scn-task-{run_id}",
+            task_entry_id, task_id,
+            "related_to",
+            f"Scenario run {run_id} executed for {task_id}",
+            [{"reference": "scenario-run:" + run_id, "type": "scenario-run", "label": run_id}],
+            knowledge_state="hypothesis",
+        )
     return _format_status(run_row, step_rows, definition, view="scenario-run")
 
 
@@ -1792,7 +2093,7 @@ def set_run_state(conn, api, database, run_id, action, *, checked_project=None, 
     return _format_status(run_row, step_rows, definition, view="scenario-run")
 
 
-def _format_status(run_row, step_rows, definition, *, view="scenario-status"):
+def _format_status(run_row, step_rows, definition, *, view="scenario-status", is_baseline=False):
     steps = []
     for row in step_rows:
         item = {
@@ -1803,6 +2104,8 @@ def _format_status(run_row, step_rows, definition, *, view="scenario-status"):
             "executor": {"role": row["executor_role"], "agent": row["executor_agent"]},
             "attempts": row["attempts"],
             "rejections": row["rejections"],
+            "started_at": row["started_at"],
+            "finished_at": row["finished_at"],
         }
         if row["matrix_json"]:
             item["matrix"] = json.loads(row["matrix_json"])
@@ -1825,6 +2128,7 @@ def _format_status(run_row, step_rows, definition, *, view="scenario-status"):
         "scope": run_row["scope"],
         "project_id": run_row["project_id"],
         "status": run_row["status"],
+        "is_baseline": bool(is_baseline),
         "task_entry_id": run_row["task_entry_id"],
         "inputs": json.loads(run_row["inputs_json"]),
         "created_by_chat": run_row["created_by_chat"],
@@ -1842,7 +2146,8 @@ def run_status(conn, api, run_id, *, checked_project=None):
     _check_run_project(run_row, checked_project, api)
     step_rows = _load_steps(conn, run_id)
     definition = json.loads(run_row["definition_json"])
-    return _format_status(run_row, step_rows, definition)
+    is_base = get_baseline_run_id(conn, run_row["scenario_id"], run_row["project_id"]) == run_id
+    return _format_status(run_row, step_rows, definition, is_baseline=is_base)
 
 
 def list_runs(conn, api, *, active=False, chat=None, project_id=None, scenario_id=None, limit=20):
@@ -1868,7 +2173,8 @@ def list_runs(conn, api, *, active=False, chat=None, project_id=None, scenario_i
         + where + " ORDER BY updated_at DESC, id DESC LIMIT ?",
         params + [limit],
     ).fetchall()
+    baselines = _all_baseline_ids(conn)
     return {
         "view": "scenario-runs",
-        "runs": [dict(row) for row in rows],
+        "runs": [dict(row, is_baseline=row["id"] in baselines) for row in rows],
     }

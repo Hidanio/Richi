@@ -156,6 +156,7 @@ richi --compact-json scenario log --run run-review-20261127-0001 --entries 50
 richi --compact-json scenario hook session-start --agent claude
 richi --compact-json scenario hook stop --agent claude --format claude
 richi --compact-json scenario hook pre-compact
+richi --compact-json scenario baseline run-review-20261127-0001
 ```
 
 Skipping a step requires `--reason` and still satisfies downstream `needs`

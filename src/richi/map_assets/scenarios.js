@@ -11,7 +11,9 @@
     {id:'gate',label:'Вопрос человеку',role:'human',desc:'Останавливает запуск до ответа в чате'},
     {id:'checklist',label:'Чек-лист',role:'human',desc:'Контрольный список для подтверждения человеком'},
     {id:'memory.recall',label:'Поиск в памяти',role:'richi',desc:'Автоматический поиск в Richi'},
-    {id:'memory.brief',label:'Сводка из памяти',role:'richi',desc:'Автоматическая сводка Richi по вопросу'},
+    {id:'memory.brief',label:'Сводка из памяти',role:'richi',desc:'Автоматическая сводка Richi по вопросу + прошлые запуски'},
+    {id:'memory.record',label:'Записать в память',role:'richi',desc:'Сохраняет подтверждённый вывод в базу знаний Richi'},
+    {id:'compare',label:'Сравнить с baseline',role:'richi',desc:'Сравнивает метрики шага с эталонным прошлым запуском'},
     {id:'condition',label:'Условие',role:'richi',desc:'Вычисление выражения для ветвления'},
   ];
   const SCN_STEP_META=Object.fromEntries(SCN_STEP_TYPES.map(item=>[item.id,item]));
@@ -29,7 +31,9 @@
     if(type==='gate')return {question:'',options:['Да','Нет'],allow_comment:true};
     if(type==='checklist')return {items:[{text:'Проверить результат',required:true}]};
     if(type==='memory.recall')return {query:'',limit:10};
-    if(type==='memory.brief')return {question:'',limit:10};
+    if(type==='memory.brief')return {question:'',limit:10,include_past_runs:true};
+    if(type==='memory.record')return {kind:'decision',title:'',summary:'',knowledge_state:'confirmed',link_task:true};
+    if(type==='compare')return {step:'',metrics:[]};
     if(type==='condition')return {expr:''};
     return {text:''};
   }
@@ -200,6 +204,23 @@
         params={question:String(p.question||'')};
         const lim=scnInt(p.limit);
         if(lim!==null)params.limit=lim;
+        if(p.include_past_runs===false)params.include_past_runs=false;
+      }else if(type==='memory.record'){
+        params={
+          kind:SCN_ENTRY_KINDS.includes(p.kind)?p.kind:'decision',
+          title:String(p.title||''),
+          summary:String(p.summary||''),
+        };
+        if(String(p.entry_id||'').trim())params.entry_id=String(p.entry_id).trim();
+        if(p.knowledge_state==='hypothesis'||p.knowledge_state==='confirmed')params.knowledge_state=p.knowledge_state;
+        if(p.link_task===false)params.link_task=false;
+        const tags=Array.isArray(p.tags)?p.tags.map(t=>String(t||'').trim()).filter(Boolean).slice(0,10):[];
+        if(tags.length)params.tags=tags;
+      }else if(type==='compare'){
+        params={step:String(p.step||'').trim()};
+        const metrics=Array.isArray(p.metrics)?p.metrics.map(m=>String(m||'').trim()).filter(Boolean).slice(0,20):[];
+        if(metrics.length)params.metrics=metrics;
+        if(String(p.baseline_run||'').trim())params.baseline_run=String(p.baseline_run).trim();
       }else if(type==='condition'){
         params={expr:String(p.expr||'')};
       }
@@ -281,6 +302,14 @@
       if(step.type==='memory.brief'){
         if(!String(p.question||'').trim())return 'Шаг «'+step.id+'»: укажите вопрос для сводки.';
         if(p.limit!==undefined&&(p.limit<1||p.limit>50))return 'Шаг «'+step.id+'»: максимум записей должен быть от 1 до 50.';
+      }
+      if(step.type==='memory.record'){
+        if(!SCN_ENTRY_KINDS.includes(p.kind))return 'Шаг «'+step.id+'»: выберите допустимый тип записи.';
+        if(!String(p.title||'').trim())return 'Шаг «'+step.id+'»: укажите заголовок записи в память.';
+        if(!String(p.summary||'').trim())return 'Шаг «'+step.id+'»: укажите текст записи в память.';
+      }
+      if(step.type==='compare'){
+        if(!String(p.step||'').trim())return 'Шаг «'+step.id+'»: выберите предыдущий шаг для сравнения с baseline.';
       }
       if(step.type==='condition'&&!String(p.expr||'').trim())return 'Шаг «'+step.id+'»: укажите условие.';
       if(step.retry&&step.retry.max!==undefined&&(step.retry.max<0||step.retry.max>5))return 'Шаг «'+step.id+'»: число повторов должно быть от 0 до 5.';
@@ -432,6 +461,15 @@
         if(!String(p.question||'').trim())push(step.id,'err','Укажите вопрос для сводки из памяти.');
         else checkTemplates(step,p.question,{forbidSecret:true});
         if(p.limit!==undefined&&(p.limit<1||p.limit>50))push(step.id,'err','Максимум записей должен быть от 1 до 50.');
+      }else if(step.type==='memory.record'){
+        if(!String(p.title||'').trim())push(step.id,'err','Укажите заголовок записи в память.');
+        else checkTemplates(step,p.title,{forbidSecret:true});
+        if(!String(p.summary||'').trim())push(step.id,'err','Укажите текст записи в память.');
+        else checkTemplates(step,p.summary,{forbidSecret:true});
+      }else if(step.type==='compare'){
+        const target=String(p.step||'').trim();
+        if(!target)push(step.id,'err','Выберите шаг-предок для сравнения с baseline.');
+        else if(!ancestry[step.id]?.has(target))push(step.id,'err','Шаг «'+target+'» должен быть предком в needs для compare.');
       }else if(step.type==='condition'){
         if(!String(p.expr||'').trim())push(step.id,'err','Укажите условие.');
       }
@@ -501,6 +539,8 @@
     step_done:'Авто-шаг выполнен',step_failed:'Шаг завершился с ошибкой',step_skipped:'Шаг пропущен',step_blocked:'Шаг заблокирован',
     waiting_human:'Ожидание ответа человека',answered:'Ответ на вопрос',matrix_expanded:'Матрица развёрнута',
     retried:'Повтор шага',lease_expired:'Истёк lease',
+    stop_enforced:'Хук Stop: продолжение шага',stop_limit_reached:'Хук Stop: достигнут лимит',
+    baseline_set:'Назначен эталон (baseline)',baseline_cleared:'Снят эталон (baseline)',
   };
   function scenariosNote(){
     if(scenariosState.loading&&!scenariosState.data)return 'Загружаем сценарии…';
@@ -1437,11 +1477,23 @@
     },
     'memory.brief':{
       who:'Выполняет Richi автоматически (до агента)',
-      what:'Движок Richi сам собирает компактную сводку из вашей базы знаний по вопросу, чтобы агент начал работу уже с контекстом проекта.',
+      what:'Движок Richi сам собирает компактную сводку из вашей базы знаний по вопросу и подтягивает итоги последних запусков этого сценария.',
       examples:[
         ['Правила проекта','Какие архитектурные решения, ограничения и договорённости действуют в этом проекте?'],
         ['Риски изменений','Какие прошлые баги, зависимости и риски связаны с этой областью кода?'],
       ],
+    },
+    'memory.record':{
+      who:'Выполняет Richi автоматически (память процесса)',
+      what:'Сохраняет подтверждённый итог, решение или находку в долгосрочную память Richi со ссылкой на этот запуск, чтобы следующие запуски стали умнее.',
+      examples:[
+        ['Итог ревью','Зафиксировать принятые решения и найденные риски'],
+      ],
+    },
+    compare:{
+      who:'Выполняет Richi автоматически (сравнение с эталоном)',
+      what:'Сравнивает числовые метрики и списки выбранного шага с закреплённым baseline или последним успешным запуском этого же сценария.',
+      examples:[],
     },
     condition:{
       who:'Выполняет Richi автоматически (развилка)',
@@ -2156,6 +2208,56 @@
       const lim=make('input');lim.type='text';lim.value=p.limit!==undefined?String(p.limit):'10';
       bindBoundedInt(lim,limErr,'Максимум записей',1,50,v=>{p.limit=v;},()=>{delete p.limit;});
       const limF=ruleField('Максимум записей (1–50)',lim);limF.append(limErr);box.append(limF);
+      const pastLbl=make('label','check-label'),pastCb=make('input');pastCb.type='checkbox';pastCb.checked=p.include_past_runs!==false;
+      pastCb.addEventListener('change',()=>{pushScenarioUndo(ed);p.include_past_runs=pastCb.checked;markScenarioDirty(ed);});
+      pastLbl.append(pastCb,document.createTextNode('Включать итоги последних 3 запусков этого сценария'));
+      box.append(pastLbl);
+    }else if(step.type==='memory.record'){
+      const kindSel=make('select');
+      for(const k of SCN_ENTRY_KINDS)kindSel.add(new Option(kindLabel(k,true)+' ('+k+')',k));
+      kindSel.value=SCN_ENTRY_KINDS.includes(p.kind)?p.kind:'decision';
+      kindSel.addEventListener('change',()=>{pushScenarioUndo(ed);p.kind=kindSel.value;markScenarioDirty(ed);});
+      const ksSel=make('select');
+      ksSel.add(new Option('Подтверждено (confirmed)','confirmed'));
+      ksSel.add(new Option('Гипотеза (hypothesis)','hypothesis'));
+      ksSel.value=p.knowledge_state==='hypothesis'?'hypothesis':'confirmed';
+      ksSel.addEventListener('change',()=>{pushScenarioUndo(ed);p.knowledge_state=ksSel.value;markScenarioDirty(ed);});
+      const topRow=make('div','rule-field-row');
+      topRow.append(ruleField('Вид записи',kindSel),ruleField('Статус знания',ksSel));
+      box.append(topRow);
+      const titleRich=createRichPromptEditor(p.title||'',{singleLine:true,forbidSecret:true,placeholder:'Заголовок записи, например: Итоги ревью {{run.id}}'},val=>{p.title=val;});
+      box.append(ruleField('Заголовок записи в память',titleRich.el));
+      const sumRich=createRichPromptEditor(p.summary||'',{forbidSecret:true,placeholder:'Что сохранить в память? Введите @ чтобы вставить итоги предыдущих шагов…'},val=>{p.summary=val;});
+      activePrompt=sumRich;
+      box.append(ruleField('Текст записи (что запомнить)',sumRich.el));
+      const eidInp=make('input');eidInp.type='text';eidInp.value=p.entry_id||'';eidInp.placeholder='Автоматически (или существующий ID, чтобы дописать в задачу)';
+      bindTextUndo(eidInp);
+      eidInp.addEventListener('input',()=>{const v=eidInp.value.trim();if(v)p.entry_id=v;else delete p.entry_id;markScenarioDirty(ed);});
+      box.append(ruleField('ID записи (необязательно)',eidInp));
+      const tagsInp=make('input');tagsInp.type='text';tagsInp.value=Array.isArray(p.tags)?p.tags.join(', '):'';tagsInp.placeholder='perf, review, architecture';
+      bindTextUndo(tagsInp);
+      tagsInp.addEventListener('input',()=>{const arr=tagsInp.value.split(',').map(s=>s.trim()).filter(Boolean).slice(0,10);if(arr.length)p.tags=arr;else delete p.tags;markScenarioDirty(ed);});
+      box.append(ruleField('Теги через запятую (необязательно)',tagsInp));
+    }else if(step.type==='compare'){
+      const ancIds=[...ancestors];
+      const targetSel=make('select');
+      targetSel.add(new Option('— выберите шаг-предок —',''));
+      for(const aid of ancIds){
+        const aStep=stepById.get(aid);
+        if(aStep)targetSel.add(new Option('#'+stepNumById.get(aid)+' '+prettyStepLabel(aStep)+' ('+aid+')',aid));
+      }
+      if(p.step&&!ancIds.includes(p.step))targetSel.add(new Option(p.step+' (не подключён в needs!)',p.step));
+      targetSel.value=p.step||'';
+      targetSel.addEventListener('change',()=>{pushScenarioUndo(ed);p.step=targetSel.value;markScenarioDirty(ed);renderScenarios();});
+      box.append(ruleField('Какой шаг сравнивать с прошлым запуском',targetSel,'Выберите шаг-предок, который возвращает числовые метрики или списки в data.'));
+      const metricsInp=make('input');metricsInp.type='text';metricsInp.value=Array.isArray(p.metrics)?p.metrics.join(', '):'';metricsInp.placeholder='Например: p95_ms, error_rate, findings (пусто = все поля data)';
+      bindTextUndo(metricsInp);
+      metricsInp.addEventListener('input',()=>{const arr=metricsInp.value.split(',').map(s=>s.trim()).filter(Boolean).slice(0,20);if(arr.length)p.metrics=arr;else delete p.metrics;markScenarioDirty(ed);});
+      box.append(ruleField('Ключи метрик в data (через запятую)',metricsInp));
+      const baseInp=make('input');baseInp.type='text';baseInp.value=p.baseline_run||'';baseInp.placeholder='По умолчанию — закреплённый baseline или последний успешный запуск';
+      bindTextUndo(baseInp);
+      baseInp.addEventListener('input',()=>{const v=baseInp.value.trim();if(v)p.baseline_run=v;else delete p.baseline_run;markScenarioDirty(ed);});
+      box.append(ruleField('Явный baseline run_id (необязательно)',baseInp));
     }else if(step.type==='condition'){
       box.append(renderConditionHelper(def,steps,step,p.expr||'',val=>{p.expr=val;markScenarioDirty(ed);}));
     }
@@ -2643,7 +2745,7 @@
       const btn=toolButton('',()=>{loadScenarioRun(run.id);},'scn-run-card');
       btn.setAttribute('aria-pressed',String(run.id===scenariosState.selectedRunId));
       const top=make('div','scn-run-top');
-      top.append(make('strong','',run.scenario_id+' · v'+run.scenario_version),make('span','scn-status st-'+runDisplayStatus(run),runDisplayLabel(run)));
+      top.append(make('strong','',run.scenario_id+' · v'+run.scenario_version+(run.is_baseline?' ★':'')),make('span','scn-status st-'+runDisplayStatus(run),runDisplayLabel(run)));
       const counts=run.step_counts||{},total=counts.total||0,done=(counts.done||0)+(counts.skipped||0);
       const prog=make('div','scn-progress'),fill=make('i');fill.style.width=(total?Math.round(done*100/total):0)+'%';prog.append(fill);
       const meta=make('div','rule-meta');
@@ -2675,6 +2777,7 @@
       const meta=make('div','rule-meta');
       const scopeLabel=r.scope==='builtin'?('Встроенный шаблон'+(r.project_id?' · проект: '+r.project_id:'')):(r.scope==='project'?'Проект: '+r.project_id:'Глобальный');
       meta.append(make('code','',r.run_id),make('span','','rev '+r.revision),make('span','',scopeLabel));
+      if(r.is_baseline)meta.append(make('span','scn-node-badge','★ Эталон (baseline)'));
       if(r.created_by_agent)meta.append(make('span','','Агент: '+r.created_by_agent));
       if(r.updated_at)meta.append(make('span','','Снимок от '+dateText(r.updated_at)));
       detail.append(meta);
