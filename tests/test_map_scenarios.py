@@ -18,6 +18,7 @@ from richi import agents, map_access, memory, rules, scenario_runs, scenarios, s
 
 
 MAP = serve.BASE / "map.html"
+MAP_SCENARIOS_JS = serve.BASE / "map_assets" / "scenarios.js"
 BEGIN, END = "  // scenarios-pure: begin.", "  // scenarios-pure: end."
 
 
@@ -148,6 +149,23 @@ class MapScenariosAPITests(unittest.TestCase):
         status, snap_auth = self.request("GET", "/api/scenarios", headers={map_access.HEADER: secret})
         self.assertEqual(status, 200)
         self.assertTrue(snap_auth["editing"])
+
+        # Static map_assets routes serve cleanly with strict CSP and block unknown/traversal paths
+        for asset, expected_ctype in serve.MAP_ASSETS.items():
+            conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+            try:
+                conn.request("GET", f"/assets/{asset}", headers={"Host": f"127.0.0.1:{self.port}"})
+                resp = conn.getresponse()
+                body = resp.read()
+                self.assertEqual(resp.status, 200, asset)
+                self.assertEqual(resp.getheader("Content-Type"), expected_ctype)
+                self.assertIn("script-src 'self';", resp.getheader("Content-Security-Policy") or "")
+                self.assertGreater(len(body), 50)
+            finally:
+                conn.close()
+        for bad_path in ("/assets/missing.js", "/assets/../serve.py", "/assets/map.css?v=1"):
+            status, _ = self.request("GET", bad_path)
+            self.assertEqual(status, 404, bad_path)
 
     def test_post_security_boundaries(self):
         change = {"action": "add", "scope": "global", "definition": sample_definition()}
@@ -421,7 +439,7 @@ class MapScenariosAPITests(unittest.TestCase):
 @unittest.skipUnless(shutil.which("node"), "Node.js is needed for browser-script tests")
 class ScenariosPageLogicTests(unittest.TestCase):
     def evaluate(self, script):
-        source = MAP.read_text(encoding="utf-8")
+        source = MAP_SCENARIOS_JS.read_text(encoding="utf-8")
         block = source[source.index(BEGIN):source.index(END)]
         prelude = "const assert = require('node:assert/strict');\n"
         result = subprocess.run([shutil.which("node"), "-e", prelude + block + "\n" + script],
@@ -645,9 +663,13 @@ class ScenariosHtmlSafetyTests(unittest.TestCase):
         self.assertIn('id="scenarios-tab"', source)
         self.assertIn('id="scenarios-panel"', source)
         self.assertIn('id="scenarios-content"', source)
-        block = source[source.index(BEGIN):]
-        for sink in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write"):
-            self.assertNotIn(sink, block, f"Unsafe DOM sink {sink} found in Scenarios UI script")
+        for asset in serve.MAP_ASSETS:
+            path = serve.BASE / "map_assets" / asset
+            self.assertTrue(path.is_file(), f"Missing map asset {asset}")
+            if asset.endswith(".js"):
+                text = path.read_text(encoding="utf-8")
+                for sink in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write"):
+                    self.assertNotIn(sink, text, f"Unsafe DOM sink {sink} found in map_assets/{asset}")
 
 
 if __name__ == "__main__":

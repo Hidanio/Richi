@@ -12,7 +12,7 @@ from unittest.mock import patch
 from richi import serve
 
 
-MAP = serve.BASE / "map.html"
+MAP = serve.BASE / "map_assets" / "core.js"
 
 
 @unittest.skipUnless(shutil.which("node"), "Node.js is needed for browser-script regressions")

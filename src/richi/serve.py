@@ -43,6 +43,13 @@ from . import agent_commands, map_access, memory, rules, scenario_format, scenar
 
 
 BASE = Path(__file__).resolve().parent
+MAP_ASSETS = {
+    "map.css": "text/css; charset=utf-8",
+    "core.js": "application/javascript; charset=utf-8",
+    "rules.js": "application/javascript; charset=utf-8",
+    "scenarios.js": "application/javascript; charset=utf-8",
+    "boot.js": "application/javascript; charset=utf-8",
+}
 API_VERSION = 4
 # The richi_launcher.maps protocol this runtime speaks (maps.API_VERSION).
 MAPS_API = 3
@@ -854,7 +861,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Frame-Options", "DENY")
             self.send_header("Referrer-Policy", "no-referrer")
-            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
+            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(data)
@@ -881,6 +888,15 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                     return self.send_data(200, (BASE / "map.html").read_bytes(), "text/html; charset=utf-8")
                 except OSError:
                     return self.send_data(503, {"error": "map.html is unavailable"})
+            if url.path.startswith("/assets/") and not url.query:
+                asset = url.path[len("/assets/"):]
+                ctype = MAP_ASSETS.get(asset)
+                if ctype is None:
+                    return self.send_data(404, {"error": "Unknown map asset"})
+                try:
+                    return self.send_data(200, (BASE / "map_assets" / asset).read_bytes(), ctype)
+                except OSError:
+                    return self.send_data(503, {"error": "map asset is unavailable"})
             if url.path == "/favicon.ico":
                 return self.send_data(204, b"", "image/x-icon")
             if url.path == "/api/health" and not url.query:

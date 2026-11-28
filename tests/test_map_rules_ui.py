@@ -16,7 +16,7 @@ from unittest import mock
 from richi import agents, memory, rules, serve, skill_catalog
 
 
-MAP = serve.BASE / "map.html"
+MAP = serve.BASE / "map_assets" / "rules.js"
 BEGIN, END = "  // rules-agents-pure: begin.", "  // rules-agents-pure: end."
 PRELUDE = r"""
 const assert = require('node:assert/strict');
@@ -50,7 +50,7 @@ class RulesPageLogicTests(unittest.TestCase):
 
     def evaluate(self, script, sections=()):
         """Run the page's DOM-free lines under Node; what the script prints, as JSON."""
-        source = MAP.read_text(encoding="utf-8")
+        source = (serve.BASE / "map_assets" / "core.js").read_text(encoding="utf-8") + "\n" + MAP.read_text(encoding="utf-8")
         self.assertIn("RULE_SOURCE='%s'" % serve.RULES_SOURCE, source)
         block = source[source.index(BEGIN):source.index(END)]
         for begin, end in sections:
