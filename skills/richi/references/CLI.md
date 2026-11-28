@@ -232,15 +232,17 @@ checks are described in [MAINTENANCE.md](MAINTENANCE.md).
 WAL, a lock wait of up to 10 seconds, foreign keys and explicit transactions are used. Competing processes serialize writes; to protect a card from losing concurrent changes, pass `expected_updated_at` from the latest read. Without that field, the new payload replaces the previous one. There is no automatic conflict merging.
 
 `check` verifies schema version, SQLite integrity and foreign keys. New databases
-use schema 3. Core commands support schemas 1, 2 and 3; graph commands support
-schemas 2 and 3. Tool entities require schema 3. For an older store, migration is
+use schema 4. Core commands support schemas 1 through 4; graph commands support
+schemas 2 through 4; tool entities require schema 3+; scenario runs require schema 4. For an older store, migration is
 explicit: `migrate` backs the store up, then upgrades it. Unknown versions are rejected. Repeated `init`
-does not reset data; schema 1/2 requires `migrate`, and an unknown nonempty database
+does not reset data; older schemas (1–3) require `migrate`, and an unknown nonempty database
 is not reinitialized. Original tables are `projects`, `entries`, `entry_projects`,
 `relations`, `entry_history`, `entry_events`, `metadata` and, where supported,
 `entries_fts`. Schema 2 adds `entities`, `graph_nodes`, `graph_edges`, new object
 histories and the `graph_links` view. Schema 3 extends the entity-kind constraint
-with `tool`, preserving records, links, history and indexes. The map wire format
+with `tool`, preserving records, links, history and indexes. Schema 4 adds
+`scenario_runs`, `scenario_steps` and `scenario_events` and backfills pre-migration
+scenario definition logs. The map wire format
 stays at version 2. See [GRAPH.md](GRAPH.md) for migration and compatibility.
 
 ```sh

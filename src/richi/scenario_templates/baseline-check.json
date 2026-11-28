@@ -1,0 +1,75 @@
+{
+  "format": "richi-scenario",
+  "format_version": 1,
+  "id": "baseline-check",
+  "title": "Сравнение метрик с эталоном (Baseline Check)",
+  "description": "Замер ключевых метрик (latency, размер бандла, число предупреждений или падений тестов) с автоматическим сравнением против закреплённого baseline в Richi.",
+  "when_to_use": "Перед оптимизацией, миграцией или релизом, чтобы доказать отсутствие деградации по цифрам.",
+  "run_title": "Baseline: {{inputs.target}}",
+  "tags": ["benchmark", "baseline", "daily"],
+  "inputs": {
+    "target": {
+      "type": "string",
+      "title": "Что замеряем",
+      "description": "Сервис, эндпоинт или набор тестов",
+      "default": "core suite"
+    }
+  },
+  "steps": [
+    {
+      "id": "context",
+      "type": "memory.brief",
+      "title": "История прошлых замеров",
+      "params": {
+        "question": "baseline {{inputs.target}}",
+        "limit": 8,
+        "include_past_runs": true
+      }
+    },
+    {
+      "id": "measure",
+      "type": "instruction",
+      "title": "Выполнить замер метрик",
+      "needs": ["context"],
+      "params": {
+        "text": "Выполни замер для «{{inputs.target}}» (контекст: {{steps.context.summary}}). Верни числовые метрики в data.duration_ms (number) и data.warnings_count (number)."
+      },
+      "outputs": {
+        "data": {
+          "duration_ms": {
+            "type": "number",
+            "required": true
+          },
+          "warnings_count": {
+            "type": "number",
+            "required": true
+          }
+        }
+      }
+    },
+    {
+      "id": "compare_base",
+      "type": "compare",
+      "title": "Сравнить с baseline",
+      "needs": ["measure"],
+      "params": {
+        "step": "measure",
+        "metrics": ["duration_ms", "warnings_count"]
+      }
+    },
+    {
+      "id": "verdict",
+      "type": "gate",
+      "title": "Принять дельту метрик?",
+      "needs": ["compare_base"],
+      "params": {
+        "question": "Дельта относительно baseline: {{steps.compare_base.summary}}. Принимаем результат?",
+        "options": ["accept", "investigate_regression"],
+        "allow_comment": true
+      }
+    }
+  ],
+  "layout": {
+    "mode": "list"
+  }
+}

@@ -19,7 +19,7 @@ experiment or investigation holds a particular attempt and its result.
 Definitions remain in the Encyclopedia when independently useful.
 
 The catalog uses the same SQLite store, sources and history. `tool` entities
-require schema 3. To upgrade an older store, run `richi migrate`, which backs it up first. Reading
+require schema 3 or newer. To upgrade an older store, run `richi migrate`, which backs it up first. Reading
 the catalog or switching runtime never migrates them automatically. See
 [graph and migration](../skills/richi/references/GRAPH.md).
 

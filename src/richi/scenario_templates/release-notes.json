@@ -1,0 +1,81 @@
+{
+  "format": "richi-scenario",
+  "format_version": 1,
+  "id": "release-notes",
+  "title": "Подготовка релиза и Release Notes",
+  "description": "Сборка списка изменений с последнего тега, обязательный релизный чек-лист человека и фиксация итоговых заметок релиза в памяти Richi.",
+  "when_to_use": "Перед публикацией релиза или тегированием новой версии.",
+  "run_title": "Release: {{inputs.version}}",
+  "tags": ["release", "daily"],
+  "inputs": {
+    "version": {
+      "type": "string",
+      "title": "Версия релиза",
+      "description": "Например, v1.4.0",
+      "required": true
+    },
+    "since_ref": {
+      "type": "string",
+      "title": "С какого коммита/тега",
+      "description": "Базовый тег или ветка",
+      "default": "HEAD~10"
+    }
+  },
+  "steps": [
+    {
+      "id": "context",
+      "type": "memory.brief",
+      "title": "Решения и известные риски релиза",
+      "params": {
+        "question": "release {{inputs.version}}",
+        "limit": 10,
+        "include_past_runs": true
+      }
+    },
+    {
+      "id": "draft_notes",
+      "type": "instruction",
+      "title": "Собрать черновик Release Notes",
+      "needs": ["context"],
+      "params": {
+        "text": "Изучи git log {{inputs.since_ref}}..HEAD и контекст памяти ({{steps.context.summary}}). Составь структурированные release notes для {{inputs.version}} (фичи, исправления, breaking changes, миграции)."
+      },
+      "checks": [
+        {
+          "kind": "no_dirty_git",
+          "mode": "unchanged"
+        }
+      ]
+    },
+    {
+      "id": "release_checklist",
+      "type": "checklist",
+      "title": "Чек-лист готовности релиза {{inputs.version}}",
+      "needs": ["draft_notes"],
+      "params": {
+        "items": [
+          {"text": "Тесты и линтеры прошли на релизном коммите", "required": true},
+          {"text": "Breaking changes и миграции проверены", "required": true},
+          {"text": "Release notes вычитаны", "required": true}
+        ]
+      }
+    },
+    {
+      "id": "save_release",
+      "type": "memory.record",
+      "title": "Записать релиз в память",
+      "needs": ["release_checklist"],
+      "if": "steps.release_checklist.status == 'done'",
+      "params": {
+        "kind": "note",
+        "title": "Release {{inputs.version}}",
+        "summary": "{{steps.draft_notes.summary}}",
+        "tags": ["release"],
+        "knowledge_state": "confirmed"
+      }
+    }
+  ],
+  "layout": {
+    "mode": "list"
+  }
+}

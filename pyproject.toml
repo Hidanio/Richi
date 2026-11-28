@@ -32,4 +32,4 @@ py-modules = ["richi_bootstrap"]
 package-dir = {"" = "launcher", richi = "src/richi", richi_launcher = "launcher/richi_launcher"}
 
 [tool.setuptools.package-data]
-richi = ["*.sql", "*.html"]
+richi = ["*.sql", "*.html", "map_assets/*", "scenario_templates/*.json"]

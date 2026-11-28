@@ -19,6 +19,7 @@ import venv
 import zipfile
 
 import richi
+from richi import memory as richi_memory
 import richi_bootstrap
 import richi_launcher
 from richi_launcher import maps
@@ -184,8 +185,9 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
         if storage_schema is not None:
             # An older runtime whose newest storage schema is lower, as in 1.0.1.
             memory = files["richi/memory.py"].decode("utf-8")
-            self.assertIn("SCHEMA = 3\n", memory)
-            files["richi/memory.py"] = memory.replace("SCHEMA = 3\n", "SCHEMA = %d\n" % storage_schema, 1).encode()
+            current_line = "SCHEMA = %d\n" % richi_memory.SCHEMA
+            self.assertIn(current_line, memory)
+            files["richi/memory.py"] = memory.replace(current_line, "SCHEMA = %d\n" % storage_schema, 1).encode()
         files["richi_bootstrap.py"] = Path(richi_bootstrap.__file__).read_bytes()
         files.update(extra or {})
         info = "richi-" + version + ".dist-info/"
@@ -371,7 +373,8 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             self.console("--chat", "example:review", "entry", "put", "--json", preference)
             updated = json.loads(self.run_process([self.python, "-I", "-B", runner, feed, "--chat", "example:review",
                                                    "update", "apply", "--review-preferences"]).stdout)
-            self.assertEqual((updated["current"]["version"], updated["current"]["database_schemas"]), ("0.2.0", [1, 2, 3]))
+            self.assertEqual((updated["current"]["version"], updated["current"]["database_schemas"]),
+                             ("0.2.0", list(richi_memory.SUPPORTED_VERSIONS)))
             review = updated["preference_review"]
             self.assertEqual(review["workspace"], "example")
             candidate, = review["candidates"]
@@ -574,7 +577,7 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
             self.assertEqual(json.loads(self.run_process([self.python, "-I", "-B", offline, self.feed_fixture(
                 newer, "0.2.0"), "update", "apply"]).stdout)["status"], "updated")
             self.console("backup")
-            self.assertEqual(self.console_json("migrate")["schema_version"], 3)
+            self.assertEqual(self.console_json("migrate")["schema_version"], richi_memory.SCHEMA)
             started = self.console_json("map", "--no-open")
             pid = started["pid"]
             log = next(self.root.rglob("runtime/map-server.log"))
@@ -586,15 +589,16 @@ class UpdateWheelLifecycleTests(unittest.TestCase):
                                          text=True, timeout=90)
                 self.assertEqual(swapped.returncode, 0, swapped.stdout + swapped.stderr)
                 self.assertEqual(json.loads(swapped.stdout)["current"]["version"], "0.1.0")
+                expected_msg = "cannot read database schema %d" % richi_memory.SCHEMA
                 deadline = time.monotonic() + 20
-                while "cannot read database schema 3" not in log.read_text():
+                while expected_msg not in log.read_text():
                     self.assertLess(time.monotonic(), deadline, log.read_text())
                     time.sleep(0.1)
                 # The map keeps serving the store on its version instead of exiting.
                 time.sleep(2)
                 current = maps.read_health(port, timeout=2)
                 self.assertEqual((current["pid"], current["runtime"]["version"]), (pid, "0.2.0"))
-                self.assertEqual(log.read_text().count("cannot read database schema 3"), 1)
+                self.assertEqual(log.read_text().count(expected_msg), 1)
                 # Rolling forward again needs no restart.
                 forward = self.console_json("update", "rollback")
                 self.assertEqual((forward["current"]["version"], forward["restart_maps_required"]), ("0.2.0", False))

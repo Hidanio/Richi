@@ -1,0 +1,96 @@
+{
+  "format": "richi-scenario",
+  "format_version": 1,
+  "id": "pr-ready",
+  "title": "PR Ready (проверка перед открытием PR)",
+  "description": "Короткий ежедневный чек перед открытием PR: память проекта, прогон тестов, read-only проверка diff с заземлёнными находками и финальное подтверждение.",
+  "when_to_use": "Когда ветка готова к открытию pull request и нужно убедиться, что тесты зелёные, а в diff нет явных блокеров.",
+  "run_title": "PR Ready: {{inputs.branch}}",
+  "tags": ["review", "pr", "daily"],
+  "inputs": {
+    "branch": {
+      "type": "string",
+      "title": "Ветка",
+      "description": "Имя ветки для PR",
+      "default": "HEAD",
+      "picker": "git-branch"
+    },
+    "test_cmd": {
+      "type": "string",
+      "title": "Команда тестов",
+      "description": "Команда локальной проверки (например, pytest или npm test)",
+      "default": "python3 -m unittest"
+    }
+  },
+  "steps": [
+    {
+      "id": "context",
+      "type": "memory.brief",
+      "title": "Контекст проекта и прошлые паттерны",
+      "params": {
+        "question": "{{inputs.branch}}",
+        "limit": 8,
+        "include_past_runs": true,
+        "include_learnings": true
+      }
+    },
+    {
+      "id": "tests",
+      "type": "instruction",
+      "title": "Прогнать тесты и проверки",
+      "needs": ["context"],
+      "params": {
+        "text": "Запусти тесты командой `{{inputs.test_cmd}}` в проекте и зафиксируй итог в summary и data.tests_passed (boolean)."
+      },
+      "outputs": {
+        "data": {
+          "tests_passed": {
+            "type": "boolean",
+            "required": true
+          }
+        }
+      }
+    },
+    {
+      "id": "diff_review",
+      "type": "instruction",
+      "title": "Read-only ревью diff перед PR",
+      "needs": ["tests"],
+      "params": {
+        "text": "Проведи read-only проверку diff ветки {{inputs.branch}} с учётом памяти {{steps.context.summary}}. Верни список data.findings (может быть пустым []) с полями file, line, severity (P0|P1|P2|nit), title, evidence."
+      },
+      "outputs": {
+        "data": {
+          "findings": {
+            "type": "list",
+            "required": true
+          }
+        }
+      },
+      "checks": [
+        {
+          "kind": "no_dirty_git",
+          "mode": "unchanged"
+        },
+        {
+          "kind": "findings_grounded",
+          "path": "findings"
+        }
+      ]
+    },
+    {
+      "id": "ready_gate",
+      "type": "gate",
+      "title": "Открываем PR?",
+      "needs": ["diff_review"],
+      "params": {
+        "question": "Тесты: {{steps.tests.summary}}. Ревью: {{steps.diff_review.summary}}. Готово к PR?",
+        "options": ["open_pr", "fix_first"],
+        "allow_comment": true
+      }
+    }
+  ],
+  "layout": {
+    "mode": "list"
+  }
+}

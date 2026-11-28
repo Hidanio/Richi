@@ -1,0 +1,88 @@
+{
+  "format": "richi-scenario",
+  "format_version": 1,
+  "id": "incident-triage",
+  "title": "Разбор инцидента / бага (Triage -> RCA -> Fix)",
+  "description": "Системный разбор продакшен-инцидента или сложного бага: поиск похожих кейсов в памяти, воспроизведение, локализация корневой причины, согласование фикса и запись расследования.",
+  "when_to_use": "Когда пришёл срочный баг или алерт и важно отделить доказанную первопричину от гипотез.",
+  "run_title": "Incident: {{inputs.symptom}}",
+  "tags": ["incident", "debug", "daily"],
+  "inputs": {
+    "symptom": {
+      "type": "string",
+      "title": "Симптом / ошибка",
+      "description": "Краткое описание сбоя, кода ошибки или тикета",
+      "required": true
+    }
+  },
+  "steps": [
+    {
+      "id": "prior",
+      "type": "memory.brief",
+      "title": "Проверить похожие инциденты в памяти",
+      "params": {
+        "question": "{{inputs.symptom}}",
+        "limit": 12,
+        "include_past_runs": true
+      }
+    },
+    {
+      "id": "rca",
+      "type": "instruction",
+      "title": "Воспроизвести и найти корневую причину",
+      "needs": ["prior"],
+      "params": {
+        "text": "Исследуй симптом «{{inputs.symptom}}» с учётом прошлых записей ({{steps.prior.summary}}). Отдели доказанную первопричину от гипотез. Верни data.root_cause (string) и data.reproduced (boolean)."
+      },
+      "outputs": {
+        "data": {
+          "root_cause": {
+            "type": "string",
+            "required": true
+          },
+          "reproduced": {
+            "type": "boolean",
+            "required": true
+          }
+        }
+      }
+    },
+    {
+      "id": "mitigate_gate",
+      "type": "gate",
+      "title": "Выбор стратегии исправления",
+      "needs": ["rca"],
+      "params": {
+        "question": "Причина: {{steps.rca.summary}}. Делаем точечный фикс, откат или только документируем?",
+        "options": ["hotfix", "rollback", "document_only"],
+        "allow_comment": true
+      }
+    },
+    {
+      "id": "apply_fix",
+      "type": "instruction",
+      "title": "Применить согласованное исправление",
+      "needs": ["mitigate_gate"],
+      "if": "steps.mitigate_gate.answer != 'document_only'",
+      "params": {
+        "text": "Выполни стратегию «{{steps.mitigate_gate.answer}}» (комментарий: {{steps.mitigate_gate.comment}}) для корневой причины «{{steps.rca.data.root_cause}}», проверь тестами и отчитайся о результате."
+      }
+    },
+    {
+      "id": "record_rca",
+      "type": "memory.record",
+      "title": "Сохранить расследование в память",
+      "needs": ["apply_fix"],
+      "params": {
+        "kind": "investigation",
+        "title": "RCA: {{inputs.symptom}}",
+        "summary": "Корневая причина: {{steps.rca.data.root_cause}}\nДетали: {{steps.rca.summary}}\nРешение: {{steps.mitigate_gate.answer}} ({{steps.mitigate_gate.comment}})",
+        "tags": ["incident", "rca"],
+        "knowledge_state": "confirmed"
+      }
+    }
+  ],
+  "layout": {
+    "mode": "list"
+  }
+}

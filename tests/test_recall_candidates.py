@@ -418,7 +418,7 @@ class RecallCandidateTests(unittest.TestCase):
                 self.assertEqual(score.call_count, 0)
                 self.assertEqual(audit.full_entry_ids, [])
                 self.assertEqual(value["explain"]["counts"]["entries_scored"], 0)
-        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], 3)
+        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], memory.SCHEMA)
         self.conn.close()
         self.assertEqual(self.db.read_bytes(), before)
 

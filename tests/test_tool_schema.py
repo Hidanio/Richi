@@ -59,7 +59,7 @@ class ToolSchemaTests(unittest.TestCase):
         self.assertEqual(self.conn.execute("PRAGMA foreign_keys").fetchone()[0], 1)
 
     def test_new_store_supports_tool_with_graph_and_immutable_history(self):
-        self.assertEqual(memory.initialize(self.conn, self.db)["schema_version"], 3)
+        self.assertEqual(memory.initialize(self.conn, self.db)["schema_version"], memory.SCHEMA)
         self.put_entity()
         record = graph.get(self.conn, "entity", "tool:lint", memory)
         self.assertEqual(record["kind"], "tool")
@@ -134,7 +134,7 @@ class ToolSchemaTests(unittest.TestCase):
     def test_v1_upgrades_directly_to_three_and_allows_tool(self):
         self.legacy(version=1)
         result = graph.migrate(self.conn, self.db, memory)
-        self.assertEqual(result, {"status": "migrated", "from_version": 1, "schema_version": 3, "database": str(self.db),
+        self.assertEqual(result, {"status": "migrated", "from_version": 1, "schema_version": memory.SCHEMA, "database": str(self.db),
                                   "backup": result["backup"]})
         self.assertRegex(Path(result["backup"]).name, r"^legacy-schema1-")
         self.put_entity()
@@ -151,10 +151,10 @@ class ToolSchemaTests(unittest.TestCase):
         with closing(sqlite3.connect(str(copy))) as saved:
             self.assertEqual(saved.execute("PRAGMA user_version").fetchone()[0], 2)
             self.assertEqual(list(saved.iterdump()), before)
-        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], 3)
+        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], memory.SCHEMA)
         # A current store is left alone: no second copy.
         self.assertEqual(graph.migrate(self.conn, self.db, memory),
-                         {"status": "existing", "schema_version": 3, "database": str(self.db)})
+                         {"status": "existing", "schema_version": memory.SCHEMA, "database": str(self.db)})
         self.assertEqual(self.backups(), [copy])
 
     def test_refused_store_is_not_copied(self):

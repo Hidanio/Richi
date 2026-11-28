@@ -11,6 +11,7 @@ from .output import rendered
 
 BASE_TABLES = ("projects", "entries", "entry_projects", "relations", "entry_history", "entry_events")
 GRAPH_TABLES = ("entities", "graph_nodes", "graph_edges", "entity_history", "edge_history")
+SCENARIO_TABLES = ("scenario_runs", "scenario_steps", "scenario_events")
 LOGICAL_COLUMNS = {
     "entries": ("title", "summary", "sources", "tags", "aliases"),
     "entities": ("title", "summary", "sources", "tags", "aliases"),
@@ -18,6 +19,9 @@ LOGICAL_COLUMNS = {
     "entry_history": ("before_json", "after_json"),
     "entity_history": ("before_json", "after_json"),
     "edge_history": ("before_json", "after_json"),
+    "scenario_runs": ("definition_json", "inputs_json"),
+    "scenario_steps": ("result_json", "matrix_json", "reason"),
+    "scenario_events": ("detail_json",),
 }
 FILE_AREAS = ("backups", "artifacts/git", "evaluations", "runtime")
 SQL_SECONDS, FILE_SECONDS, FILE_ENTRIES = 5.0, 2.0, 10000
@@ -166,6 +170,8 @@ def _deep(conn, tables):
                 category = "idempotency"
             elif kind == "index":
                 category = "secondary_indexes"
+            elif table in SCENARIO_TABLES:
+                category = "scenarios"
             elif table in ("entries", "entities", "graph_edges", "projects", "relations"):
                 category = "current_records"
             else:
@@ -197,7 +203,8 @@ def _stats(conn, args, api, database):
                  for name in ("page_size", "page_count", "freelist_count")}
         report["database_pages"] = dict(pages, allocated_bytes=pages["page_size"] * pages["page_count"],
                                         free_page_bytes=pages["page_size"] * pages["freelist_count"])
-        tables = BASE_TABLES + (GRAPH_TABLES if version in (2, 3) else ())
+        from . import scenario_registry
+        tables = BASE_TABLES + (GRAPH_TABLES if version >= 2 else ()) + (SCENARIO_TABLES if scenario_registry.has_scenario_tables(conn) else ())
         report["counts"] = {}
         try:
             for table in tables:

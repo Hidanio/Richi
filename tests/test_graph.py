@@ -86,11 +86,11 @@ class GraphTests(unittest.TestCase):
         with closing(sqlite3.connect(str(copy))) as conn, conn:
             self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 1)
             self.assertEqual({t: conn.execute("SELECT * FROM " + t).fetchall() for t in tables}, before)
-        self.assertEqual(self.cli("migrate"), {"status": "existing", "schema_version": 3, "database": migrated["database"]})
+        self.assertEqual(self.cli("migrate"), {"status": "existing", "schema_version": memory.SCHEMA, "database": migrated["database"]})
         self.assertEqual(list(copy.parent.iterdir()), [copy])
         with closing(sqlite3.connect(str(self.db))) as conn, conn:
             after = {t: conn.execute("SELECT * FROM " + t).fetchall() for t in tables}
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 3)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], memory.SCHEMA)
         self.assertEqual(before, after)
         shown = self.cli("rules", "show", "--project", "a", "--agent", "codex")["rules"][0]
         self.assertEqual((shown["id"], shown["use_skill"], shown["updated_at"]),

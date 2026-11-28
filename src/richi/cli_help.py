@@ -32,7 +32,7 @@ GROUPS = (
     ("read and write records", ("entry", "entity", "edge", "relation")),
     ("explore and analyze", ("map", "graph", "tools", "query", "punisher")),
     ("code evidence (Git)", ("sources",)),
-    ("projects, workspaces and chats", ("project", "workspace", "use", "chat", "rules", "skill-sources")),
+    ("projects, workspaces and chats", ("project", "workspace", "use", "chat", "rules", "scenario", "skill-sources")),
     ("configuration and updates", ("config", "update")),
     ("maintenance", ("check", "backup", "storage", "search-index", "migrate")),
     ("help", ("help", "capabilities")),
@@ -350,7 +350,7 @@ DETAILS = {
 
         Fields: id, kind, title, summary, sources, knowledge_state, verified_at,
         tags, aliases. Confirmed entities need at least one source; tool entities
-        need schema 3.""",
+        need schema 3 or newer.""",
         examples=(("", "richi entity put --json entity.json"),)),
     "entity get": dict(examples=(("", "richi entity get concept:connection-pool --history"),)),
     "edge": dict(about="""
@@ -658,6 +658,233 @@ DETAILS = {
         through it.""",
         examples=(("", "richi rules apply --json rule-change.json"),
                   ("From a program", "richi --compact-json rules apply --json -"))),
+    "scenario": dict(about="""
+        Reusable multi-step procedures an agent follows in a chat. Richi stores
+        the scenario definition (inputs, steps, explicit dependencies, checks),
+        tracks run state and leases in schema 4 tables, records each run as a
+        task entry tagged scenario-run, and logs every edit and run event in a
+        unified journal. Agents propose a matching scenario and ask before
+        starting it unless the user requested it explicitly.""",
+        examples=(("List scenarios and built-in templates", "richi scenario list"),
+                  ("Preview the built-in branch review", "richi scenario plan review --input branch=feature_x"),
+                  ("Start a review run in a project",
+                   "richi --project-path /path/to/service scenario run review --input branch=feature_x")),
+        see=("rules", "brief", "migrate"), guide="SCENARIOS.md"),
+    "scenario list": dict(about="""
+        Lists stored workspace-wide and project-scoped scenarios along with
+        built-in templates. Stored definitions live in metadata and never appear
+        in recall or search; corrupt or newer-format definitions are reported
+        separately without hiding healthy ones.""",
+        examples=(("", "richi scenario list"), ("", "richi scenario list --global"),
+                  ("", "richi scenario list --project service"))),
+    "scenario templates": dict(about="""
+        Lists the read-only synthetic templates bundled with Richi, such as the
+        built-in review scenario. Use scenario copy to save an editable copy in
+        workspace or project scope.""",
+        examples=(("", "richi scenario templates"),)),
+    "scenario show": dict(about="""
+        Shows one scenario definition in full, resolving project scope first,
+        then workspace-wide scope, then built-in templates. When an agent is
+        known or passed with --agent, resolved_skills shows the skill chosen for
+        each skill step and missing_skills flags any skill the agent lacks.""",
+        examples=(("", "richi scenario show review"),
+                  ("With explicit agent", "richi scenario show review --agent codex"))),
+    "scenario copy": dict(about="""
+        Copies a built-in template or existing scenario into workspace-wide or
+        project scope so it can be edited with scenario apply. Keeping the same
+        ID shadows the broader scope.""",
+        examples=(("Into workspace scope", "richi scenario copy review --global"),
+                  ("Into one project with a custom ID",
+                   "richi scenario copy review --project service --id service-review"))),
+    "scenario apply": dict(about="""
+        Creates, updates or removes a stored scenario from one JSON change
+        object (action: add, update or remove). Updates and removals require
+        expected_updated_at for optimistic concurrency.""",
+        examples=(("", "richi scenario apply --json change.json"),
+                  ("From stdin", "richi --compact-json scenario apply --json -"))),
+    "scenario plan": dict(about="""
+        Dry-run preview of a scenario: validates supplied inputs, resolves
+        skills for the active agent, expands static/known matrices, and renders
+        the planned run title without writing to the store.""",
+        examples=(("", "richi scenario plan review --input branch=feature_x"),
+                  ("", "richi scenario plan review --input branch=feature_x --agent codex"))),
+    "scenario run": dict(about="""
+        Starts a new run on schema 4: freezes a snapshot of the scenario
+        definition, redacts secret inputs so raw secrets are never written to
+        SQLite, creates a task entry tagged scenario-run, and executes any
+        immediately ready Richi steps. Prefer --secret-env KEY=ENV_VAR for
+        secret inputs so secret values stay out of argv.""",
+        examples=(("", "richi --project-path /path/to/service scenario run review --input branch=feature_x"),
+                  ("With JSON inputs", "richi scenario run review --inputs-json inputs.json"))),
+    "scenario next": dict(about="""
+        Returns the next ready or already-claimed step for this agent/chat,
+        rendering templates and resolving skills. Pass --step STEP to target a
+        specific parallel step. With --claim, acquires or renews a 30-minute
+        lease on the returned agent step. Prefer --secret-env KEY=ENV_VAR (or
+        --secret KEY=VALUE) when a step needs a runtime-only secret input.""",
+        examples=(("", "richi scenario next run-review-20261127-0001 --claim"),
+                  ("With explicit agent", "richi scenario next run-review-20261127-0001 --agent codex"))),
+    "scenario claim": dict(about="""
+        Claims one specific ready agent step for this chat with a 30-minute
+        lease and returns its rendered step payload, preventing another chat
+        from working on the same step at once. Prefer --secret-env KEY=ENV_VAR
+        (or --secret KEY=VALUE) when the claimed step needs a runtime-only
+        secret input.""",
+        examples=(("", "richi scenario claim run-review-20261127-0001 angle.0"),)),
+    "scenario release": dict(about="""
+        Releases a step lease held by this chat so another chat can claim it.""",
+        examples=(("", "richi scenario release run-review-20261127-0001 angle.0"),)),
+    "scenario report": dict(about="""
+        Submits a JSON report for a step claimed by this chat. Richi validates
+        declared outputs and checks (data_required, min_items, exit_code,
+        file_exists inside --project-path, evidence_git, no_dirty_git and
+        findings_grounded). A rejected report returns reasons and leaves the
+        step claimed.""",
+        examples=(("", "richi scenario report run-review-20261127-0001 angle.0 --json report.json"),
+                  ("From stdin", "richi --compact-json scenario report run-review-20261127-0001 angle.0 --json -"))),
+    "scenario answer": dict(about="""
+        Records the human's answer from the chat to a waiting gate or checklist
+        step and advances the run.""",
+        examples=(("", "richi scenario answer run-review-20261127-0001 approve all --comment 'Looks good'"),)),
+    "scenario skip": dict(about="""
+        Skips a step with a mandatory reason and advances downstream steps
+        (a skipped dependency still satisfies ordering unless downstream `if`
+        tests its status).""",
+        examples=(("", "richi scenario skip run-review-20261127-0001 angle.1 --reason 'No test changes'"),)),
+    "scenario retry": dict(about="""
+        Resets a failed or blocked step (or the first failed/blocked step of the
+        run) so it can be executed again.""",
+        examples=(("", "richi scenario retry run-review-20261127-0001"),
+                  ("One specific step", "richi scenario retry run-review-20261127-0001 merge"))),
+    "scenario pause": dict(about="""
+        Pauses an active scenario run without losing step progress.""",
+        examples=(("", "richi scenario pause run-review-20261127-0001"),)),
+    "scenario resume": dict(about="""
+        Resumes a paused scenario run and advances any ready steps.""",
+        examples=(("", "richi scenario resume run-review-20261127-0001"),)),
+    "scenario cancel": dict(about="""
+        Cancels an active scenario run and releases any claimed step leases.""",
+        examples=(("", "richi scenario cancel run-review-20261127-0001"),)),
+    "scenario status": dict(about="""
+        Prints the full state of one run: status, inputs (secrets redacted),
+        linked task entry ID, and every step with its status, lease and summary.""",
+        examples=(("", "richi scenario status run-review-20261127-0001"),)),
+    "scenario runs": dict(about="""
+        Lists runs in this workspace, optionally filtered to active runs, a chat,
+        a project or one scenario ID.""",
+        examples=(("", "richi scenario runs --active"),
+                  ("Runs of this chat", "richi scenario runs --mine --active"))),
+    "scenario log": dict(about="""
+        Shows the unified scenario journal (newest first): definition edits
+        (created, updated, removed) and run events (started, claimed, rejected,
+        accepted, answered, skipped, finished).""",
+        examples=(("", "richi scenario log"),
+                  ("For one run", "richi scenario log --run run-review-20261127-0001 --entries 50"))),
+    "scenario hook": dict(about="""
+        Handles an agent lifecycle hook for active scenario runs. session-start
+        summarizes claimed steps, pending human gates and agent-pinned ready
+        steps. stop blocks ending a turn while this chat holds a claimed step,
+        capped by a Richi-side continuation counter (default 5) so hooks never
+        loop forever. pre-compact prints a compact handoff summary to preserve
+        across context compaction. Use --format claude|codex|cursor|antigravity
+        for native hook JSON contracts.""",
+        examples=(("Session start context", "richi scenario hook session-start --agent claude"),
+                  ("Stop enforcement for Cursor", "richi scenario hook stop --agent cursor --format cursor"),
+                  ("Pre-compact handoff", "richi scenario hook pre-compact"))),
+    "scenario baseline": dict(about="""
+        Pins a completed (done) scenario run as the reference baseline for future
+        `compare` steps of the same scenario and project, or clears the pinned
+        baseline with --clear (so compare falls back to the latest done run).""",
+        examples=(("Pin a run as baseline", "richi scenario baseline run-review-20261127-0001"),
+                  ("Clear pinned baseline", "richi scenario baseline run-review-20261127-0001 --clear"))),
+    "scenario stats": dict(about="""
+        Aggregates execution metrics across runs, scenarios and steps: completion rate
+        (including cancelled runs), first-pass rate, p50 active agent duration vs
+        human wait duration, and top failure reasons per step. Filters by --kind
+        (prod by default, excluding eval and fork runs), --version and --last.""",
+        examples=(("Workspace-wide metrics", "richi scenario stats"),
+                  ("Latest 20 runs of one scenario", "richi scenario stats --scenario review --last 20"))),
+    "scenario catalog": dict(about="""
+        Prints the self-describing Richi Scenarios platform catalog: active
+        capabilities detected from the database (scenarios, review_hub,
+        process_memory, artifacts), available step blocks, report checks,
+        registered domain views and the artifact URI contract.""",
+        examples=(("Inspect active platform capabilities", "richi scenario catalog"),)),
+    "scenario feedback": dict(about="""
+        Records structured human verdicts (actionable_bug, valid_nit or
+        false_positive) and lifecycle resolutions (open, fixed, wont_fix or
+        unreviewed_dismissed) for grounded findings of a scenario run. Accepts
+        either one --finding ID or a JSON list via --batch FILE (or '-' for
+        stdin). With --verdict false_positive and --remember-pattern, promotes a
+        scoped confirmed fact entry (requiring --scope-path and
+        --safety-condition) so future review runs check that invariant.""",
+        examples=(
+            ("Mark one finding as fixed bug", "richi scenario feedback run-review-20261127-0001 --finding f:a1b2c3d4e5f6 --verdict actionable_bug --resolution fixed"),
+            ("Record a scoped false-positive pattern", "richi scenario feedback run-review-20261127-0001 --finding f:a1b2c3d4e5f6 --verdict false_positive --remember-pattern --scope-path src/auth.py --safety-condition 'Gateway verifies HMAC before calling verify_token'"),
+            ("Apply batch triage from stdin", "richi scenario feedback run-review-20261127-0001 --batch -"),
+        )),
+    "scenario fork": dict(about="""
+        Forks a prior scenario run from one step (pin data), copying all
+        non-descendant steps strictly by DAG needs and recomputing --from STEP
+        and its transitive descendants. Fork runs are tagged run_kind='fork':
+        excluded from prod stats, forbidden as baselines, and memory.record
+        writes are downgraded to hypothesis. Use --dry-run to preview.""",
+        examples=(
+            ("Preview a DAG fork", "richi scenario fork run-bug-hunt-20261127-0001 --from disprove --dry-run"),
+            ("Fork with the latest definition", "richi scenario fork run-bug-hunt-20261127-0001 --from disprove --use-latest"),
+        )),
+    "scenario export": dict(about="""
+        Exports a scenario definition or built-in template as portable JSON with
+        its canonical SHA-256 digest and a security summary listing instruction,
+        command, skill, gate, checklist, memory.*, compare, when_to_use and
+        secret input surfaces. Pass --out FILE to write atomically to
+        .richi/scenarios/<id>.json (pass --force to overwrite an existing
+        regular file; symlinks are refused).""",
+        examples=(
+            ("Export to stdout with SHA-256", "richi scenario export bug-hunt --builtin"),
+            ("Write to repo file", "richi scenario export review --out .richi/scenarios/review.json"),
+        )),
+    "scenario import": dict(about="""
+        Imports a portable scenario JSON file into project or global scope. If
+        the scenario contains agent instructions, human prompts, memory/compare
+        steps, when_to_use guidance, commands, skills or secret inputs, Richi
+        prints a security summary and the exact SHA-256 digest; re-run with
+        --trust-sha256 HEX to trust that exact revision for the target project.""",
+        examples=(
+            ("Inspect security summary before trust", "richi scenario import .richi/scenarios/review.json --project svc"),
+            ("Import with pinned digest trust", "richi scenario import .richi/scenarios/review.json --project svc --trust-sha256 0123456789abcdef"),
+        )),
+    "scenario golden": dict(about="""
+        Manages fixed-commit golden bug cases (base_rev, head_rev, expected_bugs
+        and optional known_traps) used by richi scenario eval to benchmark review
+        scenarios without floating branch drift.""",
+        examples=(
+            ("List golden cases", "richi scenario golden list"),
+            ("Add a golden case from JSON", "richi scenario golden add --json golden-auth.json"),
+        )),
+    "scenario golden add": dict(about="""
+        Adds or updates a fixed-commit golden bug benchmark case from a JSON file
+        or stdin ('-'). Each expected bug specifies a relative file path plus a
+        line_range and/or symbols list for severity-agnostic matching.""",
+        examples=(("Add from file", "richi scenario golden add --json golden-auth.json"),)),
+    "scenario golden list": dict(about="""
+        Lists stored golden bug cases in this workspace, optionally filtered to
+        one registered --project.""",
+        examples=(("List all golden cases", "richi scenario golden list"),)),
+    "scenario golden remove": dict(about="""
+        Deletes a stored golden bug case by ID from this workspace.""",
+        examples=(("Remove a golden case", "richi scenario golden remove auth-bug-1"),)),
+    "scenario eval": dict(about="""
+        Starts an isolated run_kind='eval' run of a scenario on a fixed-commit
+        golden case with explicit memory isolation (--memory-mode clean,
+        as_of_commit or with_fp_only) and optional --input/--inputs-json
+        overrides, or scores a completed eval run with --score RUN. Pass
+        --compare-run PREV with --score to print a Paired Bug Diff showing
+        newly caught and regressed bugs.""",
+        examples=(
+            ("Start a clean golden eval run", "richi scenario eval bug-hunt --case auth-bug-1 --memory-mode clean"),
+            ("Score and diff two eval runs", "richi scenario eval bug-hunt --case auth-bug-1 --score run-bug-hunt-20261127-0002 --compare-run run-bug-hunt-20261127-0001"),
+        )),
     "skill-sources": dict(about="""
         Richi knows which AI agents work on this computer and where each finds
         skills, so that a rule can name a skill for every agent or one per agent.
@@ -751,7 +978,7 @@ DETAILS = {
         examples=(("", "richi search-index build"), ("Then confirm coverage", "richi search-index status"))),
     "migrate": dict(about="""
         Writes a verified copy of the store to backups/ beside it, then upgrades
-        schema 1 or 2 to the current schema in one transaction, keeping records,
+        schema 1, 2 or 3 to the current schema in one transaction, keeping records,
         links, history and indexes. Before upgrading, migrate checks integrity and foreign keys.
         The result names the copy. On the current schema it returns existing;
         run richi check for a full integrity and foreign key check.

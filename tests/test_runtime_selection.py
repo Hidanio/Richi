@@ -167,7 +167,8 @@ class RuntimeSelectionTests(unittest.TestCase):
                     hashlib.sha256(artifact.read_bytes()).hexdigest())
 
         baseline = snapshot()
-        self.assertEqual(baseline[0], 3)
+        from richi import memory
+        self.assertEqual(baseline[0], memory.SCHEMA)
         for enabled in (True, False):
             if enabled:
                 result = self.enable_development()

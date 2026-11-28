@@ -53,7 +53,7 @@ def describe_runtime(package, mode="release", source=None):
         # Distinguish builds even if a local wheel reuses a version number.
         try:
             for path in sorted(package.rglob("*")):
-                if path.is_file() and path.suffix in {".py", ".sql", ".html"}:
+                if path.is_file() and path.suffix in {".py", ".sql", ".html", ".json"}:
                     digest.update(str(path.relative_to(package)).encode())
                     digest.update(b"\0")
                     digest.update(path.read_bytes())
@@ -142,8 +142,8 @@ try:
         from richi import memory, serve
         with closing(memory.connect(pathlib.Path(arguments[0]), readonly=True)) as connection:
             memory.backend(connection)
-            if connection.execute("PRAGMA user_version").fetchone()[0] not in (2, 3):
-                raise ValueError("The map requires schema 2 or 3; no migration was attempted")
+            if connection.execute("PRAGMA user_version").fetchone()[0] < 2:
+                raise ValueError("The map requires schema 2 or newer; no migration was attempted")
         result = 0
     elif action == "serve":
         from richi.serve import main

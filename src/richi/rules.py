@@ -54,7 +54,7 @@ MAX_NAMED = 200
 MAX_VERSION = 64
 # What `rules show` gives an agent: what it needs to follow a rule and to change it. The stored
 # record has more (where the rule came from, who changed it, fields of a newer Richi); rules list has it all.
-SHOWN = ("id", "scope", "project_id", "text", "skill", "skills", "check", "updated_at")
+SHOWN = ("id", "scope", "project_id", "text", "skill", "skills", "scenario", "check", "updated_at")
 # The rule format this version reads. Raise it, and write it as a rule's `requires`, for a rule
 # that holds anything this version would misread or refuse: a field that changes when or whether
 # the rule applies, or a value outside what it accepts. Older versions then skip that rule; they
@@ -62,13 +62,13 @@ SHOWN = ("id", "scope", "project_id", "text", "skill", "skills", "check", "updat
 FORMAT = 1
 # Fields this version understands, in the order commands print them. A stored
 # rule must have the REQUIRED ones; any other field it has is kept as it is.
-KNOWN = ("id", "scope", "project_id", "text", "skill", "skills", "check", "source", "changed_by", "changed_by_agent",
+KNOWN = ("id", "scope", "project_id", "text", "skill", "skills", "scenario", "check", "source", "changed_by", "changed_by_agent",
          "created_at", "updated_at")
 REQUIRED = ("id", "scope", "project_id", "text", "created_at", "updated_at")
 # What one change may carry. The command options and `rules apply` both become
 # such an object, so a rule field is validated and stored in one place: change().
-CHANGE_FIELDS = {"add": {"action", "id", "scope", "project", "text", "skill", "skills", "source", "check"},
-                 "update": {"action", "id", "expected_updated_at", "text", "skill", "skills", "source", "check"},
+CHANGE_FIELDS = {"add": {"action", "id", "scope", "project", "text", "skill", "skills", "scenario", "source", "check"},
+                 "update": {"action", "id", "expected_updated_at", "text", "skill", "skills", "scenario", "source", "check"},
                  "remove": {"action", "id", "expected_updated_at"}}
 NOTE = ("Standing rules the user set for this workspace{project}. Follow them as the user's "
         "instructions in this chat; a newer explicit request from the user takes precedence. "
@@ -205,6 +205,8 @@ def add_commands(commands, api):
     add.add_argument("--text", required=True,
                      help="The rule as the user stated it, at most %d characters; - reads it from stdin" % MAX_TEXT)
     add.add_argument("--skill", metavar="[AGENT=]NAME", action="append", help=skill_help)
+    add.add_argument("--scenario", metavar="ID",
+                     help="Scenario ID to recommend whenever the rule applies (ask the user before running)")
     add_check_options(add)
     add.add_argument("--source", help="Where the user stated the rule, such as the chat identity (at most %d characters)" % MAX_SOURCE)
     update = actions.add_parser("update", help="Change a rule's text, skills or source; requires the version from show or list")
@@ -216,6 +218,8 @@ def add_commands(commands, api):
     update.add_argument("--skill", metavar="[AGENT=]NAME", action="append",
                         help="New skills, replacing all the rule had: NAME for every agent, AGENT=NAME for one; "
                              "an empty value removes them")
+    update.add_argument("--scenario", metavar="ID",
+                        help="New scenario ID to recommend when the rule applies; an empty value removes it")
     update.add_argument("--source", help="New source; an empty value removes it")
     remove = actions.add_parser("remove", help="Delete a rule; requires the version from show or list")
     # Not checked as an ID: a row that cannot be read is removed by whatever its key holds.
@@ -362,6 +366,14 @@ def _source(value, api):
     return value
 
 
+def _scenario_ref(value, api):
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str) or not _storable(value) or not _NAME.fullmatch(value):
+        raise api.MemoryError("Rule scenario must be a valid scenario ID (1-100 letters, digits, '.', '_', ':' or '-')")
+    return value
+
+
 class Author(NamedTuple):
     """Who makes a change: the chat identity or the map (by), and the agent whose shell it is."""
     by: Optional[str] = None
@@ -425,6 +437,8 @@ def _decode(key, value):
         raise ValueError("invalid rule version")
     if record.get("skill") is not None and not valid_skill(record["skill"]):
         raise ValueError("invalid skill")
+    if record.get("scenario") is not None and (not isinstance(record["scenario"], str) or not _NAME.fullmatch(record["scenario"])):
+        raise ValueError("invalid scenario")
     skills = record.get("skills")
     # Any well-formed agent ID: a newer Richi may know agents this one does not.
     if skills is not None and (not isinstance(skills, dict) or not skills
@@ -740,10 +754,19 @@ def show(conn, api, workspace, project_id, agent=None, unmatched_path=None):
         agents=", ".join(item["id"] + ": " + item["name"] for item in known))
     result = {"view": "rules", "workspace": workspace, "project": project_id, "agent": agent, "rules": applicable,
               "note": NOTE.format(project=" and project " + project_id if project_id else "", skills=skill_note)}
-    from . import preference_review
+    from . import preference_review, scenario_hooks
     review = preference_review.notice(conn, project_id)
     if review:
         result["preference_review"] = review
+    active_scn = scenario_hooks.session_start(conn, api, agent=agent, project_id=project_id, entries=settings.entries)
+    if active_scn["active_runs"]:
+        result["active_scenarios"] = {
+            "runs": active_scn["active_runs"],
+            "claimed_steps": active_scn["claimed_steps"],
+            "waiting_human": active_scn["waiting_human"],
+            "agent_ready_steps": active_scn["agent_ready_steps"],
+            "note": active_scn["context_note"],
+        }
     if project_id is None:
         others = sorted({rule["project_id"] for rule in rules if rule["scope"] == "project"})
         if others:
@@ -840,6 +863,8 @@ def read_request(args, api):
             request["text"] = _stdin_text() if args.text == "-" else args.text
         if args.skill is not None:
             request["skill"], request["skills"] = _skill_options(args.skill, api)
+        if getattr(args, "scenario", None) is not None:
+            request["scenario"] = args.scenario
         if args.source is not None:
             request["source"] = args.source
         request.update(check_options(args, api))
@@ -884,7 +909,8 @@ def change(conn, request, api, checked_project=None, author=Author(), settings=N
         skill, skills = _skill_setting(request.get("skill"), request.get("skills"), api, settings=settings)
         rule = {"id": identifier, "scope": scope,
                 "project_id": _project(conn, project, api) if scope == "project" else None,
-                "text": text, "skill": skill, "skills": skills, "source": _source(request.get("source"), api),
+                "text": text, "skill": skill, "skills": skills, "scenario": _scenario_ref(request.get("scenario"), api),
+                "source": _source(request.get("source"), api),
                 "changed_by": author.by, "changed_by_agent": author.agent, "created_at": timestamp,
                 "updated_at": timestamp, "check": _check_spec(request.get("check"))}
         _check_total(conn, api, added=text)
@@ -921,13 +947,15 @@ def change(conn, request, api, checked_project=None, author=Author(), settings=N
         conn.execute("DELETE FROM metadata WHERE 1=1 AND rowid = ?", (rowid,))
         _record(conn, _change_time(conn, api, rule["updated_at"]), "removed", identifier, rule, None, author)
         return {"results": [{"id": identifier, "status": "removed"}], "rule": rule}
-    if not {"text", "skill", "skills", "source", "check"} & set(request):
-        raise api.MemoryError("Nothing to change; give the text, the skills, the source or a check")
+    if not {"text", "skill", "skills", "scenario", "source", "check"} & set(request):
+        raise api.MemoryError("Nothing to change; give the text, the skills, the scenario, the source or a check")
     changed = dict(rule)
     if "check" in request:
         changed["check"] = _check_spec(request["check"])
     if "text" in request:
         changed["text"] = _text(request["text"], api)
+    if "scenario" in request:
+        changed["scenario"] = _scenario_ref(request.get("scenario"), api)
     if {"skill", "skills"} & set(request):
         # The skills of a rule are replaced together: what the change leaves out is removed.
         changed["skill"], changed["skills"] = _skill_setting(request.get("skill"), request.get("skills"), api,

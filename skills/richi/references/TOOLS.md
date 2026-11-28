@@ -5,7 +5,7 @@ English | [Русский](TOOLS.ru.md)
 Use this procedure for linters, test clients, profiling utilities and other
 tools whose practical use should be reusable across tasks and projects. Follow
 the bound workspace and repository guard in [SKILL.md](../SKILL.md). Tool cards
-use `entity.kind: tool` and require schema 3; migration is explicit, as described
+use `entity.kind: tool` and require schema 3 or newer; migration is explicit, as described
 in [GRAPH.md](GRAPH.md). Reading or selecting a runtime never migrates a store.
 
 ## Choose the record
@@ -14,7 +14,7 @@ in [GRAPH.md](GRAPH.md). Reading or selecting a runtime never migrates a store.
 |---|---|
 | What an instrument does, basic commands, general limitations | `tool` entity |
 | Definition of a concept such as linting or sampling | `concept` entity, if independently useful |
-| A repeatable recipe, project configuration or scenario using several tools | `procedure` entry |
+| A repeatable recipe, project configuration or workflow using several tools | `procedure` entry |
 | A particular attempt, its parameters, observations and outcome | `experiment` or `investigation` entry |
 | Current goal and decision for the surrounding work | `task` entry |
 
@@ -72,7 +72,7 @@ itself supported by evidence.
 
 The Tools view follows tool → project → related tasks. It includes tasks only
 through their explicit tool-use evidence or linked details, within the selected
-project. It shows standalone scenarios separately. A project with only `used_in`
+project. It shows standalone procedures separately. A project with only `used_in`
 evidence may have no linked tasks; this is incomplete task evidence, not a reason
 to enumerate every task in that project. Unknown project scope stays unknown.
 

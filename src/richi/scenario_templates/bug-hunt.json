@@ -1,0 +1,124 @@
+{
+  "format": "richi-scenario",
+  "format_version": 1,
+  "id": "bug-hunt",
+  "title": "Охота за багами (OhMyBug + disprove)",
+  "description": "Глубокий поиск скрытых дефектов и гонок с параллельными независимыми проходами и обязательной adversarial-проверкой (disprove), отсеивающей ложные срабатывания.",
+  "when_to_use": "Перед важным релизом, после сложного рефакторинга или при аудите критичного модуля.",
+  "run_title": "Bug Hunt: {{inputs.target}}",
+  "tags": ["review", "bug-hunt"],
+  "inputs": {
+    "target": {
+      "type": "string",
+      "title": "Область / ветка / директория",
+      "description": "Что именно проверяем (например, main...HEAD или src/payments)",
+      "default": "HEAD"
+    },
+    "passes": {
+      "type": "multiselect",
+      "title": "Независимые проходы поиска",
+      "description": "Реплицированные независимые проходы для консенсусного отбора находок",
+      "options": ["pass-1", "pass-2", "pass-3"],
+      "default": ["pass-1", "pass-2"]
+    }
+  },
+  "steps": [
+    {
+      "id": "context",
+      "type": "memory.brief",
+      "title": "Контекст памяти и известные FP-паттерны",
+      "params": {
+        "question": "{{inputs.target}}",
+        "limit": 12,
+        "include_past_runs": true,
+        "include_learnings": true
+      }
+    },
+    {
+      "id": "sweep",
+      "type": "instruction",
+      "title": "Поиск багов ({{matrix.pass_name}})",
+      "needs": ["context"],
+      "matrix": {
+        "pass_name": "{{inputs.passes}}"
+      },
+      "matrix_mode": "replicated",
+      "hints": {
+        "subagent": true
+      },
+      "params": {
+        "text": "Выполни независимый read-only поиск багов ({{matrix.pass_name}}) в области {{inputs.target}}, не изменяя файлы репозитория. Контекст памяти: {{steps.context.summary}}. Ищи логические баги, гонки, утечки, ошибки граничных случаев и безопасности. Верни список data.findings (может быть пустым []), где каждый объект содержит: file, line, severity (P0|P1|P2|nit), title, evidence (цитата кода/доказательство >= 10 символов)."
+      },
+      "outputs": {
+        "data": {
+          "findings": {
+            "type": "list",
+            "required": true
+          }
+        }
+      },
+      "checks": [
+        {
+          "kind": "no_dirty_git",
+          "mode": "unchanged"
+        },
+        {
+          "kind": "findings_grounded",
+          "path": "findings"
+        }
+      ]
+    },
+    {
+      "id": "disprove",
+      "type": "instruction",
+      "title": "Adversarial проверка (попытка опровергнуть)",
+      "needs": ["sweep"],
+      "hints": {
+        "subagent": true
+      },
+      "params": {
+        "text": "Проведи adversarial-верификацию кандидатов из {{steps.sweep.data.findings}} в read-only режиме (если список пуст, верни пустые [] в обоих полях). Для каждого кандидата попытайся ДОКАЗАТЬ, что это ложное срабатывание, читая реальный код, инварианты и тесты. Раздели результат на два списка: data.findings (подтверждённые реальные баги, status='confirmed') и data.disproved (опровергнутые кандидаты, status='disproved'). Каждый объект в обоих списках обязан содержать file, line, severity (P0|P1|P2|nit), title и evidence (>= 10 символов; для disproved — объяснение, почему это ложное срабатывание)."
+      },
+      "outputs": {
+        "data": {
+          "findings": {
+            "type": "list",
+            "required": true
+          },
+          "disproved": {
+            "type": "list",
+            "required": true
+          }
+        }
+      },
+      "checks": [
+        {
+          "kind": "no_dirty_git",
+          "mode": "unchanged"
+        },
+        {
+          "kind": "findings_grounded",
+          "path": "findings"
+        },
+        {
+          "kind": "findings_grounded",
+          "path": "disproved"
+        }
+      ]
+    },
+    {
+      "id": "triage",
+      "type": "gate",
+      "title": "Решение по подтверждённым багам",
+      "needs": ["disprove"],
+      "params": {
+        "question": "Подтверждённые баги: {{steps.disprove.summary}}. Какой дальнейший шаг?",
+        "options": ["fix_blockers", "record_and_defer", "all_false_positive"],
+        "allow_comment": true
+      }
+    }
+  ],
+  "layout": {
+    "mode": "list"
+  }
+}

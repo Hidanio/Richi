@@ -1,0 +1,1 @@
+../../richi/references/SCENARIOS.ru.md

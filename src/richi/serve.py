@@ -2,9 +2,9 @@
 """Loopback viewer for project memory. Python standard library only.
 
 Knowledge is served read-only. The only changes the map accepts are to the
-user's standing rules and to the user's agent settings (which agents there
-are and where each finds skills), and only from a page opened by `richi map`
-(map_access).
+user's standing rules, scenario definitions, scenario finding triage feedback,
+and agent settings (which agents there are and where each finds skills), and
+only from a page opened by `richi map` (map_access).
 
 Like the knowledge itself, the rules, the agents with their skill folders (as
 the user wrote them, under the home directory as ~/...) and the names and
@@ -39,10 +39,17 @@ from richi_launcher.config import resolve_settings, ConfigError
 from richi_launcher.runtime import (LAUNCHER_ROOT, bootstrap_command, current_runtime, preflight,
                                     resolve_runtime, runtime_command, lease_fds)
 from .memory import Parser, MemoryError
-from . import agent_commands, map_access, rules, skill_catalog
+from . import agent_commands, map_access, memory, rules, scenario_format, scenario_review, scenario_runs, scenarios, skill_catalog
 
 
 BASE = Path(__file__).resolve().parent
+MAP_ASSETS = {
+    "map.css": "text/css; charset=utf-8",
+    "core.js": "application/javascript; charset=utf-8",
+    "rules.js": "application/javascript; charset=utf-8",
+    "scenarios.js": "application/javascript; charset=utf-8",
+    "boot.js": "application/javascript; charset=utf-8",
+}
 API_VERSION = 4
 # The richi_launcher.maps protocol this runtime speaks (maps.API_VERSION).
 MAPS_API = 3
@@ -93,7 +100,7 @@ def handoff_supported():
 # default action of that signal would terminate it.
 CAPABILITIES = (["git_source_viewer", "legacy_git_source_viewer", "standalone_runtime",
                  "runtime_selection", "runtime_reload", "workspace_selection", "tool_catalog", "rules_editor",
-                 "agents_editor"]
+                 "agents_editor", "scenarios_editor"]
                 + ([maps.HANDOFF_CAPABILITY] if handoff_supported() else []))
 
 
@@ -148,20 +155,26 @@ GIT_WORKER_OUTPUT_LIMIT = 450000
 GRAPH_WORKER_TIMEOUT = 20
 GRAPH_WORKER_OUTPUT_LIMIT = 32 * 1024 * 1024
 RULES_BODY_LIMIT = 64 * 1024
+SCENARIOS_BODY_LIMIT = scenarios.MAX_CHANGE + 16 * 1024
 RULES_WORKER_TIMEOUT = 20
 RULES_WORKER_OUTPUT_LIMIT = 1024 * 1024
+SCENARIOS_LIST_OUTPUT_LIMIT = 8 * 1024 * 1024
 # Reading the whole workspace can legitimately be much larger than applying one change.
 RULES_LIST_OUTPUT_LIMIT = GRAPH_WORKER_OUTPUT_LIMIT
 # Error codes of a refused change and the HTTP status the map answers with; any other code is 400.
-CHANGE_ERROR_STATUS = {"not_found": 404, "conflict": 409, "exists": 409, "settings": 409, "busy": 503}
+CHANGE_ERROR_STATUS = {
+    "not_found": 404, "conflict": 409, "exists": 409, "settings": 409, "busy": 503,
+    "invalid_state": 409, "schema_upgrade_required": 409, "forbidden": 403,
+}
 # How long a request waits for its turn: reading for another reading, a change for another change.
 TURN_TIMEOUT = RULES_WORKER_TIMEOUT + 5
 RULES_SOURCE = "richi map"
-CHANGES_ONLY = "The map changes only standing rules and agent settings"
+CHANGES_ONLY = "The map changes only standing rules, scenarios, finding triage feedback and agent settings"
 # What a page that may not edit is told about agent settings that cannot be used: the full text names the file.
 SETTINGS_PROBLEM = "The agent settings cannot be used now"
 # No change the page sends nests deeper; a deeper body is refused before anything else reads it.
 BODY_DEPTH = 16
+SCENARIOS_BODY_DEPTH = scenario_format.MAX_DEPTH + 4
 # parse_change's answer for a body it refused, apart from any JSON value (null included).
 INVALID = object()
 
@@ -592,6 +605,234 @@ def _run_rules_request(database, operation, runtime, config_file=None, workspace
     return 200, payload
 
 
+def scenarios_change(body):
+    """The change object `scenario apply` receives from the map UI (stripped source, UTF-8 JSON)."""
+    if isinstance(body, dict):
+        body = {key: value for key, value in body.items() if key != "source"}
+        if body.get("action") == "add":
+            body["source"] = RULES_SOURCE
+    return json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+
+def _scenarios_list_worker(database, workspace):
+    """Private map read of scenario definitions, templates, runs and unified journal."""
+    try:
+        with closing(memory.connect(Path(database), readonly=True)) as conn, memory.transaction(conn, write=False):
+            memory.backend(conn)
+            payload = scenarios.map_snapshot(conn, memory, workspace=workspace)
+    except (OSError, sqlite3.Error, memory.MemoryError) as exc:
+        print(json.dumps({"code": "busy" if memory._store_busy(exc) else "unavailable"}), file=sys.stderr)
+        return 1
+    sys.stdout.buffer.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    return 0
+
+
+def _scenario_run_worker(database, run_id):
+    """Private map read of one run's detailed step state and event journal."""
+    try:
+        with closing(memory.connect(Path(database), readonly=True)) as conn, memory.transaction(conn, write=False):
+            memory.backend(conn)
+            run_data = scenario_runs.run_status(conn, memory, run_id)
+            run_row = conn.execute("SELECT * FROM scenario_runs WHERE id = ?", (run_id,)).fetchone()
+            if run_row is not None and run_row["definition_json"]:
+                from . import templating
+                run_dict = dict(run_row)
+                definition = json.loads(run_dict["definition_json"])
+                step_rows = scenario_runs._load_steps(conn, run_id)
+                repo_path = None
+                if run_dict.get("project_id"):
+                    prow = conn.execute("SELECT repo_path FROM projects WHERE id = ?", (run_dict["project_id"],)).fetchone()
+                    if prow and prow[0]:
+                        repo_path = prow[0]
+                base_ctx = scenario_runs._context(
+                    run_dict, step_rows, definition,
+                    project_path=repo_path, agent=run_dict.get("created_by_agent"),
+                )
+
+                def _try_render(template_text, ctx, *, line=False, limit=4000):
+                    text = str(template_text or "")
+                    if "{{" not in text:
+                        return text[:limit]
+                    try:
+                        return scenario_runs._render_field(text, ctx, line=line, limit=limit, empty=False)
+                    except (templating.TemplateError, templating.Unresolved, ValueError):
+                        return text[:limit]
+
+                run_data["scenario_title"] = definition.get("title") or run_data["scenario_id"]
+                def_steps = [step for step in definition.get("steps", []) if isinstance(step, dict)]
+                run_data["definition_steps"] = [
+                    {
+                        "id": step.get("id", ""),
+                        "title": step.get("title") or step.get("id", ""),
+                        "type": step.get("type", "instruction"),
+                        "needs": list(step.get("needs") or []),
+                        "subagent": bool((step.get("hints") or {}).get("subagent")),
+                    }
+                    for step in def_steps
+                ]
+                if isinstance(definition.get("layout"), dict):
+                    run_data["layout"] = definition["layout"]
+                by_id = {step["id"]: step for step in def_steps if "id" in step}
+                for step in run_data.get("steps", []):
+                    spec = by_id.get(step.get("id"))
+                    if not spec:
+                        continue
+                    step_ctx = dict(base_ctx)
+                    if isinstance(step.get("matrix"), dict):
+                        step_ctx["matrix"] = step["matrix"]
+                    step["title"] = _try_render(spec.get("title") or step["id"], step_ctx, line=True, limit=200)
+                    params = spec.get("params") or {}
+                    if spec.get("type") == "gate":
+                        step["gate"] = {
+                            "question": _try_render(params.get("question", ""), step_ctx, line=False, limit=4000),
+                            "options": list(params.get("options") or []),
+                            "allow_comment": params.get("allow_comment") is not False,
+                        }
+                    elif spec.get("type") == "checklist":
+                        rendered_items = []
+                        for item in params.get("items") or []:
+                            if isinstance(item, dict):
+                                rendered_items.append({
+                                    **item,
+                                    "text": _try_render(item.get("text", ""), step_ctx, line=True, limit=1000),
+                                })
+                            else:
+                                rendered_items.append(_try_render(item, step_ctx, line=True, limit=1000))
+                        step["checklist"] = {"items": rendered_items}
+            events = scenarios.log(conn, run_id=run_id, entries=100)
+            payload = {"run": run_data, "log": events["entries"], "log_more": events["more"]}
+    except memory.NotFoundError as exc:
+        print(json.dumps({"error": str(exc), "code": "not_found"}), file=sys.stderr)
+        return 1
+    except memory.MemoryError as exc:
+        code = getattr(exc, "code", None) or ("busy" if memory._store_busy(exc) else "unavailable")
+        if code in ("busy", "unavailable"):
+            print(json.dumps({"code": code}), file=sys.stderr)
+        else:
+            print(json.dumps({"error": str(exc), "code": code}), file=sys.stderr)
+        return 1
+    except (OSError, sqlite3.Error) as exc:
+        print(json.dumps({"code": "busy" if memory._store_busy(exc) else "unavailable"}), file=sys.stderr)
+        return 1
+    sys.stdout.buffer.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    return 0
+
+
+def _scenario_review_worker(database, project_id):
+    """Private map read of Review Hub KPIs, deduped findings inbox, and FP patterns."""
+    try:
+        with closing(memory.connect(Path(database), readonly=True, timeout=5)) as conn:
+            with memory.transaction(conn, write=False):
+                memory.backend(conn)
+                payload = scenario_review.review_hub_snapshot(conn, memory, project_id=project_id or None)
+    except memory.NotFoundError as exc:
+        print(json.dumps({"error": str(exc), "code": "not_found"}), file=sys.stderr)
+        return 1
+    except memory.MemoryError as exc:
+        code = getattr(exc, "code", None) or "error"
+        print(json.dumps({"error": str(exc), "code": code}), file=sys.stderr)
+        return 1
+    except (OSError, sqlite3.Error) as exc:
+        print(json.dumps({"code": "busy" if memory._store_busy(exc) else "unavailable"}), file=sys.stderr)
+        return 1
+    sys.stdout.buffer.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    return 0
+
+
+def _scenario_feedback_worker(database):
+    """Scoped map write of finding feedback into metadata `scenario-feedback:<run_id>` (never `entries`)."""
+    raw = sys.stdin.buffer.read(scenario_review.MAX_FEEDBACK_BYTES + 1)
+    if len(raw) > scenario_review.MAX_FEEDBACK_BYTES:
+        print(json.dumps({"error": "Feedback body is too large", "code": "limit"}), file=sys.stderr)
+        return 1
+    try:
+        body = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeError):
+        print(json.dumps({"error": "Invalid feedback JSON", "code": "invalid_request"}), file=sys.stderr)
+        return 1
+    if not isinstance(body, dict) or not isinstance(body.get("run_id"), str) or not isinstance(body.get("items"), list):
+        print(json.dumps({"error": "Feedback requires run_id and items list", "code": "invalid_request"}), file=sys.stderr)
+        return 1
+    try:
+        with closing(memory.connect(Path(database), readonly=False, timeout=5)) as conn:
+            with memory.transaction(conn, write=True):
+                memory.backend(conn)
+                payload = scenario_review.record_feedback(
+                    conn, memory, body["run_id"], body["items"],
+                    author=rules.current_author(), allow_remember_pattern=False,
+                )
+    except memory.NotFoundError as exc:
+        print(json.dumps({"error": str(exc), "code": "not_found"}), file=sys.stderr)
+        return 1
+    except memory.MemoryError as exc:
+        code = getattr(exc, "code", None) or "error"
+        print(json.dumps({"error": str(exc), "code": code}), file=sys.stderr)
+        return 1
+    except (OSError, sqlite3.Error) as exc:
+        print(json.dumps({"code": "busy" if memory._store_busy(exc) else "unavailable"}), file=sys.stderr)
+        return 1
+    sys.stdout.buffer.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    return 0
+
+
+def _run_scenarios_request(database, mode, runtime, config_file=None, workspace=None, config_required=False,
+                           *, run_id=None, project_id=None, stdin=None):
+    """Run a scenario list/run-detail/review/feedback/apply worker for the map."""
+    environment = worker_environment(config_file, workspace, config_required)
+    if stdin is not None:
+        environment["RICHI_RULES_ACTOR"] = RULES_SOURCE
+    if mode == "list":
+        arguments = ["_scenarios_list", str(database), workspace or ""]
+        action = "serve"
+        maximum = SCENARIOS_LIST_OUTPUT_LIMIT
+    elif mode == "run":
+        arguments = ["_scenario_run", str(database), run_id]
+        action = "serve"
+        maximum = SCENARIOS_LIST_OUTPUT_LIMIT
+    elif mode == "review":
+        arguments = ["_scenario_review", str(database), project_id or ""]
+        action = "serve"
+        maximum = SCENARIOS_LIST_OUTPUT_LIMIT
+    elif mode == "feedback":
+        arguments = ["_scenario_feedback", str(database)]
+        action = "serve"
+        maximum = RULES_WORKER_OUTPUT_LIMIT
+    else:
+        arguments = ["--compact-json", *config_arguments(config_file, config_required), "--db", str(database),
+                     "scenario", "apply", "--json", "-"]
+        action = "cli"
+        maximum = RULES_WORKER_OUTPUT_LIMIT
+    try:
+        process = subprocess.Popen(
+            runtime_command(runtime, arguments, action=action),
+            stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            pass_fds=lease_fds(), env=environment)
+        status, output, error = _read_worker_output(
+            process, label="Scenarios command", timeout=RULES_WORKER_TIMEOUT, maximum=maximum, request=stdin)
+    except (TimeoutError, subprocess.TimeoutExpired):
+        return 503, {"error": "The scenarios command timed out", "code": "timeout"}
+    except WorkerOutputLimit as exc:
+        return 503, {"error": str(exc), "code": "output_limit"}
+    except (OSError, ValueError) as exc:
+        return 503, {"error": str(exc)[:1000], "code": "unavailable"}
+    try:
+        payload = json.loads((error if status else output).decode("utf-8"))
+    except (ValueError, UnicodeError):
+        payload = None
+    if not isinstance(payload, dict):
+        return 503, {"error": "The scenarios command failed; run richi check", "code": "unavailable"}
+    if status:
+        if payload.get("code") == "busy":
+            return 503, {"error": "The store is busy", "code": "busy"}
+        if payload.get("code") == "unavailable" or mode == "list":
+            return 503, {"error": "Scenarios could not be read; run richi check", "code": "unavailable"}
+        if "error" not in payload:
+            return 503, {"error": "The scenarios command failed; run richi check", "code": "unavailable"}
+        return CHANGE_ERROR_STATUS.get(payload.get("code"), 400), payload
+    return 200, payload
+
+
 def compatible_health(health, database, runtime=None, config_file=None):
     return (isinstance(health, dict) and health.get("application") == "project-memory-map"
             and health.get("database") == str(database) and health.get("api_version") == API_VERSION
@@ -620,6 +861,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
     # Readings take turns among themselves and changes among themselves. Any client of the port
     # may read, so a change, which only the user's page makes, never waits behind readings.
     rules_read_lock, rules_lock = threading.Lock(), threading.Lock()
+    scenarios_read_lock, scenarios_lock = threading.Lock(), threading.Lock()
     agents_read_lock, agents_lock = threading.Lock(), threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
@@ -667,7 +909,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
         def require_edit_key(self):
             editing = self.edit_key()
             if editing is False:
-                self.send_data(403, {"error": "Open the map with richi map to change rules or agents here",
+                self.send_data(403, {"error": "Open the map with richi map to change rules, scenarios or agents here",
                                      "code": "not_editing"})
             return editing is True
 
@@ -684,7 +926,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Frame-Options", "DENY")
             self.send_header("Referrer-Policy", "no-referrer")
-            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
+            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(data)
@@ -711,6 +953,15 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                     return self.send_data(200, (BASE / "map.html").read_bytes(), "text/html; charset=utf-8")
                 except OSError:
                     return self.send_data(503, {"error": "map.html is unavailable"})
+            if url.path.startswith("/assets/") and not url.query:
+                asset = url.path[len("/assets/"):]
+                ctype = MAP_ASSETS.get(asset)
+                if ctype is None:
+                    return self.send_data(404, {"error": "Unknown map asset"})
+                try:
+                    return self.send_data(200, (BASE / "map_assets" / asset).read_bytes(), ctype)
+                except OSError:
+                    return self.send_data(503, {"error": "map asset is unavailable"})
             if url.path == "/favicon.ico":
                 return self.send_data(204, b"", "image/x-icon")
             if url.path == "/api/health" and not url.query:
@@ -752,6 +1003,66 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                     payload["limit_text"] = rules.MAX_TEXT
                     if not editing and isinstance(payload.get("agent_settings_problem"), dict):
                         payload["agent_settings_problem"]["error"] = SETTINGS_PROBLEM
+                return self.send_data(status, payload)
+            if url.path == "/api/scenarios" and not url.query:
+                editing = self.edit_key()
+                if editing is None:
+                    return None
+                if not scenarios_read_lock.acquire(timeout=TURN_TIMEOUT):
+                    return self.send_data(503, {"error": "Scenarios are being read; try again", "code": "busy"})
+                try:
+                    status, payload = _run_scenarios_request(database, "list", runtime, config_file, workspace,
+                                                             config_required)
+                finally:
+                    scenarios_read_lock.release()
+                if status == 200:
+                    payload["editing"] = editing
+                return self.send_data(status, payload)
+            if url.path == "/api/scenario-run":
+                try:
+                    if len(url.query) > 256:
+                        return self.send_data(414, {"error": "Query exceeds the size limit"})
+                    params = parse_qs(url.query, keep_blank_values=True, strict_parsing=True, max_num_fields=1) if url.query else {}
+                except ValueError:
+                    return self.send_data(400, {"error": "Invalid query"})
+                run_id = params.get("id", [None])[0]
+                if (set(params) != {"id"} or len(params["id"]) != 1 or not run_id
+                        or len(run_id) > 120 or any(ord(c) < 32 or ord(c) == 127 for c in run_id)):
+                    return self.send_data(400, {"error": "Pass a valid run id"})
+                if not scenarios_read_lock.acquire(timeout=TURN_TIMEOUT):
+                    return self.send_data(503, {"error": "Scenarios are being read; try again", "code": "busy"})
+                try:
+                    status, payload = _run_scenarios_request(database, "run", runtime, config_file, workspace,
+                                                             config_required, run_id=run_id)
+                finally:
+                    scenarios_read_lock.release()
+                return self.send_data(status, payload)
+            if url.path == "/api/scenario-review":
+                editing = self.edit_key()
+                if editing is None:
+                    return None
+                project_filter = None
+                if url.query:
+                    try:
+                        if len(url.query) > 256:
+                            return self.send_data(414, {"error": "Query exceeds the size limit"})
+                        params = parse_qs(url.query, keep_blank_values=True, strict_parsing=True, max_num_fields=1)
+                    except ValueError:
+                        return self.send_data(400, {"error": "Invalid query"})
+                    if set(params) != {"project"} or len(params["project"]) != 1:
+                        return self.send_data(400, {"error": "Pass at most one project filter"})
+                    project_filter = params["project"][0] or None
+                    if project_filter and (len(project_filter) > 120 or any(ord(c) < 32 or ord(c) == 127 for c in project_filter)):
+                        return self.send_data(400, {"error": "Invalid project filter"})
+                if not scenarios_read_lock.acquire(timeout=TURN_TIMEOUT):
+                    return self.send_data(503, {"error": "Scenarios are being read; try again", "code": "busy"})
+                try:
+                    status, payload = _run_scenarios_request(database, "review", runtime, config_file, workspace,
+                                                             config_required, project_id=project_filter)
+                finally:
+                    scenarios_read_lock.release()
+                if status == 200:
+                    payload["editing"] = editing
                 return self.send_data(status, payload)
             if url.path in {"/api/agents", "/api/skills"} and not url.query:
                 editing = self.edit_key() if url.path == "/api/agents" else False
@@ -805,13 +1116,13 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
         def do_HEAD(self):
             return self.answer(self.get)
 
-        def read_change(self):
+        def read_change(self, max_bytes=RULES_BODY_LIMIT):
             """The body of a same-origin change request as bytes, or None after answering it."""
             port = self.server.server_address[1]
             if (not self.allowed_origin()
                     or self.headers.get("Origin") not in {"http://127.0.0.1:%d" % port, "http://localhost:%d" % port}
                     or self.headers.get("Sec-Fetch-Site") not in (None, "same-origin")):
-                self.send_data(403, {"error": "Only same-origin pages of this map may change rules or agents"})
+                self.send_data(403, {"error": "Only same-origin pages of this map may change rules, scenarios or agents"})
                 return None
             if self.headers.get_content_type() != "application/json":
                 self.send_data(415, {"error": "Send application/json"})
@@ -820,12 +1131,12 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 length = int(self.headers.get("Content-Length", ""))
             except ValueError:
                 length = -1
-            if not 0 <= length <= RULES_BODY_LIMIT:
-                self.send_data(413, {"error": "The request body must have a length of at most %d bytes" % RULES_BODY_LIMIT})
+            if not 0 <= length <= max_bytes:
+                self.send_data(413, {"error": "The request body must have a length of at most %d bytes" % max_bytes})
                 return None
             return self.rfile.read(length)
 
-        def parse_change(self, raw):
+        def parse_change(self, raw, max_depth=BODY_DEPTH):
             """The JSON value of a request body, or INVALID after answering 400; reached only by an entitled request."""
             try:
                 value = json.loads(raw.decode("utf-8"))
@@ -833,7 +1144,7 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 # RecursionError: brackets nested deeper than the parser goes.
                 value = INVALID
             # Some Pythons parse brackets far deeper than they can write back; no change nests that deep.
-            if value is INVALID or not _shallow(value, BODY_DEPTH):
+            if value is INVALID or not _shallow(value, max_depth):
                 self.send_data(400, {"error": "Invalid JSON", "code": "invalid_request"})
                 return INVALID
             return value
@@ -843,9 +1154,15 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
 
         def post(self):
             path = urlsplit(self.path)
-            if path.path not in {"/api/session", "/api/rules", "/api/agents"} or path.query:
+            if path.path not in {"/api/session", "/api/rules", "/api/agents", "/api/scenarios", "/api/scenario-feedback"} or path.query:
                 return self.send_data(405, {"error": CHANGES_ONLY})
-            raw = self.read_change()
+            scenario_request = path.path == "/api/scenarios"
+            feedback_request = path.path == "/api/scenario-feedback"
+            body_limit = (
+                SCENARIOS_BODY_LIMIT if scenario_request
+                else (scenario_review.MAX_FEEDBACK_BYTES + 16 * 1024 if feedback_request else RULES_BODY_LIMIT)
+            )
+            raw = self.read_change(max_bytes=body_limit)
             if raw is None:
                 return None
             if path.path == "/api/session":
@@ -865,18 +1182,32 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 return self.send_data(200, {"secret": value})
             if not self.require_edit_key():
                 return None
-            body = self.parse_change(raw)
+            body = self.parse_change(raw, max_depth=SCENARIOS_BODY_DEPTH if scenario_request else BODY_DEPTH)
             if body is INVALID:
                 return None
             agent_request = path.path == "/api/agents"
-            if not agent_request:
+            if feedback_request:
+                try:
+                    change = json.dumps(body, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+                except (TypeError, ValueError, UnicodeEncodeError):
+                    return self.send_data(400, {"error": "Invalid feedback payload", "code": "invalid_request"})
+                if len(change) > scenario_review.MAX_FEEDBACK_BYTES:
+                    return self.send_data(413, {"error": "The feedback change is too large", "code": "limit"})
+            elif scenario_request:
+                try:
+                    change = scenarios_change(body)
+                except UnicodeEncodeError:
+                    return self.send_data(400, {"error": "The scenario change contains invalid UTF-8 characters", "code": "invalid_request"})
+                if len(change) > scenarios.MAX_CHANGE:
+                    return self.send_data(413, {"error": "The scenario change is too large", "code": "limit"})
+            elif not agent_request:
                 change = rules_change(body)
                 if len(change) > rules.MAX_CHANGE:
                     # Escaping non-ASCII text can exceed what the rules command reads.
                     return self.send_data(413, {"error": "The rule change is too large", "code": "limit"})
-            lock = agents_lock if agent_request else rules_lock
+            lock = agents_lock if agent_request else (scenarios_lock if (scenario_request or feedback_request) else rules_lock)
             if not lock.acquire(timeout=TURN_TIMEOUT):
-                subject = "change of the agents" if agent_request else "rule change"
+                subject = "change of the agents" if agent_request else ("scenario change" if (scenario_request or feedback_request) else "rule change")
                 return self.send_data(503, {"error": "Another " + subject + " is in progress; try again", "code": "busy"})
             try:
                 # The page may have lost its editing session while waiting behind another save.
@@ -884,6 +1215,12 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                     return None
                 if agent_request:
                     status, payload = agent_change(body)
+                elif feedback_request:
+                    status, payload = _run_scenarios_request(database, "feedback", runtime,
+                                                             config_file, workspace, config_required, stdin=change)
+                elif scenario_request:
+                    status, payload = _run_scenarios_request(database, "apply", runtime,
+                                                             config_file, workspace, config_required, stdin=change)
                 else:
                     status, payload = _run_rules_request(database, ["rules", "apply", "--json", "-"], runtime,
                                                          config_file, workspace, config_required, stdin=change)
@@ -969,7 +1306,7 @@ def source_fingerprint(package=None):
     package = Path(package) if package is not None else BASE
     digest = hashlib.sha256()
     for path in sorted(package.rglob("*")):
-        if path.suffix in {".py", ".sql"} and path.is_file():
+        if path.suffix in {".py", ".sql", ".json"} and path.is_file():
             digest.update(str(path.relative_to(package)).encode("utf-8"))
             digest.update(b"\0")
             digest.update(path.read_bytes())
@@ -1180,8 +1517,8 @@ def _main(argv=None):
     schema = database_schema(database)
     if schema is None:
         parser.error("Cannot read the database: " + str(database))
-    if schema not in (2, 3):
-        parser.error("The map requires schema 2 or 3; run richi migrate, which backs up the store first")
+    if schema not in memory.SUPPORTED_VERSIONS or schema < 2:
+        parser.error("The map requires schema 2 or newer; run richi migrate, which backs up the store first")
     # Taken before anything copies the environment: no child may see them.
     listener = inherited_listener(args.port)
     restarted = os.environ.pop(RESTARTED_ENV, None) == "1"
@@ -1265,8 +1602,8 @@ def _main(argv=None):
     print("Project memory map: " + address, flush=True)
     if listener is not None:
         print("Took over the listening socket of the previous map process.", flush=True)
-    print("Local viewer: knowledge is read-only; standing rules and agent settings change only from a page "
-          "opened by richi map. Press Ctrl+C to stop.", flush=True)
+    print("Local viewer: knowledge is read-only; standing rules, scenarios, finding triage feedback and agent "
+          "settings change only from a page opened by richi map. Press Ctrl+C to stop.", flush=True)
     if args.open:
         # In a thread: the page can redeem its edit ticket only once the server below answers.
         threading.Thread(target=map_access.open_browser, args=(address, database), daemon=True).start()
@@ -1342,6 +1679,14 @@ def main(argv=None):
     try:
         if argv and argv[0] == "_rules_list" and len(argv) == 3:
             return _rules_list_worker(argv[1], argv[2] or None)
+        if argv and argv[0] == "_scenarios_list" and len(argv) == 3:
+            return _scenarios_list_worker(argv[1], argv[2] or None)
+        if argv and argv[0] == "_scenario_run" and len(argv) == 3:
+            return _scenario_run_worker(argv[1], argv[2])
+        if argv and argv[0] == "_scenario_review" and len(argv) == 3:
+            return _scenario_review_worker(argv[1], argv[2] or None)
+        if argv and argv[0] == "_scenario_feedback" and len(argv) == 2:
+            return _scenario_feedback_worker(argv[1])
         return _main(argv) or 0
     except (MemoryError, OSError, ValueError, RuntimeError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)

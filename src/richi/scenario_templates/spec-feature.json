@@ -1,0 +1,83 @@
+{
+  "format": "richi-scenario",
+  "format_version": 1,
+  "id": "spec-feature",
+  "title": "Фича по спецификации (Spec -> Design -> Code)",
+  "description": "Пошаговая разработка фичи по методике Spec-Driven Development: сбор контекста из памяти, спецификация и план, согласование с человеком, реализация, тесты и запись решения в память.",
+  "when_to_use": "При старте новой нетривиальной фичи, когда важно сначала согласовать требования и дизайн до написания кода.",
+  "run_title": "Feature: {{inputs.feature}}",
+  "tags": ["feature", "spec", "daily"],
+  "inputs": {
+    "feature": {
+      "type": "string",
+      "title": "Название фичи",
+      "description": "Короткое название задачи или фичи",
+      "required": true
+    }
+  },
+  "steps": [
+    {
+      "id": "context",
+      "type": "memory.brief",
+      "title": "Прочитать контекст и решения в памяти",
+      "params": {
+        "question": "{{inputs.feature}}",
+        "limit": 12,
+        "include_past_runs": true
+      }
+    },
+    {
+      "id": "spec",
+      "type": "instruction",
+      "title": "Подготовить спецификацию и план",
+      "needs": ["context"],
+      "params": {
+        "text": "Сформируй компактную спецификацию для «{{inputs.feature}}» с учётом памяти ({{steps.context.summary}}): границы scope, контракты, риски и план проверки. Не редактируй код на этом шаге."
+      },
+      "checks": [
+        {
+          "kind": "no_dirty_git",
+          "mode": "unchanged"
+        }
+      ]
+    },
+    {
+      "id": "approve_spec",
+      "type": "gate",
+      "title": "Согласование спецификации",
+      "needs": ["spec"],
+      "params": {
+        "question": "План для «{{inputs.feature}}»: {{steps.spec.summary}}. Согласуем переход к реализации?",
+        "options": ["approve", "defer"],
+        "allow_comment": true
+      }
+    },
+    {
+      "id": "implement",
+      "type": "instruction",
+      "title": "Реализовать и покрыть тестами",
+      "needs": ["approve_spec"],
+      "if": "steps.approve_spec.answer == 'approve'",
+      "params": {
+        "text": "Реализуй согласованную спецификацию «{{inputs.feature}}» (комментарий человека: {{steps.approve_spec.comment}}), добавь тесты и убедись, что все проверки проходят."
+      }
+    },
+    {
+      "id": "record_decision",
+      "type": "memory.record",
+      "title": "Зафиксировать архитектурное решение в памяти",
+      "needs": ["implement"],
+      "if": "steps.implement.status == 'done'",
+      "params": {
+        "kind": "decision",
+        "title": "Реализация фичи: {{inputs.feature}}",
+        "summary": "Спецификация: {{steps.spec.summary}}\n\nИтог реализации: {{steps.implement.summary}}",
+        "tags": ["feature", "spec"],
+        "knowledge_state": "confirmed"
+      }
+    }
+  ],
+  "layout": {
+    "mode": "list"
+  }
+}

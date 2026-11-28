@@ -434,7 +434,7 @@ WHERE 1=1
         self.assertEqual(report["finding_counts"]["long_summary"], 3)
 
     def test_long_summary_is_read_only_for_all_supported_schemas_without_external_io(self):
-        for version in (1, 2, 3):
+        for version in (1, 2, 3, 4):
             with self.subTest(version=version):
                 if version == 1:
                     self.conn.close()
@@ -450,12 +450,15 @@ WHERE 1=1
                     self.db = Path(self.temp.name) / ("schema-%d.sqlite3" % version)
                     self.conn = memory.connect(self.db, create=True)
                     self.addCleanup(self.conn.close)
-                    if version == 2:
+                    if version in (2, 3):
                         memory.execute_script(self.conn, (memory.BASE / "schema.sql").read_text())
-                        memory.execute_script(self.conn, (memory.BASE / "graph_schema.sql").read_text().replace(", 'tool'", ""))
+                        graph_sql = (memory.BASE / "graph_schema.sql").read_text()
+                        if version == 2:
+                            graph_sql = graph_sql.replace(", 'tool'", "")
+                        memory.execute_script(self.conn, graph_sql)
                         memory.execute_script(self.conn, memory.FTS_SQL)
                         self.conn.execute("INSERT INTO metadata VALUES ('search_backend', 'fts5')")
-                        self.conn.execute("PRAGMA user_version = 2")
+                        self.conn.execute("PRAGMA user_version = " + str(version))
                     else:
                         memory.initialize(self.conn, self.db)
                     memory.project_put(self.conn, {"id": "alpha", "name": "alpha", "source": "fixture"})

@@ -1,0 +1,72 @@
+{
+  "format": "richi-scenario",
+  "format_version": 1,
+  "id": "pre-commit-review",
+  "title": "Pre-commit ревью (~2 мин)",
+  "description": "Быстрая локальная проверка staged и unstaged изменений перед коммитом с учётом памяти проекта и заземлением каждой находки на реальный файл и строку.",
+  "when_to_use": "Перед git commit или push, когда нужна быстрая проверка diff без запуска тяжёлого многоэтапного ревью.",
+  "run_title": "Pre-commit: {{inputs.focus}}",
+  "tags": ["review", "pre-commit"],
+  "inputs": {
+    "focus": {
+      "type": "string",
+      "title": "Фокус проверки",
+      "description": "Короткое описание задачи или области изменений (например, auth или billing)",
+      "default": "current diff"
+    }
+  },
+  "steps": [
+    {
+      "id": "context",
+      "type": "memory.brief",
+      "title": "Загрузить память проекта и прошлые паттерны",
+      "params": {
+        "question": "{{inputs.focus}}",
+        "limit": 8,
+        "include_past_runs": true,
+        "include_learnings": true
+      }
+    },
+    {
+      "id": "diff_check",
+      "type": "instruction",
+      "title": "Проверить текущий diff (read-only)",
+      "needs": ["context"],
+      "params": {
+        "text": "Проверь локальный git diff (staged и unstaged) в read-only режиме, не изменяя файлы репозитория. Контекст из памяти: {{steps.context.summary}}. Ищи только реальные баги, регрессии, утечки, ошибки безопасности и пропущенные проверки. Верни список data.findings (может быть пустым [], если проблем нет), где каждый элемент имеет поля: file (относительный путь), line (номер строки >= 1), severity (P0|P1|P2|nit), title, evidence (минимум 10 символов с цитатой кода/фактом)."
+      },
+      "outputs": {
+        "data": {
+          "findings": {
+            "type": "list",
+            "required": true
+          }
+        }
+      },
+      "checks": [
+        {
+          "kind": "no_dirty_git",
+          "mode": "unchanged"
+        },
+        {
+          "kind": "findings_grounded",
+          "path": "findings"
+        }
+      ]
+    },
+    {
+      "id": "decision",
+      "type": "gate",
+      "title": "Решение перед коммитом",
+      "needs": ["diff_check"],
+      "params": {
+        "question": "Проверить находки pre-commit ревью ({{steps.diff_check.summary}}) и решить, что делать дальше?",
+        "options": ["commit_as_is", "fix_blockers", "abort"],
+        "allow_comment": true
+      }
+    }
+  ],
+  "layout": {
+    "mode": "list"
+  }
+}
