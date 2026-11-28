@@ -822,6 +822,65 @@ DETAILS = {
             ("Record a scoped false-positive pattern", "richi scenario feedback run-review-20261127-0001 --finding f:a1b2c3d4e5f6 --verdict false_positive --remember-pattern --scope-path src/auth.py --safety-condition 'Gateway verifies HMAC before calling verify_token'"),
             ("Apply batch triage from stdin", "richi scenario feedback run-review-20261127-0001 --batch -"),
         )),
+    "scenario fork": dict(about="""
+        Forks a prior scenario run from one step (pin data), copying all
+        non-descendant steps strictly by DAG needs and recomputing --from STEP
+        and its transitive descendants. Fork runs are tagged run_kind='fork':
+        excluded from prod stats, forbidden as baselines, and memory.record
+        writes are downgraded to hypothesis. Use --dry-run to preview.""",
+        examples=(
+            ("Preview a DAG fork", "richi scenario fork run-bug-hunt-20261127-0001 --from disprove --dry-run"),
+            ("Fork with the latest definition", "richi scenario fork run-bug-hunt-20261127-0001 --from disprove --use-latest"),
+        )),
+    "scenario export": dict(about="""
+        Exports a scenario definition or built-in template as portable JSON with
+        its canonical SHA-256 digest and a security summary listing any command,
+        skill, memory.record or secret input surfaces. Pass --out FILE to write
+        directly to .richi/scenarios/<id>.json for Git version control.""",
+        examples=(
+            ("Export to stdout with SHA-256", "richi scenario export bug-hunt --builtin"),
+            ("Write to repo file", "richi scenario export review --out .richi/scenarios/review.json"),
+        )),
+    "scenario import": dict(about="""
+        Imports a portable scenario JSON file into project or global scope. If
+        the scenario contains executable or privileged steps (command, skill,
+        memory.record or secret inputs), Richi prints a security summary and the
+        exact SHA-256 digest; re-run with --trust-sha256 HEX to trust that exact
+        revision for the target project.""",
+        examples=(
+            ("Inspect security summary before trust", "richi scenario import .richi/scenarios/review.json --project svc"),
+            ("Import with pinned digest trust", "richi scenario import .richi/scenarios/review.json --project svc --trust-sha256 0123456789abcdef"),
+        )),
+    "scenario golden": dict(about="""
+        Manages fixed-commit golden bug cases (base_rev, head_rev, expected_bugs
+        and optional known_traps) used by richi scenario eval to benchmark review
+        scenarios without floating branch drift.""",
+        examples=(
+            ("List golden cases", "richi scenario golden list"),
+            ("Add a golden case from JSON", "richi scenario golden add --json golden-auth.json"),
+        )),
+    "scenario golden add": dict(about="""
+        Adds or updates a fixed-commit golden bug benchmark case from a JSON file
+        or stdin ('-'). Each expected bug specifies a relative file path plus a
+        line_range and/or symbols list for severity-agnostic matching.""",
+        examples=(("Add from file", "richi scenario golden add --json golden-auth.json"),)),
+    "scenario golden list": dict(about="""
+        Lists stored golden bug cases in this workspace, optionally filtered to
+        one registered --project.""",
+        examples=(("List all golden cases", "richi scenario golden list"),)),
+    "scenario golden remove": dict(about="""
+        Deletes a stored golden bug case by ID from this workspace.""",
+        examples=(("Remove a golden case", "richi scenario golden remove auth-bug-1"),)),
+    "scenario eval": dict(about="""
+        Starts an isolated run_kind='eval' run of a scenario on a fixed-commit
+        golden case with explicit memory isolation (--memory-mode clean,
+        as_of_commit or with_fp_only), or scores a completed eval run with
+        --score RUN. Pass --compare-run PREV with --score to print a Paired Bug
+        Diff showing newly caught and regressed bugs.""",
+        examples=(
+            ("Start a clean golden eval run", "richi scenario eval bug-hunt --case auth-bug-1 --memory-mode clean"),
+            ("Score and diff two eval runs", "richi scenario eval bug-hunt --case auth-bug-1 --score run-bug-hunt-20261127-0002 --compare-run run-bug-hunt-20261127-0001"),
+        )),
     "skill-sources": dict(about="""
         Richi knows which AI agents work on this computer and where each finds
         skills, so that a rule can name a skill for every agent or one per agent.

@@ -164,6 +164,13 @@ richi --compact-json scenario baseline run-review-20261127-0001
 richi --compact-json scenario stats --scenario review
 richi --compact-json scenario catalog
 richi --compact-json scenario feedback run-review-20261127-0001 --finding f:a1b2c3d4e5f6 --verdict actionable_bug --resolution fixed
+richi --compact-json scenario fork run-review-20261127-0001 --from merge --dry-run
+richi --compact-json scenario export review --out .richi/scenarios/review.json
+richi --compact-json scenario import .richi/scenarios/review.json --project svc --trust-sha256 0123456789abcdef
+richi --compact-json scenario golden add --json golden-auth.json
+richi --compact-json scenario golden list
+richi --compact-json scenario golden remove auth-bug-1
+richi --compact-json scenario eval bug-hunt --case auth-bug-1 --memory-mode clean
 ```
 
 Пропуск этапа требует `--reason` и не блокирует следующие этапы по порядку

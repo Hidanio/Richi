@@ -555,6 +555,10 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
             "data": {"value": bool(outcome)},
         }
     if kind == "memory.recall":
+        run_meta = get_run_meta(conn, run_row["id"])
+        mem_mode = run_meta.get("memory_mode")
+        if mem_mode in ("clean", "with_fp_only"):
+            return {"status": "done", "summary": f"Eval memory_mode={mem_mode}: recall omitted.", "data": {"refs": [], "count": 0}}
         from . import recall
         query = _render_field(params["query"], ctx, line=True, limit=2000, field="params.query", empty=False)
         limit = params.get("limit", 8)
@@ -569,32 +573,49 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
         )
         res = recall.recall(conn, args, api)
         matches = res.get("results") or []
+        if mem_mode == "as_of_commit" and run_meta.get("commit_time"):
+            cutoff = str(run_meta["commit_time"])
+            matches = [m for m in matches if not m.get("updated_at") or str(m["updated_at"]) <= cutoff]
         refs = [item.get("ref") for item in matches if item.get("ref")]
         lines = ["%s: %s" % (item.get("ref"), item.get("title", "")) for item in matches[:8]]
         summary = ("[untrusted memory evidence: %s]" % "; ".join(lines)[:1460]) if lines else "No matching records found."
         return {"status": "done", "summary": summary, "data": {"refs": refs, "count": len(refs)}}
     if kind == "memory.brief":
-        from . import task_brief
+        run_meta = get_run_meta(conn, run_row["id"])
+        mem_mode = run_meta.get("memory_mode")
         question = _render_field(params["question"], ctx, line=False, limit=2000, field="params.question", empty=False)
-        limit = params.get("limit", 12)
-        args = SimpleNamespace(
-            query=question, project=run_row["project_id"], limit=limit, max_chars=16000,
-            include_hypotheses=False, include_superseded=False,
-            base=None, target=None, worktree=False, repo=None, check_sources=False,
-            where=None, explain=False, expect=None,
-        )
-        res = task_brief.brief(conn, args, api, database)
-        cards = res.get("results") or []
-        refs = [item.get("ref") for item in cards if item.get("ref")]
-        lines = ["%s: %s" % (item.get("ref"), item.get("title", "")) for item in cards[:8]]
+        if mem_mode == "clean":
+            return {
+                "status": "done",
+                "summary": "Eval memory_mode=clean: prior memory, past runs and FP learnings omitted.",
+                "data": {"refs": [], "count": 0, "past_runs": [], "learnings": []},
+            }
+        refs = []
+        lines = []
         past_runs = []
-        if params.get("include_past_runs", True):
-            past_runs = _past_runs_summary(conn, run_row["scenario_id"], run_row["project_id"], run_row["id"], limit=3)
-            for pr in past_runs:
-                hl = ", ".join(pr["highlights"][:2])
-                lines.append("past-run %s (%s)%s" % (pr["run_id"], pr["status"], (": " + hl) if hl else ""))
+        if mem_mode != "with_fp_only":
+            from . import task_brief
+            limit = params.get("limit", 12)
+            args = SimpleNamespace(
+                query=question, project=run_row["project_id"], limit=limit, max_chars=16000,
+                include_hypotheses=False, include_superseded=False,
+                base=None, target=None, worktree=False, repo=None, check_sources=False,
+                where=None, explain=False, expect=None,
+            )
+            res = task_brief.brief(conn, args, api, database)
+            cards = res.get("results") or []
+            if mem_mode == "as_of_commit" and run_meta.get("commit_time"):
+                cutoff = str(run_meta["commit_time"])
+                cards = [c for c in cards if not c.get("updated_at") or str(c["updated_at"]) <= cutoff]
+            refs = [item.get("ref") for item in cards if item.get("ref")]
+            lines = ["%s: %s" % (item.get("ref"), item.get("title", "")) for item in cards[:8]]
+            if params.get("include_past_runs", True) and mem_mode != "as_of_commit":
+                past_runs = _past_runs_summary(conn, run_row["scenario_id"], run_row["project_id"], run_row["id"], limit=3)
+                for pr in past_runs:
+                    hl = ", ".join(pr["highlights"][:2])
+                    lines.append("past-run %s (%s)%s" % (pr["run_id"], pr["status"], (": " + hl) if hl else ""))
         learnings = []
-        if params.get("include_learnings"):
+        if params.get("include_learnings") or mem_mode == "with_fp_only":
             from . import scenario_review
             learnings, fp_hints = scenario_review.load_scoped_fp_learnings(
                 conn, project_id=run_row["project_id"], query=question,
@@ -1027,7 +1048,8 @@ def _next_run_id(conn, scenario_id, at_dt):
 
 
 def start_run(conn, api, database, scenario_id, *, project_id=None, project_path=None, scope=None,
-              raw_inputs=None, inputs_json=None, secrets_runtime=None, task_id=None, author=None, now_override=None):
+              raw_inputs=None, inputs_json=None, secrets_runtime=None, task_id=None, author=None,
+              now_override=None, initial_run_meta=None):
     """Start a new run: validate inputs, freeze snapshot, create task entry, advance ready steps."""
     require_v4(conn, api)
     if project_id is not None:
@@ -1072,7 +1094,8 @@ def start_run(conn, api, database, scenario_id, *, project_id=None, project_path
     at_dt = _now_dt(api, now_override)
     at_iso = _format_iso(at_dt)
     run_id = _next_run_id(conn, record["id"], at_dt)
-    task_entry_id = "task:scenario-" + run_id
+    is_eval_run = isinstance(initial_run_meta, dict) and initial_run_meta.get("kind") == "eval"
+    task_entry_id = None if is_eval_run else ("task:scenario-" + run_id)
 
     # R2-J19 & R2-J24: filter by secret_names (not sentinel text) and require non-empty rendered title.
     title_ctx = {
@@ -1101,6 +1124,8 @@ def start_run(conn, api, database, scenario_id, *, project_id=None, project_path
          json.dumps(redacted, ensure_ascii=False, separators=(",", ":")),
          task_entry_id, author.by, author.agent, at_iso, at_iso),
     )
+    if isinstance(initial_run_meta, dict) and initial_run_meta:
+        set_run_meta(conn, run_id, initial_run_meta)
     for pos, step in enumerate(definition["steps"]):
         role, pinned = scenario_format.executor(step)
         conn.execute(
@@ -1113,8 +1138,9 @@ def start_run(conn, api, database, scenario_id, *, project_id=None, project_path
 
     run_row, step_rows, _ = _advance(conn, api, database, run_id, project_path=project_path,
                                      agent=author.agent, now_override=at_dt)
-    _sync_task_entry(conn, api, run_row, step_rows, definition, title=run_title, create=True)
-    if task_id is not None:
+    if task_entry_id is not None:
+        _sync_task_entry(conn, api, run_row, step_rows, definition, title=run_title, create=True)
+    if task_id is not None and task_entry_id is not None:
         _safe_link_entries(
             conn, api,
             f"edge:scn-task-{run_id}",
@@ -1124,7 +1150,7 @@ def start_run(conn, api, database, scenario_id, *, project_id=None, project_path
             [{"reference": "scenario-run:" + run_id, "type": "scenario-run", "label": run_id}],
             knowledge_state="hypothesis",
         )
-    return _format_status(run_row, step_rows, definition, view="scenario-run")
+    return _format_status(run_row, step_rows, definition, view="scenario-run", run_meta=get_run_meta(conn, run_id))
 
 
 def _check_cwd_containment(rendered_cwd, project_path):

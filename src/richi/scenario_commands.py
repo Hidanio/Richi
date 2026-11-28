@@ -1,12 +1,15 @@
 """CLI declarations and dispatch for `richi scenario ...`."""
 import argparse
+import json
+from pathlib import Path
 
-from . import agents, rules, scenario_format, scenario_hooks, scenario_registry, scenario_review, scenario_runs, scenarios
+from . import agents, rules, scenario_eval, scenario_format, scenario_hooks, scenario_registry, scenario_review, scenario_runs, scenarios
 
 
 WRITE_ACTIONS = frozenset({
     "copy", "apply", "run", "next", "claim", "release", "report", "answer",
     "skip", "retry", "pause", "resume", "cancel", "baseline", "feedback",
+    "fork", "import", "golden", "eval",
 })
 
 
@@ -202,12 +205,65 @@ def add_commands(commands, api):
     fb_cmd.add_argument("--batch", metavar="FILE",
                         help="Read a JSON array (or object with items) of feedback records from FILE or '-' for stdin")
 
+    fork_cmd = actions.add_parser("fork", help="Fork a run from one step, freezing non-descendant steps by DAG needs")
+    fork_cmd.add_argument("run_id", metavar="RUN", help="Source scenario run ID to fork")
+    fork_cmd.add_argument("--from", dest="from_step", required=True, metavar="STEP",
+                          help="Step ID to recompute along with all its downstream descendants")
+    fork_cmd.add_argument("--use-latest", action="store_true",
+                          help="Use the latest saved scenario definition instead of the source run's frozen snapshot")
+    fork_cmd.add_argument("--dry-run", action="store_true",
+                          help="Preview which steps stay frozen and which will recompute without writing")
+
+    exp_cmd = actions.add_parser("export", help="Export a scenario definition as portable JSON with SHA-256 and security summary")
+    exp_cmd.add_argument("id", type=_argument_id, help="Scenario or built-in template ID to export")
+    exp_scope = exp_cmd.add_mutually_exclusive_group()
+    exp_scope.add_argument("--global", dest="global_scope", action="store_true", help="Export from workspace-wide scope only")
+    exp_scope.add_argument("--project", metavar="ID", help="Project scope to resolve first")
+    exp_scope.add_argument("--builtin", action="store_true", help="Export the built-in template")
+    exp_cmd.add_argument("--out", metavar="FILE", help="Write portable scenario JSON directly to FILE")
+
+    imp_cmd = actions.add_parser("import", help="Import a scenario JSON file with SHA-256 trust bound to project")
+    imp_cmd.add_argument("file", metavar="FILE", help="Scenario JSON file path (or '-' for stdin)")
+    imp_scope = imp_cmd.add_mutually_exclusive_group()
+    imp_scope.add_argument("--global", dest="global_scope", action="store_true", help="Import into workspace-wide scope")
+    imp_scope.add_argument("--project", metavar="ID", help="Import into this registered project (default: --project-path)")
+    imp_cmd.add_argument("--trust-sha256", metavar="HEX",
+                         help="Approve executable surfaces (command/skill/memory.record/secret) for this exact SHA-256")
+    imp_cmd.add_argument("--replace", action="store_true", help="Update an existing scenario with the same ID")
+
+    gold_cmd = actions.add_parser("golden", help="Manage fixed-commit golden bug cases for CLI scenario evaluation")
+    gold_sub = gold_cmd.add_subparsers(dest="golden_action", required=True)
+    gold_add = gold_sub.add_parser("add", help="Add or update a golden bug case from JSON")
+    gold_add.add_argument("--json", required=True, metavar="FILE", help="Golden case JSON file path or '-' for stdin")
+    gold_list = gold_sub.add_parser("list", help="List stored golden bug cases")
+    gold_list.add_argument("--project", metavar="ID", help="Filter golden cases to one registered project")
+    gold_rm = gold_sub.add_parser("remove", help="Remove a stored golden bug case")
+    gold_rm.add_argument("case_id", metavar="ID", type=_argument_id, help="Golden case ID to remove")
+
+    eval_cmd = actions.add_parser("eval", help="Run or score a scenario on a fixed-commit golden bug case")
+    eval_cmd.add_argument("id", type=_argument_id, help="Scenario ID to evaluate")
+    eval_cmd.add_argument("--case", dest="case_id", required=True, metavar="ID", type=_argument_id,
+                          help="Golden case ID to evaluate against")
+    eval_cmd.add_argument("--memory-mode", choices=scenario_eval.MEMORY_MODES, default="clean", metavar="MODE",
+                          help="Memory isolation: clean (default), as_of_commit or with_fp_only")
+    eval_cmd.add_argument("--score", dest="score_run", metavar="RUN",
+                          help="Score an existing eval run instead of starting a new run")
+    eval_cmd.add_argument("--compare-run", metavar="PREV",
+                          help="Compare --score RUN against a previous run to show Paired Bug Diff")
+    eval_cmd.add_argument("--project", metavar="ID", help="Project ID override (default: golden case or --project-path)")
+
 
 def writes(args):
     if args.command != "scenario":
         return False
     if args.action == "hook":
         return getattr(args, "hook_event", None) == "stop"
+    if args.action == "fork":
+        return not bool(getattr(args, "dry_run", False))
+    if args.action == "golden":
+        return getattr(args, "golden_action", None) != "list"
+    if args.action == "eval":
+        return not bool(getattr(args, "score_run", None))
     return args.action in WRITE_ACTIONS
 
 
@@ -223,6 +279,10 @@ def read_request(args, api):
         return scenarios.read_json_input(args.inputs_json, api, limit=scenarios.MAX_CHANGE)
     if args.action == "feedback" and getattr(args, "batch", None):
         return scenarios.read_json_input(args.batch, api, limit=scenario_review.MAX_FEEDBACK_BYTES)
+    if args.action == "import":
+        return scenarios.read_json_input(args.file, api, limit=scenario_format.MAX_BYTES)
+    if args.action == "golden" and getattr(args, "golden_action", None) == "add":
+        return scenarios.read_json_input(args.json, api, limit=scenario_eval.MAX_GOLDEN_BYTES)
     return None
 
 
@@ -395,6 +455,49 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
         return scenario_review.record_feedback(
             conn, api, args.run_id, items,
             checked_project=checked_project, author=author, allow_remember_pattern=True,
+        )
+    if action == "fork":
+        return scenario_eval.fork_run(
+            conn, api, database, args.run_id, args.from_step,
+            use_latest=args.use_latest, dry_run=args.dry_run,
+            checked_project=checked_project, project_path=project_path, author=author,
+        )
+    if action == "export":
+        scope = "builtin" if args.builtin else ("global" if args.global_scope else None)
+        res = scenario_eval.export_scenario(
+            conn, api, args.id, project_id=args.project, scope=scope, checked_project=checked_project,
+        )
+        if args.out:
+            out_path = Path(args.out).expanduser()
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(json.dumps(res["definition"], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            res["written_to"] = str(out_path)
+        return res
+    if action == "import":
+        scope = "global" if args.global_scope else "project"
+        return scenario_eval.import_scenario(
+            conn, api, request, scope=scope, project_id=args.project, checked_project=checked_project,
+            trust_sha256=args.trust_sha256, replace=args.replace, author=author,
+        )
+    if action == "golden":
+        ga = args.golden_action
+        if ga == "add":
+            return scenario_eval.golden_add(conn, api, request, checked_project=checked_project, author=author)
+        if ga == "list":
+            project_id = args.project if args.project is not None else checked_project
+            return scenario_eval.golden_list(conn, project_id=project_id)
+        if ga == "remove":
+            return scenario_eval.golden_remove(conn, api, args.case_id)
+    if action == "eval":
+        if args.score_run:
+            return scenario_eval.eval_score(
+                conn, api, args.case_id, args.score_run,
+                compare_run_id=args.compare_run, checked_project=checked_project,
+            )
+        return scenario_eval.eval_start(
+            conn, api, database, args.id, args.case_id,
+            memory_mode=args.memory_mode, project_id=args.project,
+            checked_project=checked_project, project_path=project_path, author=author,
         )
     if action == "next":
         secrets_runtime = _parse_secrets(args.secrets, api, getattr(args, "secret_envs", None))

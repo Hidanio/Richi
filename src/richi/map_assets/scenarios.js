@@ -548,7 +548,7 @@
     retried:'Повтор шага',lease_expired:'Истёк lease',
     stop_enforced:'Хук Stop: продолжение шага',stop_limit_reached:'Хук Stop: достигнут лимит',
     baseline_set:'Назначен эталон (baseline)',baseline_cleared:'Снят эталон (baseline)',
-    finding_feedback:'Триаж находок ревью',
+    finding_feedback:'Триаж находок ревью',run_forked:'Ответвление запуска (fork)',
   };
   function scenariosNote(){
     if(scenariosState.loading&&!scenariosState.data)return 'Загружаем сценарии…';
