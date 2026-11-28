@@ -164,7 +164,7 @@ RULES_LIST_OUTPUT_LIMIT = GRAPH_WORKER_OUTPUT_LIMIT
 # Error codes of a refused change and the HTTP status the map answers with; any other code is 400.
 CHANGE_ERROR_STATUS = {
     "not_found": 404, "conflict": 409, "exists": 409, "settings": 409, "busy": 503,
-    "invalid_state": 409, "schema_upgrade_required": 409, "forbidden": 403, "limit": 413,
+    "invalid_state": 409, "schema_upgrade_required": 409, "forbidden": 403,
 }
 # How long a request waits for its turn: reading for another reading, a change for another change.
 TURN_TIMEOUT = RULES_WORKER_TIMEOUT + 5
