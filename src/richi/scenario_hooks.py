@@ -7,7 +7,7 @@ so enforcement never relies on an agent's own loop-guard flag (e.g. Antigravity'
 from datetime import datetime, timezone
 import json
 
-from . import rules, scenario_runs, scenarios
+from . import rules, scenario_registry, scenario_runs, scenarios
 
 
 DEFAULT_MAX_CONTINUATIONS = 5
@@ -15,9 +15,8 @@ MAX_CONTINUATIONS_LIMIT = 20
 ENFORCE_KEY = "scenarios:enforce"
 
 
-def _schema_version(conn):
-    row = conn.execute("PRAGMA user_version").fetchone()
-    return int(row[0]) if row else 0
+def _has_tables(conn):
+    return scenario_registry.has_scenario_tables(conn)
 
 
 def _now_iso(api, now_override=None):
@@ -46,7 +45,7 @@ def _step_title(definition, step_id):
 
 def _load_active_context(conn, *, chat=None, agent=None, project_id=None):
     """Collect active claimed steps, waiting human gates, and agent-pinned ready steps."""
-    if _schema_version(conn) < 4:
+    if not _has_tables(conn):
         return {
             "active_runs": [],
             "claimed_steps": [],
@@ -203,7 +202,7 @@ def stop_check(conn, api, *, chat=None, agent=None, project_id=None,
         "agent": agent_id,
         "max_continuations": max_continuations,
     }
-    if _schema_version(conn) < 4:
+    if not _has_tables(conn):
         return {**base, "decision": "allow", "enforced": False}
     if not _enforcement_enabled(conn):
         return {**base, "decision": "allow", "enforced": False}

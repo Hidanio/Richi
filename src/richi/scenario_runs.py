@@ -31,7 +31,7 @@ import time
 from types import SimpleNamespace
 import unicodedata
 
-from . import agents, git_evidence, rules, scenario_format, scenarios, templating
+from . import agents, git_evidence, rules, scenario_format, scenario_registry, scenarios, templating
 
 
 LEASE_SECONDS = 30 * 60
@@ -42,15 +42,81 @@ MAX_GIT_EVIDENCE = 20
 ACTIVE_RUN_STATUSES = ("running", "waiting", "paused")
 TERMINAL_RUN_STATUSES = ("done", "failed", "cancelled")
 _GIT_REV = re.compile(r"[0-9A-Za-z][0-9A-Za-z._/@~^-]{0,199}\Z")
+_ARTIFACT_URI = re.compile(r"^richi://artifact/[A-Za-z0-9_.:-]+@[A-Za-z0-9_-]+(?:/[^?#\x00]+)?\Z")
+MAX_ARTIFACTS = 50
+RUN_META_PREFIX = "scenario-run-meta:"
 _UNSET = object()
 
 
 def require_v4(conn, api):
-    version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if version < 4:
+    if not scenario_registry.has_scenario_tables(conn):
         error = api.MemoryError("Scenario runs require schema 4; run richi migrate, which backs up the store first")
         error.code = "schema_upgrade_required"
         raise error
+
+
+def _run_meta_key(run_id):
+    return RUN_META_PREFIX + str(run_id)
+
+
+def set_run_meta(conn, run_id, meta):
+    """Store non-default run metadata (run_kind='eval'|'fork', forked_from, case_id) in metadata."""
+    if not meta:
+        return
+    conn.execute(
+        "INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)",
+        (_run_meta_key(run_id), json.dumps(meta, ensure_ascii=False, separators=(",", ":"))),
+    )
+
+
+def get_run_meta(conn, run_id):
+    row = conn.execute("SELECT value FROM metadata WHERE key = ?", (_run_meta_key(run_id),)).fetchone()
+    if row is None or not row[0]:
+        return {}
+    try:
+        val = json.loads(row[0])
+        return val if isinstance(val, dict) else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def all_run_meta(conn):
+    rows = conn.execute(
+        "SELECT key, value FROM metadata WHERE key >= ? AND key < ?",
+        (RUN_META_PREFIX, RUN_META_PREFIX[:-1] + ";"),
+    ).fetchall()
+    out = {}
+    for k, v in rows:
+        rid = k[len(RUN_META_PREFIX):]
+        try:
+            parsed = json.loads(v)
+            if isinstance(parsed, dict):
+                out[rid] = parsed
+        except (ValueError, TypeError):
+            continue
+    return out
+
+
+def _valid_artifact_item(item):
+    if isinstance(item, str):
+        return _valid_artifact_uri(item)
+    if not isinstance(item, dict):
+        return False
+    if not set(item).issubset({"uri", "kind", "title"}) or not _valid_artifact_uri(item.get("uri")):
+        return False
+    for opt in ("kind", "title"):
+        if opt in item and (not isinstance(item[opt], str) or len(item[opt]) > 200 or "\x00" in item[opt]):
+            return False
+    return True
+
+
+def _valid_artifact_uri(uri):
+    if not isinstance(uri, str) or len(uri) > 1000 or not _ARTIFACT_URI.fullmatch(uri):
+        return False
+    _, _, tail = uri[len("richi://artifact/"):].partition("/")
+    if tail and any(seg in ("", ".", "..") for seg in tail.split("/")):
+        return False
+    return True
 
 
 def _failure(api, message, code, **details):
@@ -357,6 +423,10 @@ def set_baseline(conn, api, run_id, *, clear=False, checked_project=None, author
     if run_row["status"] != "done":
         raise _failure(api, "Only completed (done) runs can be marked as baseline (run is %s)" % run_row["status"],
                        "invalid_state")
+    run_kind = get_run_meta(conn, run_id).get("kind", "prod")
+    if run_kind != "prod":
+        raise _failure(api, "Only prod runs can be marked as baseline (run kind is %s)" % run_kind,
+                       "invalid_state")
     conn.execute("INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)", (key, run_id))
     _record_event(conn, at_iso, run_row["scenario_id"], run_id, None, "baseline_set",
                   author.by, author.agent, {})
@@ -365,7 +435,8 @@ def set_baseline(conn, api, run_id, *, clear=False, checked_project=None, author
 
 
 def _past_runs_summary(conn, scenario_id, project_id, exclude_run_id, limit=3):
-    """Load recent completed/failed runs of the same scenario+project for memory.brief process memory."""
+    """Load recent completed/failed prod runs of the same scenario+project for memory.brief process memory."""
+    fetch_limit = max(limit * 4, 20)
     if project_id is None:
         rows = conn.execute(
             "SELECT id, status, finished.finished_at, created_at, updated_at, inputs_json "
@@ -374,7 +445,7 @@ def _past_runs_summary(conn, scenario_id, project_id, exclude_run_id, limit=3):
             ") AS finished ON finished.run_id = scenario_runs.id "
             "WHERE scenario_id = ? AND project_id IS NULL AND id <> ? AND status IN ('done', 'failed') "
             "ORDER BY created_at DESC, id DESC LIMIT ?",
-            (scenario_id, exclude_run_id, limit),
+            (scenario_id, exclude_run_id, fetch_limit),
         ).fetchall()
     else:
         rows = conn.execute(
@@ -384,10 +455,12 @@ def _past_runs_summary(conn, scenario_id, project_id, exclude_run_id, limit=3):
             ") AS finished ON finished.run_id = scenario_runs.id "
             "WHERE scenario_id = ? AND project_id = ? AND id <> ? AND status IN ('done', 'failed') "
             "ORDER BY created_at DESC, id DESC LIMIT ?",
-            (scenario_id, project_id, exclude_run_id, limit),
+            (scenario_id, project_id, exclude_run_id, fetch_limit),
         ).fetchall()
+    meta_map = all_run_meta(conn)
+    prod_rows = [r for r in rows if (meta_map.get(r["id"]) or {}).get("kind", "prod") == "prod"][:limit]
     out = []
-    for row in rows:
+    for row in prod_rows:
         rid = row["id"]
         steps = conn.execute(
             "SELECT step_key, status, result_json, reason FROM scenario_steps "
@@ -590,20 +663,23 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
             if pinned and pinned != run_row["id"]:
                 base_run_id = pinned
         if base_run_id is None:
+            meta_map = all_run_meta(conn)
             if run_row["project_id"] is None:
-                prev = conn.execute(
+                cands = conn.execute(
                     "SELECT id FROM scenario_runs WHERE scenario_id = ? AND project_id IS NULL AND id <> ? AND status = 'done' "
-                    "ORDER BY created_at DESC, id DESC LIMIT 1",
+                    "ORDER BY created_at DESC, id DESC LIMIT 20",
                     (run_row["scenario_id"], run_row["id"]),
-                ).fetchone()
+                ).fetchall()
             else:
-                prev = conn.execute(
+                cands = conn.execute(
                     "SELECT id FROM scenario_runs WHERE scenario_id = ? AND project_id = ? AND id <> ? AND status = 'done' "
-                    "ORDER BY created_at DESC, id DESC LIMIT 1",
+                    "ORDER BY created_at DESC, id DESC LIMIT 20",
                     (run_row["scenario_id"], run_row["project_id"], run_row["id"]),
-                ).fetchone()
-            if prev:
-                base_run_id = prev[0]
+                ).fetchall()
+            for cand in cands:
+                if (meta_map.get(cand[0]) or {}).get("kind", "prod") == "prod":
+                    base_run_id = cand[0]
+                    break
         if base_run_id is None:
             return {
                 "status": "done",
@@ -952,13 +1028,13 @@ def start_run(conn, api, database, scenario_id, *, project_id=None, project_path
     definition = record["definition"]
     # R3-X1: fail fast when starting a workspace-wide run for a scenario with project-bound checks.
     if project_id is None and any(
-        c["kind"] in ("file_exists", "evidence_git")
+        c["kind"] in scenario_registry.PROJECT_BOUND_CHECKS
         for step in definition.get("steps") or []
         for c in step.get("checks") or []
     ):
         raise _failure(
             api,
-            "Scenario %s uses project-bound checks (file_exists/evidence_git) and requires --project or --project-path"
+            "Scenario %s uses project-bound checks and requires --project or --project-path"
             % record["id"],
             "invalid_input",
         )
@@ -1523,7 +1599,7 @@ def _verify_git_evidence_io(evidence, project_path):
 def prepare_report_preflight(conn, api, run_id, step_key, report, *, checked_project=None, project_path=None,
                              author=None, now_dt=None):
     """Load DB context for read-only report checks inside a brief read transaction (R2-J03, R3-I2, R3-C2)."""
-    if conn.execute("PRAGMA user_version").fetchone()[0] < 4:
+    if not scenario_registry.has_scenario_tables(conn):
         return None
     if not isinstance(report, dict) or report.get("status") != "done":
         return None
@@ -1652,6 +1728,13 @@ def _validate_report(report, step_row, step_spec, ctx, project_path, preflight_i
         reasons.append("report.files must be a list of paths without NUL bytes")
         files = []
     files = files or []
+
+    artifacts = report.get("artifacts")
+    if artifacts is not None:
+        if not isinstance(artifacts, list) or len(artifacts) > MAX_ARTIFACTS:
+            reasons.append("report.artifacts must be a list of at most %d richi://artifact/... URIs" % MAX_ARTIFACTS)
+        elif not all(_valid_artifact_item(item) for item in artifacts):
+            reasons.append("report.artifacts entries must match richi://artifact/<id>@<version_uid>/<path> without traversal")
 
     evidence = report.get("evidence")
     if evidence is not None and (not isinstance(evidence, list) or not all(isinstance(item, dict) for item in evidence)):
@@ -1788,6 +1871,8 @@ def report_step(conn, api, database, run_id, step_key, report, *, checked_projec
         "agent": author.agent,
         "chat": author.by,
     }
+    if report.get("artifacts"):
+        stored["artifacts"] = list(report["artifacts"])
     raw_exit = report.get("exit_code")
     if raw_exit is not None and not isinstance(raw_exit, bool) and isinstance(raw_exit, int):
         stored["exit_code"] = raw_exit
@@ -2093,7 +2178,7 @@ def set_run_state(conn, api, database, run_id, action, *, checked_project=None, 
     return _format_status(run_row, step_rows, definition, view="scenario-run")
 
 
-def _format_status(run_row, step_rows, definition, *, view="scenario-status", is_baseline=False):
+def _format_status(run_row, step_rows, definition, *, view="scenario-status", is_baseline=False, run_meta=None):
     steps = []
     for row in step_rows:
         item = {
@@ -2119,7 +2204,10 @@ def _format_status(run_row, step_rows, definition, *, view="scenario-status", is
             item["summary"] = parsed.get("summary", "")
             if "answer" in parsed:
                 item["answer"] = parsed["answer"]
+            if parsed.get("artifacts"):
+                item["artifacts"] = parsed["artifacts"]
         steps.append(item)
+    meta = run_meta if isinstance(run_meta, dict) else {}
     return {
         "view": view,
         "run_id": run_row["id"],
@@ -2128,6 +2216,7 @@ def _format_status(run_row, step_rows, definition, *, view="scenario-status", is
         "scope": run_row["scope"],
         "project_id": run_row["project_id"],
         "status": run_row["status"],
+        "run_kind": meta.get("kind", "prod"),
         "is_baseline": bool(is_baseline),
         "task_entry_id": run_row["task_entry_id"],
         "inputs": json.loads(run_row["inputs_json"]),
@@ -2147,7 +2236,7 @@ def run_status(conn, api, run_id, *, checked_project=None):
     step_rows = _load_steps(conn, run_id)
     definition = json.loads(run_row["definition_json"])
     is_base = get_baseline_run_id(conn, run_row["scenario_id"], run_row["project_id"]) == run_id
-    return _format_status(run_row, step_rows, definition, is_baseline=is_base)
+    return _format_status(run_row, step_rows, definition, is_baseline=is_base, run_meta=get_run_meta(conn, run_id))
 
 
 def list_runs(conn, api, *, active=False, chat=None, project_id=None, scenario_id=None, limit=20):
@@ -2174,9 +2263,17 @@ def list_runs(conn, api, *, active=False, chat=None, project_id=None, scenario_i
         params + [limit],
     ).fetchall()
     baselines = _all_baseline_ids(conn)
+    meta_map = all_run_meta(conn)
     return {
         "view": "scenario-runs",
-        "runs": [dict(row, is_baseline=row["id"] in baselines) for row in rows],
+        "runs": [
+            dict(
+                row,
+                is_baseline=row["id"] in baselines,
+                run_kind=(meta_map.get(row["id"]) or {}).get("kind", "prod"),
+            )
+            for row in rows
+        ],
     }
 
 
@@ -2190,61 +2287,86 @@ def _duration_sec(start_iso, end_iso):
         return None
 
 
-def scenario_stats(conn, api, *, scenario_id=None, project_id=None):
-    """Aggregate execution metrics across runs, scenarios, and steps (M8 / Quick Wins)."""
+def _median(values):
+    if not values:
+        return None
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2 == 1:
+        return round(float(ordered[mid]), 2)
+    return round((float(ordered[mid - 1]) + float(ordered[mid])) / 2.0, 2)
+
+
+def scenario_stats(conn, api, *, scenario_id=None, project_id=None, version=None, last_n=None, run_kind="prod"):
+    """Aggregate execution metrics across runs, scenarios, and steps (SQL JOIN, p50, run_kind isolation)."""
     schema_version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if schema_version < 4:
-        return {
-            "view": "scenario-stats",
-            "schema_version": schema_version,
-            "total_runs": 0,
-            "by_status": {},
-            "completion_rate": None,
-            "first_pass_rate": None,
-            "per_scenario": [],
-            "per_step": [],
-        }
+    empty = {
+        "view": "scenario-stats",
+        "schema_version": schema_version,
+        "run_kind": run_kind,
+        "total_runs": 0,
+        "by_status": {},
+        "completion_rate": None,
+        "abort_rate": None,
+        "first_pass_rate": None,
+        "agent_active_p50_sec": None,
+        "human_wait_p50_sec": None,
+        "per_scenario": [],
+        "per_step": [],
+    }
+    if not scenario_registry.has_scenario_tables(conn):
+        return empty
     if project_id is not None:
         api.require_project(conn, project_id)
     clauses, params = [], []
     if scenario_id is not None:
-        clauses.append("scenario_id = ?")
+        clauses.append("r.scenario_id = ?")
         params.append(scenario_id)
     if project_id is not None:
-        clauses.append("project_id = ?")
+        clauses.append("r.project_id = ?")
         params.append(project_id)
+    if version is not None:
+        clauses.append("r.scenario_version = ?")
+        params.append(int(version))
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-    run_rows = conn.execute(
-        "SELECT id, scenario_id, project_id, status, created_at, updated_at FROM scenario_runs" + where,
+    all_runs = conn.execute(
+        "SELECT r.id, r.scenario_id, r.scenario_version, r.project_id, r.status, r.created_at, r.updated_at "
+        "FROM scenario_runs r" + where + " ORDER BY r.created_at DESC, r.id DESC",
         params,
     ).fetchall()
+    if not all_runs:
+        return empty
+    meta_map = all_run_meta(conn)
+    if run_kind and run_kind != "all":
+        run_rows = [r for r in all_runs if (meta_map.get(r["id"]) or {}).get("kind", "prod") == run_kind]
+    else:
+        run_rows = list(all_runs)
+    if last_n is not None and int(last_n) > 0:
+        run_rows = run_rows[: int(last_n)]
     if not run_rows:
-        return {
-            "view": "scenario-stats",
-            "schema_version": schema_version,
-            "total_runs": 0,
-            "by_status": {},
-            "completion_rate": None,
-            "first_pass_rate": None,
-            "per_scenario": [],
-            "per_step": [],
-        }
-    run_ids = [r["id"] for r in run_rows]
-    placeholders = ",".join("?" for _ in run_ids)
+        return empty
+
+    selected_ids = {r["id"] for r in run_rows}
     step_rows = conn.execute(
-        "SELECT run_id, step_id, type, status, attempts, rejections, reason, started_at, finished_at "
-        f"FROM scenario_steps WHERE run_id IN ({placeholders})",
-        run_ids,
+        "SELECT s.run_id, s.step_id, s.type, s.status, s.attempts, s.rejections, s.reason, s.started_at, s.finished_at "
+        "FROM scenario_steps s JOIN scenario_runs r ON r.id = s.run_id" + where,
+        params,
     ).fetchall()
 
     by_status = {}
     scn_buckets = {}
-    run_rejections = {rid: 0 for rid in run_ids}
-    run_retries = {rid: 0 for rid in run_ids}
+    run_rejections = {rid: 0 for rid in selected_ids}
+    run_retries = {rid: 0 for rid in selected_ids}
+    run_agent_sec = {rid: 0.0 for rid in selected_ids}
+    run_human_sec = {rid: 0.0 for rid in selected_ids}
+    run_has_agent = set()
+    run_has_human = set()
     step_buckets = {}
 
     for sr in step_rows:
         rid = sr["run_id"]
+        if rid not in selected_ids:
+            continue
         run_rejections[rid] = run_rejections.get(rid, 0) + int(sr["rejections"] or 0)
         if int(sr["attempts"] or 0) > 1:
             run_retries[rid] = run_retries.get(rid, 0) + (int(sr["attempts"]) - 1)
@@ -2261,16 +2383,27 @@ def scenario_stats(conn, api, *, scenario_id=None, project_id=None):
         dur = _duration_sec(sr["started_at"], sr["finished_at"])
         if dur is not None:
             sb["_durs"].append(dur)
+            if sr["type"] in ("gate", "checklist"):
+                run_human_sec[rid] = run_human_sec.get(rid, 0.0) + dur
+                run_has_human.add(rid)
+            else:
+                run_agent_sec[rid] = run_agent_sec.get(rid, 0.0) + dur
+                run_has_agent.add(rid)
         if sr["reason"] and st in ("failed", "blocked"):
             key = str(sr["reason"])[:120]
             sb["_reasons"][key] = sb["_reasons"].get(key, 0) + 1
 
-    # Also collect historical step_failed reasons from scenario_events (survives retries!)
+    # Also collect historical step_failed reasons from scenario_events (survives retries!) via SQL JOIN.
+    ev_clauses = clauses + ["e.action = 'step_failed'"]
+    ev_where = " WHERE " + " AND ".join(ev_clauses)
     ev_rows = conn.execute(
-        f"SELECT step_key, detail_json FROM scenario_events WHERE run_id IN ({placeholders}) AND action = 'step_failed'",
-        run_ids,
+        "SELECT e.run_id, e.step_key, e.detail_json "
+        "FROM scenario_events e JOIN scenario_runs r ON r.id = e.run_id" + ev_where,
+        params,
     ).fetchall()
     for ev in ev_rows:
+        if ev["run_id"] not in selected_ids:
+            continue
         sk = (ev["step_key"] or "").split(".", 1)[0]
         if sk not in step_buckets:
             continue
@@ -2283,9 +2416,12 @@ def scenario_stats(conn, api, *, scenario_id=None, project_id=None):
             key = str(reason)[:120]
             step_buckets[sk]["_reasons"][key] = step_buckets[sk]["_reasons"].get(key, 0) + 1
 
-    finished = 0
+    terminal = 0
     done_total = 0
+    cancelled_total = 0
     first_pass_done = 0
+    done_agent_durs = []
+    done_human_durs = []
     for r in run_rows:
         st = r["status"]
         by_status[st] = by_status.get(st, 0) + 1
@@ -2297,17 +2433,23 @@ def scenario_stats(conn, api, *, scenario_id=None, project_id=None):
         if st == "done":
             sc["done"] += 1
             done_total += 1
-            finished += 1
+            terminal += 1
             if run_rejections.get(r["id"], 0) == 0 and run_retries.get(r["id"], 0) == 0:
                 first_pass_done += 1
             dur = _duration_sec(r["created_at"], r["updated_at"])
             if dur is not None:
                 sc["_durs"].append(dur)
+            if r["id"] in run_has_agent:
+                done_agent_durs.append(run_agent_sec[r["id"]])
+            if r["id"] in run_has_human:
+                done_human_durs.append(run_human_sec[r["id"]])
         elif st == "failed":
             sc["failed"] += 1
-            finished += 1
+            terminal += 1
         elif st == "cancelled":
             sc["cancelled"] += 1
+            cancelled_total += 1
+            terminal += 1
         else:
             sc["active"] += 1
 
@@ -2315,6 +2457,7 @@ def scenario_stats(conn, api, *, scenario_id=None, project_id=None):
     for sc in sorted(scn_buckets.values(), key=lambda x: (-x["total"], x["scenario_id"])):
         durs = sc.pop("_durs")
         sc["avg_duration_sec"] = round(sum(durs) / len(durs), 2) if durs else None
+        sc["p50_duration_sec"] = _median(durs)
         per_scenario.append(sc)
 
     per_step = []
@@ -2322,6 +2465,7 @@ def scenario_stats(conn, api, *, scenario_id=None, project_id=None):
         durs = sb.pop("_durs")
         reasons = sb.pop("_reasons")
         sb["avg_duration_sec"] = round(sum(durs) / len(durs), 2) if durs else None
+        sb["p50_duration_sec"] = _median(durs)
         sb["top_failure_reasons"] = [
             {"reason": k, "count": v}
             for k, v in sorted(reasons.items(), key=lambda kv: (-kv[1], kv[0]))[:3]
@@ -2331,10 +2475,14 @@ def scenario_stats(conn, api, *, scenario_id=None, project_id=None):
     return {
         "view": "scenario-stats",
         "schema_version": schema_version,
+        "run_kind": run_kind,
         "total_runs": len(run_rows),
         "by_status": by_status,
-        "completion_rate": round(done_total / finished, 4) if finished else None,
+        "completion_rate": round(done_total / terminal, 4) if terminal else None,
+        "abort_rate": round(cancelled_total / terminal, 4) if terminal else None,
         "first_pass_rate": round(first_pass_done / done_total, 4) if done_total else None,
+        "agent_active_p50_sec": _median(done_agent_durs),
+        "human_wait_p50_sec": _median(done_human_durs),
         "per_scenario": per_scenario,
         "per_step": per_step[:30],
     }
@@ -2342,7 +2490,7 @@ def scenario_stats(conn, api, *, scenario_id=None, project_id=None):
 
 def waiting_gates_queue(conn, *, limit=30):
     """Unified 'Waiting for me' queue of all active human gate/checklist steps across projects."""
-    if conn.execute("PRAGMA user_version").fetchone()[0] < 4:
+    if not scenario_registry.has_scenario_tables(conn):
         return []
     rows = conn.execute(
         "SELECT s.run_id, s.step_key, s.step_id, s.type, s.matrix_json, s.started_at, "

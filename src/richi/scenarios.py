@@ -550,12 +550,13 @@ def plan(conn, api, scenario_id, *, project_id=None, project_path=None, scope=No
             entry["outputs"] = step["outputs"]
         if step.get("checks"):
             entry["checks"] = step["checks"]
-            if any(c["kind"] in ("file_exists", "evidence_git") for c in step["checks"]):
+            from . import scenario_registry
+            if any(c["kind"] in scenario_registry.PROJECT_BOUND_CHECKS for c in step["checks"]):
                 needs_project_checks = True
         planned_steps.append(entry)
     if project_id is None and needs_project_checks:
         warnings.append(
-            "Scenario uses project-bound checks (file_exists/evidence_git) and requires --project or --project-path to run"
+            "Scenario uses project-bound checks and requires --project or --project-path to run"
         )
 
     return {
@@ -902,10 +903,12 @@ def copy_template(conn, api, template_id, *, new_id=None, scope="global", projec
 
 
 def map_snapshot(conn, api, workspace=None, *, run_limit=50, log_limit=100):
-    """Complete read-only snapshot for the map's Scenarios tab (definitions, templates, runs, log)."""
-    from . import scenario_runs
+    """Complete read-only snapshot for the map's Scenarios tab (definitions, templates, runs, log, platform)."""
+    from . import scenario_registry, scenario_runs
 
     schema_version = conn.execute("PRAGMA user_version").fetchone()[0]
+    has_tables = scenario_registry.has_scenario_tables(conn)
+    platform = scenario_registry.platform_catalog(conn)
     projects = [{"id": row[0], "name": row[1]} for row in conn.execute(
         "SELECT id, name FROM projects ORDER BY name, id")]
     stored, invalid, unsupported = scan(conn)
@@ -924,7 +927,7 @@ def map_snapshot(conn, api, workspace=None, *, run_limit=50, log_limit=100):
     runs_waiting = 0
     waiting_queue = []
     stats = None
-    if schema_version >= 4:
+    if has_tables:
         runs_total = conn.execute("SELECT count(*) FROM scenario_runs").fetchone()[0]
         runs_waiting = conn.execute(
             "SELECT count(DISTINCT r.id) FROM scenario_runs r "
@@ -955,6 +958,7 @@ def map_snapshot(conn, api, workspace=None, *, run_limit=50, log_limit=100):
         "view": "scenario-map",
         "workspace": workspace,
         "schema_version": schema_version,
+        "platform": platform,
         "projects": projects,
         "scenarios": stored,
         "builtin_templates": builtins,

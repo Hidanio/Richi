@@ -1,7 +1,7 @@
 """CLI declarations and dispatch for `richi scenario ...`."""
 import argparse
 
-from . import agents, rules, scenario_format, scenario_hooks, scenario_runs, scenarios
+from . import agents, rules, scenario_format, scenario_hooks, scenario_registry, scenario_runs, scenarios
 
 
 WRITE_ACTIONS = frozenset({
@@ -175,6 +175,13 @@ def add_commands(commands, api):
     stats_cmd = actions.add_parser("stats", help="Show execution statistics across runs, scenarios and steps")
     stats_cmd.add_argument("--scenario", metavar="ID", type=_argument_id, help="Filter metrics to one scenario ID")
     stats_cmd.add_argument("--project", metavar="ID", help="Filter metrics to one registered project")
+    stats_cmd.add_argument("--version", type=int, metavar="N", help="Filter metrics to one scenario version")
+    stats_cmd.add_argument("--last", dest="last_n", type=api.limit, metavar="N",
+                           help="Analyze only the latest N matching runs (1-200)")
+    stats_cmd.add_argument("--kind", dest="run_kind", choices=("prod", "eval", "fork", "all"), default="prod",
+                           help="Which run kinds to include (default: prod)")
+
+    actions.add_parser("catalog", help="Describe active platform capabilities, step blocks, checks and domain views")
 
 
 def writes(args):
@@ -314,7 +321,13 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
                                           checked_project=checked_project, author=author)
     if action == "stats":
         project_id = args.project if args.project is not None else checked_project
-        return scenario_runs.scenario_stats(conn, api, scenario_id=args.scenario, project_id=project_id)
+        return scenario_runs.scenario_stats(
+            conn, api, scenario_id=args.scenario, project_id=project_id,
+            version=getattr(args, "version", None), last_n=getattr(args, "last_n", None),
+            run_kind=getattr(args, "run_kind", "prod"),
+        )
+    if action == "catalog":
+        return scenario_registry.platform_catalog(conn)
     if action == "next":
         secrets_runtime = _parse_secrets(args.secrets, api, getattr(args, "secret_envs", None))
         return scenario_runs.next_step(conn, api, database, args.run_id, claim=args.claim, step_key=args.step_key,

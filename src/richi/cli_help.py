@@ -797,11 +797,18 @@ DETAILS = {
         examples=(("Pin a run as baseline", "richi scenario baseline run-review-20261127-0001"),
                   ("Clear pinned baseline", "richi scenario baseline run-review-20261127-0001 --clear"))),
     "scenario stats": dict(about="""
-        Aggregates execution metrics across runs, scenarios and steps: completion rate,
-        first-pass rate (done without rejections or retries), average durations, and
-        top failure reasons per step.""",
+        Aggregates execution metrics across runs, scenarios and steps: completion rate
+        (including cancelled runs), first-pass rate, p50 active agent duration vs
+        human wait duration, and top failure reasons per step. Filters by --kind
+        (prod by default, excluding eval and fork runs), --version and --last.""",
         examples=(("Workspace-wide metrics", "richi scenario stats"),
-                  ("For one scenario", "richi scenario stats --scenario review"))),
+                  ("Latest 20 runs of one scenario", "richi scenario stats --scenario review --last 20"))),
+    "scenario catalog": dict(about="""
+        Prints the self-describing Richi Scenarios platform catalog: active
+        capabilities detected from the database (scenarios, review_hub,
+        process_memory, artifacts), available step blocks, report checks,
+        registered domain views and the artifact URI contract.""",
+        examples=(("Inspect active platform capabilities", "richi scenario catalog"),)),
     "skill-sources": dict(about="""
         Richi knows which AI agents work on this computer and where each finds
         skills, so that a rule can name a skill for every agent or one per agent.
