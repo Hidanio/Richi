@@ -215,6 +215,21 @@ def preflight(conn, args, api, *, request=None, project_path=None):
     if args.action in ("next", "claim"):
         active_agent = getattr(args, "agent", None) or author.agent
         out["installed_skills"] = scenarios.installed_skills(active_agent, settings)
+        will_claim = args.action == "claim" or bool(getattr(args, "claim", False))
+        if will_claim and project_path is not None and scenario_registry.has_scenario_tables(conn):
+            run_id = getattr(args, "run_id", None)
+            needs_fp = False
+            if run_id:
+                with api.transaction(conn, write=False):
+                    rrow = conn.execute("SELECT definition_json FROM scenario_runs WHERE id = ?", (run_id,)).fetchone()
+                    if rrow and rrow[0] and '"no_dirty_git"' in rrow[0]:
+                        needs_fp = True
+                        from .projects import checkout_root, ensure_project_match
+                        matched = ensure_project_match(conn, project_path)
+                        effective_root = checkout_root(matched, project_path)
+            if needs_fp:
+                from . import scenario_findings
+                out["claim_fingerprint"] = scenario_findings.compute_worktree_fingerprint(effective_root)
         return out
     if args.action != "report" or request is None:
         return out
@@ -332,12 +347,14 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
         secrets_runtime = _parse_secrets(args.secrets, api, getattr(args, "secret_envs", None))
         return scenario_runs.next_step(conn, api, database, args.run_id, claim=args.claim, step_key=args.step_key,
                                        checked_project=checked_project, project_path=project_path,
-                                       agent=args.agent, author=author, secrets_runtime=secrets_runtime, **installed_kw)
+                                       agent=args.agent, author=author, secrets_runtime=secrets_runtime,
+                                       claim_fingerprint=pf.get("claim_fingerprint"), **installed_kw)
     if action == "claim":
         secrets_runtime = _parse_secrets(args.secrets, api, getattr(args, "secret_envs", None))
         return scenario_runs.claim_step(conn, api, database, args.run_id, args.step_key,
                                         checked_project=checked_project, project_path=project_path,
-                                        agent=args.agent, author=author, secrets_runtime=secrets_runtime, **installed_kw)
+                                        agent=args.agent, author=author, secrets_runtime=secrets_runtime,
+                                        claim_fingerprint=pf.get("claim_fingerprint"), **installed_kw)
     if action == "release":
         return scenario_runs.release_step(conn, api, args.run_id, args.step_key,
                                           checked_project=checked_project, author=author)

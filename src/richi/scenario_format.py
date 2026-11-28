@@ -49,7 +49,7 @@ import math
 import re
 import unicodedata
 
-from . import agents, templating
+from . import agents, scenario_registry, templating
 
 
 FORMAT = "richi-scenario"
@@ -83,8 +83,9 @@ INPUT_NAME_HELP = "Input name: 1-48 lowercase letters, digits or '_', starting w
 TOP_FIELDS = {"format", "format_version", "id", "title", "description", "when_to_use", "run_title", "tags",
               "inputs", "steps", "layout"}
 TOP_REQUIRED = ("format", "format_version", "id", "title", "steps")
-STEP_FIELDS = {"id", "type", "title", "params", "needs", "if", "matrix", "executor", "hints", "outputs", "checks",
+STEP_FIELDS = {"id", "type", "title", "params", "needs", "if", "matrix", "matrix_mode", "executor", "hints", "outputs", "checks",
                "retry", "continue_on_failure"}
+MATRIX_MODES = ("orthogonal", "replicated")
 INPUT_TYPES = ("string", "text", "number", "boolean", "select", "multiselect", "secret")
 INPUT_FIELDS = {"type", "title", "description", "required", "default", "options", "picker"}
 PICKERS = ("git-branch", "git-revision", "project", "entry", "skill", "file")
@@ -132,7 +133,7 @@ STEP_KINDS = {
     },
     "memory.brief": {
         "executor": "richi",
-        "params": frozenset({"question", "limit", "include_past_runs"}),
+        "params": frozenset({"question", "limit", "include_past_runs", "include_learnings"}),
         "results": frozenset({"summary", "status", "data"}),
         "matrix": False, "outputs": False, "checks": False, "retry": False,
     },
@@ -156,8 +157,8 @@ STEP_KINDS = {
     },
 }
 EXECUTORS = {kind: spec["executor"] for kind, spec in STEP_KINDS.items()}
-CHECK_KINDS = {"data_required": {"path"}, "min_items": {"path", "count"}, "exit_code": {"expect"},
-               "file_exists": {"path"}, "evidence_git": set()}
+CHECK_KINDS = {kind: set(spec["required_fields"]) for kind, spec in scenario_registry.CHECK_REGISTRY.items()}
+CHECK_OPTIONAL = {kind: set(spec["optional_fields"]) for kind, spec in scenario_registry.CHECK_REGISTRY.items()}
 SECRET_ALLOWED_FIELDS = frozenset({"exec_param", "command"})
 # C0/C1 controls (including U+0085 NEL), Unicode line/paragraph separators, and
 # bidirectional override/isolate controls (Trojan Source).
@@ -496,6 +497,8 @@ def _params(step, here, found):
             _integer(params["limit"], where + ".limit", 1, 50)
         if "include_past_runs" in params:
             _bool(params["include_past_runs"], where + ".include_past_runs")
+        if "include_learnings" in params:
+            _bool(params["include_learnings"], where + ".include_learnings")
     elif kind == "memory.record":
         entry_kind = params.get("kind")
         if entry_kind not in ENTRY_KINDS:
@@ -595,13 +598,20 @@ def _checks(value, where, step, found):
         kind = check.get("kind")
         if not isinstance(kind, str) or kind not in CHECK_KINDS:
             raise FormatError("kind must be one of " + ", ".join(sorted(CHECK_KINDS)), spot + ".kind")
-        _object(check, spot, CHECK_KINDS[kind] | {"kind"}, tuple(sorted(CHECK_KINDS[kind])))
+        allowed_fields = CHECK_KINDS[kind] | CHECK_OPTIONAL.get(kind, set()) | {"kind"}
+        _object(check, spot, allowed_fields, tuple(sorted(CHECK_KINDS[kind])))
         if not STEP_KINDS[step["type"]]["checks"]:
             raise FormatError("only instruction, skill and command steps report results to check", spot)
         if kind in ("data_required", "min_items"):
             _data_path(check["path"], spot + ".path")
         elif kind == "file_exists":
             _project_path(check["path"], spot + ".path", found)
+        elif kind == "no_dirty_git":
+            if "mode" in check and check["mode"] not in ("unchanged", "clean"):
+                raise FormatError("mode must be 'unchanged' or 'clean'", spot + ".mode")
+        elif kind == "findings_grounded":
+            if "path" in check:
+                _data_path(check["path"], spot + ".path")
         if kind == "min_items":
             _integer(check["count"], spot + ".count", 1, 10000)
             if check["path"] in declared_data and declared_data[check["path"]]["type"] != "list":
@@ -716,6 +726,11 @@ def _step(step, index, ids):
         if not spec["matrix"]:
             raise FormatError("only agent and human steps can be repeated by a matrix", here + ".matrix")
         _matrix(step["matrix"], here + ".matrix", found)
+    if "matrix_mode" in step:
+        if "matrix" not in step:
+            raise FormatError("matrix_mode requires matrix on the step", here + ".matrix_mode")
+        if step["matrix_mode"] not in MATRIX_MODES:
+            raise FormatError("matrix_mode must be one of " + ", ".join(MATRIX_MODES), here + ".matrix_mode")
     if "executor" in step:
         _executor(step, here)
     if "hints" in step:

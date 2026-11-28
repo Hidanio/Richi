@@ -205,6 +205,7 @@
         const lim=scnInt(p.limit);
         if(lim!==null)params.limit=lim;
         if(p.include_past_runs===false)params.include_past_runs=false;
+        if(p.include_learnings===true)params.include_learnings=true;
       }else if(type==='memory.record'){
         params={
           kind:SCN_ENTRY_KINDS.includes(p.kind)?p.kind:'decision',
@@ -231,7 +232,10 @@
       if(role==='agent'&&step?.executor&&typeof step.executor==='object'&&String(step.executor.agent||'').trim()){
         cleanStep.executor={agent:String(step.executor.agent).trim()};
       }
-      if((role==='agent'||role==='human')&&step?.matrix&&typeof step.matrix==='object'&&Object.keys(step.matrix).length)cleanStep.matrix=step.matrix;
+      if((role==='agent'||role==='human')&&step?.matrix&&typeof step.matrix==='object'&&Object.keys(step.matrix).length){
+        cleanStep.matrix=step.matrix;
+        if(step.matrix_mode==='orthogonal'||step.matrix_mode==='replicated')cleanStep.matrix_mode=step.matrix_mode;
+      }
       if(role==='agent'&&step?.outputs&&typeof step.outputs==='object'&&Object.keys(step.outputs).length)cleanStep.outputs=step.outputs;
       if(role==='agent'&&Array.isArray(step?.checks)&&step.checks.length)cleanStep.checks=step.checks;
       const retryMax=role==='agent'&&step?.retry&&typeof step.retry==='object'?scnInt(step.retry.max):null;
@@ -2548,7 +2552,24 @@
       };
       jsonField('Матрица повторения шага (matrix)','Запускает копию этого шага для каждого значения из списка (например, параллельно по разным углам ревью).','matrix','{"angle": ["безопасность", "тесты"]}');
       jsonField('Ожидаемые выходные поля (outputs)','Структура данных, которую агент обязан вернуть в отчёте шага.','outputs','{"data": {"findings": {"type": "list", "required": true}}}');
-      jsonField('Автопроверки отчёта (checks)','Проверки, которые Richi проверит перед принятием отчёта шага (например, наличие файла или git-ревизии).','checks','[{"kind": "data_required", "path": "findings"}]');
+      const quickChecks=make('div');quickChecks.style.display='grid';quickChecks.style.gap='6px';
+      const toggleStepCheck=(kind,enabled,factory)=>{
+        const cur=Array.isArray(step.checks)?step.checks.filter(c=>c&&c.kind!==kind):[];
+        if(enabled)cur.push(factory());
+        if(cur.length)step.checks=cur;else delete step.checks;
+        markScenarioDirty(ed);renderScenarios();
+      };
+      const hasNoDirty=Array.isArray(step.checks)&&step.checks.some(c=>c&&c.kind==='no_dirty_git');
+      const ndLbl=make('label','check-label'),ndCb=make('input');ndCb.type='checkbox';ndCb.checked=hasNoDirty;
+      ndCb.addEventListener('change',()=>toggleStepCheck('no_dirty_git',ndCb.checked,()=>({kind:'no_dirty_git',mode:'unchanged'})));
+      ndLbl.append(ndCb,document.createTextNode('Read-only guard (no_dirty_git): запретить изменение файлов репозитория на этом шаге'));
+      const hasGrounded=Array.isArray(step.checks)&&step.checks.some(c=>c&&c.kind==='findings_grounded');
+      const fgLbl=make('label','check-label'),fgCb=make('input');fgCb.type='checkbox';fgCb.checked=hasGrounded;
+      fgCb.addEventListener('change',()=>toggleStepCheck('findings_grounded',fgCb.checked,()=>({kind:'findings_grounded',path:'findings'})));
+      fgLbl.append(fgCb,document.createTextNode('Заземлить находки (findings_grounded): проверять реальный файл, строку и evidence'));
+      quickChecks.append(ndLbl,fgLbl);
+      advBody.append(quickChecks);
+      jsonField('Автопроверки отчёта (checks)','Проверки, которые Richi проверит перед принятием отчёта шага (no_dirty_git, findings_grounded, file_exists, evidence_git).','checks','[{"kind": "findings_grounded", "path": "findings"}]');
     }else if(role==='human'){
       const ta=make('textarea');ta.style.minHeight='64px';ta.style.fontFamily='ui-monospace,SFMono-Regular,monospace';ta.style.fontSize='11px';
       ta.value=step.matrix?JSON.stringify(step.matrix,null,2):'';ta.placeholder='{"item": ["a", "b"]}';

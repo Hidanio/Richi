@@ -31,7 +31,7 @@ import time
 from types import SimpleNamespace
 import unicodedata
 
-from . import agents, git_evidence, rules, scenario_format, scenario_registry, scenarios, templating
+from . import agents, git_evidence, rules, scenario_findings, scenario_format, scenario_registry, scenarios, templating
 
 
 LEASE_SECONDS = 30 * 60
@@ -1231,9 +1231,29 @@ def _block_step_and_commit(conn, api, run_row, definition, step_key, reason, aut
     return updated_run, step_rows
 
 
+def _step_has_check(spec, kind):
+    return any(c.get("kind") == kind for c in (spec.get("checks") or ()))
+
+
+def _latest_claimed_fingerprint(conn, run_id, step_key):
+    row = conn.execute(
+        "SELECT detail_json FROM scenario_events "
+        "WHERE run_id = ? AND step_key = ? AND action = 'claimed' "
+        "ORDER BY id DESC LIMIT 1",
+        (run_id, step_key),
+    ).fetchone()
+    if row is None or not row[0]:
+        return None
+    try:
+        det = json.loads(row[0])
+        return det.get("worktree_fingerprint") if isinstance(det, dict) else None
+    except (ValueError, TypeError):
+        return None
+
+
 def next_step(conn, api, database, run_id, *, claim=False, step_key=None, checked_project=None,
               project_path=None, agent=None, author=None, secrets_runtime=None, installed_skills=_UNSET,
-              now_override=None):
+              claim_fingerprint=None, now_override=None):
     """Return the next actionable step for this agent/chat; with claim=True, acquire a 30m lease."""
     require_v4(conn, api)
     author = author or rules.current_author()
@@ -1357,6 +1377,11 @@ def next_step(conn, api, database, run_id, *, claim=False, step_key=None, checke
     if claim and chosen["executor_role"] == "agent":
         lease_until = _format_iso(at_dt + timedelta(seconds=LEASE_SECONDS))
         if chosen["status"] == "ready":
+            claim_detail = {"lease_until": lease_until}
+            if _step_has_check(spec, "no_dirty_git") and project_path is not None:
+                fp_info = claim_fingerprint if isinstance(claim_fingerprint, dict) else scenario_findings.compute_worktree_fingerprint(project_path)
+                if fp_info and fp_info.get("fingerprint"):
+                    claim_detail["worktree_fingerprint"] = fp_info["fingerprint"]
             conn.execute(
                 "UPDATE scenario_steps SET status = 'claimed', claimed_by_chat = ?, claimed_by_agent = ?, "
                 "lease_until = ?, stop_continuations = 0, attempts = attempts + 1, started_at = COALESCE(started_at, ?) "
@@ -1365,7 +1390,7 @@ def next_step(conn, api, database, run_id, *, claim=False, step_key=None, checke
             )
             conn.execute("UPDATE scenario_runs SET updated_at = ?, revision = revision + 1 WHERE id = ?", (at_iso, run_id))
             _record_event(conn, at_iso, run_row["scenario_id"], run_id, chosen["step_key"],
-                          "claimed", author.by, active_agent, {"lease_until": lease_until})
+                          "claimed", author.by, active_agent, claim_detail)
         else:
             conn.execute(
                 "UPDATE scenario_steps SET lease_until = ? WHERE run_id = ? AND step_key = ?",
@@ -1395,7 +1420,7 @@ def next_step(conn, api, database, run_id, *, claim=False, step_key=None, checke
 
 def claim_step(conn, api, database, run_id, step_key, *, checked_project=None, project_path=None,
                agent=None, author=None, secrets_runtime=None, expected_revision=None,
-               installed_skills=_UNSET, now_override=None):
+               installed_skills=_UNSET, claim_fingerprint=None, now_override=None):
     """Claim a specific ready step and return its rendered payload (supporting single-chat parallel fan-out, R2-J11)."""
     require_v4(conn, api)
     author = author or rules.current_author()
@@ -1461,6 +1486,11 @@ def claim_step(conn, api, database, run_id, step_key, *, checked_project=None, p
 
     lease_until = _format_iso(at_dt + timedelta(seconds=LEASE_SECONDS))
     if step["status"] == "ready":
+        claim_detail = {"lease_until": lease_until}
+        if _step_has_check(spec, "no_dirty_git") and project_path is not None:
+            fp_info = claim_fingerprint if isinstance(claim_fingerprint, dict) else scenario_findings.compute_worktree_fingerprint(project_path)
+            if fp_info and fp_info.get("fingerprint"):
+                claim_detail["worktree_fingerprint"] = fp_info["fingerprint"]
         conn.execute(
             "UPDATE scenario_steps SET status = 'claimed', claimed_by_chat = ?, claimed_by_agent = ?, "
             "lease_until = ?, stop_continuations = 0, attempts = attempts + 1, started_at = COALESCE(started_at, ?) "
@@ -1469,7 +1499,7 @@ def claim_step(conn, api, database, run_id, step_key, *, checked_project=None, p
         )
         conn.execute("UPDATE scenario_runs SET updated_at = ?, revision = revision + 1 WHERE id = ?", (at_iso, run_id))
         _record_event(conn, at_iso, run_row["scenario_id"], run_id, step_key, "claimed", author.by, active_agent,
-                      {"lease_until": lease_until})
+                      claim_detail)
     else:
         conn.execute("UPDATE scenario_steps SET lease_until = ? WHERE run_id = ? AND step_key = ?",
                      (lease_until, run_id, step_key))
@@ -1625,7 +1655,7 @@ def prepare_report_preflight(conn, api, run_id, step_key, report, *, checked_pro
     if spec is None:
         return None
     checks = spec.get("checks") or []
-    if not any(c["kind"] in ("file_exists", "evidence_git") for c in checks):
+    if not any(c["kind"] in ("file_exists", "evidence_git", "no_dirty_git", "findings_grounded") for c in checks):
         return None
     ctx = _context(run_row, step_rows, definition, project_path=project_path,
                    agent=author.agent if author is not None else None, now_dt=at_dt)
@@ -1637,6 +1667,7 @@ def prepare_report_preflight(conn, api, run_id, step_key, report, *, checked_pro
         "checks": checks,
         "step_ctx": step_ctx,
         "evidence": report.get("evidence") if isinstance(report.get("evidence"), list) else [],
+        "data": report.get("data") if isinstance(report.get("data"), dict) else {},
     }
 
 
@@ -1647,11 +1678,15 @@ def run_report_preflight_io(prepared):
     project_path = prepared["project_path"]
     step_ctx = prepared["step_ctx"]
     evidence = prepared["evidence"]
+    data = prepared.get("data") if isinstance(prepared.get("data"), dict) else {}
     io_results = {
         "project_path": project_path,
         "file_exists": {},
         "evidence": evidence,
         "evidence_git": None,
+        "worktree": None,
+        "data": data,
+        "findings_grounded": {},
     }
     for check in prepared["checks"]:
         if check["kind"] == "file_exists":
@@ -1665,6 +1700,18 @@ def run_report_preflight_io(prepared):
         elif check["kind"] == "evidence_git" and io_results["evidence_git"] is None:
             if len(evidence) <= MAX_EVIDENCE_ITEMS:
                 io_results["evidence_git"] = _verify_git_evidence_io(evidence, project_path)
+        elif check["kind"] == "no_dirty_git" and io_results["worktree"] is None:
+            io_results["worktree"] = scenario_findings.compute_worktree_fingerprint(project_path)
+        elif check["kind"] == "findings_grounded":
+            path = check.get("path") or "findings"
+            if path not in io_results["findings_grounded"]:
+                found, val = _lookup_dotted(data, path)
+                if not found:
+                    io_results["findings_grounded"][path] = [f"check findings_grounded failed: missing data.{path}"]
+                else:
+                    io_results["findings_grounded"][path] = scenario_findings.verify_findings_grounded_io(
+                        val, project_path, path_label=path
+                    )
     return io_results
 
 
@@ -1678,7 +1725,7 @@ def preflight_report_checks(conn, api, run_id, step_key, report, *, checked_proj
     )
 
 
-def _validate_report(report, step_row, step_spec, ctx, project_path, preflight_io=None):
+def _validate_report(report, step_row, step_spec, ctx, project_path, preflight_io=None, claimed_fingerprint=None):
     """Return list of failure reasons (empty means report is accepted)."""
     reasons = []
     if not isinstance(report, dict):
@@ -1818,6 +1865,33 @@ def _validate_report(report, step_row, step_spec, ctx, project_path, preflight_i
                 reasons.extend(preflight_io["evidence_git"])
             else:
                 reasons.extend(_verify_git_evidence_io(evidence, project_path))
+        elif kind == "no_dirty_git":
+            mode = check.get("mode") or "unchanged"
+            if project_path is None:
+                reasons.append("check no_dirty_git requires --project-path to verify repository worktree")
+                continue
+            wt = preflight_io.get("worktree") if (preflight_matches_root and preflight_io.get("worktree") is not None) else None
+            if wt is None:
+                wt = scenario_findings.compute_worktree_fingerprint(project_path)
+            if wt.get("error"):
+                reasons.append("check no_dirty_git failed: " + wt["error"])
+            elif mode == "clean":
+                if not wt.get("is_clean"):
+                    reasons.append("check no_dirty_git (clean) failed: repository worktree has uncommitted changes")
+            else:
+                if claimed_fingerprint is not None and wt.get("fingerprint") != claimed_fingerprint:
+                    reasons.append("check no_dirty_git (unchanged) failed: repository worktree changed during read-only step")
+        elif kind == "findings_grounded":
+            path = check.get("path") or "findings"
+            if (preflight_matches_root and path in (preflight_io.get("findings_grounded") or {})
+                    and preflight_io.get("data") == data):
+                reasons.extend(preflight_io["findings_grounded"][path])
+            else:
+                found, val = _lookup_dotted(data, path)
+                if not found:
+                    reasons.append(f"check findings_grounded failed: missing data.{path}")
+                else:
+                    reasons.extend(scenario_findings.verify_findings_grounded_io(val, project_path, path_label=path))
     return reasons
 
 
@@ -1849,7 +1923,9 @@ def report_step(conn, api, database, run_id, step_key, report, *, checked_projec
 
     spec = by_def[step["step_id"]]
     ctx = _context(run_row, step_rows, definition, project_path=project_path, agent=author.agent, now_dt=at_dt)
-    reasons = _validate_report(report, step, spec, ctx, project_path, preflight_io=preflight_io)
+    claimed_fp = _latest_claimed_fingerprint(conn, run_id, step_key) if _step_has_check(spec, "no_dirty_git") else None
+    reasons = _validate_report(report, step, spec, ctx, project_path, preflight_io=preflight_io,
+                               claimed_fingerprint=claimed_fp)
     if reasons:
         lease_until = _format_iso(at_dt + timedelta(seconds=LEASE_SECONDS))
         conn.execute(
