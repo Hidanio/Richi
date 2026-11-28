@@ -599,12 +599,12 @@ def _run_rules_request(database, operation, runtime, config_file=None, workspace
 
 
 def scenarios_change(body):
-    """The change object `scenario apply` receives from the map UI (stripped source, ASCII-safe JSON)."""
+    """The change object `scenario apply` receives from the map UI (stripped source, UTF-8 JSON)."""
     if isinstance(body, dict):
         body = {key: value for key, value in body.items() if key != "source"}
         if body.get("action") == "add":
             body["source"] = RULES_SOURCE
-    return json.dumps(body).encode("ascii")
+    return json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
 def _scenarios_list_worker(database, workspace):
@@ -626,9 +626,23 @@ def _scenario_run_worker(database, run_id):
         with closing(memory.connect(Path(database), readonly=True)) as conn, memory.transaction(conn, write=False):
             memory.backend(conn)
             run_data = scenario_runs.run_status(conn, memory, run_id)
-            row = conn.execute("SELECT definition_json FROM scenario_runs WHERE id = ?", (run_id,)).fetchone()
-            if row is not None and row[0]:
-                definition = json.loads(row[0])
+            run_row = conn.execute("SELECT * FROM scenario_runs WHERE id = ?", (run_id,)).fetchone()
+            if run_row is not None and run_row["definition_json"]:
+                from . import templating
+                run_dict = dict(run_row)
+                definition = json.loads(run_dict["definition_json"])
+                step_rows = scenario_runs._load_steps(conn, run_id)
+                base_ctx = scenario_runs._context(run_dict, step_rows, definition)
+
+                def _try_render(template_text, ctx):
+                    text = str(template_text or "")
+                    if "{{" not in text:
+                        return text
+                    try:
+                        return templating.render(templating.parse_template(text), ctx)
+                    except (templating.TemplateError, templating.Unresolved, ValueError):
+                        return text
+
                 run_data["scenario_title"] = definition.get("title") or run_data["scenario_id"]
                 def_steps = [step for step in definition.get("steps", []) if isinstance(step, dict)]
                 run_data["definition_steps"] = [
@@ -648,16 +662,28 @@ def _scenario_run_worker(database, run_id):
                     spec = by_id.get(step.get("id"))
                     if not spec:
                         continue
-                    step["title"] = spec.get("title") or step["id"]
+                    step_ctx = dict(base_ctx)
+                    if isinstance(step.get("matrix"), dict):
+                        step_ctx["matrix"] = step["matrix"]
+                    step["title"] = _try_render(spec.get("title") or step["id"], step_ctx)
                     params = spec.get("params") or {}
                     if spec.get("type") == "gate":
                         step["gate"] = {
-                            "question": params.get("question", ""),
+                            "question": _try_render(params.get("question", ""), step_ctx),
                             "options": list(params.get("options") or []),
                             "allow_comment": params.get("allow_comment") is not False,
                         }
                     elif spec.get("type") == "checklist":
-                        step["checklist"] = {"items": list(params.get("items") or [])}
+                        rendered_items = []
+                        for item in params.get("items") or []:
+                            if isinstance(item, dict):
+                                rendered_items.append({
+                                    **item,
+                                    "text": _try_render(item.get("text", ""), step_ctx),
+                                })
+                            else:
+                                rendered_items.append(_try_render(item, step_ctx))
+                        step["checklist"] = {"items": rendered_items}
             events = scenarios.log(conn, run_id=run_id, entries=100)
             payload = {"run": run_data, "log": events["entries"], "log_more": events["more"]}
     except memory.NotFoundError as exc:
@@ -1040,7 +1066,10 @@ def handler_for(database, config_file=None, runtime=None, config_required=False,
                 return None
             agent_request = path.path == "/api/agents"
             if scenario_request:
-                change = scenarios_change(body)
+                try:
+                    change = scenarios_change(body)
+                except UnicodeEncodeError:
+                    return self.send_data(400, {"error": "The scenario change contains invalid UTF-8 characters", "code": "invalid_request"})
                 if len(change) > scenarios.MAX_CHANGE:
                     return self.send_data(413, {"error": "The scenario change is too large", "code": "limit"})
             elif not agent_request:

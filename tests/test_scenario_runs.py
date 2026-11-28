@@ -659,14 +659,19 @@ class ScenarioRunsTests(unittest.TestCase):
             scenario_runs.set_run_state(self.conn, memory, self.db, c_run["run_id"], "cancel",
                                         author=self.chat_a, now_override=self.t0 + timedelta(minutes=1))
         done_task = memory.entry_get(self.conn, done_run["task_entry_id"])
-        self.assertEqual(done_task["knowledge_state"], "confirmed")
-        self.assertEqual(done_task["verified_at"], done_run["updated_at"])
+        self.assertEqual(done_task["work_state"], "done")
+        self.assertEqual(done_task["knowledge_state"], "hypothesis")
         cancel_task = memory.entry_get(self.conn, c_run["task_entry_id"])
         self.assertEqual(cancel_task["knowledge_state"], "superseded")
-        # Default recall finds completed run and omits cancelled run!
-        rec_done = recall.recall(self.conn, SimpleNamespace(
+        # Default recall stays clean (routine scenario runs do not pollute confirmed memory),
+        # while include_hypotheses=True still finds completed runs and omits cancelled runs!
+        rec_default = recall.recall(self.conn, SimpleNamespace(
             query="NeedleAlpha", project="demo", where=None, limit=10, max_chars=8000,
             include_hypotheses=False, include_superseded=False, explain=False, expect=None), memory)
+        self.assertEqual(rec_default["results"], [])
+        rec_done = recall.recall(self.conn, SimpleNamespace(
+            query="NeedleAlpha", project="demo", where=None, limit=10, max_chars=8000,
+            include_hypotheses=True, include_superseded=False, explain=False, expect=None), memory)
         self.assertIn("entry:" + done_run["task_entry_id"], [r["ref"] for r in rec_done["results"]])
         rec_cancel = recall.recall(self.conn, SimpleNamespace(
             query="CancelledMarkerRun", project="demo", where=None, limit=10, max_chars=8000,
@@ -823,6 +828,59 @@ class ScenarioRunsTests(unittest.TestCase):
             res_dup = scenario_runs._verify_git_evidence_io([{"type": "git", "revision": self.head_sha}] * 5, self.repo)
             self.assertEqual(res_dup, [])
             self.assertEqual(spy_git.call_count, 1)
+
+    def test_product_review_must_fixes_project_path_failed_reason_evidence_and_secret_env(self):
+        from richi import scenario_commands
+        self.add_scenario({
+            "format": "richi-scenario", "format_version": 1, "id": "pr-fixes", "title": "PR Fixes",
+            "inputs": {"tok": {"type": "secret"}},
+            "steps": [
+                {"id": "rec", "type": "memory.recall", "title": "Recall", "params": {"query": "Existing"}},
+                {"id": "work", "type": "instruction", "title": "Work", "needs": ["rec"],
+                 "params": {"text": "Use {{steps.rec.summary}} with {{inputs.tok}}"}},
+            ],
+        })
+        with memory.transaction(self.conn):
+            memory.entry_put(self.conn, {
+                "id": "fact:existing-note", "kind": "fact", "title": "Existing Architecture Fact",
+                "summary": "Keep boundaries clean.", "project_ids": ["demo"],
+                "knowledge_state": "confirmed", "sources": [{"reference": "docs/arch.md"}],
+                "expected_updated_at": None,
+            })
+            started = scenario_runs.start_run(self.conn, memory, self.db, "pr-fixes",
+                                              project_id="demo", project_path=self.repo, author=self.chat_a)
+            run_id = started["run_id"]
+            # Memory step summary is explicitly framed as untrusted evidence.
+            st = scenario_runs.run_status(self.conn, memory, run_id)
+            rec_step = next(s for s in st["steps"] if s["id"] == "rec")
+            self.assertIn("[untrusted memory evidence:", rec_step["summary"])
+            self.assertIn("Existing Architecture Fact", rec_step["summary"])
+            # --secret-env resolves from environment without placing secret in argv.
+            with mock.patch.dict(os.environ, {"RICHI_TEST_TOK": "s3cr3t-env"}):
+                parsed_sec = scenario_commands._parse_secrets(None, memory, ["tok=RICHI_TEST_TOK"])
+            self.assertEqual(parsed_sec, {"tok": "s3cr3t-env"})
+            with self.assertRaises(memory.MemoryError) as missing_env:
+                scenario_commands._parse_secrets(None, memory, ["tok=RICHI_MISSING_VAR_XYZ"])
+            self.assertEqual(missing_env.exception.code, "invalid_input")
+            # next_step includes --project-path in report_command and recommends --secret-env when missing.
+            miss = scenario_runs.next_step(self.conn, memory, self.db, run_id, claim=True,
+                                           checked_project="demo", project_path=self.repo, author=self.chat_a)
+            self.assertEqual(miss["missing_secret"], "tok")
+            self.assertIn("--secret-env tok=ENV_VAR", miss["note"])
+            claimed = scenario_runs.next_step(self.conn, memory, self.db, run_id, claim=True,
+                                              checked_project="demo", project_path=self.repo,
+                                              secrets_runtime=parsed_sec, author=self.chat_a)
+            self.assertIn("--project-path", claimed["step"]["report_command"])
+            self.assertIn(str(self.repo), claimed["step"]["report_command"])
+            # step_failed event persists reason even after retry_step clears scenario_steps.reason.
+            scenario_runs.report_step(self.conn, memory, self.db, run_id, "work",
+                                      {"status": "failed", "summary": "failed build", "reason": "pytest timeout 60s"},
+                                      checked_project="demo", project_path=self.repo, author=self.chat_a)
+            scenario_runs.retry_step(self.conn, memory, self.db, run_id, "work",
+                                     checked_project="demo", author=self.chat_a)
+            fail_ev = [e for e in scenarios.log(self.conn, run_id=run_id, entries=20)["entries"]
+                       if e["action"] == "step_failed"][0]
+            self.assertEqual(fail_ev["detail"].get("reason"), "pytest timeout 60s")
 
 
 if __name__ == "__main__":

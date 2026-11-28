@@ -14,7 +14,7 @@ in [GRAPH.md](GRAPH.md). Reading or selecting a runtime never migrates a store.
 |---|---|
 | What an instrument does, basic commands, general limitations | `tool` entity |
 | Definition of a concept such as linting or sampling | `concept` entity, if independently useful |
-| A repeatable recipe, project configuration or scenario using several tools | `procedure` entry |
+| A repeatable recipe, project configuration or workflow using several tools | `procedure` entry |
 | A particular attempt, its parameters, observations and outcome | `experiment` or `investigation` entry |
 | Current goal and decision for the surrounding work | `task` entry |
 

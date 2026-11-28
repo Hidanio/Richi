@@ -88,6 +88,8 @@ def add_commands(commands, api):
                           help="Agent ID filtering pinned steps and skills (default: detected from shell)")
     next_cmd.add_argument("--secret", dest="secrets", action="append", metavar="KEY=VALUE",
                           help="Runtime-only secret input for rendering this step (never stored)")
+    next_cmd.add_argument("--secret-env", dest="secret_envs", action="append", metavar="KEY=ENV_VAR",
+                          help="Read runtime-only secret input from an environment variable (keeps value out of argv)")
 
     claim_cmd = actions.add_parser("claim", help="Claim a specific ready agent step and return its rendered payload")
     claim_cmd.add_argument("run_id", metavar="RUN", help="Run ID")
@@ -95,6 +97,8 @@ def add_commands(commands, api):
     claim_cmd.add_argument("--agent", metavar="ID", type=_argument_agent, help="Agent ID (default: detected from shell)")
     claim_cmd.add_argument("--secret", dest="secrets", action="append", metavar="KEY=VALUE",
                            help="Runtime-only secret input for rendering this step (never stored)")
+    claim_cmd.add_argument("--secret-env", dest="secret_envs", action="append", metavar="KEY=ENV_VAR",
+                           help="Read runtime-only secret input from an environment variable (keeps value out of argv)")
 
     release_cmd = actions.add_parser("release", help="Release a step lease held by this chat")
     release_cmd.add_argument("run_id", metavar="RUN", help="Run ID")
@@ -204,17 +208,29 @@ def preflight(conn, args, api, *, request=None, project_path=None):
     return out
 
 
-def _parse_secrets(raw_pairs, api):
-    if not raw_pairs:
+def _parse_secrets(raw_pairs, api, raw_env_pairs=None):
+    if not raw_pairs and not raw_env_pairs:
         return None
+    import os
     result = {}
-    for pair in raw_pairs:
+    for pair in raw_pairs or ():
         if "=" not in pair:
             err = api.MemoryError("secret must have the form KEY=VALUE")
             err.code = "invalid_input"
             raise err
         key, val = pair.split("=", 1)
         result[key] = val
+    for pair in raw_env_pairs or ():
+        if "=" not in pair:
+            err = api.MemoryError("secret-env must have the form KEY=ENV_VAR")
+            err.code = "invalid_input"
+            raise err
+        key, env_name = pair.split("=", 1)
+        if not env_name or env_name not in os.environ:
+            err = api.MemoryError("environment variable %r is not set for secret %r" % (env_name, key))
+            err.code = "invalid_input"
+            raise err
+        result[key] = os.environ[env_name]
     return result
 
 
@@ -254,12 +270,12 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
                                        project_path=project_path, raw_inputs=args.inputs,
                                        inputs_json=request, author=author)
     if action == "next":
-        secrets_runtime = _parse_secrets(args.secrets, api)
+        secrets_runtime = _parse_secrets(args.secrets, api, getattr(args, "secret_envs", None))
         return scenario_runs.next_step(conn, api, database, args.run_id, claim=args.claim, step_key=args.step_key,
                                        checked_project=checked_project, project_path=project_path,
                                        agent=args.agent, author=author, secrets_runtime=secrets_runtime, **installed_kw)
     if action == "claim":
-        secrets_runtime = _parse_secrets(args.secrets, api)
+        secrets_runtime = _parse_secrets(args.secrets, api, getattr(args, "secret_envs", None))
         return scenario_runs.claim_step(conn, api, database, args.run_id, args.step_key,
                                         checked_project=checked_project, project_path=project_path,
                                         agent=args.agent, author=author, secrets_runtime=secrets_runtime, **installed_kw)

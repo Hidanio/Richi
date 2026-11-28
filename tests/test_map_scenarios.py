@@ -110,7 +110,7 @@ class MapScenariosAPITests(unittest.TestCase):
             hdrs.update(headers)
         payload = body
         if isinstance(body, (dict, list)):
-            payload = json.dumps(body).encode("utf-8")
+            payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
             hdrs.setdefault("Content-Type", "application/json")
         if method == "POST":
             hdrs.setdefault("Origin", f"http://127.0.0.1:{self.port}")
@@ -288,19 +288,45 @@ class MapScenariosAPITests(unittest.TestCase):
         self.assertEqual(run_summary["step_counts"].get("done"), 1)
         self.assertEqual(run_summary["step_counts"].get("waiting_human"), 1)
 
-        # Run detail includes scenario_title, step title, read-only gate metadata, and run log
+        # Run detail includes scenario_title, rendered gate question/title, definition_steps, layout, and run log
         status, detail = self.request("GET", f"/api/scenario-run?id={run_id}")
         self.assertEqual(status, 200, detail)
         self.assertEqual(detail["run"]["scenario_title"], "Gate Flow")
         gate_step = next(s for s in detail["run"]["steps"] if s["id"] == "approve")
         self.assertEqual(gate_step["status"], "waiting_human")
         self.assertEqual(gate_step["title"], "Human confirmation")
+        self.assertEqual(gate_step["gate"]["question"], "Approve branch main?")
         self.assertEqual(gate_step["gate"]["options"], ["approve", "reject"])
         self.assertTrue(gate_step["gate"]["allow_comment"])
         self.assertEqual([s["id"] for s in detail["run"]["definition_steps"]], ["recall", "approve"])
         self.assertEqual(detail["run"]["definition_steps"][1]["needs"], ["recall"])
         self.assertEqual(detail["run"]["layout"]["positions"]["approve"], {"x": 352, "y": 36})
         self.assertTrue(len(detail["log"]) >= 1)
+        self.assertEqual(snap["runs_total"], 1)
+        self.assertFalse(snap["runs_more"])
+
+        # Large Cyrillic scenario (~130 KB UTF-8 across 10 steps, < 256 KB MAX_BYTES) must NOT inflate 3x to HTTP 413!
+        ru_def = {
+            "format": "richi-scenario",
+            "format_version": 1,
+            "id": "ru-large",
+            "title": "Большой русский сценарий",
+            "steps": [
+                {
+                    "id": f"s{i}",
+                    "type": "instruction",
+                    "title": f"Этап {i}",
+                    "needs": [] if i == 1 else [f"s{i - 1}"],
+                    "params": {"text": "Проверь архитектуру и тесты. " * 250},
+                }
+                for i in range(1, 11)
+            ],
+        }
+        self.assertGreater(len(json.dumps(ru_def, ensure_ascii=False).encode("utf-8")), 120_000)
+        status, ru_created = self.request("POST", "/api/scenarios", {
+            "action": "add", "scope": "global", "definition": ru_def,
+        }, headers=auth)
+        self.assertEqual(status, 200, ru_created)
 
         # Error handling on /api/scenario-run
         status, missing = self.request("GET", "/api/scenario-run?id=run-does-not-exist")
@@ -540,9 +566,30 @@ assert.equal(added.value, 'Review findings: {{steps.self_review.summary}}');
 const removed = scenarioToggleToken(added.value, tok);
 assert.equal(removed.active, false);
 assert.equal(removed.value, 'Review findings:');
-const removedParen = scenarioToggleToken('Compare ({{steps.self_review.summary}}) and code.', tok);
+const removedParen = scenarioToggleToken('Compare ({{steps.self_review.summary}}) and foo().', tok);
 assert.equal(removedParen.active, false);
-assert.equal(removedParen.value, 'Compare and code.');
+assert.equal(removedParen.value, 'Compare and foo().');
+
+// Indexed inputs, multiline commands, numeric bounds, typo'd needs, and matrix gate refs
+const idxDef = {
+  id: 'idx-ok', title: 'Indexed',
+  inputs: {angles: {type: 'multiselect', options: ['sec', 'perf']}},
+  steps: [{id: 's1', type: 'instruction', title: 'One', needs: [], params: {text: 'Focus {{inputs.angles[0]}}'}}],
+};
+assert.equal(scenarioLintDraft(idxDef).ok, true);
+
+const multiCmd = {
+  id: 'multi-cmd', title: 'Multi',
+  steps: [
+    {id: 'c1', type: 'command', title: 'Cmd', needs: ['ghost_step'], params: {command: 'echo a\necho b', expect_exit: 300, tail_lines: 999}},
+    {id: 'r1', type: 'memory.recall', title: 'Rec', needs: [], params: {query: 'q', limit: 99}},
+  ],
+};
+const multiLint = scenarioLintDraft(multiCmd);
+assert.equal(multiLint.ok, false);
+assert.equal(multiLint.byStep.c1.severity, 'err');
+assert.equal(multiLint.byStep.r1.severity, 'err');
+assert.notEqual(scenarioValidateDraft(scenarioNormalizeDraft(multiCmd)), '');
 
 // Draft baseline dirty comparison
 assert.equal(scenarioDraftChanged({id: 'a', steps: []}, {id: 'a', steps: []}), false);

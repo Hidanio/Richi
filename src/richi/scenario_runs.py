@@ -26,6 +26,7 @@ from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import re
+import shlex
 import time
 from types import SimpleNamespace
 import unicodedata
@@ -346,7 +347,7 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
         matches = res.get("results") or []
         refs = [item.get("ref") for item in matches if item.get("ref")]
         lines = ["%s: %s" % (item.get("ref"), item.get("title", "")) for item in matches[:8]]
-        summary = ("; ".join(lines)) if lines else "No matching records found."
+        summary = ("[untrusted memory evidence: %s]" % "; ".join(lines)) if lines else "No matching records found."
         return {"status": "done", "summary": summary[:1500], "data": {"refs": refs, "count": len(refs)}}
     if kind == "memory.brief":
         from . import task_brief
@@ -362,7 +363,7 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
         cards = res.get("results") or []
         refs = [item.get("ref") for item in cards if item.get("ref")]
         lines = ["%s: %s" % (item.get("ref"), item.get("title", "")) for item in cards[:8]]
-        summary = ("; ".join(lines)) if lines else "No prior records found for this context."
+        summary = ("[untrusted memory evidence: %s]" % "; ".join(lines)) if lines else "No prior records found for this context."
         return {"status": "done", "summary": summary[:1500], "data": {"refs": refs, "count": len(refs)}}
     raise ValueError("Unsupported Richi step type: " + kind)
 
@@ -574,15 +575,12 @@ def _sync_task_entry(conn, api, run_row, step_rows, definition, *, title=None, c
                  "failed": "blocked", "done": "done", "cancelled": "done"}
     work_state = state_map.get(status, "in_progress")
     summary = _format_run_summary(run_row, step_rows, definition)
-    if status == "done":
-        target_ks = "confirmed"
-        verified_at = run_row["updated_at"]
-    elif status == "cancelled":
+    if status == "cancelled":
         target_ks = "superseded"
-        verified_at = None
     else:
+        # Keep routine scenario run tasks as hypothesis so repeated runs never pollute
+        # default confirmed recall/brief or the Knowledge Map until explicitly promoted.
         target_ks = "hypothesis"
-        verified_at = None
 
     if create:
         clean_title = (title or "").strip() or ("%s: %s" % (definition["title"], run_row["id"]))
@@ -603,8 +601,6 @@ def _sync_task_entry(conn, api, run_row, step_rows, definition, *, title=None, c
             "aliases": [run_row["id"]],
             "expected_updated_at": None,
         }
-        if verified_at is not None:
-            record["verified_at"] = verified_at
         api.entry_put(conn, record)
         return
     # R2-J12: use entry_record() so a deleted task entry never crashes run transitions.
@@ -614,10 +610,7 @@ def _sync_task_entry(conn, api, run_row, step_rows, definition, *, title=None, c
     updated = {k: v for k, v in current.items() if k not in ("created_at", "updated_at", "history")}
     updated["summary"] = summary
     updated["work_state"] = work_state
-    if status == "done":
-        updated["knowledge_state"] = "confirmed"
-        updated["verified_at"] = run_row["updated_at"]
-    elif status == "cancelled":
+    if status == "cancelled":
         updated["knowledge_state"] = "superseded"
     elif current.get("knowledge_state") != "confirmed":
         updated["knowledge_state"] = "hypothesis"
@@ -949,7 +942,8 @@ def next_step(conn, api, database, run_id, *, claim=False, step_key=None, checke
                 "run_status": run_row["status"],
                 "step": {"key": chosen["step_key"], "id": spec["id"], "type": spec["type"], "status": chosen["status"]},
                 "missing_secret": exc.path.split(".", 1)[1],
-                "note": "Pass --secret %s=VALUE or ask the user in this chat; secret values are never stored." % exc.path.split(".", 1)[1],
+                "note": "Prefer --secret-env %s=ENV_VAR (or --secret %s=VALUE); secret values are never stored." % (
+                    exc.path.split(".", 1)[1], exc.path.split(".", 1)[1]),
             }
         # R2-J02: commit blocked status cleanly instead of raising out of the transaction.
         reason = "unresolved value: " + str(exc)
@@ -1001,10 +995,11 @@ def next_step(conn, api, database, run_id, *, claim=False, step_key=None, checke
         rendered["status"] = "claimed"
         rendered["lease_until"] = lease_until
 
+    prefix = ("richi --project-path %s " % shlex.quote(str(project_path))) if project_path else "richi "
     if chosen["executor_role"] == "human":
-        rendered["answer_command"] = "richi scenario answer %s %s VALUE" % (run_id, chosen["step_key"])
+        rendered["answer_command"] = "%sscenario answer %s %s VALUE" % (prefix, run_id, chosen["step_key"])
     else:
-        rendered["report_command"] = "richi scenario report %s %s --json -" % (run_id, chosen["step_key"])
+        rendered["report_command"] = "%sscenario report %s %s --json -" % (prefix, run_id, chosen["step_key"])
 
     parallel_ready = [row["step_key"] for row in ready_for_me if row["step_key"] != chosen["step_key"]]
     return {
@@ -1071,7 +1066,8 @@ def claim_step(conn, api, database, run_id, step_key, *, checked_project=None, p
             return {
                 "status": "missing_secret", "run_id": run_id, "step_key": step_key,
                 "missing_secret": exc.path.split(".", 1)[1],
-                "note": "Pass --secret %s=VALUE; secret values are never stored." % exc.path.split(".", 1)[1],
+                "note": "Prefer --secret-env %s=ENV_VAR (or --secret %s=VALUE); secret values are never stored." % (
+                    exc.path.split(".", 1)[1], exc.path.split(".", 1)[1]),
             }
         reason = "unresolved value: " + str(exc)
         updated_run, _ = _block_step_and_commit(conn, api, run_row, definition, step_key, reason, author, active_agent, at_iso)
@@ -1099,9 +1095,10 @@ def claim_step(conn, api, database, run_id, step_key, *, checked_project=None, p
                      (lease_until, run_id, step_key))
         conn.execute("UPDATE scenario_runs SET updated_at = ?, revision = revision + 1 WHERE id = ?", (at_iso, run_id))
 
+    prefix = ("richi --project-path %s " % shlex.quote(str(project_path))) if project_path else "richi "
     rendered["status"] = "claimed"
     rendered["lease_until"] = lease_until
-    rendered["report_command"] = "richi scenario report %s %s --json -" % (run_id, step_key)
+    rendered["report_command"] = "%sscenario report %s %s --json -" % (prefix, run_id, step_key)
     return {"status": "claimed", "run_id": run_id, "step_key": step_key, "lease_until": lease_until, "step": rendered}
 
 
@@ -1495,9 +1492,14 @@ def report_step(conn, api, database, run_id, step_key, report, *, checked_projec
         (new_step_status, json.dumps(stored, ensure_ascii=False, separators=(",", ":")),
          report.get("reason") if new_step_status == "failed" else None, at_iso, run_id, step_key),
     )
+    event_detail = {"summary": stored["summary"][:300]}
+    if new_step_status == "failed" and report.get("reason"):
+        event_detail["reason"] = str(report["reason"])[:500]
+    if "exit_code" in stored:
+        event_detail["exit_code"] = stored["exit_code"]
     _record_event(conn, at_iso, run_row["scenario_id"], run_id, step_key,
                   "report_accepted" if new_step_status == "done" else "step_failed",
-                  author.by, author.agent, {"summary": stored["summary"][:300]})
+                  author.by, author.agent, event_detail)
 
     run_row, step_rows, status_changed = _advance(conn, api, database, run_id, project_path=project_path,
                                                   agent=author.agent, now_override=at_dt, force_bump=True)

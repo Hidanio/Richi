@@ -215,6 +215,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 .rule-confirm{font-size:13px;line-height:1.7}
 .rule-quote{margin:0;border-left:3px solid var(--line);padding:6px 0 6px 12px;color:var(--muted);font-size:12px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
 @media(max-width:760px){.rules-totals{width:100%}.rules-totals>*{flex:1;min-width:0}.rule-templates{grid-template-columns:minmax(0,1fr)}.rule-dialog{width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:11px}.rule-dialog-body,.rule-dialog-head,.rule-dialog-foot{padding-left:16px;padding-right:16px}.rule-agent-skill{grid-template-columns:minmax(0,1fr);gap:4px}.rule-agent-name{line-height:1.4}.agents-layout{grid-template-columns:minmax(0,1fr)}.agent-detail{padding:16px}.agent-source{grid-template-columns:auto minmax(0,1fr) auto;row-gap:4px}.agent-source-count{grid-column:2}}
+:root{--scn-human-ink:#8a560f;--scn-richi-ink:#1b6d60}
+@media(prefers-color-scheme:dark){:root{--scn-human-ink:var(--entity);--scn-richi-ink:var(--record)}}
 .scn-subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;border-bottom:1px solid var(--line);padding-bottom:12px}
 .scn-subtab{border-radius:999px;padding:7px 15px;font-size:12.5px;font-weight:600;color:var(--muted);transition:background .14s,color .14s,border-color .14s}
 .scn-subtab[aria-pressed=true]{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -261,15 +263,15 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 .scn-back-btn:hover{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
 .scn-editor-title{font-size:16px;font-weight:650}
 .scn-status-pill{font-size:11.5px;font-weight:650;padding:3px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel-soft);color:var(--muted)}
-.scn-status-pill.clean{border-color:var(--record);color:var(--record);background:#36988816}
-.scn-status-pill.dirty{border-color:var(--entity);color:var(--entity);background:#ba874020}
+.scn-status-pill.clean{border-color:var(--record);color:var(--scn-richi-ink);background:#36988816}
+.scn-status-pill.dirty{border-color:var(--entity);color:var(--scn-human-ink);background:#ba874020}
 .scn-dirty-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:11px 16px;border:1.5px solid var(--entity);border-radius:12px;background:#ba874018}
 .scn-dirty-bar[hidden]{display:none}
 .scn-dirty-bar-text{font-size:13px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:8px}
 .scn-dirty-bar-dot{width:8px;height:8px;border-radius:50%;background:var(--entity);flex:none}
 .scn-dirty-bar-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .mode-tab .tab-dirty-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--entity);margin-left:6px;vertical-align:middle}
-.scn-incoming-btn.active{border-color:var(--record);background:#3698881c;color:var(--record);font-weight:600}
+.scn-incoming-btn.active{border-color:var(--record);background:#3698881c;color:var(--scn-richi-ink);font-weight:600}
 .scn-meta-card{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:16px 18px;display:grid;gap:12px}
 .scn-meta-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
 .scn-inputs-list{display:grid;gap:8px;margin-top:6px}
@@ -286,7 +288,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 .scn-canvas-hud button{border:0;background:transparent;padding:4px 7px;font-size:12px;border-radius:7px;color:var(--ink)}
 .scn-canvas-hud button:hover{background:var(--panel-soft)}
 .scn-canvas-hud span{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11.5px;color:var(--muted);min-width:42px;text-align:center}
-.scn-wire-menu{position:absolute;z-index:40;width:250px;background:var(--panel);border:1px solid var(--accent);border-radius:12px;box-shadow:0 16px 40px #1823342c;padding:6px;display:grid;gap:2px}
+.scn-wire-menu{position:absolute;z-index:40;width:256px;max-height:310px;overflow-y:auto;background:var(--panel);border:1px solid var(--accent);border-radius:12px;box-shadow:0 16px 40px #1823342c;padding:6px;display:grid;gap:2px}
 .scn-wire-menu-head{font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:5px 8px 4px}
 .scn-wire-menu button{border:0;background:transparent;text-align:left;padding:7px 9px;border-radius:8px;display:grid;gap:1px}
 .scn-wire-menu button:hover{background:var(--accent-soft)}
@@ -320,8 +322,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 .scn-node-badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:2px}
 .scn-node-badge{font-size:10.5px;padding:2px 7px;border-radius:999px;background:var(--panel-soft);border:1px solid var(--line);color:var(--muted)}
 .scn-node-lint{font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:999px;flex:none}
-.scn-node-lint.ok{background:#36988822;color:var(--record)}
-.scn-node-lint.warn{background:#ba874026;color:var(--entity)}
+.scn-node-lint.ok{background:#36988822;color:var(--scn-richi-ink)}
+.scn-node-lint.warn{background:#ba874026;color:var(--scn-human-ink)}
 .scn-node-lint.err{background:#b4464d24;color:var(--danger)}
 .scn-port{position:absolute;top:52%;transform:translateY(-50%);width:15px;height:15px;border-radius:50%;border:2px solid var(--accent);background:var(--panel);padding:0;display:grid;place-items:center;cursor:crosshair;z-index:5;transition:transform .12s,background .12s}
 .scn-port:hover,.scn-port.active{transform:translateY(-50%) scale(1.28);background:var(--accent)}
@@ -343,20 +345,20 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 .scn-live-preview-label{font-size:10.5px;font-weight:650;text-transform:uppercase;letter-spacing:.45px;color:var(--muted);margin-bottom:4px;display:block}
 .scn-var-pill{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;margin:0 2px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);cursor:pointer;vertical-align:baseline;transition:filter .12s,transform .12s}
 .scn-var-pill:hover{filter:brightness(.96);transform:translateY(-1px)}
-.scn-var-pill.role-richi{background:#3698881e;color:var(--record);border-color:var(--record)}
-.scn-var-pill.role-human{background:#ba874022;color:var(--entity);border-color:var(--entity)}
+.scn-var-pill.role-richi{background:#3698881e;color:var(--scn-richi-ink);border-color:var(--record)}
+.scn-var-pill.role-human{background:#ba874022;color:var(--scn-human-ink);border-color:var(--entity)}
 .scn-var-pill.bad{background:#b4464d20;color:var(--danger);border-color:var(--danger)}
 .scn-rich-wrap{position:relative;border:1px solid var(--line);border-radius:9px;background:var(--panel);transition:border-color .14s,box-shadow .14s}
 .scn-rich-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .scn-rich-editor{min-height:112px;max-height:280px;overflow-y:auto;padding:10px 12px;font-size:13px;line-height:1.72;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;outline:none}
-.scn-rich-editor.mono{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;min-height:66px}
+.scn-rich-editor.mono{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;min-height:46px}
 .scn-rich-editor.is-empty::before{content:attr(data-placeholder);color:var(--muted);pointer-events:none}
-.scn-inline-pill{display:inline-flex;align-items:center;gap:4px;padding:1px 4px 1px 8px;margin:0 2px;border-radius:999px;font-family:system-ui,-apple-system,sans-serif;font-size:11.5px;font-weight:600;line-height:1.45;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);vertical-align:baseline;user-select:none;cursor:pointer}
-.scn-inline-pill.role-richi{background:#3698881e;color:var(--record);border-color:var(--record)}
-.scn-inline-pill.role-human{background:#ba874022;color:var(--entity);border-color:var(--entity)}
+.scn-inline-pill{display:inline-flex;align-items:center;gap:4px;padding:1px 4px 1px 8px;margin:0 2px;border-radius:999px;font-family:system-ui,-apple-system,sans-serif;font-size:11.5px;font-weight:600;line-height:1.45;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);vertical-align:baseline;user-select:none;cursor:default}
+.scn-inline-pill.role-richi{background:#3698881e;color:var(--scn-richi-ink);border-color:var(--record)}
+.scn-inline-pill.role-human{background:#ba874022;color:var(--scn-human-ink);border-color:var(--entity)}
 .scn-inline-pill.bad{background:#b4464d20;color:var(--danger);border-color:var(--danger)}
-.scn-inline-pill-x{border:0;background:transparent;color:currentColor;font-size:13px;line-height:1;padding:0 4px;border-radius:999px;cursor:pointer;opacity:.72}
-.scn-inline-pill-x:hover{opacity:1;background:#0001}
+.scn-inline-pill-x{border:0;background:transparent;color:currentColor;font-size:13px;line-height:1;padding:0 4px;border-radius:999px;cursor:pointer;opacity:.75}
+.scn-inline-pill-x:hover{opacity:1;background:color-mix(in srgb,currentColor 14%,transparent)}
 .scn-rich-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:6px 10px;border-top:1px solid var(--line);background:var(--panel-soft);border-radius:0 0 8px 8px}
 .scn-rich-bar span{font-size:11.5px;color:var(--muted)}
 .scn-mention-menu{position:absolute;left:6px;right:6px;top:calc(100% + 5px);z-index:50;background:var(--panel);border:1.5px solid var(--accent);border-radius:11px;box-shadow:0 16px 38px #1823342c;padding:6px;max-height:250px;overflow-y:auto;display:grid;gap:2px}
@@ -396,9 +398,10 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 .scn-run-card[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}
 .scn-run-top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .scn-status{font-size:11px;font-weight:650;padding:2px 8px;border-radius:999px;border:1px solid var(--line);background:var(--panel-soft);color:var(--muted)}
-.scn-status.st-done{color:var(--record);border-color:var(--record)}
+.scn-status.st-done{color:var(--scn-richi-ink);border-color:var(--record)}
 .scn-status.st-running,.scn-status.st-claimed{color:var(--accent);border-color:var(--accent)}
-.scn-status.st-waiting,.scn-status.st-waiting_human,.scn-status.st-paused,.scn-status.st-blocked{color:var(--entity);border-color:var(--entity)}
+.scn-status.st-waiting,.scn-status.st-waiting_human,.scn-status.st-paused{color:var(--scn-human-ink);border-color:var(--entity)}
+.scn-status.st-blocked{color:var(--danger);border-color:var(--danger)}
 .scn-status.st-failed,.scn-status.st-cancelled{color:var(--danger);border-color:var(--danger)}
 .scn-progress{height:5px;border-radius:4px;background:var(--panel-soft);border:1px solid var(--line);overflow:hidden}
 .scn-progress i{display:block;height:100%;background:var(--record);border-radius:4px}
@@ -892,7 +895,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const heading=make('div','tools-heading'),copy=make('div');copy.append(make('div','tools-eyebrow','Практика и опыт'),make('h2','tool-detail-heading','Инструменты'),make('p','tools-lead','Чем решали задачи, как настраивали и где применяли. Откройте инструмент, чтобы найти проекты и связанный опыт.'));copy.querySelector('h2').tabIndex=-1;
     const count=make('div','tools-total');count.append(make('strong','',matches.length),make('span','',query||state.toolFilter?'найдено':'в каталоге'));heading.append(copy,count);root.append(heading);
     if(state.toolsData?.truncated)toolWarning(root,'Показана часть каталога. Некоторые инструменты, проекты и задачи могут не попасть в этот список.');
-    if(!matches.length){toolEmpty(root,all.length?'Подходящих инструментов нет':'Здесь будет ваш инструментарий',all.length?'Попробуйте другое название, назначение или проект.':'Сохраняйте инструменты и связывайте их с задачами и сценариями. Здесь появятся карточки с проектами и опытом применения.');if(all.length){const reset=toolButton('Сбросить поиск и проект',()=>{state.toolQuery='';state.toolFilter='';$('search').value='';renderProjectOptions();renderTools();},'small');root.querySelector('.tools-empty').append(reset);}return;}
+    if(!matches.length){toolEmpty(root,all.length?'Подходящих инструментов нет':'Здесь будет ваш инструментарий',all.length?'Попробуйте другое название, назначение или проект.':'Сохраняйте инструменты и связывайте их с задачами и рецептами применения. Здесь появятся карточки с проектами и опытом применения.');if(all.length){const reset=toolButton('Сбросить поиск и проект',()=>{state.toolQuery='';state.toolFilter='';$('search').value='';renderProjectOptions();renderTools();},'small');root.querySelector('.tools-empty').append(reset);}return;}
     const cards=make('div','tools-grid');for(const tool of matches.sort((a,b)=>String(a.title).localeCompare(String(b.title),'ru')))cards.append(renderToolCard(tool));root.append(cards);
   }
   function renderToolFacts(tool){
@@ -929,9 +932,9 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
   function renderToolProject(root,tool,project){
     toolBreadcrumbs(root,tool,project);const heading=make('div','tools-heading'),copy=make('div');copy.append(make('div','tools-eyebrow',tool.title+' / применение в проекте'),make('h2','tool-detail-heading',project.name));copy.querySelector('h2').tabIndex=-1;if(project.description)copy.append(make('p','tools-project-description',project.description));heading.append(copy);root.append(heading);
     if(project.truncated||tool.truncated||state.toolsData.truncated)toolWarning(root,'Показана часть связанных задач и применений. Отсутствие записи в этом списке не означает, что такого опыта нет.');
-    const tasks=list(project.tasks);toolSection(root,'Задачи',tasks.length);const taskList=make('div','tools-task-list');for(const task of tasks)taskList.append(renderToolTask(task));if(!tasks.length)taskList.append(make('p','tools-inline-note','Связанные задачи пока не указаны. Здесь появятся задачи, в которых этот инструмент применяли напрямую или в рамках связанного сценария.'));root.append(taskList);
+    const tasks=list(project.tasks);toolSection(root,'Задачи',tasks.length);const taskList=make('div','tools-task-list');for(const task of tasks)taskList.append(renderToolTask(task));if(!tasks.length)taskList.append(make('p','tools-inline-note','Связанные задачи пока не указаны. Здесь появятся задачи, в которых этот инструмент применяли напрямую или в рамках связанного рецепта.'));root.append(taskList);
     const shown=new Set(tasks.flatMap(task=>[task.id,...list(task.usage_records).map(record=>record.id)])),records=list(project.records).filter(record=>!shown.has(record.id));
-    if(records.length){toolSection(root,'Другие сценарии и результаты',records.length);const rows=make('div','tools-task-list');records.forEach(record=>rows.append(renderToolTask(record,[])));root.append(rows);}root.append(toolButton('← К инструменту',()=>openTool(tool.id),'tools-back small'));root.lastElementChild.style.marginTop='24px';
+    if(records.length){toolSection(root,'Другие рецепты и результаты',records.length);const rows=make('div','tools-task-list');records.forEach(record=>rows.append(renderToolTask(record,[])));root.append(rows);}root.append(toolButton('← К инструменту',()=>openTool(tool.id),'tools-back small'));root.lastElementChild.style.marginTop='24px';
   }
   function renderTools(){
     const root=$('tools-content');root.replaceChildren();$('tool-catalog').setAttribute('aria-busy',String(state.toolsLoading));
@@ -940,7 +943,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     if(!state.toolId){renderToolCatalog(root);return;}const tool=state.toolDetails.get(state.toolId)||list(state.toolsData.tools).find(item=>item.id===state.toolId);
     if(state.toolDetailMissing===state.toolId&&!state.toolDetailLoading){toolBreadcrumbs(root);toolEmpty(root,'Инструмент не найден','В памяти нет этого инструмента при выбранных состояниях знаний. Его могли удалить или скрыть фильтром гипотез или устаревших записей.');return;}
     if(!tool&&!state.toolDetailLoading&&!state.toolDetailError){toolBreadcrumbs(root);toolEmpty(root,'Инструмент не найден в этом снимке','Он мог быть изменён, скрыт фильтром состояния или не войти в загруженную часть каталога.');return;}
-    if(!tool||tool.detail!==true){toolBreadcrumbs(root,tool);toolEmpty(root,state.toolDetailLoading?'Открываем инструмент':state.toolDetailError?'Не удалось открыть инструмент':'Загружаем применение',state.toolDetailLoading?'Читаем проекты, задачи и сценарии применения.':state.toolDetailError||'Читаем подробности инструмента.');if(state.toolDetailError)root.querySelector('.tools-empty').append(toolButton('Повторить',()=>loadToolDetail(state.toolId),'primary'));return;}
+    if(!tool||tool.detail!==true){toolBreadcrumbs(root,tool);toolEmpty(root,state.toolDetailLoading?'Открываем инструмент':state.toolDetailError?'Не удалось открыть инструмент':'Загружаем применение',state.toolDetailLoading?'Читаем проекты, задачи и рецепты применения.':state.toolDetailError||'Читаем подробности инструмента.');if(state.toolDetailError)root.querySelector('.tools-empty').append(toolButton('Повторить',()=>loadToolDetail(state.toolId),'primary'));return;}
     if(!state.toolProject){renderToolDetail(root,tool);return;}const project=toolProjects(tool).find(item=>item.id===state.toolProject);
     if(!project){toolBreadcrumbs(root,tool);toolEmpty(root,'Применение в проекте не найдено','В текущем снимке нет подтверждённой связи этого инструмента с выбранным проектом.');return;}renderToolProject(root,tool,project);
   }
@@ -1007,7 +1010,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     if(!viewModes.includes(mode)||mode===state.mode)return;
     rulesState.outcome='';if(typeof scenariosState!=='undefined')scenariosState.outcome='';
     const queryKey={map:'mapQuery',encyclopedia:'conceptQuery',tools:'toolQuery',scenarios:'scenarioQuery',rules:'ruleQuery',agents:'agentQuery'};state[queryKey[state.mode]]=$('search').value;state.mode=mode;const encyclopedia=mode==='encyclopedia',tools=mode==='tools',scenariosMode=mode==='scenarios',rules=mode==='rules',agents=mode==='agents';hideSearch();
-    $('canvas').hidden=mode!=='map';$('encyclopedia').hidden=!encyclopedia;$('tool-catalog').hidden=!tools;$('scenarios-panel').hidden=!scenariosMode;$('rules-panel').hidden=!rules;$('agents-panel').hidden=!agents;$('kind-filters').hidden=mode!=='map';document.querySelector('.switches').hidden=scenariosMode||rules||agents;document.querySelector('.project-field').hidden=agents;$('main').classList.toggle('tools-mode',tools||scenariosMode||rules||agents);$('main').classList.remove('tools-reading');
+    $('canvas').hidden=mode!=='map';$('encyclopedia').hidden=!encyclopedia;$('tool-catalog').hidden=!tools;$('scenarios-panel').hidden=!scenariosMode;$('rules-panel').hidden=!rules;$('agents-panel').hidden=!agents;$('kind-filters').hidden=mode!=='map';document.querySelector('.switches').hidden=scenariosMode||rules||agents;document.querySelector('.project-field').hidden=agents;document.querySelector('.toolbar').hidden=scenariosMode&&typeof scenariosState!=='undefined'&&Boolean(scenariosState.editing);$('main').classList.toggle('tools-mode',tools||scenariosMode||rules||agents);$('main').classList.remove('tools-reading');
     for(const name of viewModes){const tab=$(name+'-tab');tab.setAttribute('aria-selected',String(name===mode));tab.tabIndex=name===mode?0:-1;}
     $('search-label').textContent=agents?'Найти агента':scenariosMode?'Найти сценарий, запуск или событие':rules?'Найти правило':tools?'Найти инструмент':encyclopedia?'Найти понятие':'Найти в памяти';$('project-label').textContent=scenariosMode||rules?'Область':tools?'Применялся в проекте':encyclopedia?'Область применения':'Вокруг проекта';
     $('search').placeholder=agents?'Имя, ID или папка…':scenariosMode?'ID, название, тег или шаг…':rules?'ID, текст или скилл…':tools?'Название, назначение, тема…':encyclopedia?'Термин, синоним, определение…':'Проект, задача, решение, тег…';$('search').value=state[queryKey[mode]]||'';
@@ -2308,15 +2311,27 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         const hasPer=Boolean(sk&&typeof sk==='object'&&sk.per_agent&&Object.keys(sk.per_agent).length);
         if(!hasDefault&&!hasPer)return 'Шаг «'+step.id+'»: выберите или укажите скилл.';
       }
-      if(step.type==='command'&&!String(p.command||'').trim())return 'Шаг «'+step.id+'»: укажите команду.';
+      if(step.type==='command'){
+        if(!String(p.command||'').trim())return 'Шаг «'+step.id+'»: укажите команду.';
+        if(/[\r\n]/.test(String(p.command||'')))return 'Шаг «'+step.id+'»: команда должна быть в одну строку (без переносов).';
+        if(p.expect_exit!==undefined&&(p.expect_exit<0||p.expect_exit>255))return 'Шаг «'+step.id+'»: ожидаемый код выхода должен быть от 0 до 255.';
+        if(p.tail_lines!==undefined&&(p.tail_lines<0||p.tail_lines>500))return 'Шаг «'+step.id+'»: число строк лога должно быть от 0 до 500.';
+      }
       if(step.type==='gate'){
         if(!String(p.question||'').trim())return 'Шаг «'+step.id+'»: укажите вопрос человеку.';
         if(Array.isArray(p.options)&&p.options.length&&(p.options.length<2||p.options.length>10))return 'Шаг «'+step.id+'»: если заданы варианты ответа, их должно быть от 2 до 10.';
       }
       if(step.type==='checklist'&&(!Array.isArray(p.items)||!p.items.length))return 'Шаг «'+step.id+'»: добавьте хотя бы один пункт чек-листа.';
-      if(step.type==='memory.recall'&&!String(p.query||'').trim())return 'Шаг «'+step.id+'»: укажите запрос для поиска в памяти.';
-      if(step.type==='memory.brief'&&!String(p.question||'').trim())return 'Шаг «'+step.id+'»: укажите вопрос для сводки.';
+      if(step.type==='memory.recall'){
+        if(!String(p.query||'').trim())return 'Шаг «'+step.id+'»: укажите запрос для поиска в памяти.';
+        if(p.limit!==undefined&&(p.limit<1||p.limit>50))return 'Шаг «'+step.id+'»: максимум записей должен быть от 1 до 50.';
+      }
+      if(step.type==='memory.brief'){
+        if(!String(p.question||'').trim())return 'Шаг «'+step.id+'»: укажите вопрос для сводки.';
+        if(p.limit!==undefined&&(p.limit<1||p.limit>50))return 'Шаг «'+step.id+'»: максимум записей должен быть от 1 до 50.';
+      }
       if(step.type==='condition'&&!String(p.expr||'').trim())return 'Шаг «'+step.id+'»: укажите условие.';
+      if(step.retry&&step.retry.max!==undefined&&(step.retry.max<0||step.retry.max>5))return 'Шаг «'+step.id+'»: число повторов должно быть от 0 до 5.';
     }
     for(const step of def.steps){
       for(const need of Array.isArray(step.needs)?step.needs:[]){
@@ -2360,13 +2375,16 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       const expr=m[1].trim(),segs=expr.split('|').map(s=>s.trim());
       const path=segs[0]||'',filter=segs.slice(1).join(' | ');
       const dot=path.split('.');
-      parts.push({type:'token',raw:m[0],expr,path,filter,root:dot[0]||'',target:dot[1]||'',field:dot.slice(2).join('.')});
+      const rawTarget=dot[1]||'',target=rawTarget.replace(/\[\d+\]$/,'');
+      parts.push({type:'token',raw:m[0],expr,path,filter,root:dot[0]||'',target,rawTarget,field:dot.slice(2).join('.')});
       last=m.index+m[0].length;
     }
     if(last<raw.length)parts.push({type:'text',value:raw.slice(last)});
     return parts;
   }
   function scenarioLintDraft(rawDef,installedSkillNames=null){
+    const rawSteps=Array.isArray(rawDef?.steps)?rawDef.steps:[];
+    const rawIds=new Set(rawSteps.map(s=>String(s?.id||'').trim()).filter(Boolean));
     const def=scenarioNormalizeDraft(rawDef);
     const issues=[],byStep={};
     const push=(stepId,severity,message)=>{
@@ -2380,6 +2398,15 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     if(!SCN_ID_RE.test(def.id||''))push(null,'err','Неверный ID сценария (нужны латиница, цифры, «.», «_», «:», «-»).');
     if(!String(def.title||'').trim())push(null,'err','Не указано название сценария.');
     if(!Array.isArray(def.steps)||!def.steps.length){push(null,'err','Добавьте хотя бы один шаг.');return {ok:false,issues,byStep};}
+    for(const rs of rawSteps){
+      const sid=String(rs?.id||'').trim();
+      if(Array.isArray(rs?.needs)){
+        for(const need of rs.needs){
+          const n=String(need||'').trim();
+          if(n&&n!==sid&&!rawIds.has(n))push(sid||null,'err','Ссылка на несуществующий шаг «'+n+'» в needs.');
+        }
+      }
+    }
     const inputs=def.inputs&&typeof def.inputs==='object'?def.inputs:{};
     const secrets=new Set(Object.entries(inputs).filter(([,s])=>s?.type==='secret').map(([k])=>k));
     const stepById=new Map();
@@ -2400,8 +2427,13 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
           if(!inputs[part.target])push(step.id,'err','Необъявленный параметр «'+part.target+'» в '+part.raw+'.');
           else if(opts.forbidSecret&&secrets.has(part.target))push(step.id,'err','Секрет «'+part.target+'» нельзя использовать в этом поле.');
         }else if(part.root==='steps'){
-          if(!stepById.has(part.target))push(step.id,'err','Ссылка на несуществующий шаг «'+part.target+'» в '+part.raw+'.');
+          const src=stepById.get(part.target);
+          if(!src)push(step.id,'err','Ссылка на несуществующий шаг «'+part.target+'» в '+part.raw+'.');
           else if(!ancestors.has(part.target))push(step.id,'err','Шаг «'+part.target+'» не является предком — сначала соедините его стрелкой (needs).');
+          else if(src.matrix&&(src.type==='gate'||src.type==='checklist')){
+            const topField=String(part.field||'').split('.')[0].replace(/\[\d+\]$/,'');
+            if(topField&&!['items','status'].includes(topField))push(step.id,'err','Для матричного шага «'+part.target+'» доступны только поля items и status (не «'+topField+'»).');
+          }
         }
       }
     };
@@ -2411,6 +2443,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         if(!stepById.has(need))push(step.id,'err','Ссылка на несуществующий шаг «'+need+'».');
         else if(scenarioWouldCycle(def.steps,need,step.id))push(step.id,'err','Обнаружен цикл зависимостей через «'+need+'».');
       }
+      if(step.retry&&step.retry.max!==undefined&&(step.retry.max<0||step.retry.max>5))push(step.id,'err','Повторы должны быть в диапазоне 0–5.');
       if(step.type==='instruction'){
         if(!String(p.text||'').trim())push(step.id,'err','Заполните текст задания для агента.');
         else checkTemplates(step,p.text);
@@ -2426,7 +2459,12 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         if(p.instruction)checkTemplates(step,p.instruction);
       }else if(step.type==='command'){
         if(!String(p.command||'').trim())push(step.id,'err','Укажите консольную команду.');
-        else checkTemplates(step,p.command,{requireShell:true});
+        else{
+          if(/[\r\n]/.test(String(p.command)))push(step.id,'err','Консольная команда должна быть в одну строку (без переносов).');
+          checkTemplates(step,p.command,{requireShell:true});
+        }
+        if(p.expect_exit!==undefined&&(p.expect_exit<0||p.expect_exit>255))push(step.id,'err','Ожидаемый код выхода должен быть от 0 до 255.');
+        if(p.tail_lines!==undefined&&(p.tail_lines<0||p.tail_lines>500))push(step.id,'err','Число строк лога должно быть от 0 до 500.');
       }else if(step.type==='gate'){
         if(!String(p.question||'').trim())push(step.id,'err','Укажите вопрос пользователю.');
         else checkTemplates(step,p.question,{forbidSecret:true});
@@ -2437,9 +2475,11 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       }else if(step.type==='memory.recall'){
         if(!String(p.query||'').trim())push(step.id,'err','Укажите поисковый запрос в память.');
         else checkTemplates(step,p.query,{forbidSecret:true});
+        if(p.limit!==undefined&&(p.limit<1||p.limit>50))push(step.id,'err','Максимум записей должен быть от 1 до 50.');
       }else if(step.type==='memory.brief'){
         if(!String(p.question||'').trim())push(step.id,'err','Укажите вопрос для сводки из памяти.');
         else checkTemplates(step,p.question,{forbidSecret:true});
+        if(p.limit!==undefined&&(p.limit<1||p.limit>50))push(step.id,'err','Максимум записей должен быть от 1 до 50.');
       }else if(step.type==='condition'){
         if(!String(p.expr||'').trim())push(step.id,'err','Укажите условие.');
       }
@@ -2460,11 +2500,18 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const parts=scenarioParseTokens(raw);
     if(parts.some(pt=>pt.type==='token'&&scenarioTokenKey(pt.raw)===key)){
       let out='';
-      for(const pt of parts){
-        if(pt.type==='token'&&scenarioTokenKey(pt.raw)===key)continue;
+      for(let i=0;i<parts.length;i++){
+        const pt=parts[i];
+        if(pt.type==='token'&&scenarioTokenKey(pt.raw)===key){
+          if(out.endsWith('(')&&parts[i+1]?.type==='text'&&parts[i+1].value.startsWith(')')){
+            out=out.slice(0,-1);
+            parts[i+1]={type:'text',value:parts[i+1].value.slice(1)};
+          }
+          continue;
+        }
         out+=pt.type==='token'?pt.raw:pt.value;
       }
-      out=out.replace(/\(\s*\)/g,'').replace(/[ \t]{2,}/g,' ').replace(/ ([.,;:!?])/g,'$1').trim();
+      out=out.replace(/[ \t]{2,}/g,' ').replace(/ ([.,;:!?])/g,'$1').trim();
       return {value:out,active:false};
     }
     const pos=typeof cursorPos==='number'&&cursorPos>=0&&cursorPos<=raw.length?cursorPos:raw.length;
@@ -2632,6 +2679,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     ensureDraftPositions(def);
     scenariosState.editing={
       mode:record?'update':'add',
+      fromCopy:Boolean(copyFrom),
       original:record,
       scope:baseScope,
       project_id:baseProject,
@@ -2685,6 +2733,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     }
     for(const btn of root.querySelectorAll('[data-scn-undo]'))btn.disabled=!ed.undoStack.length;
     for(const btn of root.querySelectorAll('[data-scn-reset]'))btn.disabled=!ed.dirty;
+    for(const btn of root.querySelectorAll('[data-scn-run]'))btn.hidden=ed.dirty;
   }
   function undoScenarioEdit(){
     const ed=scenariosState.editing;if(!ed||!ed.undoStack.length)return;
@@ -2741,6 +2790,15 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const def=item.definition||{};
     const panel=ruleDialog('Как запустить: '+(def.title||item.id),scenarioScopeText(item)+' · '+item.id);
     const {dialog,body,foot}=panel;
+    const schemaVersion=Number(scenariosState.data?.schema_version)||0;
+    if(schemaVersion<4){
+      const migBox=make('div','tools-warning');
+      migBox.append(make('strong','','Сначала обновите схему хранилища до v4 (сейчас v'+schemaVersion+')'));
+      migBox.append(make('p','','Запуск сценариев требует схему v4. Без обновления команда запуска вернёт ошибку schema_upgrade_required. Перед обновлением Richi сам создаст резервную копию базы:'));
+      const migCmd=['richi',...list(state.mapStore).map(scnShellQuote),'migrate'].join(' ');
+      const showMig=ruleCommandBox(migBox);showMig(migCmd);
+      body.append(migBox);
+    }
     const chatBox=make('div','scn-chat-prompt');
     const chatPhrase='Запусти сценарий «'+(def.title||item.id)+'» ('+item.id+')';
     const chatPre=make('pre','',chatPhrase);
@@ -2767,11 +2825,11 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       cliBody.append(make('p','tools-inline-note','Необязательно заполнять вручную: в чате агент обычно подставляет эти параметры сам. Если запускаете в терминале — укажите значения ниже:'));
       for(const [name,spec] of inputs){
         if(spec.type==='secret'){
-          const note=make('div','rule-readonly','Секретное поле ('+name+'): не вводите секреты в браузер — передайте значение напрямую в терминале (--input '+name+'=...).');
+          const note=make('div','rule-readonly','Секретное поле ('+name+'): не вводите секреты в браузер — при шаге передавайте через переменную окружения (--secret-env '+name+'=ENV_VAR).');
           cliBody.append(ruleField((spec.title||name)+(spec.required?' *':''),note,spec.description||''));
           continue;
         }
-        values[name]=spec.default!==undefined?spec.default:'';
+        values[name]=spec.default!==undefined?(Array.isArray(spec.default)?[...spec.default]:spec.default):'';
         let ctrl;
         if(spec.type==='boolean'){
           ctrl=make('select');ctrl.add(new Option('— не задано —',''));ctrl.add(new Option('Да (true)','true'));ctrl.add(new Option('Нет (false)','false'));
@@ -2782,6 +2840,14 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
           for(const opt of list(spec.options))ctrl.add(new Option(opt,opt));
           ctrl.value=String(values[name]||'');
           ctrl.addEventListener('change',()=>{values[name]=ctrl.value;updateCmd();});
+        }else if(spec.type==='multiselect'&&list(spec.options).length){
+          ctrl=make('div','scn-needs-grid');
+          const chosen=new Set(Array.isArray(values[name])?values[name]:[]);
+          for(const opt of list(spec.options)){
+            const lbl=make('label','scn-needs-item'),cb=make('input');cb.type='checkbox';cb.checked=chosen.has(opt);
+            cb.addEventListener('change',()=>{if(cb.checked)chosen.add(opt);else chosen.delete(opt);values[name]=[...chosen];updateCmd();});
+            lbl.append(cb,document.createTextNode(opt));ctrl.append(lbl);
+          }
         }else{
           ctrl=make('input');ctrl.type='text';
           ctrl.value=Array.isArray(values[name])?values[name].join(','):String(values[name]||'');
@@ -2791,8 +2857,13 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         cliBody.append(ruleField((spec.title||name)+(spec.required?' *':''),ctrl,spec.description||''));
       }
     }
-    const showCmd=ruleCommandBox(cliBody,'Команда для терминала (требуется схема хранилища v4):');
+    const missingReqNote=make('div','rule-field-hint');missingReqNote.style.color='var(--danger)';missingReqNote.hidden=true;
+    cliBody.append(missingReqNote);
+    const showCmd=ruleCommandBox(cliBody);
     const updateCmd=()=>{
+      const missing=inputs.filter(([n,s])=>s.required&&s.type!=='secret'&&(values[n]===''||values[n]===undefined||(Array.isArray(values[n])&&!values[n].length))).map(([n,s])=>s.title||n);
+      missingReqNote.hidden=!missing.length;
+      if(missing.length)missingReqNote.textContent='Для запуска в терминале заполните обязательные параметры: '+missing.join(', ');
       const scopeArg=item.builtin?null:item.scope;
       const projArg=item.builtin?null:item.project_id;
       showCmd(scenarioRunCommand(item.id,scopeArg,projArg,values,state.mapStore));
@@ -3107,7 +3178,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         ['gate','Вопрос человеку','Пауза до ответа в чате'],
         ['checklist','Чек-лист','Список пунктов на проверку'],
         ['memory.recall','Поиск в памяти','Richi найдёт прошлые записи'],
-        ['condition','Условие / ветвление','Развилка по ответу или статусу'],
+        ['memory.brief','Сводка из памяти','Richi соберёт сводку по вопросу'],
+        ['condition','Условие / ветвление','Вычисляет флаг для проверок if'],
       ];
       for(const [type,label,desc] of quickTypes){
         const btn=make('button');btn.type='button';
@@ -3477,40 +3549,67 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const sources=[];
     for(const aid of ancestors){
       const anc=stepById.get(aid);if(!anc)continue;
-      if(anc.type==='gate')sources.push({path:'steps.'+aid+'.answer',label:'Ответ на «'+prettyStepLabel(anc)+'»',options:list(anc.params?.options)});
-      sources.push({path:'steps.'+aid+'.status',label:'Статус шага «'+prettyStepLabel(anc)+'»',options:['done','skipped','failed']});
+      if(anc.type==='gate'&&!anc.matrix)sources.push({path:'steps.'+aid+'.answer',type:'string',label:'Ответ на «'+prettyStepLabel(anc)+'»',options:list(anc.params?.options)});
+      if(anc.type==='condition')sources.push({path:'steps.'+aid+'.data.value',type:'boolean',label:'Результат условия «'+prettyStepLabel(anc)+'»',options:['true','false']});
+      sources.push({path:'steps.'+aid+'.status',type:'string',label:'Статус шага «'+prettyStepLabel(anc)+'»',options:['done','skipped','failed']});
     }
     for(const [name,spec] of Object.entries(def.inputs||{})){
       if(spec?.type==='secret')continue;
-      sources.push({path:'inputs.'+name,label:'Параметр «'+(spec?.title||name)+'»',options:list(spec?.options)});
+      const t=spec?.type||'string';
+      sources.push({path:'inputs.'+name,type:t,label:'Параметр «'+(spec?.title||name)+'»',options:t==='boolean'?['true','false']:list(spec?.options)});
     }
     const row=make('div','scn-cond-builder');
     const leftSel=make('select');leftSel.add(new Option('— выберите, что проверять —',''));
     for(const src of sources)leftSel.add(new Option(src.label,src.path));
     const opSel=make('select');
-    opSel.add(new Option('равно (==)','=='));opSel.add(new Option('не равно (!=)','!='));
     const rightIn=make('input');rightIn.type='text';rightIn.placeholder='Значение (напр. Подтвердить)';
     const rightList=make('datalist');rightList.id='scn-cond-opts-'+(++ruleFieldCount);rightIn.setAttribute('list',rightList.id);
-    const syncOptions=()=>{
-      rightList.replaceChildren();
+    const syncOperatorsAndOptions=()=>{
       const found=sources.find(s=>s.path===leftSel.value);
+      const t=found?.type||'string';
+      opSel.replaceChildren();
+      if(t==='multiselect'){
+        opSel.add(new Option('содержит (in)','in'));opSel.add(new Option('не содержит (not in)','not in'));
+      }else if(t==='number'){
+        opSel.add(new Option('равно (==)','=='));opSel.add(new Option('не равно (!=)','!='));
+        opSel.add(new Option('больше (>)','>'));opSel.add(new Option('меньше (<)','<'));
+        opSel.add(new Option('>=','>='));opSel.add(new Option('<=','<='));
+      }else{
+        opSel.add(new Option('равно (==)','=='));opSel.add(new Option('не равно (!=)','!='));
+      }
+      rightList.replaceChildren();
       for(const opt of list(found?.options))rightList.append(new Option(opt));
+      rightIn.placeholder=t==='boolean'?'true или false':(t==='number'?'Число (напр. 5)':'Значение (напр. Подтвердить)');
     };
+    syncOperatorsAndOptions();
     const rawIn=make('input');rawIn.type='text';rawIn.style.fontFamily='ui-monospace,SFMono-Regular,monospace';rawIn.value=currentExpr||'';rawIn.placeholder="Например: steps.human_confirm.answer == 'Подтвердить'";
     const applyBuilder=()=>{
       if(!leftSel.value||!rightIn.value.trim())return;
-      const val=rightIn.value.trim();
-      const quoted="'"+val.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"'";
-      const built=leftSel.value+' '+opSel.value+' '+quoted;
+      const found=sources.find(s=>s.path===leftSel.value),t=found?.type||'string',val=rightIn.value.trim();
+      const quoteStr=s=>"'"+s.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"'";
+      let built='';
+      if(t==='boolean'){
+        const low=val.toLowerCase();
+        const lit=(low==='true'||low==='да'||low==='1')?'true':'false';
+        built=leftSel.value+' '+opSel.value+' '+lit;
+      }else if(t==='number'){
+        const num=Number(val);
+        if(!Number.isFinite(num))return;
+        built=leftSel.value+' '+opSel.value+' '+String(num);
+      }else if(t==='multiselect'){
+        built=quoteStr(val)+' '+opSel.value+' '+leftSel.value;
+      }else{
+        built=leftSel.value+' '+opSel.value+' '+quoteStr(val);
+      }
       rawIn.value=built;onExpr(built);
     };
-    leftSel.addEventListener('change',()=>{syncOptions();const found=sources.find(s=>s.path===leftSel.value);if(found?.options?.length&&!rightIn.value)rightIn.value=found.options[0];applyBuilder();});
+    leftSel.addEventListener('change',()=>{syncOperatorsAndOptions();const found=sources.find(s=>s.path===leftSel.value);if(found?.options?.length)rightIn.value=found.options[0];else rightIn.value='';applyBuilder();});
     opSel.addEventListener('change',applyBuilder);
     rightIn.addEventListener('input',applyBuilder);
     rawIn.addEventListener('input',()=>{onExpr(rawIn.value);});
     if(sources.length){
       row.append(leftSel,opSel,rightIn);
-      wrap.append(make('span','rule-field-hint','Конструктор условия: выберите предыдущий вопрос/шаг и ожидаемый ответ — формула соберётся сама.'),row,rightList);
+      wrap.append(make('span','rule-field-hint','Конструктор условия: выберите предыдущий шаг или параметр — типизированная формула соберётся сама.'),row,rightList);
     }else{
       wrap.append(make('span','rule-field-hint','Чтобы проверять результат предыдущего шага (например, ответ на «Вопрос человеку»), сначала соедините этот шаг стрелкой с предыдущим.'));
     }
@@ -3583,17 +3682,22 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     }
 
     // Rich Inline Pill Prompt Editor (Notion / Dify / Linear UX: users NEVER see or type raw {{steps.x.summary}}!)
-    const FIELD_LABELS={summary:'Итог',answer:'Ответ',data:'Данные',status:'Статус',stdout:'Вывод',stderr:'Ошибки',exit_code:'Код выхода'};
-    const CTX_LABELS={'project.path':'Папка проекта','project.id':'ID проекта','project.name':'Имя проекта','now.date':'Текущая дата','now.iso':'Текущее время','run.id':'ID запуска'};
+    const FIELD_LABELS={summary:'Итог',answer:'Ответ',data:'Данные',items:'Элементы',status:'Статус',exit_code:'Код выхода'};
+    const CTX_LABELS={'project.path':'Папка проекта','now.date':'Текущая дата','now.utc':'Время UTC','run.id':'ID запуска','agent.id':'ID агента'};
+    const stepPrimaryRef=src=>{
+      if(src.matrix&&(src.type==='gate'||src.type==='checklist'))return {fld:'items',tag:'Ответы матрицы',noun:'ответы'};
+      if(src.type==='gate')return {fld:'answer',tag:'Ответ человека',noun:'ответ'};
+      if(src.matrix)return {fld:'data',tag:'Данные матрицы',noun:'данные'};
+      return {fld:'summary',tag:'Итог шага',noun:'итог'};
+    };
     const buildMentionItems=(opts={})=>{
       const items=[],wrap=expr=>'{{'+expr+(opts.requireShell?' | shell':'')+'}}';
       const directSet=new Set(list(step.needs));
       const orderedAnc=[...list(step.needs).filter(id=>ancestors.has(id)),...[...ancestors].filter(id=>!directSet.has(id))];
       for(const anc of orderedAnc){
         const src=stepById.get(anc);if(!src)continue;
-        const num=stepNumById.get(anc),fld=src.type==='gate'?'answer':(src.matrix?'data':'summary');
-        const tag=src.type==='gate'?'Ответ человека':(src.matrix?'Данные матрицы':'Итог шага');
-        items.push({group:'Предыдущие шаги',label:'#'+num+' '+cut(prettyStepLabel(src),32),tag,token:wrap('steps.'+anc+'.'+fld),stepId:anc,search:normalized(num+' '+prettyStepLabel(src)+' '+anc+' '+tag)});
+        const num=stepNumById.get(anc),ref=stepPrimaryRef(src);
+        items.push({group:'Предыдущие шаги',label:'#'+num+' '+cut(prettyStepLabel(src),32),tag:ref.tag,token:wrap('steps.'+anc+'.'+ref.fld),stepId:anc,search:normalized(num+' '+prettyStepLabel(src)+' '+anc+' '+ref.tag)});
       }
       for(const [name,spec] of Object.entries(def.inputs||{})){
         if(opts.forbidSecret&&spec?.type==='secret')continue;
@@ -3648,7 +3752,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 
       const makeInlinePill=pt=>{
         const pill=make('span','scn-inline-pill');
-        pill.contentEditable='false';pill.dataset.token=pt.raw;pill.title='Подстановка: '+pt.raw+' (нажмите, чтобы перейти к шагу)';
+        pill.contentEditable='false';pill.dataset.token=pt.raw;
         const badShell=opts.requireShell&&!/(^|\|\s*)shell\s*$/.test(pt.filter);
         let text='',srcStep=null;
         if(pt.root==='steps'){
@@ -3660,20 +3764,25 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
           text=srcStep
             ?('← #'+num+' '+cut(prettyStepLabel(srcStep),24)+' · '+fld+(ancestors.has(pt.target)?'':' ⚠ не связан')+(badShell?' ⚠ | shell':''))
             :('⚠ неизвестный шаг «'+pt.target+'»');
+          pill.title=srcStep?('Подстановка: '+pt.raw+' (Cmd/Ctrl+клик или двойной клик — перейти к шагу)'):('Неизвестный шаг: '+pt.raw);
         }else if(pt.root==='inputs'){
           const spec=def.inputs&&def.inputs[pt.target];
           const badSec=opts.forbidSecret&&spec?.type==='secret';
           if(!spec||badSec||badShell)pill.classList.add('bad');
           text=spec?('Параметр · '+(spec.title||pt.target)+(badSec?' ⚠ секрет':'')):('⚠ параметр «'+pt.target+'»');
+          pill.title='Параметр запуска: '+pt.raw;
         }else{
           if(badShell)pill.classList.add('bad');
           text=(CTX_LABELS[pt.path]||pt.path)+(badShell?' ⚠ | shell':'');
+          pill.title='Контекст: '+pt.raw;
         }
         const lbl=make('span','',text);
         if(srcStep){
           pill.addEventListener('mouseenter',()=>highlightScenarioNode(srcStep.id,true,step.id));
           pill.addEventListener('mouseleave',()=>highlightScenarioNode(srcStep.id,false,step.id));
-          lbl.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();highlightScenarioNode(srcStep.id,false,step.id);scenariosState.selectedStepId=srcStep.id;renderScenarios();});
+          const jumpToSrc=e=>{e.preventDefault();e.stopPropagation();highlightScenarioNode(srcStep.id,false,step.id);scenariosState.selectedStepId=srcStep.id;renderScenarios();};
+          lbl.addEventListener('click',e=>{if(e.metaKey||e.ctrlKey)jumpToSrc(e);});
+          lbl.addEventListener('dblclick',jumpToSrc);
         }
         const xBtn=make('button','scn-inline-pill-x','×');xBtn.type='button';xBtn.title='Убрать подстановку';xBtn.setAttribute('aria-label','Убрать подстановку');
         xBtn.addEventListener('mousedown',e=>{e.preventDefault();e.stopPropagation();});
@@ -3788,11 +3897,11 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         const node=sel.anchorNode,offset=sel.anchorOffset;
         if(node.nodeType!==3){closeMention();return;}
         const before=node.nodeValue.slice(0,offset);
-        const m=before.match(/(?:^|[\s([{"'])([@/])([^\s@/]{0,24})$/);
+        const m=before.match(/(?:^|[\s([{"'])@([^\s@]{0,24})$/);
         if(!m){closeMention();return;}
-        const triggerStart=offset-m[1].length-m[2].length;
+        const triggerStart=offset-1-m[1].length;
         const r=document.createRange();r.setStart(node,triggerStart);r.setEnd(node,offset);
-        openMentionMenu(m[2],r);
+        openMentionMenu(m[1],r);
       };
 
       editor.addEventListener('focus',()=>{undoCaptured=false;});
@@ -3819,6 +3928,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         }
         if(e.key==='Enter'&&!e.shiftKey&&!mentionEl){
           e.preventDefault();
+          if(opts.singleLine)return;
           const sel=window.getSelection();if(!sel||!sel.rangeCount)return;
           const r=sel.getRangeAt(0);r.deleteContents();
           const br=make('br');r.insertNode(br);
@@ -3828,7 +3938,8 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       });
       editor.addEventListener('paste',e=>{
         e.preventDefault();
-        const plain=e.clipboardData?.getData('text/plain')||'';if(!plain)return;
+        let plain=e.clipboardData?.getData('text/plain')||'';if(!plain)return;
+        if(opts.singleLine)plain=plain.replace(/[\r\n]+/g,' ').trim();
         pushScenarioUndo(ed);
         const sel=window.getSelection();if(!sel||!sel.rangeCount)return;
         const r=sel.getRangeAt(0);r.deleteContents();
@@ -3910,9 +4021,9 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       const ex=renderExampleButtons(rich,guide.examples);if(ex)f.append(ex);
       box.append(f);
     }else if(step.type==='command'){
-      const rich=createRichPromptEditor(p.command||'',{mono:true,requireShell:true,placeholder:'Например: pytest -q или npm test'},val=>{p.command=val;});
+      const rich=createRichPromptEditor(p.command||'',{mono:true,singleLine:true,requireShell:true,placeholder:'Например: pytest -q или npm test (одна строка)'},val=>{p.command=val;});
       activePrompt=rich;
-      const f=ruleField('Консольная команда',rich.el,'Все вставленные плашки автоматически безопасно экранируются для shell.');
+      const f=ruleField('Консольная команда',rich.el,'Одна строка (без переносов). Все вставленные плашки автоматически экранируются через | shell.');
       const ex=renderExampleButtons(rich,guide.examples);if(ex)f.append(ex);
       box.append(f);
       const cwd=make('input');cwd.type='text';cwd.value=p.cwd||'';cwd.placeholder='По умолчанию — корень проекта';
@@ -3920,11 +4031,15 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       cwd.addEventListener('input',()=>{p.cwd=cwd.value;markScenarioDirty(ed);});
       box.append(ruleField('Папка запуска (необязательно)',cwd));
       const row=make('div','rule-field-row');
+      const expErr=make('div','rule-field-hint');expErr.style.color='var(--danger)';
       const exp=make('input');exp.type='text';exp.value=p.expect_exit!==undefined?String(p.expect_exit):'';exp.placeholder='0 (успех)';
-      exp.addEventListener('input',()=>{const v=scnInt(exp.value);if(exp.value.trim()==='')delete p.expect_exit;else if(v!==null)p.expect_exit=v;markScenarioDirty(ed);});
+      exp.addEventListener('input',()=>{const raw=exp.value.trim(),v=scnInt(raw);if(raw===''){delete p.expect_exit;expErr.textContent='';}else if(v===null||v<0||v>255){expErr.textContent='Введите целое число от 0 до 255';}else{p.expect_exit=v;expErr.textContent='';}markScenarioDirty(ed);});
+      const tailErr=make('div','rule-field-hint');tailErr.style.color='var(--danger)';
       const tail=make('input');tail.type='text';tail.value=p.tail_lines!==undefined?String(p.tail_lines):'';tail.placeholder='200';
-      tail.addEventListener('input',()=>{const v=scnInt(tail.value);if(tail.value.trim()==='')delete p.tail_lines;else if(v!==null)p.tail_lines=v;markScenarioDirty(ed);});
-      row.append(ruleField('Ожидаемый код выхода',exp),ruleField('Сколько последних строк лога сохранить',tail));
+      tail.addEventListener('input',()=>{const raw=tail.value.trim(),v=scnInt(raw);if(raw===''){delete p.tail_lines;tailErr.textContent='';}else if(v===null||v<0||v>500){tailErr.textContent='Введите целое число от 0 до 500';}else{p.tail_lines=v;tailErr.textContent='';}markScenarioDirty(ed);});
+      const expF=ruleField('Ожидаемый код выхода',exp);expF.append(expErr);
+      const tailF=ruleField('Сколько последних строк лога сохранить',tail);tailF.append(tailErr);
+      row.append(expF,tailF);
       box.append(row);
     }else if(step.type==='gate'){
       const rich=createRichPromptEditor(p.question||'',{forbidSecret:true,placeholder:'Например: Принимаем изменения и переходим к финальному шагу?'},val=>{p.question=val;});
@@ -3932,19 +4047,21 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       const f=ruleField('Текст вопроса пользователю',rich.el);
       const ex=renderExampleButtons(rich,guide.examples);if(ex)f.append(ex);
       box.append(f);
-      // Interactive gate options builder
-      if(!Array.isArray(p.options))p.options=[];
+      // Interactive gate options builder (do NOT mutate p.options on read!)
+      const opts=Array.isArray(p.options)?p.options:[];
       const optWrap=make('div','rule-field');
       optWrap.append(make('span','field-label','Варианты ответа (необязательно, 2–10 вариантов)'));
       const optList=make('div','scn-item-list');
-      p.options.forEach((optVal,idx)=>{
+      opts.forEach((optVal,idx)=>{
         const row=make('div','scn-item-row');row.style.gridTemplateColumns='minmax(0,1fr) auto';
         const inp=make('input');inp.type='text';inp.value=optVal;inp.placeholder='Вариант '+(idx+1);
         inp.addEventListener('input',()=>{p.options[idx]=inp.value;markScenarioDirty(ed);});
-        const del=toolButton('×',()=>{p.options.splice(idx,1);markScenarioDirty(ed);renderScenarios();},'small danger');del.title='Удалить вариант';
+        const del=toolButton('×',()=>{pushScenarioUndo(ed);p.options.splice(idx,1);if(!p.options.length)delete p.options;markScenarioDirty(ed);renderScenarios();},'small danger');del.title='Удалить вариант';
         row.append(inp,del);optList.append(row);
       });
       const addOpt=toolButton('+ Добавить вариант ответа',()=>{
+        pushScenarioUndo(ed);
+        if(!Array.isArray(p.options))p.options=[];
         p.options.push(p.options.length?'Вариант '+(p.options.length+1):'Подтвердить');
         if(p.options.length===1)p.options.push('Доработать');
         markScenarioDirty(ed);renderScenarios();
@@ -3952,20 +4069,22 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       optWrap.append(optList,addOpt,make('span','rule-field-hint','Если вариантов нет — человек сможет ввести любой свободный ответ в чате.'));
       box.append(optWrap);
       const allowWrap=make('label','check-label'),cb=make('input');cb.type='checkbox';cb.checked=p.allow_comment!==false;
-      cb.addEventListener('change',()=>{p.allow_comment=cb.checked;markScenarioDirty(ed);});
+      cb.addEventListener('change',()=>{pushScenarioUndo(ed);p.allow_comment=cb.checked;markScenarioDirty(ed);});
       allowWrap.append(cb,document.createTextNode('Разрешить добавить комментарий к ответу'));box.append(allowWrap);
     }else if(step.type==='checklist'){
-      if(!Array.isArray(p.items))p.items=[];
-      p.items=p.items.map(it=>typeof it==='string'?{text:it,required:true}:{text:String(it?.text||''),required:it?.required!==false});
+      const rawItems=Array.isArray(p.items)?p.items:[];
       const chkWrap=make('div','rule-field');
       chkWrap.append(make('span','field-label','Пункты чек-листа'));
       const itemList=make('div','scn-item-list');
-      p.items.forEach((item,idx)=>{
+      rawItems.forEach((rawItem,idx)=>{
+        const textVal=typeof rawItem==='string'?rawItem:String(rawItem?.text||'');
+        const reqVal=typeof rawItem==='string'?false:Boolean(rawItem?.required);
+        const ensureObj=()=>{if(!Array.isArray(p.items))p.items=[];if(typeof p.items[idx]==='string')p.items[idx]={text:p.items[idx],required:false};return p.items[idx];};
         const row=make('div','scn-item-row');
-        const inp=make('input');inp.type='text';inp.value=item.text;inp.placeholder='Пункт '+(idx+1)+': что нужно проверить…';
-        inp.addEventListener('input',()=>{item.text=inp.value;markScenarioDirty(ed);});
-        const reqLbl=make('label','check-label'),reqCb=make('input');reqCb.type='checkbox';reqCb.checked=item.required!==false;
-        reqCb.addEventListener('change',()=>{item.required=reqCb.checked;markScenarioDirty(ed);});
+        const inp=make('input');inp.type='text';inp.value=textVal;inp.placeholder='Пункт '+(idx+1)+': что нужно проверить…';
+        inp.addEventListener('input',()=>{ensureObj().text=inp.value;markScenarioDirty(ed);});
+        const reqLbl=make('label','check-label'),reqCb=make('input');reqCb.type='checkbox';reqCb.checked=reqVal;
+        reqCb.addEventListener('change',()=>{pushScenarioUndo(ed);ensureObj().required=reqCb.checked;markScenarioDirty(ed);});
         reqLbl.append(reqCb,document.createTextNode('обяз.'));
         const acts=make('div','scn-item-actions');
         const up=toolButton('↑',()=>{if(idx>0){pushScenarioUndo(ed);const [m]=p.items.splice(idx,1);p.items.splice(idx-1,0,m);markScenarioDirty(ed);renderScenarios();}},'small');up.disabled=idx===0;up.title='Выше';
@@ -3975,9 +4094,10 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         row.append(inp,reqLbl,acts);
         itemList.append(row);
       });
-      if(!p.items.length)itemList.append(make('div','tools-inline-note','Список пока пуст — нажмите кнопку ниже, чтобы добавить первый пункт.'));
+      if(!rawItems.length)itemList.append(make('div','tools-inline-note','Список пока пуст — нажмите кнопку ниже, чтобы добавить первый пункт.'));
       const addItem=toolButton('+ Добавить пункт',()=>{
         pushScenarioUndo(ed);
+        if(!Array.isArray(p.items))p.items=[];
         p.items.push({text:'',required:true});markScenarioDirty(ed);renderScenarios();
         requestAnimationFrame(()=>{const inputs=$('scenarios-content')?.querySelectorAll('.scn-item-list input[type=text]');inputs?.[inputs.length-1]?.focus();});
       },'small primary');
@@ -4038,14 +4158,13 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         info.append(jumpBtn);
         row.append(info);
         if(activePrompt){
-          const fld=src.type==='gate'?'answer':(src.matrix?'data':'summary');
-          const noun=src.type==='gate'?'ответ':(src.matrix?'данные':'итог');
-          const token='{{steps.'+src.id+'.'+fld+(step.type==='command'?' | shell':'')+'}}';
+          const ref=stepPrimaryRef(src);
+          const token='{{steps.'+src.id+'.'+ref.fld+(step.type==='command'?' | shell':'')+'}}';
           const toggleBtn=make('button','scn-example-btn scn-incoming-btn');toggleBtn.type='button';
           const syncBtn=()=>{
             const has=scenarioHasToken(activePrompt.getValue(),token);
             toggleBtn.classList.toggle('active',has);
-            toggleBtn.textContent=has?'✓ В тексте · убрать':'+ Вставить '+noun;
+            toggleBtn.textContent=has?'✓ В тексте · убрать':'+ Вставить '+ref.noun;
             toggleBtn.title=has?'Уже добавлено плашкой в текст — нажмите, чтобы убрать':'Вставить плашку «#'+num+' '+prettyStepLabel(src)+'» в текст задания';
           };
           toggleBtn.addEventListener('click',()=>{
@@ -4205,6 +4324,15 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         if(!parsed||typeof parsed!=='object'||Array.isArray(parsed)||!Array.isArray(parsed.steps)||!parsed.steps.every(s=>s&&typeof s==='object'&&!Array.isArray(s))){
           throw new Error('Ожидается объект определения со списком объектов steps.');
         }
+        const rawIds=new Set(parsed.steps.map(s=>String(s?.id||'').trim()).filter(Boolean));
+        for(const rs of parsed.steps){
+          if(Array.isArray(rs.needs)){
+            for(const nd of rs.needs){
+              const n=String(nd||'').trim();
+              if(n&&!rawIds.has(n))throw new Error('Шаг «'+(rs.id||'?')+'» ссылается на несуществующий шаг «'+n+'» в needs.');
+            }
+          }
+        }
         const normalizedDef=scenarioNormalizeDraft(parsed);
         if(ed.mode==='update')normalizedDef.id=ed.original.id;
         ensureDraftPositions(normalizedDef);
@@ -4238,8 +4366,10 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const jsonBtn=toolButton('{ } Код JSON',()=>openScenarioJsonDialog(ed),'small');
     jsonBtn.title='Открыть исходный код сценария в JSON для экспорта или ручной правки';
     right.append(jsonBtn);
-    if(ed.mode==='update'&&!ed.dirty&&ed.original){
-      right.append(toolButton('Запустить в чате',()=>openScenarioRunModal(ed.original),'small'));
+    if(ed.mode==='update'&&ed.original){
+      const runNowBtn=toolButton('Запустить в чате',()=>openScenarioRunModal(ed.original),'small');
+      runNowBtn.dataset.scnRun='1';runNowBtn.hidden=ed.dirty;
+      right.append(runNowBtn);
     }
     const saveLabel=scenariosState.busy?'Сохраняем…':(rulesState.editing?(ed.mode==='add'?'Сохранить как новый':'Сохранить сценарий'):'Показать команду сохранения');
     const saveBtn=toolButton(saveLabel,saveScenarioDraft,'scn-btn-primary');
@@ -4301,7 +4431,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 
     // Metadata & inputs card
     const metaCard=make('div','scn-meta-card'),metaGrid=make('div','scn-meta-grid');
-    let idTouched=ed.mode==='update';
+    let idTouched=ed.mode==='update'||Boolean(ed.fromCopy);
     const titleInp=make('input');titleInp.type='text';titleInp.value=def.title||'';titleInp.placeholder='Например: Глубокое ревью перед мержем';
     const idInp=make('input');idInp.type='text';idInp.value=def.id||'';idInp.disabled=ed.mode==='update';idInp.spellcheck=false;idInp.placeholder='deep-review-custom';
     titleInp.addEventListener('input',()=>{
@@ -4413,7 +4543,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const stage=make('div','scn-stage');
     const stageHead=make('div','scn-stage-head'),sLeft=make('div','scn-stage-head-left'),sRight=make('div','scn-stage-head-right');
     const gBtn=toolButton('Граф (drag & wire)',()=>{scenariosState.viewMode='graph';renderScenarios();},'small'+(scenariosState.viewMode==='graph'?' primary':''));
-    const lBtn=toolButton('Список (порядок)',()=>{scenariosState.viewMode='list';renderScenarios();},'small'+(scenariosState.viewMode==='list'?' primary':''));
+    const lBtn=toolButton('Список шагов',()=>{scenariosState.viewMode='list';renderScenarios();},'small'+(scenariosState.viewMode==='list'?' primary':''));
     sLeft.append(gBtn,lBtn);
     const addStepSel=make('select');addStepSel.style.height='30px';addStepSel.style.fontSize='12px';addStepSel.style.borderRadius='8px';addStepSel.style.border='1px solid var(--line)';addStepSel.style.background='var(--panel)';addStepSel.style.color='var(--ink)';addStepSel.style.padding='0 8px';
     SCN_STEP_TYPES.forEach(t=>addStepSel.add(new Option(t.label,t.id)));
@@ -4441,7 +4571,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const stageFoot=make('div','scn-stage-head');
     stageFoot.append(make('span','rule-field-hint',scenariosState.viewMode==='graph'
       ?'Колесо мыши — масштаб · перетащите фон — панорама · правый порт в пустое место — создать связанный шаг · клик по линии — удалить связь.'
-      :'Перетаскивайте строки или используйте ↑ / ↓, чтобы менять порядок шагов.'));
+      :'Здесь меняется только порядок отображения в списке. Реальный порядок выполнения задаётся связями «После каких шагов» (needs) на графе.'));
     stage.append(stageFoot);
 
     builder.append(stage,renderStepInspector(ed));
@@ -4455,7 +4585,10 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       return;
     }
     const allRuns=list(scenariosState.data?.runs);
-    const filters=[['all','Все'],['active','Активные'],['waiting','Ждут ответа'],['done','Завершённые'],['failed','Ошибка / отменены']];
+    const isBlockedOnlyRun=run=>run.status==='waiting'&&(run.step_counts?.blocked||0)>0&&!(run.step_counts?.waiting_human||0);
+    const runDisplayStatus=run=>isBlockedOnlyRun(run)?'blocked':run.status;
+    const runDisplayLabel=run=>isBlockedOnlyRun(run)?'Заблокирован (ошибка)':(SCN_STATUS_LABEL[run.status]||run.status);
+    const filters=[['all','Все'],['active','Активные'],['waiting','Ждут ответа'],['done','Завершённые'],['failed','Ошибка / блок / отменены']];
     const bar=make('div','scn-subtabs');
     for(const [key,label] of filters){
       const btn=toolButton(label,()=>{scenariosState.runFilter=key;renderScenarios();},'scn-subtab');
@@ -4465,11 +4598,12 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const q=normalized(scenariosState.query);
     const filtered=allRuns.filter(run=>{
       if(scenariosState.scope==='global'&&run.scope!=='global')return false;
+      if(scenariosState.scope==='builtin'&&run.scope!=='builtin')return false;
       if(scenariosState.scope.startsWith('project:')&&run.project_id!==scenariosState.scope.slice(8))return false;
       if(scenariosState.runFilter==='active'&&!['running','waiting','paused'].includes(run.status))return false;
-      if(scenariosState.runFilter==='waiting'&&run.status!=='waiting')return false;
+      if(scenariosState.runFilter==='waiting'&&(run.status!=='waiting'||isBlockedOnlyRun(run)))return false;
       if(scenariosState.runFilter==='done'&&run.status!=='done')return false;
-      if(scenariosState.runFilter==='failed'&&!['failed','cancelled'].includes(run.status))return false;
+      if(scenariosState.runFilter==='failed'&&!['failed','cancelled'].includes(run.status)&&!isBlockedOnlyRun(run))return false;
       if(!q)return true;
       return [run.id,run.scenario_id,run.status,run.project_id,run.created_by_agent,run.task_entry_id].map(normalized).join(' ').includes(q);
     });
@@ -4490,13 +4624,18 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       const btn=toolButton('',()=>{loadScenarioRun(run.id);},'scn-run-card');
       btn.setAttribute('aria-pressed',String(run.id===scenariosState.selectedRunId));
       const top=make('div','scn-run-top');
-      top.append(make('strong','',run.scenario_id+' · v'+run.scenario_version),make('span','scn-status st-'+run.status,SCN_STATUS_LABEL[run.status]||run.status));
+      top.append(make('strong','',run.scenario_id+' · v'+run.scenario_version),make('span','scn-status st-'+runDisplayStatus(run),runDisplayLabel(run)));
       const counts=run.step_counts||{},total=counts.total||0,done=(counts.done||0)+(counts.skipped||0);
       const prog=make('div','scn-progress'),fill=make('i');fill.style.width=(total?Math.round(done*100/total):0)+'%';prog.append(fill);
       const meta=make('div','rule-meta');
       meta.append(make('code','',run.id),make('span','',done+'/'+total+' шагов'));
+      if(counts.blocked)meta.append(make('span','','блок: '+counts.blocked));
+      if(counts.failed)meta.append(make('span','','ошибок: '+counts.failed));
       if(run.updated_at)meta.append(make('span','',dateText(run.updated_at)));
       btn.append(top,prog,meta);col.append(btn);
+    }
+    if(scenariosState.data?.runs_more){
+      col.append(make('div','tools-inline-note','Показаны последние '+allRuns.length+' из '+(scenariosState.data.runs_total||allRuns.length)+' запусков. Остальные доступны через richi scenario runs --limit 200.'));
     }
     const detail=make('div','scn-run-detail');
     if(scenariosState.runDetailLoading&&scenariosState.runDetail?.run?.run_id!==scenariosState.selectedRunId){
@@ -4505,16 +4644,20 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
       detail.append(make('div','rule-error',scenariosState.runDetailError),toolButton('Повторить',()=>loadScenarioRun(scenariosState.selectedRunId),'small'));
     }else if(scenariosState.runDetail?.run?.run_id===scenariosState.selectedRunId){
       const r=scenariosState.runDetail.run;
+      const waitingSteps=list(r.steps).filter(s=>s.status==='waiting_human');
+      const blockedSteps=list(r.steps).filter(s=>s.status==='blocked');
+      const detailBlockedOnly=r.status==='waiting'&&blockedSteps.length>0&&!waitingSteps.length;
       const head=make('div','scn-run-top');
       const titles=make('div');
       titles.append(make('div','tools-eyebrow','Запуск сценария · '+r.scenario_id+' v'+r.scenario_version),make('h3','',r.scenario_title||r.scenario_id));
-      head.append(titles,make('span','scn-status st-'+r.status,SCN_STATUS_LABEL[r.status]||r.status));
+      head.append(titles,make('span','scn-status st-'+(detailBlockedOnly?'blocked':r.status),detailBlockedOnly?'Заблокирован (ошибка)':(SCN_STATUS_LABEL[r.status]||r.status)));
       detail.append(head);
 
       const meta=make('div','rule-meta');
-      meta.append(make('code','',r.run_id),make('span','','rev '+r.revision),make('span','',r.scope==='project'?'Проект: '+r.project_id:'Глобальный'));
+      const scopeLabel=r.scope==='builtin'?('Встроенный шаблон'+(r.project_id?' · проект: '+r.project_id:'')):(r.scope==='project'?'Проект: '+r.project_id:'Глобальный');
+      meta.append(make('code','',r.run_id),make('span','','rev '+r.revision),make('span','',scopeLabel));
       if(r.created_by_agent)meta.append(make('span','','Агент: '+r.created_by_agent));
-      if(r.updated_at)meta.append(make('span','','Обновлён '+dateText(r.updated_at)));
+      if(r.updated_at)meta.append(make('span','','Снимок от '+dateText(r.updated_at)));
       detail.append(meta);
 
       const actRow=make('div','rule-actions');
@@ -4532,7 +4675,7 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         },'small primary');
         actRow.append(jumpBtn);
       }
-      actRow.append(toolButton('↻ Обновить запуск',()=>loadScenarioRun(r.run_id),'small'));
+      actRow.append(toolButton('↻ Обновить снимок',()=>loadScenarioRun(r.run_id),'small'));
       detail.append(actRow,jumpNote);
 
       const inputPairs=r.inputs&&typeof r.inputs==='object'?Object.entries(r.inputs):[];
@@ -4543,17 +4686,39 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         detail.append(inpBox);
       }
 
-      // Waiting gates (strictly read-only in UI: answered only in chat)
-      const waitingSteps=list(r.steps).filter(s=>s.status==='waiting_human');
+      // Waiting gates (strictly read-only in UI: answered in chat via phrase or in terminal via CLI)
       for(const ws of waitingSteps){
         const gateBox=make('div','tools-warning');
-        gateBox.append(make('strong','','Ожидает ответа человека в чате: '+(ws.title||ws.key)+' ('+ws.key+')'));
+        gateBox.append(make('strong','','Ожидает ответа человека: '+(ws.title||ws.key)+' ('+ws.key+')'));
         if(ws.gate?.question)gateBox.append(make('p','',ws.gate.question));
-        if(list(ws.gate?.options).length)gateBox.append(make('div','tools-inline-note','Варианты: '+ws.gate.options.join(' · ')));
         if(list(ws.checklist?.items).length)gateBox.append(make('div','tools-inline-note','Чек-лист: '+ws.checklist.items.map(it=>typeof it==='string'?it:(it?.text||'')).filter(Boolean).join(' · ')));
-        const sampleVal=list(ws.gate?.options)[0]||(ws.type==='checklist'?'done':'ok');
-        const showAnswerCmd=ruleCommandBox(gateBox,'Ответы на вопросы и чек-листы принимаются только в чате агента или терминале. Скопируйте команду:');
-        showAnswerCmd(scenarioAnswerCommand(r.run_id,ws.key,sampleVal,'',state.mapStore));
+        const opts=list(ws.gate?.options);
+        let chosenVal=opts[0]||(ws.type==='checklist'?'done':'ok'),commentVal='';
+        if(opts.length){
+          const optRow=make('div','scn-chips');
+          opts.forEach(opt=>{
+            const b=toolButton(opt,()=>{chosenVal=opt;optRow.querySelectorAll('button').forEach(x=>x.classList.toggle('primary',x===b));syncAnswerBoxes();},'small'+(opt===chosenVal?' primary':''));
+            optRow.append(b);
+          });
+          gateBox.append(optRow);
+        }
+        const chatPre=make('pre','');
+        const copyPhrase=toolButton('Скопировать фразу для чата',async()=>{
+          try{await navigator.clipboard.writeText(chatPre.textContent);copyPhrase.textContent='Скопировано ✓';setTimeout(()=>copyPhrase.textContent='Скопировать фразу для чата',1500);}
+          catch{copyPhrase.textContent='Выделите текст';}
+        },'small scn-btn-primary');
+        const chatWrap=make('div','scn-chat-prompt');
+        chatWrap.append(make('div','field-label','Ответьте агенту в чате:'),chatPre,copyPhrase);
+        gateBox.append(chatWrap);
+        const cliFold=make('details','tools-fold');cliFold.append(make('summary','','Команда для терминала (CLI)'));
+        const cliInner=make('div');cliInner.style.marginTop='8px';
+        const showAnswerCmd=ruleCommandBox(cliInner);
+        cliFold.append(cliInner);gateBox.append(cliFold);
+        const syncAnswerBoxes=()=>{
+          chatPre.textContent='Ответь на шаг '+ws.key+' запуска '+r.run_id+': '+chosenVal+(commentVal?' ('+commentVal+')':'');
+          showAnswerCmd(scenarioAnswerCommand(r.run_id,ws.key,chosenVal,commentVal,state.mapStore));
+        };
+        syncAnswerBoxes();
         detail.append(gateBox);
       }
 
@@ -4590,12 +4755,16 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         }
         const surface=make('div');surface.style.position='relative';surface.style.width=maxX+'px';surface.style.height=maxY+'px';
         const svgEl=makeSvg('svg',{class:'scn-edges-svg',width:String(maxX),height:String(maxY)});
+        svgEl.style.color='var(--edge)';
+        const defsEl=makeSvg('defs'),mk=makeSvg('marker',{id:'scn-run-arrow',viewBox:'0 0 10 10',refX:'9',refY:'5',markerWidth:'6',markerHeight:'6',orient:'auto'});
+        mk.append(makeSvg('path',{d:'M 0 1.5 L 9 5 L 0 8.5 z',fill:'currentColor'}));
+        defsEl.append(mk);svgEl.append(defsEl);
         for(const ds of defSteps){
           const b=pos[ds.id];
           for(const dep of list(ds.needs)){
             const a=pos[dep];if(!a)continue;
             const d=scenarioEdgePath(a.x+210,a.y+36,b.x,b.y+36);
-            svgEl.append(makeSvg('path',{class:'scn-edge-path',d}));
+            svgEl.append(makeSvg('path',{class:'scn-edge-path',d,'marker-end':'url(#scn-run-arrow)'}));
           }
         }
         surface.append(svgEl);
@@ -4606,7 +4775,6 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
           const top=make('div','scn-run-top');
           const numWrap=make('span','scn-node-head-left');
           numWrap.append(make('span','scn-node-num','#'+(idx+1)));
-          if(st==='claimed'||st==='running')numWrap.append(make('span','scn-run-pulse'));
           const stText=rows.length>1?rows.filter(x=>x.status==='done'||x.status==='skipped').length+'/'+rows.length:(SCN_STATUS_LABEL[st]||st);
           top.append(numWrap,make('span','scn-status st-'+st,stText));
           node.append(top,make('div','scn-node-title',cut(prettyStepLabel(ds),34)));
@@ -4630,23 +4798,27 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
         const row=make('div','scn-step-row st-'+step.status);
         row.dataset.stepId=step.id;
         const sTop=make('div','scn-run-top');
-        sTop.append(make('strong','',(step.title||step.id)+' '),make('span','scn-status st-'+step.status,SCN_STATUS_LABEL[step.status]||step.status));
+        const matrixTag=step.matrix&&typeof step.matrix==='object'&&Object.keys(step.matrix).length
+          ?' ['+Object.entries(step.matrix).map(([k,v])=>k+'='+String(v)).join(', ')+']':'';
+        sTop.append(make('strong','',(step.title||step.id)+matrixTag+' '),make('span','scn-status st-'+step.status,SCN_STATUS_LABEL[step.status]||step.status));
         const sMeta=make('div','rule-meta');
         sMeta.append(make('code','',step.key),make('span','',SCN_STEP_META[step.type]?.label||step.type),make('span','',SCN_ROLE_LABEL[step.executor?.role]||step.executor?.role||''));
         if(step.attempts)sMeta.append(make('span','','попыток: '+step.attempts));
+        if(step.rejections)sMeta.append(make('span','','отклонений отчёта: '+step.rejections));
         if(step.claimed_by_chat)sMeta.append(make('span','','чат: '+cut(step.claimed_by_chat,36)));
         row.append(sTop,sMeta);
         if(step.summary)row.append(make('div','',step.summary));
-        if(step.answer!==undefined)row.append(make('div','tools-inline-note','Ответ: '+String(step.answer)));
+        if(step.answer!==undefined&&String(step.answer)!==String(step.summary||''))row.append(make('div','tools-inline-note','Ответ: '+String(step.answer)));
         if(step.reason)row.append(make('div','tools-inline-note','Причина: '+step.reason));
         detail.append(row);
       }
 
       const runEvents=list(scenariosState.runDetail.log);
       if(runEvents.length){
-        const evFold=make('details','tools-fold');evFold.append(make('summary','','События запуска ('+runEvents.length+')'));
+        const evFold=make('details','tools-fold');evFold.append(make('summary','','События запуска ('+runEvents.length+(scenariosState.runDetail.log_more?'+':'')+')'));
         const evList=make('div','scn-log-list');evList.style.marginTop='10px';
         for(const ev of runEvents)evList.append(renderScenarioLogRow(ev));
+        if(scenariosState.runDetail.log_more)evList.append(make('div','tools-inline-note','Показаны последние '+runEvents.length+' событий запуска. До 200 событий доступно через richi scenario log --run '+r.run_id+' --entries 200.'));
         evFold.append(evList);detail.append(evFold);
       }
     }
@@ -4695,14 +4867,17 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
     const listBox=make('div','scn-log-list');
     shown.forEach(ev=>listBox.append(renderScenarioLogRow(ev)));
     root.append(listBox);
-    if(scenariosState.data?.log_more)root.append(make('p','tools-inline-note','Показаны последние '+entries.length+' событий. Полный журнал доступен через richi scenario log.'));
+    if(scenariosState.data?.log_more)root.append(make('p','tools-inline-note','Показаны последние '+entries.length+' событий. До 200 последних событий доступно через richi scenario log --entries 200.'));
   }
   function renderScenarios(){
     const root=$('scenarios-content');root.replaceChildren();
     $('scenarios-panel').setAttribute('aria-busy',String(scenariosState.loading));
-    if(state.mode==='scenarios')$('data-note').textContent=scenariosNote();
+    if(state.mode==='scenarios'){
+      $('data-note').textContent=scenariosNote();
+      const tb=document.querySelector('.toolbar');if(tb)tb.hidden=Boolean(scenariosState.editing);
+    }
     const heading=make('div','tools-heading rules-heading'),intro=make('div'),count=make('div','tools-total');
-    intro.append(make('div','tools-eyebrow','Повторяемые процедуры'),make('h2','','Сценарии'),make('p','tools-lead','Визуальный конструктор пайплайнов (drag-and-drop шагов и соединение портов needs), мониторинг активных запусков и общий журнал событий.'));
+    intro.append(make('div','tools-eyebrow','Исполняемые пайплайны'),make('h2','','Сценарии'),make('p','tools-lead','Визуальный конструктор пайплайнов (drag-and-drop шагов и соединение портов needs), мониторинг запусков и общий журнал событий.'));
     const totalDefs=list(scenariosState.data?.scenarios).length+list(scenariosState.data?.builtin_templates).length;
     count.append(make('strong','',String(totalDefs)),make('span','',plural(totalDefs,['сценарий','сценария','сценариев'])));
     heading.append(intro,count);root.append(heading);
@@ -4718,10 +4893,12 @@ button.danger.solid{background:var(--danger);color:var(--panel);border-color:var
 
     // Sub-tabs bar
     const subtabs=make('div','scn-subtabs');
-    const runsList=list(scenariosState.data.runs),waitingCount=runsList.filter(r=>r.status==='waiting').length;
+    const runsList=list(scenariosState.data.runs);
+    const runsTotal=scenariosState.data.runs_total||runsList.length;
+    const waitingCount=runsList.filter(r=>r.status==='waiting'&&(r.step_counts?.waiting_human||0)>0).length;
     const tabs=[
       ['definitions','Определения ('+list(scenariosState.data.scenarios).length+' + '+list(scenariosState.data.builtin_templates).length+')'],
-      ['runs','Запуски ('+runsList.length+(waitingCount?' · '+waitingCount+' ждут':'')+')'],
+      ['runs','Запуски ('+runsTotal+(waitingCount?' · '+waitingCount+' ждут':'')+')'],
       ['log','Журнал ('+list(scenariosState.data.log).length+(scenariosState.data.log_more?'+':'')+')'],
     ];
     for(const [key,label] of tabs){
