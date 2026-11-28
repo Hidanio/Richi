@@ -432,7 +432,10 @@ def get_baseline_run_id(conn, scenario_id, project_id):
             continue
         rid = str(row[0]).strip()
         exists = conn.execute(
-            "SELECT 1 FROM scenario_runs WHERE id = ? AND scenario_id = ? AND project_id IS ?",
+            "SELECT 1 FROM scenario_runs r "
+            "LEFT JOIN metadata m ON m.key = 'scenario-run-meta:' || r.id "
+            "WHERE r.id = ? AND r.scenario_id = ? AND r.project_id IS ? "
+            f"AND r.status = 'done' AND {RUN_KIND_SQL} = 'prod'",
             (rid, scenario_id, project_id),
         ).fetchone()
         if exists:
@@ -441,13 +444,26 @@ def get_baseline_run_id(conn, scenario_id, project_id):
 
 
 def _all_baseline_ids(conn):
-    out = set()
+    candidates = set()
     for prefix in (BASELINE_V2_PREFIX, BASELINE_PREFIX):
         rows = conn.execute("SELECT value FROM metadata WHERE key >= ? AND key < ?",
                             (prefix, prefix[:-1] + ";")).fetchall()
         for r in rows:
             if r and r[0]:
-                out.add(str(r[0]).strip())
+                candidates.add(str(r[0]).strip())
+    if not candidates:
+        return set()
+    out = set()
+    checked_pairs = {}
+    for rid in candidates:
+        rrow = conn.execute("SELECT scenario_id, project_id FROM scenario_runs WHERE id = ?", (rid,)).fetchone()
+        if rrow is None:
+            continue
+        pair = (rrow[0], rrow[1])
+        if pair not in checked_pairs:
+            checked_pairs[pair] = get_baseline_run_id(conn, pair[0], pair[1])
+        if checked_pairs[pair] == rid:
+            out.add(rid)
     return out
 
 
@@ -554,8 +570,28 @@ def _safe_link_entries(conn, api, edge_id, from_entry_id, to_entry_id, kind, des
     }, "edge", api)
 
 
+def _link_memory_record_to_task(conn, api, run_row, step_id, entry_id, knowledge_state="confirmed"):
+    """Link a completed memory.record output entry to the run's task entry via a `produces` edge."""
+    if not run_row["task_entry_id"] or not entry_id:
+        return
+    base_sources = [
+        {"reference": "scenario:%s@v%d" % (run_row["scenario_id"], run_row["scenario_version"]),
+         "type": "scenario", "label": run_row["scenario_id"]},
+        {"reference": "scenario-run:" + run_row["id"], "type": "scenario-run", "label": run_row["id"]},
+    ]
+    _safe_link_entries(
+        conn, api,
+        f"edge:scn-{run_row['id']}-{step_id}",
+        run_row["task_entry_id"], entry_id,
+        "produces",
+        f"Produced by scenario run {run_row['id']} step {step_id}",
+        base_sources,
+        knowledge_state=knowledge_state,
+    )
+
+
 def _step_data_for_compare(conn, run_id, step_id):
-    """Extract comparable data dict for step_id from a historical run (handles matrix and scalar steps)."""
+    """Extract comparable data dict for step_id from a run (handles done matrix and scalar steps)."""
     rows = conn.execute(
         "SELECT status, matrix_index, result_json FROM scenario_steps WHERE run_id = ? AND step_id = ? "
         "ORDER BY position, COALESCE(matrix_index, -1), step_key",
@@ -564,7 +600,7 @@ def _step_data_for_compare(conn, run_id, step_id):
     if not rows:
         return {}
     if len(rows) == 1 and rows[0]["matrix_index"] is None:
-        if rows[0]["result_json"]:
+        if rows[0]["status"] == "done" and rows[0]["result_json"]:
             try:
                 return json.loads(rows[0]["result_json"]).get("data") or {}
             except (ValueError, TypeError):
@@ -665,7 +701,7 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
             query=query, project=run_row["project_id"], where=where, limit=fetch_limit,
             max_chars=100000 if as_of_dt is not None else 16000,
             include_hypotheses=False, include_superseded=False,
-            explain=False, expect=None,
+            explain=False, expect=None, max_edge_updated_at=as_of_dt,
         )
         res = recall.recall(conn, args, api)
         matches = res.get("results") or []
@@ -709,7 +745,7 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
                 max_chars=100000 if as_of_dt is not None else 16000,
                 include_hypotheses=False, include_superseded=False,
                 base=None, target=None, worktree=False, repo=None, check_sources=False,
-                where=where, explain=False, expect=None,
+                where=where, explain=False, expect=None, max_edge_updated_at=as_of_dt,
             )
             res = task_brief.brief(conn, args, api, database)
             cards = res.get("results") or []
@@ -846,15 +882,7 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
             }
             put_res = api.entry_put(conn, record)
         if params.get("link_task", True) and run_row["task_entry_id"]:
-            _safe_link_entries(
-                conn, api,
-                f"edge:scn-{run_row['id']}-{step_spec['id']}",
-                run_row["task_entry_id"], entry_id,
-                "produces",
-                f"Produced by scenario run {run_row['id']} step {step_spec['id']}",
-                base_sources,
-                knowledge_state=ks,
-            )
+            _link_memory_record_to_task(conn, api, run_row, step_spec["id"], entry_id, knowledge_state=ks)
         return {
             "status": "done",
             "summary": "Recorded %s (%s): %s" % (entry_id, put_res["status"], title[:160]),
@@ -887,12 +915,15 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
             return cdt is not None and udt is not None and cdt <= as_of_dt and udt <= as_of_dt
 
         target_step = params["step"]
-        current_data = (ctx["steps"].get(target_step) or {}).get("data") or {}
+        current_data = _step_data_for_compare(conn, run_row["id"], target_step)
         base_run_id = None
         if params.get("baseline_run"):
             cand = _render_field(params["baseline_run"], ctx, line=True, limit=100, field="params.baseline_run", empty=False)
             if cand != run_row["id"] and conn.execute(
-                "SELECT 1 FROM scenario_runs WHERE id = ? AND scenario_id = ? AND project_id IS ? AND status = 'done'",
+                "SELECT 1 FROM scenario_runs r "
+                "LEFT JOIN metadata m ON m.key = 'scenario-run-meta:' || r.id "
+                "WHERE r.id = ? AND r.scenario_id = ? AND r.project_id IS ? "
+                f"AND r.status = 'done' AND {RUN_KIND_SQL} = 'prod'",
                 (cand, run_row["scenario_id"], run_row["project_id"]),
             ).fetchone() and _within_as_of(cand):
                 base_run_id = cand
@@ -913,15 +944,19 @@ def _run_richi_step(conn, api, database, run_row, step_spec, ctx):
                 if cand_row:
                     base_run_id = cand_row[0]
             else:
-                cand_rows = conn.execute(
+                max_dt = datetime(9999, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+                pad_iso = _format_iso(min(max_dt, as_of_dt + timedelta(seconds=1)))
+                cursor = conn.execute(
                     "SELECT r.id, r.created_at, r.updated_at FROM scenario_runs r "
                     "LEFT JOIN metadata m ON m.key = 'scenario-run-meta:' || r.id "
                     "WHERE r.scenario_id = ? AND r.project_id IS ? AND r.id <> ? AND r.status = 'done' "
                     f"AND {RUN_KIND_SQL} = 'prod' "
+                    "AND (julianday(r.created_at) IS NULL OR julianday(r.created_at) <= julianday(?)) "
+                    "AND (julianday(r.updated_at) IS NULL OR julianday(r.updated_at) <= julianday(?)) "
                     "ORDER BY r.created_at DESC, r.id DESC",
-                    (run_row["scenario_id"], run_row["project_id"], run_row["id"]),
-                ).fetchall()
-                for crow in cand_rows:
+                    (run_row["scenario_id"], run_row["project_id"], run_row["id"], pad_iso, pad_iso),
+                )
+                for crow in cursor:
                     cdt = scenario_review._parse_utc(crow[1])
                     udt = scenario_review._parse_utc(crow[2])
                     if cdt is not None and udt is not None and cdt <= as_of_dt and udt <= as_of_dt:
@@ -1347,6 +1382,22 @@ def start_run(conn, api, database, scenario_id, *, project_id=None, project_path
                                      agent=author.agent, now_override=at_dt)
     if task_entry_id is not None:
         _sync_task_entry(conn, api, run_row, step_rows, definition, title=run_title, create=True)
+        by_def = _step_by_id_map(definition)
+        for srow in step_rows:
+            if srow["type"] != "memory.record" or srow["status"] != "done" or not srow["result_json"]:
+                continue
+            spec = by_def.get(srow["step_id"]) or {}
+            sparams = spec.get("params") or {}
+            if not sparams.get("link_task", True):
+                continue
+            try:
+                sdata = json.loads(srow["result_json"]).get("data") or {}
+            except (ValueError, TypeError):
+                continue
+            if sdata.get("status") == "simulated_eval" or not sdata.get("entry_id"):
+                continue
+            ks = sparams.get("knowledge_state") or "confirmed"
+            _link_memory_record_to_task(conn, api, run_row, srow["step_id"], sdata["entry_id"], knowledge_state=ks)
     if task_id is not None and task_entry_id is not None:
         _safe_link_entries(
             conn, api,
@@ -2391,10 +2442,22 @@ def skip_step(conn, api, database, run_id, step_key, reason, *, checked_project=
 
     definition = json.loads(run_row["definition_json"])
     by_def = _step_by_id_map(definition)
+    spec = by_def[step["step_id"]]
+    if step["status"] == "failed" or spec.get("continue_on_failure"):
+        ancestry = scenario_format.ancestors(definition)
+        for row in step_rows:
+            if step["step_id"] in ancestry.get(row["step_id"], set()) and row["status"] != "pending":
+                raise _failure(
+                    api,
+                    "Cannot skip step %s because downstream step %s is already %s"
+                    % (step["step_key"], row["step_key"], row["status"]),
+                    "invalid_state",
+                )
     previous_status = run_row["status"]
     conn.execute(
         "UPDATE scenario_steps SET status = 'skipped', claimed_by_chat = NULL, claimed_by_agent = NULL, "
-        "lease_until = NULL, stop_continuations = 0, reason = ?, finished_at = ? WHERE run_id = ? AND step_key = ?",
+        "lease_until = NULL, stop_continuations = 0, result_json = NULL, reason = ?, finished_at = ? "
+        "WHERE run_id = ? AND step_key = ?",
         (reason.strip(), at_iso, run_id, step_key),
     )
     _record_event(conn, at_iso, run_row["scenario_id"], run_id, step_key,
@@ -2423,12 +2486,21 @@ def retry_step(conn, api, database, run_id, step_key=None, *, checked_project=No
     if run_row["status"] in ("paused", "cancelled", "done"):
         raise _failure(api, "Run %s is %s and cannot be retried" % (run_id, run_row["status"]), "invalid_state")
     step_rows = _load_steps(conn, run_id)
+    definition = json.loads(run_row["definition_json"])
+    by_def = _step_by_id_map(definition)
+    ancestry = scenario_format.ancestors(definition)
     if step_key is None:
-        if run_row["status"] == "failed":
-            target = next((row for row in step_rows if row["status"] == "failed"), None) or next(
-                (row for row in step_rows if row["status"] == "blocked"), None)
-        else:
-            target = next((row for row in step_rows if row["status"] in ("failed", "blocked")), None)
+        def _has_downstream_progress(cand):
+            return any(
+                cand["step_id"] in ancestry.get(other["step_id"], set()) and other["status"] != "pending"
+                for other in step_rows
+            )
+        target = (
+            next((r for r in step_rows if r["status"] == "failed" and not by_def[r["step_id"]].get("continue_on_failure") and not _has_downstream_progress(r)), None)
+            or next((r for r in step_rows if r["status"] == "blocked"), None)
+            or next((r for r in step_rows if r["status"] == "failed" and not _has_downstream_progress(r)), None)
+            or next((r for r in step_rows if r["status"] in ("failed", "blocked")), None)
+        )
         if target is None:
             raise _failure(api, "No failed or blocked step to retry in run " + run_id, "invalid_state")
     else:
@@ -2438,12 +2510,9 @@ def retry_step(conn, api, database, run_id, step_key=None, *, checked_project=No
         if target["status"] not in ("failed", "blocked"):
             raise _failure(api, "Step %s is %s, not failed or blocked" % (step_key, target["status"]), "invalid_state")
 
-    definition = json.loads(run_row["definition_json"])
-    by_def = _step_by_id_map(definition)
     spec = by_def[target["step_id"]]
     # R3-S3 / R3-I9: refuse retrying a failed step once any downstream dependent has already left pending.
     if target["status"] == "failed" or spec.get("continue_on_failure"):
-        ancestry = scenario_format.ancestors(definition)
         for row in step_rows:
             if target["step_id"] in ancestry.get(row["step_id"], set()) and row["status"] != "pending":
                 raise _failure(
@@ -2614,7 +2683,12 @@ def list_runs(conn, api, *, active=False, chat=None, project_id=None, scenario_i
         + where + " ORDER BY r.updated_at DESC, r.id DESC LIMIT ?",
         params + [limit],
     ).fetchall()
-    baselines = _all_baseline_ids(conn)
+    baselines = {
+        bid
+        for sid, pid in {(row["scenario_id"], row["project_id"]) for row in rows}
+        for bid in (get_baseline_run_id(conn, sid, pid),)
+        if bid
+    }
     return {
         "view": "scenario-runs",
         "runs": [

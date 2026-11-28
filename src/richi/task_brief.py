@@ -376,7 +376,16 @@ def brief(conn, args, api, database):
             seeds.append({"ref": ref, "score": 100})
         if len(seeds) == 3:
             break
-    neighbors, edges, graph_truncated = recall.graph_candidates(conn, seeds, states, api)
+    from . import query_filters
+    brief_filter = query_filters.parse(getattr(args, "where", None), api)
+    if brief_filter:
+        brief_filter.prepare(conn)
+    max_edge_updated_at = getattr(args, "max_edge_updated_at", None)
+    neighbors, edges, graph_truncated = recall.graph_candidates(
+        conn, seeds, states, api,
+        selection_filter=brief_filter or None,
+        max_edge_updated_at=max_edge_updated_at,
+    )
     for item in recall.rank(neighbors.values()):
         card = ensure(item["ref"])
         if card is None:

@@ -390,8 +390,19 @@ def load_scoped_fp_learnings(conn, project_id=None, *, query="", changed_files=N
         if not stale:
             score += 10
         if changed and scope_paths:
+            norm_scopes = [
+                scenario_findings._normalize_file(str(sp)).rstrip("/")
+                for sp in scope_paths
+                if isinstance(sp, str) and sp.strip()
+            ]
+            norm_scopes = [sp for sp in norm_scopes if sp]
             for cf in changed:
-                if any(cf == sp or cf.startswith(sp.rstrip("/") + "/") for sp in scope_paths):
+                if not cf:
+                    continue
+                if any(
+                    cf == sp or cf.startswith(sp + "/") or sp.startswith(cf + "/")
+                    for sp in norm_scopes
+                ):
                     score += 50
         hay = (str(row[1] or "") + " " + str(row[2] or "")).lower()
         for tok in q_tokens:

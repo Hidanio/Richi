@@ -566,12 +566,36 @@ console.log(JSON.stringify({applyReq, applyCmd, runCmdProj, runCmdGlobal, ansCmd
             conn = memory.connect(db, create=True)
             try:
                 memory.initialize(conn, db)
+                from richi import scenario_registry
+                cat_v4 = scenario_registry.platform_catalog(conn)
                 with memory.transaction(conn, write=True):
                     res = scenarios.change(conn, out["applyReq"], memory)
                 self.assertEqual(res["status"], "created")
                 self.assertEqual(res["scenario"]["id"], "my-flow")
+                # Drop scenario tables to simulate schema v3 platform catalog
+                conn.executescript("DROP TABLE scenario_events; DROP TABLE scenario_steps; DROP TABLE scenario_runs;")
+                cat_v3 = scenario_registry.platform_catalog(conn)
             finally:
                 conn.close()
+        # R6-ARCH-01 / C5: Verify pure platform step-block gating & project-bound check discovery against real backend catalogs!
+        self.evaluate(
+            f"""
+const catV4 = {json.dumps(cat_v4)};
+const catV3 = {json.dumps(cat_v3)};
+const v4Types = scenarioAvailableStepTypes(catV4).map(t => t.id);
+const v3Types = scenarioAvailableStepTypes(catV3).map(t => t.id);
+assert.ok(v4Types.includes('compare'));
+assert.ok(!v3Types.includes('compare'));
+assert.ok(v3Types.includes('instruction'));
+const projChecks = scenarioProjectBoundChecks(catV4);
+assert.ok(projChecks.has('no_dirty_git'));
+assert.ok(projChecks.has('findings_grounded'));
+assert.ok(projChecks.has('file_exists'));
+assert.ok(projChecks.has('evidence_git'));
+assert.ok(!projChecks.has('data_required'));
+console.log(JSON.stringify({{ok: true}}));
+"""
+        )
         # Verify shell-quoted run & answer commands parse cleanly with the real CLI parser!
         parser = memory.parser()
         for cmd, expected in (

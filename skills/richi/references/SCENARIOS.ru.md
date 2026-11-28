@@ -4,8 +4,12 @@
 
 Сценарий — это повторяемая многошаговая процедура, которую агент выполняет в
 чате: типизированные поля ввода, универсальные этапы (`instruction`, `skill`,
-`command`, `gate`, `checklist`, `memory.recall`, `memory.brief`, `condition`),
-явные зависимости (`needs`), матрицы и проверки отчётов. Richi хранит
+`command`, `gate`, `checklist`, `memory.recall`, `memory.brief`,
+`memory.record`, `compare`, `condition`), явные зависимости (`needs`), матрицы
+(`matrix_mode`: `orthogonal` или `replicated`) и проверки отчётов
+(`data_required`, `min_items`, `exit_code`, `file_exists`, `evidence_git`,
+`no_dirty_git`, `findings_grounded`). Активные возможности платформы, доступные
+блоки и проверки смотри через `richi --compact-json scenario catalog`. Richi хранит
 определение, состояние запуска и аренду этапов, создаёт для каждого запуска
 запись `task` с тегом `scenario-run` и ведёт общий журнал правок и событий.
 Richi сам не запускает команды и не поднимает агентов.
@@ -66,8 +70,17 @@ richi --compact-json scenario apply --json change.json
    - `checklist`: `params: {"items": [{"text": "Тесты пройдены", "required": true}]}`.
    - `memory.recall`: `params: {"query": "...", "limit": 10}` (выполняется
      автоматически движком Richi до агента).
-   - `memory.brief`: `params: {"question": "...", "limit": 10}`.
+   - `memory.brief`: `params: {"question": "...", "limit": 10, "include_past_runs": true, "include_learnings": true}`
+     (при `include_learnings: true` подмешивает скоупированные FP-паттерны).
+   - `memory.record`: `params: {"kind": "decision", "title": "...", "summary": "...", "knowledge_state": "confirmed"}`
+     (записывает итоги в память со связью с задачей запуска; в `eval` — dry-run).
+   - `compare`: `params: {"step": "measure", "metrics": ["p95_ms"]}` (сравнивает
+     метрики шага-предка с закреплённым baseline или последним prod-запуском).
    - `condition`: `params: {"expr": "steps.gate.answer == 'Да'"}`.
+   - Проверки и матрицы: для read-only шагов ревью добавляй
+     `checks: [{"kind": "no_dirty_git", "mode": "unchanged"}, {"kind": "findings_grounded", "path": "findings"}]`,
+     а для матриц задавай `matrix_mode: "orthogonal"` (разные углы) или
+     `"replicated"` (повторные проходы для консенсуса).
 3. **Задай явные `needs` и проверь план**: для параллельных стартовых шагов
    ставь `needs: []`, для шагов сведения — `needs: ["step_a", "step_b"]`.
    Координаты `layout.positions` необязательны (карта разложит граф сама). После
@@ -181,7 +194,5 @@ richi --compact-json scenario eval bug-hunt --case auth-bug-1 --memory-mode clea
 `pre-compact`). Для каждого запуска создаётся запись `task` с тегом
 `scenario-run`, обновляемая на ключевых переходах (`in_progress`, `blocked`,
 `done`). Сценарии из репозитория (`.richi/scenarios/*.json`) импортируй через
-`richi scenario import` (с `--trust-sha256` после проверки сводки безопасности),
-а не через `scenario apply`, чтобы промпты и команды были привязаны к одобренному дайджесту. Сценарии из репозитория (`.richi/scenarios/*.json`) импортируй через
 `richi scenario import` (с `--trust-sha256` после проверки сводки безопасности),
 а не через `scenario apply`, чтобы промпты и команды были привязаны к одобренному дайджесту.

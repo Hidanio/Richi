@@ -271,11 +271,14 @@ def fork_run(conn, api, database, source_run_id, from_step_id, *, use_latest=Fal
 
 
 def security_summary(definition):
-    """Inspect a normalized scenario definition for all agent-executable and privileged surfaces."""
+    """Inspect a normalized scenario definition for all agent-executable, prompt, and memory surfaces."""
     commands = []
     skills = []
     instructions = []
     memory_records = []
+    memory_reads = []
+    human_prompts = []
+    other_steps = []
     checks = set()
     for step in definition.get("steps") or ():
         stype = step.get("type")
@@ -317,6 +320,58 @@ def security_summary(definition):
             if params.get("tags"):
                 rec_item["tags"] = list(params["tags"])
             memory_records.append(rec_item)
+        elif stype == "memory.recall":
+            q_txt = str(params.get("query") or "").strip()
+            rd_item = {
+                "step_id": step["id"],
+                "type": stype,
+                "query_preview": q_txt[:140],
+                "query_chars": len(q_txt),
+                "query_truncated": len(q_txt) > 140,
+            }
+            if params.get("kinds"):
+                rd_item["kinds"] = list(params["kinds"])
+            memory_reads.append(rd_item)
+        elif stype == "memory.brief":
+            q_txt = str(params.get("question") or "").strip()
+            memory_reads.append({
+                "step_id": step["id"],
+                "type": stype,
+                "question_preview": q_txt[:140],
+                "question_chars": len(q_txt),
+                "question_truncated": len(q_txt) > 140,
+                "include_past_runs": params.get("include_past_runs", True),
+                "include_learnings": bool(params.get("include_learnings", False)),
+            })
+        elif stype == "gate":
+            q_txt = str(params.get("question") or "").strip()
+            hp_item = {
+                "step_id": step["id"],
+                "type": stype,
+                "preview": q_txt[:140],
+                "chars": len(q_txt),
+                "truncated": len(q_txt) > 140,
+            }
+            if params.get("options"):
+                hp_item["options"] = [str(o)[:80] for o in list(params["options"])[:10]]
+            human_prompts.append(hp_item)
+        elif stype == "checklist":
+            item_texts = [
+                str(it.get("text") if isinstance(it, dict) else it or "").strip()
+                for it in (params.get("items") or ())
+            ]
+            joined = " | ".join(t for t in item_texts if t)
+            human_prompts.append({
+                "step_id": step["id"],
+                "type": stype,
+                "preview": joined[:140],
+                "chars": len(joined),
+                "truncated": len(joined) > 140,
+                "item_count": len(item_texts),
+            })
+        elif stype != "condition":
+            # Fail-closed for compare (reads historical runs) and any future/unknown step type.
+            other_steps.append({"step_id": step["id"], "type": str(stype or "")})
         for chk in step.get("checks") or ():
             if chk.get("kind"):
                 checks.add(chk["kind"])
@@ -324,18 +379,26 @@ def security_summary(definition):
         name for name, spec in (definition.get("inputs") or {}).items()
         if isinstance(spec, dict) and spec.get("type") == "secret"
     )
+    wtu = str(definition.get("when_to_use") or "").strip()
     out = {
         "commands": commands,
         "skills": skills,
         "instructions": instructions,
         "memory_records": memory_records,
+        "memory_reads": memory_reads,
+        "human_prompts": human_prompts,
+        "other_steps": other_steps,
         "secrets": secrets,
         "checks": sorted(checks),
-        "requires_trust": bool(commands or skills or instructions or memory_records or secrets),
+        "requires_trust": bool(
+            commands or skills or instructions or memory_records
+            or memory_reads or human_prompts or other_steps or secrets or wtu
+        ),
     }
-    wtu = str(definition.get("when_to_use") or "").strip()
     if wtu:
         out["when_to_use"] = wtu[:200]
+        out["when_to_use_chars"] = len(wtu)
+        out["when_to_use_truncated"] = len(wtu) > 200
     return out
 
 
@@ -422,9 +485,18 @@ def import_scenario(conn, api, raw_definition, *, scope="project", project_id=No
     tkey = _trust_key(eff_project, sha)
     already_trusted = _is_trusted(conn, eff_project, sha)
 
+    # Always verify an explicitly supplied --trust-sha256 pin even if already trusted or trust-exempt.
+    if trust_sha256 is not None:
+        provided = str(trust_sha256).strip().lower()
+        if not provided or provided != sha:
+            raise scenario_runs._failure(
+                api, f"Digest mismatch: scenario SHA-256 is {sha}, but --trust-sha256 was {provided[:80] or '<empty>'}",
+                "digest_mismatch",
+            )
+
     should_record_trust = False
     if sec["requires_trust"] and not already_trusted:
-        if not trust_sha256:
+        if trust_sha256 is None:
             return {
                 "view": "scenario-import",
                 "status": "trust_required",
@@ -435,12 +507,6 @@ def import_scenario(conn, api, raw_definition, *, scope="project", project_id=No
                 "security_summary": sec,
                 "note": "Review security_summary and re-run with --trust-sha256 " + sha,
             }
-        provided = str(trust_sha256).strip().lower()
-        if provided != sha:
-            raise scenario_runs._failure(
-                api, f"Digest mismatch: scenario SHA-256 is {sha}, but --trust-sha256 was {provided[:80]}",
-                "digest_mismatch",
-            )
         should_record_trust = True
 
     existing_key = scenarios.storage_key(scope, defn["id"], eff_project)
@@ -691,18 +757,21 @@ def _min_cost_max_matching(specs, candidates):
     for j in range(n_right):
         add_edge(1 + n_left + j, sink, 1, 0)
 
+    stride = max(n_right, 1)
+    i_stride = n_left * stride + 1
+    q_stride = n_left * n_left * i_stride + 1
     has_any = False
     for i, spec in enumerate(specs):
         for j, finding in enumerate(ordered):
             q = _match_quality(finding, spec)
             if q is not None:
                 has_any = True
-                weight = q[0] * 1_000_000 + i * 1_000 + j
+                weight = q[0] * q_stride + i * i_stride + j
                 add_edge(1 + i, 1 + n_left + j, 1, weight)
     if not has_any:
         return {}
 
-    inf = 10**18
+    inf = max(10**18, (4 * n_left + 1) * q_stride)
     while True:
         dist = [inf] * n_nodes
         parent_v = [-1] * n_nodes
@@ -818,9 +887,10 @@ def _score_single_run(conn, api, case, run_id):
 
 def _validate_eval_score_run(conn, api, case_id, case, run_row, *, expected_scenario_id=None, checked_project=None):
     scenario_runs._check_run_project(run_row, checked_project, api)
-    if case.get("project_id") and run_row["project_id"] and case["project_id"] != run_row["project_id"]:
+    if case.get("project_id") and run_row["project_id"] != case["project_id"]:
+        run_scope = f"project '{run_row['project_id']}'" if run_row["project_id"] else "workspace-wide (no project)"
         raise scenario_runs._failure(
-            api, f"Run {run_row['id']} belongs to project '{run_row['project_id']}', not case project '{case['project_id']}'",
+            api, f"Run {run_row['id']} is {run_scope}, not case project '{case['project_id']}'",
             "project_mismatch",
         )
     if expected_scenario_id and run_row["scenario_id"] != expected_scenario_id:

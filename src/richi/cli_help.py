@@ -737,8 +737,9 @@ DETAILS = {
     "scenario report": dict(about="""
         Submits a JSON report for a step claimed by this chat. Richi validates
         declared outputs and checks (data_required, min_items, exit_code,
-        file_exists inside --project-path, evidence_git). A rejected report
-        returns reasons and leaves the step claimed.""",
+        file_exists inside --project-path, evidence_git, no_dirty_git and
+        findings_grounded). A rejected report returns reasons and leaves the
+        step claimed.""",
         examples=(("", "richi scenario report run-review-20261127-0001 angle.0 --json report.json"),
                   ("From stdin", "richi --compact-json scenario report run-review-20261127-0001 angle.0 --json -"))),
     "scenario answer": dict(about="""
@@ -835,17 +836,18 @@ DETAILS = {
     "scenario export": dict(about="""
         Exports a scenario definition or built-in template as portable JSON with
         its canonical SHA-256 digest and a security summary listing instruction,
-        command, skill, memory.record and secret input surfaces. Pass --out FILE
-        to write atomically to .richi/scenarios/<id>.json (pass --force to
-        overwrite an existing regular file; symlinks are refused).""",
+        command, skill, gate, checklist, memory.*, compare, when_to_use and
+        secret input surfaces. Pass --out FILE to write atomically to
+        .richi/scenarios/<id>.json (pass --force to overwrite an existing
+        regular file; symlinks are refused).""",
         examples=(
             ("Export to stdout with SHA-256", "richi scenario export bug-hunt --builtin"),
             ("Write to repo file", "richi scenario export review --out .richi/scenarios/review.json"),
         )),
     "scenario import": dict(about="""
         Imports a portable scenario JSON file into project or global scope. If
-        the scenario contains agent instructions or executable/privileged steps
-        (instruction, command, skill, memory.record or secret inputs), Richi
+        the scenario contains agent instructions, human prompts, memory/compare
+        steps, when_to_use guidance, commands, skills or secret inputs, Richi
         prints a security summary and the exact SHA-256 digest; re-run with
         --trust-sha256 HEX to trust that exact revision for the target project.""",
         examples=(

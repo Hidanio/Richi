@@ -275,6 +275,88 @@ def writes(args):
     return args.action in WRITE_ACTIONS
 
 
+def _validate_feedback_args(args, api):
+    if getattr(args, "batch", None) is not None:
+        if not isinstance(args.batch, str) or not args.batch.strip():
+            err = api.MemoryError("--batch requires a nonempty file path or '-'")
+            err.code = "usage_error"
+            raise err
+        conflicting = [
+            flag for flag, val in (
+                ("--finding", args.finding),
+                ("--verdict", args.verdict),
+                ("--resolution", args.resolution),
+                ("--note", args.note),
+                ("--remember-pattern", args.remember_pattern),
+                ("--scope-path", args.scope_paths),
+                ("--safety-condition", args.safety_condition),
+                ("--rev", args.rev),
+                ("--title", args.title),
+            )
+            if val is not None and val is not False
+        ]
+        if conflicting:
+            err = api.MemoryError("--batch cannot be combined with " + ", ".join(conflicting))
+            err.code = "usage_error"
+            raise err
+        return
+    if not args.finding:
+        err = api.MemoryError("Pass --finding ID (or --batch FILE/-)")
+        err.code = "usage_error"
+        raise err
+    if not args.remember_pattern:
+        pat_flags = [
+            flag for flag, val in (
+                ("--scope-path", args.scope_paths),
+                ("--safety-condition", args.safety_condition),
+                ("--rev", args.rev),
+                ("--title", args.title),
+            )
+            if val is not None
+        ]
+        if pat_flags:
+            err = api.MemoryError(", ".join(pat_flags) + " require --remember-pattern")
+            err.code = "usage_error"
+            raise err
+
+
+def _validate_eval_args(args, api):
+    if getattr(args, "score_run", None) is not None:
+        if not args.score_run.strip():
+            err = api.MemoryError("--score requires a nonempty run ID")
+            err.code = "usage_error"
+            raise err
+        if args.compare_run is not None and not args.compare_run.strip():
+            err = api.MemoryError("--compare-run requires a nonempty run ID")
+            err.code = "usage_error"
+            raise err
+        extra_start_flags = [
+            flag for flag, val in (
+                ("--project", args.project),
+                ("--input", args.inputs),
+                ("--inputs-json", args.inputs_json),
+            )
+            if val is not None
+        ]
+        if extra_start_flags:
+            err = api.MemoryError(", ".join(extra_start_flags) + " cannot be used with --score")
+            err.code = "usage_error"
+            raise err
+        return
+    if args.compare_run is not None:
+        err = api.MemoryError("--compare-run requires --score RUN")
+        err.code = "usage_error"
+        raise err
+    if not args.id:
+        err = api.MemoryError("Pass a scenario ID to start an eval run, or pass --score RUN")
+        err.code = "usage_error"
+        raise err
+    if getattr(args, "inputs_json", None) is not None and not str(args.inputs_json).strip():
+        err = api.MemoryError("--inputs-json requires a nonempty file path or '-'")
+        err.code = "usage_error"
+        raise err
+
+
 def read_request(args, api):
     """Read any file/stdin JSON payload BEFORE acquiring a SQLite write lock."""
     if args.command != "scenario":
@@ -283,10 +365,22 @@ def read_request(args, api):
         return scenarios.read_json_input(args.json, api, limit=scenarios.MAX_CHANGE)
     if args.action == "report":
         return scenarios.read_json_input(args.json, api, limit=scenario_runs.MAX_REPORT_BYTES)
-    if args.action in ("plan", "run", "eval") and getattr(args, "inputs_json", None):
+    if args.action == "eval":
+        _validate_eval_args(args, api)
+        if getattr(args, "score_run", None) is None and getattr(args, "inputs_json", None) is not None:
+            return scenarios.read_json_input(args.inputs_json, api, limit=scenarios.MAX_CHANGE)
+        return None
+    if args.action in ("plan", "run") and getattr(args, "inputs_json", None) is not None:
+        if not str(args.inputs_json).strip():
+            err = api.MemoryError("--inputs-json requires a nonempty file path or '-'")
+            err.code = "usage_error"
+            raise err
         return scenarios.read_json_input(args.inputs_json, api, limit=scenarios.MAX_CHANGE)
-    if args.action == "feedback" and getattr(args, "batch", None):
-        return scenarios.read_json_input(args.batch, api, limit=scenario_review.MAX_FEEDBACK_BYTES, allow_list=True)
+    if args.action == "feedback":
+        _validate_feedback_args(args, api)
+        if getattr(args, "batch", None) is not None:
+            return scenarios.read_json_input(args.batch, api, limit=scenario_review.MAX_FEEDBACK_BYTES, allow_list=True)
+        return None
     if args.action == "import":
         return scenarios.read_json_input(args.file, api, limit=scenario_format.MAX_BYTES * 2)
     if args.action == "golden" and getattr(args, "golden_action", None) == "add":
@@ -449,49 +543,14 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
     if action == "catalog":
         return scenario_registry.platform_catalog(conn)
     if action == "feedback":
+        _validate_feedback_args(args, api)
         if getattr(args, "batch", None) is not None:
-            conflicting = [
-                flag for flag, val in (
-                    ("--finding", args.finding),
-                    ("--verdict", args.verdict),
-                    ("--resolution", args.resolution),
-                    ("--note", args.note),
-                    ("--remember-pattern", args.remember_pattern),
-                    ("--scope-path", args.scope_paths),
-                    ("--safety-condition", args.safety_condition),
-                    ("--rev", args.rev),
-                    ("--title", args.title),
-                )
-                if val is not None and val is not False
-            ]
-            if conflicting:
-                err = api.MemoryError("--batch cannot be combined with " + ", ".join(conflicting))
-                err.code = "usage_error"
-                raise err
             items = request.get("items") if isinstance(request, dict) else request
             if not isinstance(items, list):
                 err = api.MemoryError("--batch JSON must be a list of items or an object with 'items'")
                 err.code = "invalid_input"
                 raise err
         else:
-            if not args.finding:
-                err = api.MemoryError("Pass --finding ID (or --batch FILE/-)")
-                err.code = "usage_error"
-                raise err
-            if not args.remember_pattern:
-                pat_flags = [
-                    flag for flag, val in (
-                        ("--scope-path", args.scope_paths),
-                        ("--safety-condition", args.safety_condition),
-                        ("--rev", args.rev),
-                        ("--title", args.title),
-                    )
-                    if val is not None
-                ]
-                if pat_flags:
-                    err = api.MemoryError(", ".join(pat_flags) + " require --remember-pattern")
-                    err.code = "usage_error"
-                    raise err
             item = {"finding_id": args.finding}
             if args.verdict is not None:
                 item["verdict"] = args.verdict
@@ -543,42 +602,14 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
         if ga == "remove":
             return scenario_eval.golden_remove(conn, api, args.case_id, checked_project=checked_project)
     if action == "eval":
+        _validate_eval_args(args, api)
         if args.score_run is not None:
-            score_id = args.score_run.strip()
-            if not score_id:
-                err = api.MemoryError("--score requires a nonempty run ID")
-                err.code = "usage_error"
-                raise err
-            if args.compare_run is not None and not args.compare_run.strip():
-                err = api.MemoryError("--compare-run requires a nonempty run ID")
-                err.code = "usage_error"
-                raise err
-            extra_start_flags = [
-                flag for flag, val in (
-                    ("--project", args.project),
-                    ("--input", args.inputs),
-                    ("--inputs-json", args.inputs_json),
-                )
-                if val is not None
-            ]
-            if extra_start_flags:
-                err = api.MemoryError(", ".join(extra_start_flags) + " cannot be used with --score")
-                err.code = "usage_error"
-                raise err
             return scenario_eval.eval_score(
-                conn, api, args.case_id, score_id,
+                conn, api, args.case_id, args.score_run.strip(),
                 compare_run_id=args.compare_run.strip() if args.compare_run is not None else None,
                 checked_project=checked_project,
                 expected_scenario_id=args.id,
             )
-        if args.compare_run is not None:
-            err = api.MemoryError("--compare-run requires --score RUN")
-            err.code = "usage_error"
-            raise err
-        if not args.id:
-            err = api.MemoryError("Pass a scenario ID to start an eval run, or pass --score RUN")
-            err.code = "usage_error"
-            raise err
         return scenario_eval.eval_start(
             conn, api, database, args.id, args.case_id,
             memory_mode=args.memory_mode, project_id=args.project,

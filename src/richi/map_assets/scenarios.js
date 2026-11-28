@@ -523,6 +523,21 @@
   function scenarioDraftChanged(draft,baseline){
     return JSON.stringify(draft||null)!==JSON.stringify(baseline||null);
   }
+  function scenarioAvailableStepTypes(platform){
+    const blocks=Array.isArray(platform?.step_blocks)?platform.step_blocks:[];
+    if(!blocks.length)return SCN_STEP_TYPES;
+    const avail=new Map();
+    for(const b of blocks){
+      const key=b&&(b.type||b.kind);
+      if(key)avail.set(key,b.available!==false);
+    }
+    return SCN_STEP_TYPES.filter(t=>avail.has(t.id)?avail.get(t.id):true);
+  }
+  function scenarioProjectBoundChecks(platform){
+    const checks=Array.isArray(platform?.checks)?platform.checks:[];
+    if(!checks.length)return new Set(['no_dirty_git','findings_grounded','file_exists','evidence_git']);
+    return new Set(checks.filter(c=>c&&c.project_bound&&c.kind).map(c=>c.kind));
+  }
   // scenarios-pure: end.
 
   const scenariosState={
@@ -531,7 +546,7 @@
     editing:null,selectedStepId:'',viewMode:'graph',showJson:false,metaOpen:false,advOpen:false,
     camera:{x:20,y:20,k:1},cameraFitNeeded:true,lintResult:null,
     busy:false,saveError:'',outcome:'',commandText:'',
-    runFilter:'all',selectedRunId:'',runDetail:null,runDetailLoading:false,runDetailError:'',runDetailRequest:0,
+    runFilter:'all',selectedRunId:'',runDetail:null,runDetailLoading:false,runDetailLoadingId:'',runDetailError:'',runDetailRequest:0,
     logFilter:'all',
     reviewData:null,reviewLoading:false,reviewError:'',reviewRequest:0,
     reviewProject:'',reviewSeverity:'all',reviewStatus:'open',
@@ -615,28 +630,25 @@
     if(!runId)return;
     if(scenarioRunController)scenarioRunController.abort();
     const request=++scenariosState.runDetailRequest;
-    scenariosState.selectedRunId=runId;scenariosState.runDetailLoading=true;scenariosState.runDetailError='';
+    scenariosState.selectedRunId=runId;scenariosState.runDetailLoading=true;scenariosState.runDetailLoadingId=runId;scenariosState.runDetailError='';
     renderScenarios();
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000);scenarioRunController=controller;
     try{
       const response=await fetch('/api/scenario-run?id='+encodeURIComponent(runId),{cache:'no-store',signal:controller.signal});
       let data=null;try{data=await response.json();}catch{data=null;}
       if(!response.ok)throw new Error(data&&data.error||'Сервер вернул HTTP '+response.status);
-      if(request!==scenariosState.runDetailRequest)return;
+      if(request!==scenariosState.runDetailRequest||scenariosState.selectedRunId!==runId)return;
       scenariosState.runDetail=data;
     }catch(error){
-      if(request!==scenariosState.runDetailRequest)return;
+      if(request!==scenariosState.runDetailRequest||scenariosState.selectedRunId!==runId)return;
       scenariosState.runDetailError=error.name==='AbortError'?'Сервер не ответил за 20 секунд.':error.message;
     }finally{
       clearTimeout(timeout);
-      if(request===scenariosState.runDetailRequest){scenariosState.runDetailLoading=false;scenarioRunController=null;if(state.mode==='scenarios')renderScenarios();}
+      if(request===scenariosState.runDetailRequest){scenariosState.runDetailLoading=false;scenariosState.runDetailLoadingId='';scenarioRunController=null;if(state.mode==='scenarios')renderScenarios();}
     }
   }
   function availableScenarioStepTypes(){
-    const blocks=list(scenariosState.data?.platform?.step_blocks);
-    if(!blocks.length)return SCN_STEP_TYPES;
-    const avail=new Map(blocks.map(b=>[b.kind,b.available!==false]));
-    return SCN_STEP_TYPES.filter(t=>avail.has(t.id)?avail.get(t.id):true);
+    return scenarioAvailableStepTypes(scenariosState.data?.platform);
   }
   async function loadScenarioReview(projectId='',opts={}){
     if(scenarioReviewController)scenarioReviewController.abort();
@@ -879,12 +891,12 @@
     cliFold.append(make('summary','','Запуск вручную через команду терминала (CLI)'));
     const cliBody=make('div');cliBody.style.display='grid';cliBody.style.gap='10px';cliBody.style.marginTop='10px';
     const values={};
-    const PROJECT_CHECKS=new Set(['no_dirty_git','findings_grounded','file_exists','evidence_git']);
+    const PROJECT_CHECKS=scenarioProjectBoundChecks(scenariosState.data?.platform);
     const needsProject=list(def.steps).some(s=>list(s?.checks).some(c=>c&&PROJECT_CHECKS.has(c.kind)));
     const projEntries=scenarioProjectNames();
     let selectedProject=(!item.builtin&&item.scope==='project')?(item.project_id||''):'';
     if(item.builtin||item.scope!=='project'){
-      const preferred=scenariosState.reviewProject||(scenariosState.scope.startsWith('project:')?scenariosState.scope.slice(8):'');
+      const preferred=scenariosState.subtab==='review'?scenariosState.reviewProject:(scenariosState.scope.startsWith('project:')?scenariosState.scope.slice(8):'');
       if(preferred&&projEntries.some(([pid])=>pid===preferred))selectedProject=preferred;
       const projSel=make('select');
       projSel.add(new Option(needsProject?'— выберите проект (обязательно для проверок) —':'— без проекта (весь workspace) —',''));
@@ -1377,6 +1389,7 @@
     for(const step of list(draft.steps)){
       if(step.id===oldId)step.id=newId;
       if(Array.isArray(step.needs))step.needs=step.needs.map(n=>n===oldId?newId:n);
+      if(step.type==='compare'&&step.params&&step.params.step===oldId)step.params.step=newId;
     }
     if(draft.layout?.positions&&draft.layout.positions[oldId]){
       draft.layout.positions[newId]=draft.layout.positions[oldId];
@@ -1978,7 +1991,7 @@
       step.type=typeSel.value;step.params=scenarioDefaultParams(step.type);
       const nextRole=scenarioStepRole(step.type);
       if(nextRole!=='agent'){delete step.executor;delete step.outputs;delete step.checks;delete step.retry;delete step.hints;delete step.continue_on_failure;}
-      if(nextRole==='richi')delete step.matrix;
+      if(nextRole==='richi'){delete step.matrix;delete step.matrix_mode;}
       scenariosState.lintResult=null;markScenarioDirty(ed);renderScenarios();
     });
     box.append(ruleField('Тип шага',typeSel));
@@ -2697,6 +2710,8 @@
       jsonField('Ожидаемые выходные поля (outputs)','Структура данных, которую агент обязан вернуть в отчёте шага.','outputs','{"data": {"findings": {"type": "list", "required": true}}}');
       const quickChecks=make('div');quickChecks.style.display='grid';quickChecks.style.gap='6px';
       const toggleStepCheck=(kind,enabled,factory)=>{
+        pushScenarioUndo(ed);
+        invalidFields.delete(step.id+':checks');
         const cur=Array.isArray(step.checks)?step.checks.filter(c=>c&&c.kind!==kind):[];
         if(enabled)cur.push(factory());
         if(cur.length)step.checks=cur;else delete step.checks;
@@ -2721,7 +2736,9 @@
     idInput.addEventListener('change',()=>{
       const next=idInput.value.trim();
       if(next===step.id){idError.textContent='';return;}
-      if(!renameStepId(def,step.id,next)){idError.textContent='Нужны строчные латинские буквы, цифры, «_» или «-», и ID не должен повторяться.';idInput.value=step.id;return;}
+      if(!SCN_STEP_ID_RE.test(next)||list(def.steps).some(s=>s.id===next)){idError.textContent='Нужны строчные латинские буквы, цифры, «_» или «-», и ID не должен повторяться.';idInput.value=step.id;return;}
+      pushScenarioUndo(ed);
+      renameStepId(def,step.id,next);
       markScenarioDirty(ed);renderScenarios();
     });
     const idField=ruleField('Технический ID шага',idInput,'Генерируется автоматически. Нужен, только если вы пишете формулы {{steps.<id>.*}} вручную.');idField.append(idError);
@@ -2745,7 +2762,10 @@
       pushScenarioUndo(ed);
       pruneStepInvalidFields(ed,step.id);
       def.steps=def.steps.filter(s=>s.id!==step.id);
-      for(const other of def.steps)if(Array.isArray(other.needs))other.needs=other.needs.filter(n=>n!==step.id);
+      for(const other of def.steps){
+        if(Array.isArray(other.needs))other.needs=other.needs.filter(n=>n!==step.id);
+        if(other.type==='compare'&&other.params&&other.params.step===step.id)other.params.step='';
+      }
       if(def.layout?.positions)delete def.layout.positions[step.id];
       scenariosState.selectedStepId=def.steps[0]?.id||'';markScenarioDirty(ed);renderScenarios();
     },'small danger'));
@@ -3118,11 +3138,11 @@
       root.append(empty);return;
     }
     const inWaiting=waitingQueue.some(w=>w.run_id===scenariosState.selectedRunId);
-    if(!filtered.some(r=>r.id===scenariosState.selectedRunId)&&!(inWaiting&&(scenariosState.runDetailLoading||scenariosState.runDetail?.run?.run_id===scenariosState.selectedRunId))){
+    if(!filtered.some(r=>r.id===scenariosState.selectedRunId)&&!(inWaiting&&(scenariosState.runDetailLoading||scenariosState.runDetailError||scenariosState.runDetail?.run?.run_id===scenariosState.selectedRunId))){
       scenariosState.selectedRunId=filtered[0].id;
-      if(!scenariosState.runDetailLoading&&scenariosState.runDetail?.run?.run_id!==scenariosState.selectedRunId){
-        const targetId=scenariosState.selectedRunId;
-        queueMicrotask(()=>{if(scenariosState.selectedRunId===targetId&&scenariosState.runDetail?.run?.run_id!==targetId)loadScenarioRun(targetId);});
+      const targetId=scenariosState.selectedRunId;
+      if(scenariosState.runDetail?.run?.run_id!==targetId&&scenariosState.runDetailLoadingId!==targetId){
+        queueMicrotask(()=>{if(scenariosState.selectedRunId===targetId&&scenariosState.runDetail?.run?.run_id!==targetId&&scenariosState.runDetailLoadingId!==targetId)loadScenarioRun(targetId);});
       }
     }
     const layout=make('div','scn-runs-layout'),col=make('div','scn-runs-list');

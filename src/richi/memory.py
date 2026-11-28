@@ -1012,6 +1012,7 @@ def run(args, cli=None):
         )
         checked_project = checked_root = unmatched_path = None
         infer_rule_scope = args.command == "rules" and args.action in {"show", "check"} and args.project is None
+        infer_hook_scope = args.command == "scenario" and args.action == "hook" and args.project is None
         scenario_post_export = None
         with transaction(conn, write=writing or source_attach or adding_project or applying_scan or building_index or writing_rules or writing_scenarios):
             if project_path is not None:
@@ -1025,7 +1026,9 @@ def run(args, cli=None):
                     # them does not depend on this one being registered.
                     # A preflight may pass only if we know which rules apply. In
                     # particular, an ambiguous or unreadable path may have project rules.
-                    if not infer_rule_scope or (args.action == "check" and exc.code != "project_unregistered"):
+                    # Scenario lifecycle hooks degrade cleanly to chat/workspace scope
+                    # when --project is not explicitly forced.
+                    if not (infer_rule_scope or infer_hook_scope) or (infer_rule_scope and args.action == "check" and exc.code != "project_unregistered"):
                         raise
                     project, unmatched_path = None, str(exc)
                 checked_project = project["id"] if project else None
@@ -1042,9 +1045,10 @@ def run(args, cli=None):
                                  checked_project=checked_project, unmatched_path=unmatched_path,
                                  request=rule_request)
             if args.command == "scenario":
+                effective_scenario_path = checked_root if checked_root is not None else (None if unmatched_path is not None else project_path)
                 scenario_res = scenario_commands.run(conn, args, sys.modules[__name__], database,
                                                      workspace=settings.workspace, checked_project=checked_project,
-                                                     project_path=checked_root if checked_root is not None else project_path,
+                                                     project_path=effective_scenario_path,
                                                      request=scenario_request, preflight_io=scenario_preflight)
                 if args.action == "export" and getattr(args, "out", None) is not None:
                     scenario_post_export = scenario_res

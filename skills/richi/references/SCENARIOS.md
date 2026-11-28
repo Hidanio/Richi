@@ -4,8 +4,12 @@ English | [Русский](SCENARIOS.ru.md)
 
 A scenario is a reusable multi-step procedure that an agent follows in a chat:
 typed input fields, generic steps (`instruction`, `skill`, `command`, `gate`,
-`checklist`, `memory.recall`, `memory.brief`, `condition`), explicit
-dependencies (`needs`), optional matrices, and report checks. Richi stores the
+`checklist`, `memory.recall`, `memory.brief`, `memory.record`, `compare`,
+`condition`), explicit dependencies (`needs`), optional matrices (`matrix_mode`:
+`orthogonal` or `replicated`), and report checks (`data_required`, `min_items`,
+`exit_code`, `file_exists`, `evidence_git`, `no_dirty_git`, `findings_grounded`).
+Run `richi --compact-json scenario catalog` to inspect active platform capabilities,
+available step blocks, checks, and domain views. Richi stores the
 definition, tracks run state and step leases, creates a `task` entry tagged
 `scenario-run` for each run, and writes every edit and run event to a unified
 journal. Richi never executes shell commands or spawns agents itself.
@@ -65,8 +69,16 @@ multi-stage review / release / triage scenario"*), author it directly via
    - `checklist`: `params: {"items": [{"text": "Tests pass", "required": true}]}`.
    - `memory.recall`: `params: {"query": "...", "limit": 10}` (runs automatically
      inside Richi before the agent).
-   - `memory.brief`: `params: {"question": "...", "limit": 10}`.
+   - `memory.brief`: `params: {"question": "...", "limit": 10, "include_past_runs": true, "include_learnings": true}`
+     (adds scoped false-positive learnings when `include_learnings: true`).
+   - `memory.record`: `params: {"kind": "decision", "title": "...", "summary": "...", "knowledge_state": "confirmed"}`
+     (records outcomes to memory linked to the run task; dry-run in `eval` runs).
+   - `compare`: `params: {"step": "measure", "metrics": ["p95_ms"]}` (compares
+     ancestor step metrics against a pinned baseline or latest done prod run).
    - `condition`: `params: {"expr": "steps.gate.answer == 'Approve'"}`.
+   - Checks & matrices: use `checks: [{"kind": "no_dirty_git", "mode": "unchanged"}, {"kind": "findings_grounded", "path": "findings"}]`
+     for read-only review steps, and `matrix_mode: "orthogonal"` (distinct lenses)
+     or `"replicated"` (independent consensus passes) on matrix steps.
 3. **Wire explicit `needs` and verify**: set `needs: []` on parallel root steps
    and `needs: ["step_a", "step_b"]` on fan-in steps. Optionally include
    `layout.positions` (the map also auto-lays out omitted positions). After
@@ -175,10 +187,6 @@ shows both definition edits and run events newest first. `scenario hook`
 powers agent lifecycle hooks (`session-start`, `stop` with a Richi-side
 continuation counter so agents cannot loop infinitely, and `pre-compact`).
 Each run also creates a `task` entry tagged `scenario-run` that updates on
-milestone transitions (`in_progress`, `blocked`, `done`). Always import
-repository-sourced scenario files via `richi scenario import` (with
-`--trust-sha256` after inspecting the security summary) rather than
-`scenario apply`, so prompt/command surfaces stay pinned to an approved digest. Always import
-repository-sourced scenario files via `richi scenario import` (with
-`--trust-sha256` after inspecting the security summary) rather than
+milestone transitions (`in_progress`, `blocked`, `done`). Always import repository-sourced scenario files via `richi scenario import`
+(with `--trust-sha256` after inspecting the security summary) rather than
 `scenario apply`, so prompt/command surfaces stay pinned to an approved digest.

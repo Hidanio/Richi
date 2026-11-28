@@ -1,6 +1,7 @@
 """Bounded, explainable recall over existing records; no writes or network calls."""
 
 import bisect
+from datetime import datetime, timedelta, timezone
 import functools
 import itertools
 import json
@@ -752,17 +753,89 @@ def load_record(conn, ref, states, api, *, counts_only=False):
     return load_node(conn, ref, states, api, counts_only=counts_only)
 
 
-def graph_candidates(conn, direct, states, api, keys=(), trace=None, selection_filter=None):
+def _parse_utc_ts(ts):
+    if ts is None:
+        return None
+    if isinstance(ts, datetime):
+        return ts.astimezone(timezone.utc) if ts.tzinfo is not None else ts.replace(tzinfo=timezone.utc)
+    try:
+        dt = datetime.fromisoformat(str(ts).strip().replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _edge_within_as_of(row, max_edge_dt):
+    if max_edge_dt is None:
+        return True
+    cdt = _parse_utc_ts(row["created_at"])
+    udt = _parse_utc_ts(row["updated_at"])
+    return cdt is not None and udt is not None and cdt <= max_edge_dt and udt <= max_edge_dt
+
+
+def _edge_matches_filter(conn, edge_id, selection_filter, max_edge_dt):
+    if max_edge_dt is None:
+        return False
+    if not table_exists(conn, "graph_edges"):
+        return False
+    row = conn.execute(
+        "SELECT created_at, updated_at, from_ref, to_ref FROM graph_edges WHERE id = ?",
+        (edge_id,),
+    ).fetchone()
+    if row is None or not _edge_within_as_of(row, max_edge_dt):
+        return False
+    if selection_filter:
+        for ep in (row["from_ref"], row["to_ref"]):
+            if not isinstance(ep, str):
+                return False
+            if ep.startswith(("entry:", "entity:")):
+                if not selection_filter.matches_ref(conn, ep):
+                    return False
+            elif ep.startswith("project:"):
+                continue
+            else:
+                return False
+    return True
+
+
+def graph_candidates(conn, direct, states, api, keys=(), trace=None, selection_filter=None, *, max_edge_updated_at=None):
     result, edges, truncated = {}, {}, False
     if not table_exists(conn, "graph_edges"):
+        return result, edges, truncated
+    max_edge_dt = _parse_utc_ts(max_edge_updated_at) if max_edge_updated_at is not None else None
+    if max_edge_updated_at is not None and max_edge_dt is None:
         return result, edges, truncated
     states_sql = ",".join("?" for _ in states)
     for anchor in itertools.islice((item for item in direct if not item["ref"].startswith("edge:")), 3):
         if trace:
             trace.counts["graph_seeds"] += 1
-        links = conn.execute("SELECT * FROM graph_edges WHERE 1=1 AND (from_ref = ? OR to_ref = ?) AND knowledge_state IN (" + states_sql + ") AND kind <> 'belongs_to_project' ORDER BY id LIMIT 101",
-                             [anchor["ref"], anchor["ref"]] + states).fetchall()
-        truncated = truncated or len(links) > 100
+        if max_edge_dt is None:
+            links = conn.execute(
+                "SELECT * FROM graph_edges WHERE 1=1 AND (from_ref = ? OR to_ref = ?) "
+                "AND knowledge_state IN (" + states_sql + ") AND kind <> 'belongs_to_project' ORDER BY id LIMIT 101",
+                [anchor["ref"], anchor["ref"]] + states,
+            ).fetchall()
+            truncated = truncated or len(links) > 100
+        else:
+            max_dt = datetime(9999, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+            padded = min(max_dt, max_edge_dt + timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            cursor = conn.execute(
+                "SELECT * FROM graph_edges WHERE 1=1 AND (from_ref = ? OR to_ref = ?) "
+                "AND knowledge_state IN (" + states_sql + ") AND kind <> 'belongs_to_project' "
+                "AND (julianday(created_at) IS NULL OR julianday(created_at) <= julianday(?)) "
+                "AND (julianday(updated_at) IS NULL OR julianday(updated_at) <= julianday(?)) ORDER BY id",
+                [anchor["ref"], anchor["ref"]] + states + [padded, padded],
+            )
+            links = []
+            for row in cursor:
+                if not _edge_within_as_of(row, max_edge_dt):
+                    continue
+                links.append(row)
+                if len(links) > 100:
+                    truncated = True
+                    break
         if trace:
             trace.counts["graph_links_fetched"] += len(links)
         for row in links[:100]:
@@ -884,19 +957,32 @@ def _recall(conn, args, api, *, bounded=True, additional_matches=None):
                 trace.expected["direct_stage"] = "filtered_where"
     terms, question_text, keys = _routed_terms(conn, query)
     observation_query = measurements.MeasurementQuery(question_text) if additional_matches is not None else None
+    max_edge_updated_at = getattr(args, "max_edge_updated_at", None)
+    max_edge_dt = _parse_utc_ts(max_edge_updated_at) if max_edge_updated_at is not None else None
     options = {"selection_filter": selection_filter} if selection_filter else {}
     direct_by_ref, fts_truncated, backend, discarded_weak = candidates(conn, query, terms, keys, states, project, api, trace, **options)
     if additional_matches is not None:
         for item in additional_matches(conn, query, observation_query.terms, keys, states, project, api,
                                        decision_terms=terms, measured=observation_query):
-            existing = direct_by_ref.get(item["ref"])
+            ref = item["ref"]
+            if selection_filter or max_edge_updated_at is not None:
+                if ref.startswith("edge:"):
+                    if not _edge_matches_filter(conn, ref[5:], selection_filter, max_edge_dt):
+                        continue
+                elif ref.startswith(("entry:", "entity:")):
+                    if selection_filter and not selection_filter.matches_ref(conn, ref):
+                        continue
+                elif selection_filter:
+                    continue
+            existing = direct_by_ref.get(ref)
             if existing is None:
-                direct_by_ref[item["ref"]] = item
+                direct_by_ref[ref] = item
             else:
                 existing["score"] = max(existing["score"], item["score"])
                 existing["reasons"].extend(reason for reason in item["reasons"] if reason not in existing["reasons"])
     direct = rank(direct_by_ref.values())
-    graph_by_ref, edges_by_id, graph_truncated = graph_candidates(conn, direct, states, api, keys, trace, **options)
+    graph_options = dict(options, max_edge_updated_at=max_edge_updated_at) if max_edge_updated_at is not None else options
+    graph_by_ref, edges_by_id, graph_truncated = graph_candidates(conn, direct, states, api, keys, trace, **graph_options)
     # Reserve at most two places for connected evidence; keep exact/lexical hits first.
     graph_only = rank(item for node_ref, item in graph_by_ref.items() if node_ref not in {x["ref"] for x in direct[:args.limit]})
     protected = sum(any(reason in {"exact_id", "exact_jira_key", "exact_alias", "exact_concept_alias"} for reason in item["reasons"]) for item in direct[:args.limit])
