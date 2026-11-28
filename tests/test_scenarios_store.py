@@ -35,7 +35,13 @@ class ScenariosStoreTests(unittest.TestCase):
         self.assertEqual(scenario_format.normalize(deep), deep)
         self.assertEqual(len(deep["steps"]), 7)
         listing = scenarios.list_templates()
-        self.assertEqual([item["id"] for item in listing["templates"]], ["deep-review", "review"])
+        self.assertEqual(
+            [item["id"] for item in listing["templates"]],
+            [
+                "baseline-check", "bug-hunt", "deep-review", "incident-triage",
+                "pr-ready", "pre-commit-review", "release-notes", "review", "spec-feature",
+            ],
+        )
 
     def test_copy_and_scope_resolution_order(self):
         # Built-in resolves out of the box.
