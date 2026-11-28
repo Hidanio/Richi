@@ -88,6 +88,14 @@ try:
         context += "\\nCurrent rules for this session. Follow the rules array. Show preference_review to the user for confirmation.\\n" + result.stdout.strip()
 except (OSError, ValueError, subprocess.TimeoutExpired):
     pass  # The instructions above give the CLI fallback.
+try:
+    scn = subprocess.run(args + ["scenario", "hook", "session-start", "--agent", "cursor"], capture_output=True, text=True, timeout=4)
+    if scn.returncode == 0:
+        scn_note = (json.loads(scn.stdout).get("context_note") or "").strip()
+        if scn_note:
+            context += "\\n" + scn_note
+except (OSError, ValueError, subprocess.TimeoutExpired):
+    pass
 print(json.dumps({"env": {"RICHI_CHAT_ID": chat}, "additional_context": context}))
 '''
 

@@ -153,10 +153,15 @@ richi --compact-json scenario pause run-review-20261127-0001
 richi --compact-json scenario resume run-review-20261127-0001
 richi --compact-json scenario cancel run-review-20261127-0001
 richi --compact-json scenario log --run run-review-20261127-0001 --entries 50
+richi --compact-json scenario hook session-start --agent claude
+richi --compact-json scenario hook stop --agent claude --format claude
+richi --compact-json scenario hook pre-compact
 ```
 
 Skipping a step requires `--reason` and still satisfies downstream `needs`
 ordering unless a downstream step's `if` tests its status. `scenario log`
-shows both definition edits and run events newest first. Each run also creates
-a `task` entry tagged `scenario-run` that updates on milestone transitions
-(`in_progress`, `blocked`, `done`).
+shows both definition edits and run events newest first. `scenario hook`
+powers agent lifecycle hooks (`session-start`, `stop` with a Richi-side
+continuation counter so agents cannot loop infinitely, and `pre-compact`).
+Each run also creates a `task` entry tagged `scenario-run` that updates on
+milestone transitions (`in_progress`, `blocked`, `done`).

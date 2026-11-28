@@ -1498,7 +1498,7 @@ def report_step(conn, api, database, run_id, step_key, report, *, checked_projec
     new_step_status = report["status"]
     conn.execute(
         "UPDATE scenario_steps SET status = ?, claimed_by_chat = NULL, claimed_by_agent = NULL, lease_until = NULL, "
-        "result_json = ?, reason = ?, finished_at = ? WHERE run_id = ? AND step_key = ?",
+        "stop_continuations = 0, result_json = ?, reason = ?, finished_at = ? WHERE run_id = ? AND step_key = ?",
         (new_step_status, json.dumps(stored, ensure_ascii=False, separators=(",", ":")),
          report.get("reason") if new_step_status == "failed" else None, at_iso, run_id, step_key),
     )

@@ -84,6 +84,7 @@ COMMANDS = (
     ('scenario status', 'scenarios', 'read', 'Inspect the full state and step results of one scenario run.', 'SCENARIOS.md'),
     ('scenario runs', 'scenarios', 'read', 'List scenario runs filtered by activity, chat, project or scenario.', 'SCENARIOS.md'),
     ('scenario log', 'scenarios', 'read', 'Read the unified journal of scenario definition changes and run events.', 'SCENARIOS.md'),
+    ('scenario hook', 'scenarios', 'write', 'Handle agent lifecycle hooks (session-start, stop with Richi-side counter, pre-compact).', 'SCENARIOS.md'),
     ('skill-sources list', 'agents', 'read', 'List known agents with their skill sources, skill counts and versions.', 'AGENT_SKILLS.md'),
     ('skill-sources add', 'agents', 'write', 'Describe an agent Richi lacks: name, skill folders and how to recognize it.', 'AGENT_SKILLS.md'),
     ('skill-sources update', 'agents', 'write', "Switch an agent's skill sources, add or remove skill folders, or edit an own agent.", 'AGENT_SKILLS.md'),

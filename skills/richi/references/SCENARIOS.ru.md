@@ -157,10 +157,16 @@ richi --compact-json scenario pause run-review-20261127-0001
 richi --compact-json scenario resume run-review-20261127-0001
 richi --compact-json scenario cancel run-review-20261127-0001
 richi --compact-json scenario log --run run-review-20261127-0001 --entries 50
+richi --compact-json scenario hook session-start --agent claude
+richi --compact-json scenario hook stop --agent claude --format claude
+richi --compact-json scenario hook pre-compact
 ```
 
 Пропуск этапа требует `--reason` и не блокирует следующие этапы по порядку
 `needs`, если их `if` не проверяет статус пропущенного этапа. `scenario log`
-показывает и правки определений, и события запусков от новых к старым. Для
-каждого запуска создаётся запись `task` с тегом `scenario-run`, обновляемая на
-ключевых переходах (`in_progress`, `blocked`, `done`).
+показывает и правки определений, и события запусков от новых к старым.
+`scenario hook` обслуживает хуки жизненного цикла агентов (`session-start`,
+`stop` со счётчиком продолжений на стороне Richi для защиты от зацикливания и
+`pre-compact`). Для каждого запуска создаётся запись `task` с тегом
+`scenario-run`, обновляемая на ключевых переходах (`in_progress`, `blocked`,
+`done`).

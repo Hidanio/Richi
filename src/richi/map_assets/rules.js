@@ -81,6 +81,7 @@
       const options=[];if(change.skill)options.push(change.skill);for(const agent of Object.keys(change.skills||{}).sort())options.push(agent+'='+(change.skills[agent]||''));
       for(const option of options.length?options:[''])parts.push(commandOption('--skill',option));
     }
+    if('scenario' in change)parts.push(commandOption('--scenario',change.scenario||''));
     if(change.action==='add')parts.push(commandOption('--source',RULE_SOURCE));
     if(dashed)parts.push('--',shellQuote(change.id));
     return parts.join(' ');
@@ -149,11 +150,12 @@
     if(!sameCreation(opened,current))return 'Правило с этим ID создали заново. Скопируйте нужный текст и откройте актуальное правило.';
     return '';
   }
-  function ruleUpdate(opened,rule,text,setting,check=opened.check,baseCheck=opened.check){
+  function ruleUpdate(opened,rule,text,setting,check=opened.check,baseCheck=opened.check,scenario=opened.scenario??null,baseScenario=opened.scenario??null){
     const target=ruleTargetProblem(opened,rule);if(target)return target;
     const update={action:'update',id:rule.id,expected_updated_at:rule.updated_at};
     if(lineEnds(text)!==lineEnds(opened.text))update.text=text;
     if(!sameBranchCheck(check,baseCheck))update.check=check;
+    if((scenario||null)!==(baseScenario||null))update.scenario=scenario||null;
     if(!sameRuleSkills(setting,opened)){
       // An agent that neither this computer nor the latest version of the rule knows (another window
       // took it out): the server refuses any entry for it, "no skill" included, so it gets what
@@ -167,7 +169,7 @@
       const skills=Object.entries(setting.skills||{}).filter(([agent])=>!gone(agent));
       update.skill=setting.skill;update.skills=skills.length?Object.fromEntries(skills):null;
     }
-    return 'text' in update||'skill' in update||'check' in update?update:null;
+    return 'text' in update||'skill' in update||'check' in update||'scenario' in update?update:null;
   }
   // What a save stored for the skills when the form did not say so beforehand (announced: it said
   // the skills become one for every agent). The server merges by the agents it knows, and they may
@@ -525,7 +527,18 @@
     const skill=ruleSkillPicker(rule),skillField=ruleField('Скилл',skill.element,null,skill.focusTarget);
     const text=make('textarea'),counter=make('div','rule-counter'),own=make('span'),total=make('span');text.rows=6;text.value=rule?.text||'';text.placeholder='Например: отвечай пользователю на русском языке, а код и команды оставляй как есть.';counter.append(own,total);
     const textField=ruleField('Текст правила',text,'Агент получит этот текст дословно. Одна инструкция на правило.');textField.insertBefore(counter,textField.lastChild);
-    let baseCheck=rule?.check||null;
+    let baseCheck=rule?.check||null,baseScenario=rule?.scenario||null;
+    const scenarioInput=make('input'),scenarioList=make('datalist');
+    scenarioInput.type='text';scenarioInput.maxLength=100;scenarioInput.spellcheck=false;scenarioInput.autocomplete='off';
+    scenarioInput.value=rule?.scenario||'';scenarioInput.placeholder='например, deep-review или review (необязательно)';
+    scenarioList.id='rule-scenarios-list';scenarioInput.setAttribute('list',scenarioList.id);
+    const knownScenarioIds=new Set();
+    for(const item of list(scenariosState?.data?.scenarios))knownScenarioIds.add(item.id);
+    for(const item of list(scenariosState?.data?.builtin_templates))knownScenarioIds.add(item.id);
+    if(!knownScenarioIds.size){knownScenarioIds.add('review');knownScenarioIds.add('deep-review');}
+    for(const sid of [...knownScenarioIds].sort())scenarioList.append(new Option(sid,sid));
+    const scenarioField=ruleField('Рекомендуемый сценарий (необязательно)',scenarioInput,'Агент предложит запустить этот сценарий, когда сработает правило (молча не запускает).');
+    scenarioField.append(scenarioList);
     const checkKind=make('select'),checkInput=make('input'),checkRow=make('div','rule-field-row');
     for(const [key,label] of [['','Без проверки'],['format','Формат имени ветки'],['forbid_prefix','Запрещённый префикс ветки']])checkKind.add(new Option(label,key));
     checkInput.type='text';checkInput.spellcheck=false;checkInput.autocomplete='off';
@@ -552,7 +565,7 @@
     }
     const idInput=make('input');idInput.type='text';idInput.maxLength=100;idInput.spellcheck=false;idInput.autocomplete='off';idInput.placeholder='branch-naming';
     const idField=ruleField('ID правила',idInput,'Латиница, цифры, «.», «_», «:» или «-». По ID правило потом меняют и удаляют.');idInput.addEventListener('input',()=>{idTouched=true;});
-    if(rule)body.append(skillField,textField,checkRow,scopeField);else body.append(templateRow,situationField,namingRow,skillField,textField,checkRow,scopeField,idField);
+    if(rule)body.append(skillField,scenarioField,textField,checkRow,scopeField);else body.append(templateRow,situationField,namingRow,skillField,scenarioField,textField,checkRow,scopeField,idField);
     const problem=ruleProblem(body),showCommand=ruleCommandBox(body),cancel=toolButton('Отмена',()=>dialog.close()),submit=make('button','primary');submit.type='submit';foot.append(cancel,submit);
     const submitLabel=()=>{submit.textContent=rulesState.editing?(rule?'Сохранить':'Добавить правило'):'Показать команду';};
     function templateText(){
@@ -581,10 +594,12 @@
       if(!rule&&template==='skill'&&!ruleHasSkill(setting))return 'Выберите скилл.';
       const check=branchCheckFromForm(checkKind.value,checkInput.value);
       if(typeof check==='string')return check;
-      if(rule)return ruleUpdate(opened,rule,value,setting,check,baseCheck)||'Изменений нет.';
+      const scenarioVal=scenarioInput.value.trim()||null;
+      if(scenarioVal&&!RULE_NAME.test(scenarioVal))return 'ID сценария: 1–100 символов — латиница, цифры, «.», «_», «:» или «-», начиная с буквы или цифры.';
+      if(rule)return ruleUpdate(opened,rule,value,setting,check,baseCheck,scenarioVal,baseScenario)||'Изменений нет.';
       const id=idInput.value.trim();if(!RULE_NAME.test(id))return 'ID: 1–100 символов — латиница, цифры, «.», «_», «:» или «-», начиная с буквы или цифры.';
       if(ruleList().some(item=>item.id===id))return 'Правило с ID «'+id+'» уже есть.';const scope=scopeValue();if(!scope)return 'Выберите проект.';
-      const add={action:'add',id,scope:scope.scope,text:value};if(scope.project)add.project=scope.project;if(setting.skill)add.skill=setting.skill;if(setting.skills)add.skills=setting.skills;if(check)add.check=check;return add;
+      const add={action:'add',id,scope:scope.scope,text:value};if(scope.project)add.project=scope.project;if(setting.skill)add.skill=setting.skill;if(setting.skills)add.skills=setting.skills;if(scenarioVal)add.scenario=scenarioVal;if(check)add.check=check;return add;
     }
     text.addEventListener('input',()=>{textTouched=text.value!=='';if(!rule&&!idTouched&&template==='text')idInput.value=suggestedId();updateCounter();});
     for(const input of [situation,format,example])input.addEventListener('input',compose);target.addEventListener('change',compose);skill.element.addEventListener('skillchange',compose);
@@ -671,6 +686,11 @@
     const text=make('p','rule-text',rule.text);card.append(text);
     if(ruleLength(rule.text)>360||String(rule.text).split('\n').length>6){text.classList.add('clamped');const more=toolButton('Показать полностью',()=>{const folded=text.classList.toggle('clamped');more.textContent=folded?'Показать полностью':'Свернуть';more.setAttribute('aria-expanded',String(!folded));},'rule-more');more.setAttribute('aria-expanded','false');card.append(more);}
     if(ruleHasSkill(rule))card.append(ruleSkillChips(rule));
+    if(rule.scenario){
+      const scnRow=make('div','rule-meta');
+      scnRow.append(make('span','','Рекомендуемый сценарий:'),toolButton(rule.scenario,()=>{scenariosState.subtab='definitions';scenariosState.query=rule.scenario;setMode('scenarios');},'small'));
+      card.append(scnRow);
+    }
     if(rule.check)card.append(make('p','rule-meta',branchCheckLabel(rule.check)));
     const bottom=make('div','rule-card-bottom'),meta=make('div','rule-meta'),actions=make('div','rule-actions');meta.append(make('span','','Изменено '+dateText(rule.updated_at)));
     const author=changedBy(rule.changed_by,rule.changed_by_agent);if(author){const who=make('span','','Кем: '+author);who.title=rule.changed_by;meta.append(who);}

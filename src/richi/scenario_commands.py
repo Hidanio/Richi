@@ -1,7 +1,7 @@
 """CLI declarations and dispatch for `richi scenario ...`."""
 import argparse
 
-from . import agents, rules, scenario_format, scenario_runs, scenarios
+from . import agents, rules, scenario_format, scenario_hooks, scenario_runs, scenarios
 
 
 WRITE_ACTIONS = frozenset({
@@ -155,9 +155,24 @@ def add_commands(commands, api):
     log_cmd.add_argument("--entries", metavar="N", type=_argument_entries, default=20,
                          help="How many latest events to show, 1-%d (default: %%(default)s)" % scenarios.MAX_LOG)
 
+    hook_cmd = actions.add_parser("hook", help="Handle an agent lifecycle hook (session-start, stop, pre-compact)")
+    hook_cmd.add_argument("hook_event", choices=("session-start", "stop", "pre-compact"), metavar="EVENT",
+                          help="Lifecycle event: session-start, stop or pre-compact")
+    hook_cmd.add_argument("--agent", metavar="ID", type=_argument_agent,
+                          help="Agent ID, such as " + known + " (default: detected from shell)")
+    hook_cmd.add_argument("--project", metavar="ID", help="Project scope filter (default: --project-path project)")
+    hook_cmd.add_argument("--format", dest="hook_format", choices=("richi", "claude", "codex", "cursor", "antigravity"),
+                          default="richi", help="Output JSON schema: richi (default) or native agent hook contract")
+    hook_cmd.add_argument("--max-continuations", type=int, default=scenario_hooks.DEFAULT_MAX_CONTINUATIONS,
+                          metavar="N", help="Maximum automatic Stop continuations per claimed step, 1-20 (default: %(default)s)")
+
 
 def writes(args):
-    return args.command == "scenario" and args.action in WRITE_ACTIONS
+    if args.command != "scenario":
+        return False
+    if args.action == "hook":
+        return getattr(args, "hook_event", None) == "stop"
+    return args.action in WRITE_ACTIONS
 
 
 def read_request(args, api):
@@ -266,6 +281,17 @@ def run(conn, args, api, database, *, workspace=None, checked_project=None, proj
                               agent=args.agent, raw_inputs=args.inputs, inputs_json=request, settings=settings)
     if action == "log":
         return scenarios.log(conn, scenario_id=args.scenario_id, run_id=args.run_id, entries=args.entries)
+    if action == "hook":
+        project_id = args.project if args.project is not None else checked_project
+        event = args.hook_event
+        if event == "session-start":
+            res = scenario_hooks.session_start(conn, api, chat=author.by, agent=args.agent or author.agent, project_id=project_id)
+        elif event == "stop":
+            res = scenario_hooks.stop_check(conn, api, chat=author.by, agent=args.agent or author.agent,
+                                            project_id=project_id, max_continuations=args.max_continuations)
+        else:
+            res = scenario_hooks.pre_compact(conn, api, chat=author.by, agent=args.agent or author.agent, project_id=project_id)
+        return scenario_hooks.format_agent_output(event, res, args.hook_format)
     if action == "run":
         project_id = args.project if args.project is not None else checked_project
         secrets_runtime = _parse_secrets(None, api, getattr(args, "secret_envs", None))
